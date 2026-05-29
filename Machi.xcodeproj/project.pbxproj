@@ -1,0 +1,591 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXContainerItemProxy section */
+		359BD8A62FBEC344006E5BA1 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 359BD8902FBEC342006E5BA1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 359BD8972FBEC342006E5BA1;
+			remoteInfo = kaizi;
+		};
+		359BD8B02FBEC344006E5BA1 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 359BD8902FBEC342006E5BA1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 359BD8972FBEC342006E5BA1;
+			remoteInfo = kaizi;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		359BD8982FBEC342006E5BA1 /* Machi.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Machi.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		359BD8A52FBEC344006E5BA1 /* MachiTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MachiTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		359BD8AF2FBEC344006E5BA1 /* MachiUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MachiUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		359BD89A2FBEC342006E5BA1 /* Machi */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Machi;
+			sourceTree = "<group>";
+		};
+		359BD8A82FBEC344006E5BA1 /* kaiziTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = kaiziTests;
+			sourceTree = "<group>";
+		};
+		359BD8B22FBEC344006E5BA1 /* kaiziUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = kaiziUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		359BD8952FBEC342006E5BA1 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		359BD8A22FBEC344006E5BA1 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		359BD8AC2FBEC344006E5BA1 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		359BD88F2FBEC342006E5BA1 = {
+			isa = PBXGroup;
+			children = (
+				359BD89A2FBEC342006E5BA1 /* Machi */,
+				359BD8A82FBEC344006E5BA1 /* kaiziTests */,
+				359BD8B22FBEC344006E5BA1 /* kaiziUITests */,
+				359BD8992FBEC342006E5BA1 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		359BD8992FBEC342006E5BA1 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				359BD8982FBEC342006E5BA1 /* Machi.app */,
+				359BD8A52FBEC344006E5BA1 /* MachiTests.xctest */,
+				359BD8AF2FBEC344006E5BA1 /* MachiUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		359BD8972FBEC342006E5BA1 /* Machi */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 359BD8B92FBEC344006E5BA1 /* Build configuration list for PBXNativeTarget "Machi" */;
+			buildPhases = (
+				359BD8942FBEC342006E5BA1 /* Sources */,
+				359BD8952FBEC342006E5BA1 /* Frameworks */,
+				359BD8962FBEC342006E5BA1 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				359BD89A2FBEC342006E5BA1 /* Machi */,
+			);
+			name = Machi;
+			packageProductDependencies = (
+			);
+			productName = kaizi;
+			productReference = 359BD8982FBEC342006E5BA1 /* Machi.app */;
+			productType = "com.apple.product-type.application";
+		};
+		359BD8A42FBEC344006E5BA1 /* MachiTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 359BD8BC2FBEC344006E5BA1 /* Build configuration list for PBXNativeTarget "MachiTests" */;
+			buildPhases = (
+				359BD8A12FBEC344006E5BA1 /* Sources */,
+				359BD8A22FBEC344006E5BA1 /* Frameworks */,
+				359BD8A32FBEC344006E5BA1 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				359BD8A72FBEC344006E5BA1 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				359BD8A82FBEC344006E5BA1 /* kaiziTests */,
+			);
+			name = MachiTests;
+			packageProductDependencies = (
+			);
+			productName = kaiziTests;
+			productReference = 359BD8A52FBEC344006E5BA1 /* MachiTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		359BD8AE2FBEC344006E5BA1 /* MachiUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 359BD8BF2FBEC344006E5BA1 /* Build configuration list for PBXNativeTarget "MachiUITests" */;
+			buildPhases = (
+				359BD8AB2FBEC344006E5BA1 /* Sources */,
+				359BD8AC2FBEC344006E5BA1 /* Frameworks */,
+				359BD8AD2FBEC344006E5BA1 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				359BD8B12FBEC344006E5BA1 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				359BD8B22FBEC344006E5BA1 /* kaiziUITests */,
+			);
+			name = MachiUITests;
+			packageProductDependencies = (
+			);
+			productName = kaiziUITests;
+			productReference = 359BD8AF2FBEC344006E5BA1 /* MachiUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		359BD8902FBEC342006E5BA1 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2650;
+				LastUpgradeCheck = 2650;
+				TargetAttributes = {
+					359BD8972FBEC342006E5BA1 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+					359BD8A42FBEC344006E5BA1 = {
+						CreatedOnToolsVersion = 26.5;
+						TestTargetID = 359BD8972FBEC342006E5BA1;
+					};
+					359BD8AE2FBEC344006E5BA1 = {
+						CreatedOnToolsVersion = 26.5;
+						TestTargetID = 359BD8972FBEC342006E5BA1;
+					};
+				};
+			};
+			buildConfigurationList = 359BD8932FBEC342006E5BA1 /* Build configuration list for PBXProject "Machi" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 359BD88F2FBEC342006E5BA1;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 359BD8992FBEC342006E5BA1 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				359BD8972FBEC342006E5BA1 /* Machi */,
+				359BD8A42FBEC344006E5BA1 /* MachiTests */,
+				359BD8AE2FBEC344006E5BA1 /* MachiUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		359BD8962FBEC342006E5BA1 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		359BD8A32FBEC344006E5BA1 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		359BD8AD2FBEC344006E5BA1 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		359BD8942FBEC342006E5BA1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		359BD8A12FBEC344006E5BA1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		359BD8AB2FBEC344006E5BA1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		359BD8A72FBEC344006E5BA1 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 359BD8972FBEC342006E5BA1 /* Machi */;
+			targetProxy = 359BD8A62FBEC344006E5BA1 /* PBXContainerItemProxy */;
+		};
+		359BD8B12FBEC344006E5BA1 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 359BD8972FBEC342006E5BA1 /* Machi */;
+			targetProxy = 359BD8B02FBEC344006E5BA1 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		359BD8B72FBEC344006E5BA1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		359BD8B82FBEC344006E5BA1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		359BD8BA2FBEC344006E5BA1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = P22K8NF89K;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Machi;
+				INFOPLIST_KEY_CFBundleName = Machi;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Machi uses the camera when you choose to capture media for posts or messages.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Machi uses the microphone when you choose to record video for posts or messages.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Machi saves edited media only when you explicitly choose to export or keep it.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Machi accesses your photo library when you choose images or videos for posts and messages.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yaokai.kaizi;
+				PRODUCT_NAME = Machi;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		359BD8BB2FBEC344006E5BA1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = P22K8NF89K;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Machi;
+				INFOPLIST_KEY_CFBundleName = Machi;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Machi uses the camera when you choose to capture media for posts or messages.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Machi uses the microphone when you choose to record video for posts or messages.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Machi saves edited media only when you explicitly choose to export or keep it.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Machi accesses your photo library when you choose images or videos for posts and messages.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yaokai.kaizi;
+				PRODUCT_NAME = Machi;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		359BD8BD2FBEC344006E5BA1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yaokai.kaiziTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Machi.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Machi";
+			};
+			name = Debug;
+		};
+		359BD8BE2FBEC344006E5BA1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yaokai.kaiziTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Machi.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Machi";
+			};
+			name = Release;
+		};
+		359BD8C02FBEC344006E5BA1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yaokai.kaiziUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Machi;
+			};
+			name = Debug;
+		};
+		359BD8C12FBEC344006E5BA1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yaokai.kaiziUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Machi;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		359BD8932FBEC342006E5BA1 /* Build configuration list for PBXProject "Machi" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				359BD8B72FBEC344006E5BA1 /* Debug */,
+				359BD8B82FBEC344006E5BA1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		359BD8B92FBEC344006E5BA1 /* Build configuration list for PBXNativeTarget "Machi" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				359BD8BA2FBEC344006E5BA1 /* Debug */,
+				359BD8BB2FBEC344006E5BA1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		359BD8BC2FBEC344006E5BA1 /* Build configuration list for PBXNativeTarget "MachiTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				359BD8BD2FBEC344006E5BA1 /* Debug */,
+				359BD8BE2FBEC344006E5BA1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		359BD8BF2FBEC344006E5BA1 /* Build configuration list for PBXNativeTarget "MachiUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				359BD8C02FBEC344006E5BA1 /* Debug */,
+				359BD8C12FBEC344006E5BA1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 359BD8902FBEC342006E5BA1 /* Project object */;
+}

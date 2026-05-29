@@ -1,2 +1,32 @@
-
+# macOS
 .DS_Store
+
+# Xcode — build output & user-specific state
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM
+*.dSYM.zip
+
+# Swift Package Manager
+.swiftpm/
+.build/
+Packages/
+
+# CocoaPods / Carthage (unused, ignored defensively)
+Pods/
+Carthage/Build/
+
+# Local SwiftData / app artifacts (should never be committed)
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.store
+*.store-shm
+*.store-wal
