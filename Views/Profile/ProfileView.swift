@@ -1,0 +1,1026 @@
+import SwiftData
+import SwiftUI
+import UIKit
+
+struct ProfileView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.appLanguage) private var language
+    @EnvironmentObject private var chrome: AppChromeState
+    @EnvironmentObject private var postStore: PostStore
+    @EnvironmentObject private var userStore: UserStore
+    @EnvironmentObject private var router: AppRouter
+    @AppStorage("blockedUserIds") private var blockedUserIdsRaw = ""
+    @StateObject private var viewModel = ProfileViewModel()
+    @State private var loadedProfileUser: UserEntity?
+    @State private var profileLoadState: ScreenState = .idle
+    @State private var profileTab = PersonalProfileTab.posts
+    @State private var isFollowing = false
+    @State private var isFollowWorking = false
+    @State private var menuMessage: String?
+    @State private var isShowingSettings = false
+    @State private var followListKind: FollowListKind?
+    @State private var isRefreshingProfile = false
+    @State private var scheduledProfileRefreshTask: Task<Void, Never>?
+
+    let currentUser: UserEntity
+    let profileUserId: String
+    private let initialProfileUser: UserEntity?
+    private let refreshToken: UUID?
+    let sourceTab: AppTab
+    let tracksChrome: Bool
+    var showsBackButton = false
+    var onLogout: (() -> Void)?
+    var onSwitchAccount: ((UserEntity) -> Void)?
+
+    init(
+        currentUser: UserEntity,
+        profileUserId: String? = nil,
+        profileUser: UserEntity? = nil,
+        refreshToken: UUID? = nil,
+        sourceTab: AppTab = .profile,
+        tracksChrome: Bool = true,
+        showsBackButton: Bool = false,
+        onLogout: (() -> Void)? = nil,
+        onSwitchAccount: ((UserEntity) -> Void)? = nil
+    ) {
+        self.currentUser = currentUser
+        self.profileUserId = profileUserId ?? profileUser?.id ?? currentUser.id
+        self.initialProfileUser = profileUser
+        self.refreshToken = refreshToken
+        self.sourceTab = sourceTab
+        self.tracksChrome = tracksChrome
+        self.showsBackButton = showsBackButton
+        self.onLogout = onLogout
+        self.onSwitchAccount = onSwitchAccount
+        _loadedProfileUser = State(initialValue: profileUser ?? ((profileUserId == nil || profileUserId == currentUser.id) ? currentUser : nil))
+    }
+
+    private var profileUser: UserEntity {
+        loadedProfileUser ?? initialProfileUser ?? currentUser
+    }
+
+    private var isCurrentUser: Bool {
+        currentUser.id == profileUserId
+    }
+
+    private var blockedUserIds: [String] {
+        blockedUserIdsRaw
+            .split(separator: "|")
+            .map(String.init)
+            .filter { !$0.isEmpty }
+    }
+
+    private var isBlocked: Bool {
+        blockedUserIds.contains(profileUserId)
+    }
+
+    private var visiblePosts: [PostEntity] {
+        switch profileTab {
+        case .posts: viewModel.authoredPosts
+        case .replies: viewModel.repliedPosts
+        case .media: viewModel.mediaPosts
+        case .likes: isCurrentUser ? viewModel.likedPosts : []
+        }
+    }
+
+    private var availableTabs: [PersonalProfileTab] {
+        isCurrentUser ? PersonalProfileTab.allCases : [.posts, .replies, .media]
+    }
+
+    private var isProfileVisibleForRefresh: Bool {
+        !tracksChrome || chrome.selectedTab == sourceTab
+    }
+
+    private var displayedFollowerCount: Int {
+        userStore.followerCounts[profileUser.id] ?? profileUser.followerCount
+    }
+
+    private var displayedFollowingCount: Int {
+        userStore.followingCounts[profileUser.id] ?? profileUser.followingCount
+    }
+
+    var body: some View {
+        Group {
+            switch profileLoadState {
+            case .idle, .loading:
+                LoadingView()
+            case .error(let message):
+                ErrorStateView(message: message) {
+                    Task { await loadProfileAndContent() }
+                }
+            case .empty:
+                EmptyStateView(title: L("unknownUser", language), subtitle: L("noContent", language), systemImage: "person.crop.circle")
+            case .loaded:
+                VStack(spacing: 0) {
+                    topBar
+                        .padding(.horizontal, KaiXTheme.horizontalPadding)
+                        .padding(.top, KXSpacing.sm)
+                        .padding(.bottom, KXSpacing.md)
+                        .kxGlassBar(ignoresTopSafeArea: true)
+                        .overlay(alignment: .bottom) {
+                            Divider().opacity(0.35)
+                        }
+
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: KXSpacing.md) {
+                            profileHeader
+                            // "成就 / 活跃城市 / Top 话题" all moved
+                            // off the primary profile view per UX
+                            // feedback — the page now leads straight
+                            // into the post tabs so the actual content
+                            // is the first thing you see below the
+                            // header card.
+                            PersonalProfileTabPicker(tabs: availableTabs, selection: $profileTab)
+                                .padding(.horizontal, 2)
+
+                            stateContent
+                        }
+                        .padding(.horizontal, KaiXTheme.horizontalPadding)
+                        .padding(.top, KXSpacing.sm)
+                        .padding(.bottom, showsBackButton ? 28 : chrome.bottomContentPadding)
+                    }
+                    .refreshable {
+                        await loadProfileAndContent(showLoading: false)
+                    }
+                }
+            }
+        }
+        .kxPageBackground()
+        .toolbar(.hidden, for: .navigationBar)
+        .task(id: profileUserId) {
+            await loadProfileAndContent()
+        }
+        .onChange(of: chrome.selectedTab) { _, tab in
+            guard tracksChrome, tab == sourceTab else { return }
+            scheduleProfileRefresh()
+        }
+        .onChange(of: refreshToken) { _, _ in
+            scheduleProfileRefresh(currentUserOnly: true)
+        }
+        .onChange(of: postStore.profilePostIds[profileUserId] ?? []) { _, _ in
+            scheduleProfileRefresh()
+        }
+        .onChange(of: postStore.likedPostIds) { _, _ in
+            scheduleProfileRefresh(currentUserOnly: true)
+        }
+        .onChange(of: postStore.bookmarkedPostIds) { _, _ in
+            scheduleProfileRefresh(currentUserOnly: true)
+        }
+        .onChange(of: postStore.repostedPostIds) { _, _ in
+            scheduleProfileRefresh(currentUserOnly: true)
+        }
+        .onDisappear {
+            scheduledProfileRefreshTask?.cancel()
+            scheduledProfileRefreshTask = nil
+        }
+        .alert(L("ok", language), isPresented: Binding(
+            get: { menuMessage != nil },
+            set: { if !$0 { menuMessage = nil } }
+        )) {
+            Button(L("ok", language), role: .cancel) {}
+        } message: {
+            Text(menuMessage ?? "")
+        }
+        .alert(L("error", language), isPresented: Binding(
+            get: { viewModel.transientError != nil },
+            set: { if !$0 { viewModel.transientError = nil } }
+        )) {
+            Button(L("ok", language), role: .cancel) {}
+        } message: {
+            Text(viewModel.transientError ?? "")
+        }
+        .fullScreenCover(isPresented: $isShowingSettings) {
+            SettingsView(currentUser: currentUser, onLogout: onLogout, onSwitchAccount: onSwitchAccount)
+        }
+        .sheet(item: $followListKind) { kind in
+            NavigationStack {
+                FollowListView(profileUser: profileUser, currentUser: currentUser, kind: kind)
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+    }
+
+    private func loadProfileAndContent(showLoading: Bool = true) async {
+        if isRefreshingProfile, !showLoading { return }
+        isRefreshingProfile = true
+        defer { isRefreshingProfile = false }
+
+        let hadLoadedProfile = profileLoadState == .loaded && loadedProfileUser != nil
+        if showLoading || !hadLoadedProfile {
+            profileLoadState = .loading
+        }
+        if !isCurrentUser, profileTab == .likes {
+            profileTab = .posts
+        }
+        do {
+            let resolvedUser: UserEntity?
+            if profileUserId == currentUser.id {
+                resolvedUser = currentUser
+            } else if initialProfileUser?.id == profileUserId {
+                resolvedUser = initialProfileUser
+            } else {
+                resolvedUser = try await UserRepository(context: modelContext).fetchUser(id: profileUserId)
+            }
+
+            guard let resolvedUser else {
+                loadedProfileUser = nil
+                profileLoadState = .empty
+                return
+            }
+
+            loadedProfileUser = resolvedUser
+            userStore.register(resolvedUser)
+            if isCurrentUser {
+                userStore.register(currentUser)
+            }
+            profileLoadState = .loaded
+            await viewModel.load(context: modelContext, user: resolvedUser, postStore: postStore)
+            await refreshFollowState()
+        } catch {
+            if hadLoadedProfile {
+                profileLoadState = .loaded
+                viewModel.transientError = error.kaixUserMessage
+            } else {
+                loadedProfileUser = nil
+                profileLoadState = .error(error.kaixUserMessage)
+            }
+        }
+    }
+
+    private func scheduleProfileRefresh(currentUserOnly: Bool = false) {
+        guard !currentUserOnly || isCurrentUser else { return }
+        guard isProfileVisibleForRefresh else { return }
+        guard profileLoadState == .loaded || profileLoadState == .empty else { return }
+        guard !isRefreshingProfile else { return }
+
+        scheduledProfileRefreshTask?.cancel()
+        scheduledProfileRefreshTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 120_000_000)
+            guard !Task.isCancelled else { return }
+            await loadProfileAndContent(showLoading: false)
+        }
+    }
+
+    private var topBar: some View {
+        HStack {
+            if showsBackButton {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 42, height: 42)
+                        .kxGlassCircle()
+                }
+                .buttonStyle(.plain)
+            } else {
+                Color.clear
+                    .frame(width: 42, height: 42)
+            }
+
+            Spacer()
+
+            Text(isCurrentUser ? L("profile", language) : profileUser.displayName)
+                .font(.title3.weight(.semibold))
+                .lineLimit(1)
+
+            Spacer()
+
+            if isCurrentUser {
+                Button {
+                    isShowingSettings = true
+                } label: {
+                    Image(systemName: "gearshape.fill")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 42, height: 42)
+                        .kxGlassCircle()
+                }
+                .buttonStyle(.plain)
+            } else {
+                Menu {
+                    Button(L("shareProfile", language)) {
+                        UIPasteboard.general.string = "@\(profileUser.username)"
+                        menuMessage = L("profileCopied", language)
+                    }
+                    Button(L("reportUser", language), role: .destructive) {
+                        menuMessage = L("reportRecorded", language)
+                    }
+                    if isBlocked {
+                        Button(L("unblockUser", language)) {
+                            toggleBlockUser()
+                        }
+                    } else {
+                        Button(L("blockUser", language), role: .destructive) {
+                            toggleBlockUser()
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 42, height: 42)
+                        .kxGlassCircle()
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var stateContent: some View {
+        switch viewModel.state {
+        case .loading, .idle:
+            LoadingView()
+                .frame(maxWidth: .infinity)
+        case .error(let message):
+            ErrorStateView(message: message) {
+                Task { await loadProfileAndContent() }
+            }
+        case .empty, .loaded:
+            if visiblePosts.isEmpty {
+                EmptyStateView(title: profileTab.emptyTitle(language), subtitle: L("noContent", language), systemImage: profileTab.emptyIcon)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 22)
+            } else {
+                ForEach(visiblePosts) { post in
+                    let displayedPost = postStore.post(id: post.id) ?? post
+                    let originalPost = displayedPost.repostOfPostId.flatMap { postStore.post(id: $0) }
+                    let isQuoteRepost = originalPost != nil && !displayedPost.previewText.isEmpty
+                    let targetPost = isQuoteRepost ? displayedPost : (originalPost ?? displayedPost)
+                    PostCardView(
+                        post: displayedPost,
+                        author: viewModel.authors[displayedPost.authorId] ?? profileUser,
+                        mediaItems: viewModel.mediaByPostId[displayedPost.id] ?? [],
+                        currentUser: currentUser,
+                        originalPost: originalPost,
+                        originalAuthor: originalPost.flatMap { viewModel.authors[$0.authorId] },
+                        originalMediaItems: originalPost == nil ? [] : (viewModel.mediaByPostId[originalPost?.id ?? ""] ?? []),
+                        onOpen: { router.open(.postDetail(postId: targetPost.id)) },
+                        onOpenOriginal: { if let originalPost { router.open(.postDetail(postId: originalPost.id)) } },
+                        onAuthor: { router.open(.profile(userId: targetPost.authorId)) },
+                        onTag: { router.open(.topic(tag: $0)) },
+                        onComment: { router.open(.postDetailComment(postId: targetPost.id, commentId: nil)) },
+                        onLike: { Task { await viewModel.toggleLike(context: modelContext, post: targetPost, currentUser: currentUser, profileUser: profileUser, postStore: postStore) } },
+                        onBookmark: { Task { await viewModel.toggleBookmark(context: modelContext, post: targetPost, currentUser: currentUser, profileUser: profileUser, postStore: postStore) } },
+                        onRepost: { Task { await viewModel.repost(context: modelContext, post: targetPost, currentUser: currentUser, profileUser: profileUser, postStore: postStore) } },
+                        onQuoteRepost: { content in
+                            Task { await viewModel.quoteRepost(context: modelContext, post: targetPost, currentUser: currentUser, profileUser: profileUser, content: content, postStore: postStore) }
+                        }
+                    )
+                    .equatable()
+                }
+            }
+        }
+    }
+
+    private var profileHeader: some View {
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
+            ZStack(alignment: .bottomLeading) {
+                CoverGradientView(user: profileUser)
+
+                AvatarView(user: profileUser, size: KXAvatarSize.profile)
+                    .overlay(Circle().stroke(KXColor.cardBackground, lineWidth: 4))
+                    .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
+                    .offset(x: 14, y: 44)
+            }
+            .padding(.bottom, 48)
+
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Text(profileUser.displayName)
+                            .font(.title3.weight(.semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.82)
+                        if profileUser.isVerified {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.title3)
+                                .foregroundStyle(.blue)
+                        }
+                    }
+                    Text("@\(profileUser.username)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .layoutPriority(1)
+
+                Spacer()
+
+                profileActionButton
+            }
+
+            Text(profileUser.bio.isEmpty ? L("defaultBio", language) : profileUser.bio)
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: KXSpacing.md) {
+                if let regionLabel = profileRegionLabel {
+                    Label(regionLabel, systemImage: "mappin.and.ellipse")
+                } else if !profileUser.location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Label(profileUser.location, systemImage: "mappin.and.ellipse")
+                }
+                Label("\(profileUser.joinDate.formatted(date: .numeric, time: .omitted)) \(L("joined", language))", systemImage: "calendar")
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.secondary)
+
+            profileStatsStrip
+            contentSummaryStrip
+        }
+        .padding(KXSpacing.lg)
+        .kxGlassSurface(radius: KXRadius.sheet)
+    }
+
+    private var profileRegionLabel: String? {
+        if !profileUser.currentRegionCode.isEmpty,
+           let region = KaiXRegionDirectory.resolve(regionCode: profileUser.currentRegionCode) {
+            return "\(region.countryName) · \(region.shortLabel)"
+        }
+        if !profileUser.country.isEmpty, !profileUser.city.isEmpty,
+           let region = KaiXRegionDirectory.make(
+            country: profileUser.country,
+            province: profileUser.province.isEmpty ? nil : profileUser.province,
+            city: profileUser.city
+           ) {
+            return "\(region.countryName) · \(region.shortLabel)"
+        }
+        return nil
+    }
+
+    private var profileStatsStrip: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Tight, X-style metric strip — only the four numbers the
+            // user actually checks on themselves and others. "总热度",
+            // "被收藏", "活跃城市" earlier filled the card with
+            // numbers nobody actively reads.
+            FlowLayout(spacing: 14) {
+                followMetricButton(kind: .following)
+                followMetricButton(kind: .followers)
+                ProfileMetricInline(value: NumberFormatterUtils.compact(viewModel.postCount), title: L("posts", language))
+                ProfileMetricInline(value: NumberFormatterUtils.compact(viewModel.likeCount), title: L("likes", language))
+            }
+            // Identity + merchant + creator badges below the stats
+            // strip — these are categorical not numeric, so they
+            // belong on their own line.
+            FlowLayout(spacing: 6) {
+                if profileUser.role != .member {
+                    ProfileRoleBadge(title: roleTitle)
+                }
+                if !profileUser.creatorBadge.isEmpty {
+                    ProfileRoleBadge(title: profileUser.creatorBadge)
+                }
+                if profileUser.merchantVerified {
+                    ProfileRoleBadge(title: L("merchantVerified", language))
+                }
+                if profileUser.isMerchant && !profileUser.merchantVerified {
+                    ProfileRoleBadge(title: L("merchantPending", language))
+                }
+                if !profileUser.contentLanguagePreference.isEmpty {
+                    ProfileRoleBadge(title: ContentLanguage(rawValue: profileUser.contentLanguagePreference)?.title(language) ?? profileUser.contentLanguagePreference)
+                }
+            }
+        }
+        .padding(.top, 2)
+    }
+
+    @ViewBuilder
+    private var contentSummaryStrip: some View {
+        let visible = profileContentSummaryItems
+        if !visible.isEmpty {
+            FlowLayout(spacing: 7) {
+                ForEach(visible, id: \.0) { item in
+                    let spec = item.0.spec
+                    Label("\(L(spec.titleKey, language)) \(item.1)", systemImage: spec.icon)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(spec.tint)
+                        .lineLimit(1)
+                        .padding(.horizontal, 9)
+                        .frame(height: 28)
+                        .kxGlassCapsule()
+                }
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    /// "成就" — small badge strip computed from existing
+    /// counters. Pure local derivation, no extra fetch.
+    @ViewBuilder
+    private var achievementsRow: some View {
+        let badges = computedAchievements
+        if !badges.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Image(systemName: "trophy.fill")
+                        .foregroundStyle(KXColor.heat)
+                        .font(.subheadline.weight(.bold))
+                    Text("成就")
+                        .font(.subheadline.weight(.bold))
+                    Spacer()
+                }
+                FlowLayout(spacing: 8) {
+                    ForEach(badges, id: \.self) { badge in
+                        HStack(spacing: 5) {
+                            Image(systemName: badge.icon)
+                                .font(.caption.weight(.bold))
+                            Text(badge.title)
+                                .font(.caption.weight(.semibold))
+                        }
+                        .foregroundStyle(badge.color)
+                        .padding(.horizontal, 11)
+                        .frame(height: 28)
+                        .background(badge.color.opacity(0.12), in: Capsule())
+                    }
+                }
+            }
+            .padding(14)
+            .kxGlassSurface(radius: KXRadius.lg)
+        }
+    }
+
+    /// "活跃城市" — derive from `profileUser.recentRegionCodes`. Tap
+    /// any chip to set that region as the global browsing region.
+    @ViewBuilder
+    private var activeRegionsRow: some View {
+        let regions = profileUser.recentRegionCodes.prefix(6).compactMap { KaiXRegionDirectory.resolve(regionCode: $0) }
+        if !regions.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Image(systemName: "map")
+                        .foregroundStyle(KXColor.accent)
+                        .font(.subheadline.weight(.bold))
+                    Text("活跃城市")
+                        .font(.subheadline.weight(.bold))
+                    Spacer()
+                }
+                FlowLayout(spacing: 8) {
+                    ForEach(regions, id: \.regionCode) { region in
+                        Button {
+                            RegionStore.shared.setCurrent(region)
+                        } label: {
+                            HStack(spacing: 5) {
+                                Text(region.countryEmoji)
+                                Text(region.cityName)
+                                    .font(.caption.weight(.semibold))
+                            }
+                            .padding(.horizontal, 11)
+                            .frame(height: 30)
+                            .kxGlassCapsule()
+                            .foregroundStyle(.primary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(14)
+            .kxGlassSurface(radius: KXRadius.lg)
+        }
+    }
+
+    /// Top hashtags this user posted in. Tap → topic list.
+    @ViewBuilder
+    private var topTopicsRow: some View {
+        let topTopics = computedTopTopics
+        if !topTopics.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Image(systemName: "number")
+                        .foregroundStyle(KXColor.accent)
+                        .font(.subheadline.weight(.bold))
+                    Text("常发话题")
+                        .font(.subheadline.weight(.bold))
+                    Spacer()
+                }
+                FlowLayout(spacing: 8) {
+                    ForEach(topTopics, id: \.self) { topic in
+                        Button {
+                            router.open(.topic(tag: topic))
+                        } label: {
+                            Text("#\(topic)")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(KXColor.accent)
+                                .padding(.horizontal, 11)
+                                .frame(height: 30)
+                                .background(KXColor.accent.opacity(0.10), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(14)
+            .kxGlassSurface(radius: KXRadius.lg)
+        }
+    }
+
+    private struct AchievementBadge: Hashable {
+        let icon: String
+        let title: String
+        let color: Color
+    }
+
+    private var computedAchievements: [AchievementBadge] {
+        var badges: [AchievementBadge] = []
+        if viewModel.totalHeat >= 10_000 {
+            badges.append(.init(icon: "flame.fill", title: "万热达人", color: KXColor.heat))
+        }
+        if viewModel.postCount >= 50 {
+            badges.append(.init(icon: "pencil.tip", title: "高产作者", color: .indigo))
+        } else if viewModel.postCount >= 10 {
+            badges.append(.init(icon: "pencil", title: "活跃作者", color: .indigo))
+        }
+        if displayedFollowerCount >= 100 {
+            badges.append(.init(icon: "person.3.fill", title: "百人关注", color: .blue))
+        }
+        if viewModel.bookmarkCount >= 20 {
+            badges.append(.init(icon: "bookmark.fill", title: "收藏达人", color: .teal))
+        }
+        if profileUser.merchantVerified {
+            badges.append(.init(icon: "checkmark.seal.fill", title: "认证商家", color: .green))
+        }
+        if profileUser.role == .creator {
+            badges.append(.init(icon: "sparkles", title: "本地创作者", color: KXColor.accent))
+        }
+        return badges
+    }
+
+    private var computedTopTopics: [String] {
+        var counts: [String: Int] = [:]
+        for post in viewModel.authoredPosts {
+            for tag in post.hashtags {
+                counts[tag, default: 0] += 1
+            }
+        }
+        return counts.sorted { $0.value > $1.value }
+            .prefix(8)
+            .map { $0.key }
+    }
+
+    private var profileContentSummaryItems: [(ContentType, Int)] {
+        let preferred: [ContentType] = [
+            .guide, .secondhand, .housing, .roommate, .job_seek, .job_post,
+            .meetup, .dining, .event, .service, .merchant, .coupon
+        ]
+        return preferred.compactMap { type in
+            guard let count = viewModel.contentTypeCounts[type], count > 0 else { return nil }
+            return (type, count)
+        }
+    }
+
+    private func followMetricButton(kind: FollowListKind) -> some View {
+        let value = kind == .following ? displayedFollowingCount : displayedFollowerCount
+        let title = kind == .following ? L("followingCount", language) : L("followers", language)
+
+        return Button {
+            followListKind = kind
+        } label: {
+            ProfileMetricInline(value: NumberFormatterUtils.compact(value), title: title)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(title) \(value)")
+    }
+
+    @ViewBuilder
+    private var profileActionButton: some View {
+        if isCurrentUser {
+            NavigationLink {
+                EditProfileView(user: currentUser)
+            } label: {
+                Label(L("editProfile", language), systemImage: "pencil")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, KXSpacing.md)
+                    .frame(height: 36)
+                    .kxGlassCapsule()
+            }
+            .buttonStyle(.plain)
+        } else {
+            HStack(spacing: 8) {
+                Button {
+                    guard !isBlocked else {
+                        menuMessage = L("userBlocked", language)
+                        return
+                    }
+                    Task {
+                        do {
+                            let thread = try await MessageRepository(context: modelContext).getOrCreateThread(currentUserId: currentUser.id, peerUserId: profileUser.id)
+                            router.open(.conversation(conversationId: thread.id))
+                        } catch {
+                            menuMessage = error.kaixUserMessage
+                        }
+                    }
+                } label: {
+                    Image(systemName: "envelope")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 38, height: 38)
+                        .kxGlassCircle()
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    Task { await toggleFollow() }
+                } label: {
+                    Text(isFollowing ? L("followed", language) : L("follow", language))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(isFollowing ? Color.primary : KXColor.accent)
+                        .padding(.horizontal, KXSpacing.md)
+                        .frame(height: 38)
+                        .kxGlassCapsule(isSelected: !isFollowing)
+                }
+                .disabled(isFollowWorking)
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func refreshFollowState() async {
+        guard !isCurrentUser else { return }
+        isFollowing = (try? await UserRepository(context: modelContext).isFollowing(
+            followerId: currentUser.id,
+            followingId: profileUser.id
+        )) ?? false
+        userStore.setFollowing(isFollowing, userId: profileUser.id)
+        userStore.updateCounts(userId: currentUser.id, followers: currentUser.followerCount, following: currentUser.followingCount)
+        userStore.updateCounts(userId: profileUser.id, followers: profileUser.followerCount, following: profileUser.followingCount)
+    }
+
+    private func toggleFollow() async {
+        guard !isCurrentUser, !isFollowWorking else { return }
+        isFollowWorking = true
+        defer { isFollowWorking = false }
+        do {
+            isFollowing = try await UserRepository(context: modelContext).toggleFollow(
+                currentUser: currentUser,
+                targetUser: profileUser
+            )
+            userStore.register([currentUser, profileUser])
+            userStore.setFollowing(isFollowing, userId: profileUser.id)
+            userStore.updateCounts(userId: currentUser.id, followers: currentUser.followerCount, following: currentUser.followingCount)
+            userStore.updateCounts(userId: profileUser.id, followers: profileUser.followerCount, following: profileUser.followingCount)
+        } catch {
+            await refreshFollowState()
+        }
+    }
+
+    private func toggleBlockUser() {
+        guard !isCurrentUser else { return }
+        var ids = blockedUserIds
+        if ids.contains(profileUserId) {
+            ids.removeAll { $0 == profileUserId }
+            menuMessage = L("userUnblocked", language)
+        } else {
+            ids.append(profileUserId)
+            menuMessage = L("userBlocked", language)
+        }
+        blockedUserIdsRaw = ids.removingDuplicates().joined(separator: "|")
+    }
+
+    private var roleTitle: String {
+        switch profileUser.role {
+        case .admin, .creator: L("creator", language)
+        case .member: L("member", language)
+        }
+    }
+}
+
+private enum FollowListKind: String, Identifiable {
+    case followers
+    case following
+
+    var id: String { rawValue }
+
+    func title(_ language: AppLanguage) -> String {
+        switch self {
+        case .followers: L("followersList", language)
+        case .following: L("followingList", language)
+        }
+    }
+
+    func emptyTitle(_ language: AppLanguage) -> String {
+        switch self {
+        case .followers: L("emptyFollowers", language)
+        case .following: L("emptyFollowing", language)
+        }
+    }
+
+    var emptyIcon: String {
+        switch self {
+        case .followers: "person.2"
+        case .following: "person.crop.circle.badge.checkmark"
+        }
+    }
+}
+
+private struct ProfileMetricInline: View {
+    let value: String
+    let title: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text(value)
+                .font(.callout.weight(.bold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+            Text(title)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+    }
+}
+
+private struct ProfileRoleBadge: View {
+    let title: String
+
+    var body: some View {
+        Label(title, systemImage: "checkmark.seal.fill")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(KXColor.accent)
+            .lineLimit(1)
+            .labelStyle(.titleAndIcon)
+            .frame(height: 22)
+    }
+}
+
+private struct FollowListView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.appLanguage) private var language
+    @EnvironmentObject private var router: AppRouter
+    @State private var users: [UserEntity] = []
+    @State private var state: ScreenState = .idle
+
+    let profileUser: UserEntity
+    let currentUser: UserEntity
+    let kind: FollowListKind
+
+    var body: some View {
+        Group {
+            switch state {
+            case .idle, .loading:
+                LoadingView()
+            case .empty:
+                EmptyStateView(title: kind.emptyTitle(language), subtitle: "@\(profileUser.username)", systemImage: kind.emptyIcon)
+                    .padding(KaiXTheme.horizontalPadding)
+            case .error(let message):
+                ErrorStateView(message: message) {
+                    Task { await load() }
+                }
+                .padding(KaiXTheme.horizontalPadding)
+            case .loaded:
+                List(users) { user in
+                    Button {
+                        dismiss()
+                        router.open(.profile(userId: user.id))
+                    } label: {
+                        HStack(spacing: KXSpacing.md) {
+                            AvatarView(user: user, size: 42)
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack(spacing: 5) {
+                                    Text(user.displayName)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(.primary)
+                                        .lineLimit(1)
+                                    if user.isVerified {
+                                        KXVerifiedBadge()
+                                    }
+                                }
+                                Text("@\(user.username)")
+                                    .font(KXTypography.meta)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            Spacer()
+                            Text(NumberFormatterUtils.compact(user.followerCount))
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+            }
+        }
+        .kxPageBackground()
+        .navigationTitle(kind.title(language))
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(L("ok", language)) {
+                    dismiss()
+                }
+            }
+        }
+        .task(id: "\(profileUser.id)-\(kind.id)") {
+            await load()
+        }
+    }
+
+    private func load() async {
+        state = .loading
+        do {
+            let repository = UserRepository(context: modelContext)
+            switch kind {
+            case .followers:
+                users = try await repository.fetchFollowers(userId: profileUser.id)
+            case .following:
+                users = try await repository.fetchFollowing(userId: profileUser.id)
+            }
+            state = users.isEmpty ? .empty : .loaded
+        } catch {
+            state = .error(error.kaixUserMessage)
+        }
+    }
+}
+
+private struct CoverGradientView: View {
+    let user: UserEntity
+
+    var body: some View {
+        ZStack {
+            if let url = user.coverURL.kaixMediaURL {
+                CachedMediaImageView(url: url, targetPixelSize: 1200)
+            } else {
+                LinearGradient(
+                    colors: [
+                        Color.pink.opacity(0.90),
+                        KXColor.accent.opacity(0.34),
+                        Color.cyan.opacity(0.24),
+                        Color(.systemGray4).opacity(0.42)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .overlay {
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.20),
+                            Color.clear,
+                            Color.black.opacity(0.035)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+            }
+        }
+        .frame(height: 146)
+        .clipShape(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
+    }
+}
+
+private enum PersonalProfileTab: String, CaseIterable, Identifiable {
+    case posts
+    case replies
+    case media
+    case likes
+
+    var id: String { rawValue }
+
+    func title(_ language: AppLanguage) -> String {
+        switch self {
+        case .posts: L("posts", language)
+        case .replies: L("reply", language)
+        case .media: L("media", language)
+        case .likes: L("likes", language)
+        }
+    }
+
+    func emptyTitle(_ language: AppLanguage) -> String {
+        switch self {
+        case .posts: L("emptyPosts", language)
+        case .replies: L("emptyReplies", language)
+        case .media: L("emptyMedia", language)
+        case .likes: L("emptyLikes", language)
+        }
+    }
+
+    var emptyIcon: String {
+        switch self {
+        case .posts: "doc.text"
+        case .replies: "bubble.left"
+        case .media: "photo.on.rectangle"
+        case .likes: "heart"
+        }
+    }
+}
+
+private struct PersonalProfileTabPicker: View {
+    @Environment(\.appLanguage) private var language
+    let tabs: [PersonalProfileTab]
+    @Binding var selection: PersonalProfileTab
+
+    var body: some View {
+        KXSegmentedControl(tabs, selection: $selection) { tab in
+            Text(tab.title(language))
+        }
+    }
+}

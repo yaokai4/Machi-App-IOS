@@ -1,0 +1,212 @@
+import Foundation
+import Combine
+import SwiftData
+
+@MainActor
+final class MessagesViewModel: ObservableObject {
+    @Published var threads: [MessageThreadEntity] = []
+    @Published var peers: [String: UserEntity] = [:]
+    @Published var state: ScreenState = .idle
+    @Published var transientError: String?
+
+    func load(context: ModelContext, currentUser: UserEntity, messageStore: MessageStore? = nil) async {
+        let hasCachedContent = !threads.isEmpty
+        if !hasCachedContent {
+            state = .loading
+        }
+        do {
+            let repository = MessageRepository(context: context)
+            threads = try await repository.fetchThreads(currentUserId: currentUser.id)
+            messageStore?.setConversations(threads)
+            let users = try await UserRepository(context: context).fetchUsers()
+            peers = Dictionary(uniqueKeysWithValues: users.map { ($0.id, $0) })
+            state = threads.isEmpty ? .empty : .loaded
+        } catch {
+            if hasCachedContent {
+                transientError = error.kaixUserMessage
+                state = .loaded
+            } else {
+                state = .error(error.kaixUserMessage)
+            }
+        }
+    }
+
+    func deleteThread(context: ModelContext, thread: MessageThreadEntity, messageStore: MessageStore? = nil) async {
+        let previousThreads = threads
+        let previousMessages = messageStore?.messagesByConversationId[thread.id]
+        threads.removeAll { $0.id == thread.id }
+        messageStore?.removeConversation(thread.id)
+        state = threads.isEmpty ? .empty : .loaded
+        do {
+            try await MessageRepository(context: context).deleteThread(thread)
+        } catch {
+            threads = previousThreads
+            messageStore?.setConversations(previousThreads)
+            if let previousMessages {
+                messageStore?.setMessages(previousMessages, conversationId: thread.id)
+            }
+            state = threads.isEmpty ? .empty : .loaded
+            transientError = error.kaixUserMessage
+        }
+    }
+
+    func toggleRead(context: ModelContext, thread: MessageThreadEntity, messageStore: MessageStore? = nil) async {
+        let oldValue = thread.unreadCount
+        let shouldMarkRead = thread.unreadCount > 0
+        thread.unreadCount = shouldMarkRead ? 0 : 1
+        messageStore?.setUnreadCount(thread.unreadCount, conversationId: thread.id)
+        do {
+            if shouldMarkRead {
+                try await MessageRepository(context: context).markThreadRead(thread)
+            } else {
+                try await MessageRepository(context: context).markThreadUnread(thread)
+            }
+        } catch {
+            thread.unreadCount = oldValue
+            messageStore?.setUnreadCount(oldValue, conversationId: thread.id)
+            transientError = error.kaixUserMessage
+        }
+    }
+}
+
+@MainActor
+final class ChatViewModel: ObservableObject {
+    @Published var messages: [MessageEntity] = []
+    @Published var mediaByMessageId: [String: [MediaEntity]] = [:]
+    @Published var mediaDrafts: [MediaDraft] = []
+    @Published var inputText = ""
+    @Published var state: ScreenState = .idle
+    @Published var isSending = false
+    @Published var errorMessage: String?
+
+    var canSend: Bool {
+        !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !mediaDrafts.isEmpty
+    }
+
+    func load(context: ModelContext, thread: MessageThreadEntity, messageStore: MessageStore? = nil) async {
+        let hasCachedContent = !messages.isEmpty
+        if !hasCachedContent {
+            state = .loading
+        }
+        do {
+            messages = try await MessageRepository(context: context).fetchMessages(threadId: thread.id)
+            messageStore?.setMessages(messages, conversationId: thread.id)
+            let ids = Set(messages.map(\.id))
+            if ids.isEmpty {
+                mediaByMessageId = [:]
+            } else {
+                let idList = Array(ids)
+                let media = try context.fetch(FetchDescriptor<MediaEntity>(
+                    predicate: #Predicate { idList.contains($0.postId) },
+                    sortBy: [SortDescriptor(\.createdAt)]
+                ))
+                mediaByMessageId = Dictionary(grouping: media, by: \.postId)
+            }
+            state = messages.isEmpty ? .empty : .loaded
+        } catch {
+            if hasCachedContent {
+                errorMessage = error.kaixUserMessage
+                state = .loaded
+            } else {
+                state = .error(error.kaixUserMessage)
+            }
+        }
+    }
+
+    func addMedia(data: Data, isVideo: Bool, language: AppLanguage, messageStore: MessageStore? = nil) async {
+        guard mediaDrafts.count < KaiXConfig.maxMediaItemsPerPost else { return }
+        errorMessage = nil
+        do {
+            let draft = isVideo
+                ? try await UploadService.shared.prepareVideo(data: data)
+                : try await UploadService.shared.prepareImage(data: data)
+            mediaDrafts.append(draft)
+            messageStore?.enqueueUpload(draft)
+            if case .idle = state {
+                state = messages.isEmpty ? .empty : .loaded
+            }
+        } catch {
+            errorMessage = L("mediaFailed", language)
+            state = messages.isEmpty ? .empty : .loaded
+        }
+    }
+
+    func removeMedia(_ draft: MediaDraft, messageStore: MessageStore? = nil) {
+        mediaDrafts.removeAll { $0.id == draft.id }
+        messageStore?.removeUpload(draft.id)
+    }
+
+    func send(context: ModelContext, thread: MessageThreadEntity, currentUser: UserEntity, messageStore: MessageStore? = nil) async {
+        guard canSend else { return }
+        let drafts = mediaDrafts
+        isSending = true
+        defer { isSending = false }
+        do {
+            let message = try await MessageRepository(context: context).sendMessage(
+                thread: thread,
+                senderId: currentUser.id,
+                content: inputText,
+                mediaDrafts: drafts
+            )
+            messageStore?.enqueueSending(message)
+            inputText = ""
+            mediaDrafts = []
+            let messageId = message.id
+            let media = (try? context.fetch(FetchDescriptor<MediaEntity>(
+                predicate: #Predicate { $0.postId == messageId },
+                sortBy: [SortDescriptor(\.createdAt)]
+            ))) ?? []
+            messages.append(message)
+            mediaByMessageId[message.id] = media
+            state = .loaded
+            messageStore?.setMessages(messages, conversationId: thread.id)
+            messageStore?.removeFromQueue(message.id)
+            drafts.forEach { messageStore?.removeUpload($0.id) }
+        } catch {
+            errorMessage = error.kaixUserMessage
+            state = messages.isEmpty ? .empty : .loaded
+        }
+    }
+
+    func deleteMessage(context: ModelContext, thread: MessageThreadEntity, message: MessageEntity, messageStore: MessageStore? = nil) async {
+        let previousMessages = messages
+        let previousMedia = mediaByMessageId
+        messages.removeAll { $0.id == message.id }
+        mediaByMessageId[message.id] = nil
+        messageStore?.setMessages(messages, conversationId: thread.id)
+        state = messages.isEmpty ? .empty : .loaded
+        do {
+            try await MessageRepository(context: context).deleteMessage(message, in: thread)
+        } catch {
+            messages = previousMessages
+            mediaByMessageId = previousMedia
+            messageStore?.setMessages(previousMessages, conversationId: thread.id)
+            state = messages.isEmpty ? .empty : .loaded
+            errorMessage = error.kaixUserMessage
+        }
+    }
+
+    func retryMessage(context: ModelContext, thread: MessageThreadEntity, message: MessageEntity, messageStore: MessageStore? = nil) async {
+        guard message.status == .failed else { return }
+        let previousStatus = message.status
+        message.status = .sending
+        isSending = true
+        defer { isSending = false }
+        do {
+            try context.save()
+            message.status = .sent
+            thread.lastMessageAt = message.createdAt
+            thread.updatedAt = .now
+            try context.save()
+            if messages.contains(where: { $0.id == message.id }) == false {
+                messages.append(message)
+                messages.sort { $0.createdAt < $1.createdAt }
+            }
+            state = messages.isEmpty ? .empty : .loaded
+            messageStore?.setMessages(messages, conversationId: thread.id)
+        } catch {
+            message.status = previousStatus
+            errorMessage = error.kaixUserMessage
+        }
+    }
+}

@@ -1,0 +1,952 @@
+import Foundation
+import SwiftData
+
+@MainActor
+final class PostRepository {
+    private let context: ModelContext
+    private let heatService: HeatScoreService
+
+    init(context: ModelContext) {
+        self.context = context
+        self.heatService = .shared
+    }
+
+    func fetchPage(mode: TimelineMode, currentUserId: String, page: Int, pageSize: Int) async throws -> [PostEntity] {
+        let published = PostStatus.published.rawValue
+        let active = PostStatus.active.rawValue
+        let sortDescriptors: [SortDescriptor<PostEntity>] = mode == .hot
+            ? [SortDescriptor(\.heatScore, order: .reverse), SortDescriptor(\.createdAt, order: .reverse)]
+            : [SortDescriptor(\.createdAt, order: .reverse)]
+        let recentCutoff = Date().addingTimeInterval(-24 * 3600)
+
+        var descriptor = FetchDescriptor<PostEntity>(
+            predicate: #Predicate { $0.statusRaw == published || $0.statusRaw == active },
+            sortBy: sortDescriptors
+        )
+
+        // Ranking context — captures the user's region + content
+        // language preferences and is applied in-memory below to the
+        // fetched page so a language switch reshuffles the deck without
+        // needing every SwiftData predicate to grow a "language IN (…)"
+        // arm that #Predicate can't easily express.
+        let appLang = await MainActor.run(body: { AppLanguage.resolved(from: UserDefaults.standard.string(forKey: "appLanguageCode") ?? "") })
+        let ranking = await MainActor.run(body: { FeedQueryBuilder.context(for: appLang) })
+        let selectedCountry = ranking.region?.countryCode ?? ""
+        // For "recommend" and "local" we over-fetch a touch so the
+        // in-memory ranking has a real choice; "following" and "hot"
+        // stay strict so the user's mental model ("only people I
+        // follow", "freshest hot") isn't violated.
+        let overfetch = (mode == .recommend || mode == .local) ? 2 : 1
+        let limit = pageSize * overfetch
+
+        if mode == .following {
+            let followIds = try followingIds(for: currentUserId)
+            let authorIds = Array(followIds.union([currentUserId]))
+            if selectedCountry.isEmpty {
+                descriptor.predicate = #Predicate {
+                    ($0.statusRaw == published || $0.statusRaw == active) && authorIds.contains($0.authorId)
+                }
+            } else {
+                descriptor.predicate = #Predicate {
+                    ($0.statusRaw == published || $0.statusRaw == active)
+                    && authorIds.contains($0.authorId)
+                    && $0.country == selectedCountry
+                }
+            }
+            descriptor.fetchOffset = page * pageSize
+            descriptor.fetchLimit = pageSize
+            let pagePosts = try context.fetch(descriptor)
+            try refreshRepostState(for: pagePosts, currentUserId: currentUserId)
+            return FeedQueryBuilder.rank(pagePosts, using: ranking)
+        }
+
+        if mode == .local {
+            // Same-city stream. If the user hasn't picked a region yet
+            // we return an empty page so the UI can prompt them — the
+            // server-side `local` mode would 400 in the same case.
+            guard let region = await MainActor.run(body: { RegionStore.shared.current }) else {
+                return []
+            }
+            let regionCode = region.regionCode
+            let country = region.countryCode
+            let city = region.cityCode
+            descriptor.predicate = #Predicate {
+                ($0.statusRaw == published || $0.statusRaw == active)
+                && ($0.regionCode == regionCode || ($0.country == country && $0.city == city))
+            }
+            descriptor.fetchOffset = page * pageSize
+            descriptor.fetchLimit = limit
+            let pagePosts = try context.fetch(descriptor)
+            try refreshRepostState(for: pagePosts, currentUserId: currentUserId)
+            let ranked = FeedQueryBuilder.rank(pagePosts, using: ranking)
+            return Array(ranked.prefix(pageSize))
+        }
+
+        if mode == .hot {
+            if selectedCountry.isEmpty {
+                descriptor.predicate = #Predicate {
+                    ($0.statusRaw == published || $0.statusRaw == active) && $0.createdAt >= recentCutoff
+                }
+            } else {
+                descriptor.predicate = #Predicate {
+                    ($0.statusRaw == published || $0.statusRaw == active)
+                    && $0.createdAt >= recentCutoff
+                    && $0.country == selectedCountry
+                }
+            }
+            descriptor.fetchOffset = page * pageSize
+            descriptor.fetchLimit = pageSize
+            let pagePosts = try context.fetch(descriptor)
+            try refreshRepostState(for: pagePosts, currentUserId: currentUserId)
+            return FeedQueryBuilder.rank(pagePosts, using: ranking)
+        }
+
+        // recommend
+        if !selectedCountry.isEmpty {
+            descriptor.predicate = #Predicate {
+                ($0.statusRaw == published || $0.statusRaw == active)
+                && $0.country == selectedCountry
+            }
+        }
+        descriptor.fetchOffset = page * pageSize
+        descriptor.fetchLimit = limit
+        let posts = try context.fetch(descriptor)
+        try refreshRepostState(for: posts, currentUserId: currentUserId)
+        let ranked = FeedQueryBuilder.rank(posts, using: ranking)
+        return Array(ranked.prefix(pageSize))
+    }
+
+    func fetchCityPage(
+        region: KaiXRegionDirectory.Region,
+        channel: CityChannel,
+        currentUserId: String,
+        page: Int,
+        pageSize: Int
+    ) async throws -> [PostEntity] {
+        let published = PostStatus.published.rawValue
+        let active = PostStatus.active.rawValue
+        let regionCode = region.regionCode
+        let country = region.countryCode
+        let city = region.cityCode
+        let typeRaws = channel.contentTypes?.map(\.rawValue) ?? []
+        let cutoff = Date().addingTimeInterval(-24 * 3600)
+        let sortDescriptors: [SortDescriptor<PostEntity>] = channel.sortsByHeat
+            ? [SortDescriptor(\.heatScore, order: .reverse), SortDescriptor(\.createdAt, order: .reverse)]
+            : [SortDescriptor(\.createdAt, order: .reverse)]
+
+        var descriptor: FetchDescriptor<PostEntity>
+        if !typeRaws.isEmpty && channel.limitsToRecentHotWindow {
+            descriptor = FetchDescriptor<PostEntity>(
+                predicate: #Predicate {
+                    ($0.statusRaw == published || $0.statusRaw == active)
+                    && ($0.regionCode == regionCode || ($0.country == country && $0.city == city))
+                    && typeRaws.contains($0.contentTypeRaw)
+                    && $0.createdAt >= cutoff
+                },
+                sortBy: sortDescriptors
+            )
+        } else if !typeRaws.isEmpty {
+            descriptor = FetchDescriptor<PostEntity>(
+                predicate: #Predicate {
+                    ($0.statusRaw == published || $0.statusRaw == active)
+                    && ($0.regionCode == regionCode || ($0.country == country && $0.city == city))
+                    && typeRaws.contains($0.contentTypeRaw)
+                },
+                sortBy: sortDescriptors
+            )
+        } else if channel.limitsToRecentHotWindow {
+            descriptor = FetchDescriptor<PostEntity>(
+                predicate: #Predicate {
+                    ($0.statusRaw == published || $0.statusRaw == active)
+                    && ($0.regionCode == regionCode || ($0.country == country && $0.city == city))
+                    && $0.createdAt >= cutoff
+                },
+                sortBy: sortDescriptors
+            )
+        } else {
+            descriptor = FetchDescriptor<PostEntity>(
+                predicate: #Predicate {
+                    ($0.statusRaw == published || $0.statusRaw == active)
+                    && ($0.regionCode == regionCode || ($0.country == country && $0.city == city))
+                },
+                sortBy: sortDescriptors
+            )
+        }
+        descriptor.fetchOffset = page * pageSize
+        descriptor.fetchLimit = pageSize * 2
+        let posts = try context.fetch(descriptor)
+        try refreshRepostState(for: posts, currentUserId: currentUserId)
+        let appLang = await MainActor.run(body: { AppLanguage.resolved(from: UserDefaults.standard.string(forKey: "appLanguageCode") ?? "") })
+        let ranking = await MainActor.run(body: { FeedQueryBuilder.context(for: appLang) })
+        let ranked = FeedQueryBuilder.rank(posts, using: ranking)
+        return Array(ranked.prefix(pageSize))
+    }
+
+    func fetchPost(id: String, currentUserId: String? = nil) async throws -> PostEntity? {
+        var descriptor = FetchDescriptor<PostEntity>(predicate: #Predicate { $0.id == id })
+        descriptor.fetchLimit = 1
+        let post = try context.fetch(descriptor).first
+        if let post, let currentUserId {
+            try refreshRepostState(for: [post], currentUserId: currentUserId)
+        }
+        return post
+    }
+
+    func fetchPosts(ids: Set<String>, currentUserId: String? = nil) async throws -> [PostEntity] {
+        guard !ids.isEmpty else { return [] }
+        let idList = Array(ids)
+        let published = PostStatus.published.rawValue
+        let active = PostStatus.active.rawValue
+        let posts = try context.fetch(FetchDescriptor<PostEntity>(
+            predicate: #Predicate { idList.contains($0.id) && ($0.statusRaw == published || $0.statusRaw == active) }
+        ))
+        if let currentUserId {
+            try refreshRepostState(for: posts, currentUserId: currentUserId)
+        }
+        return posts
+    }
+
+    func fetchPosts(authorId: String) async throws -> [PostEntity] {
+        let published = PostStatus.published.rawValue
+        let active = PostStatus.active.rawValue
+        return try context.fetch(FetchDescriptor<PostEntity>(
+            predicate: #Predicate { $0.authorId == authorId && ($0.statusRaw == published || $0.statusRaw == active) },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        ))
+    }
+
+    func fetchDrafts(authorId: String) async throws -> [PostEntity] {
+        let draft = PostStatus.draft.rawValue
+        return try context.fetch(FetchDescriptor<PostEntity>(
+            predicate: #Predicate { $0.authorId == authorId && $0.statusRaw == draft },
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        ))
+    }
+
+    func fetchPosts(topic: String) async throws -> [PostEntity] {
+        let normalized = topic.normalizedTopicName
+        guard !normalized.isEmpty else { return [] }
+        let published = PostStatus.published.rawValue
+        let active = PostStatus.active.rawValue
+        var descriptor = FetchDescriptor<PostEntity>(
+            predicate: #Predicate { ($0.statusRaw == published || $0.statusRaw == active) && $0.hashtagsRaw.contains(normalized) },
+            sortBy: [SortDescriptor(\.heatScore, order: .reverse), SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = 300
+        return try context.fetch(descriptor)
+            .filter { $0.hashtags.contains(normalized) || $0.content.localizedCaseInsensitiveContains("#\(topic)") }
+    }
+
+    func fetchRepliedPosts(authorId: String) async throws -> [PostEntity] {
+        let comments = try context.fetch(FetchDescriptor<CommentEntity>(
+            predicate: #Predicate { $0.authorId == authorId && $0.deletedAt == nil },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        ))
+        var seen = Set<String>()
+        var orderedIds: [String] = []
+        for comment in comments where seen.insert(comment.postId).inserted {
+            orderedIds.append(comment.postId)
+        }
+
+        guard orderedIds.isEmpty == false else { return [] }
+        let idList = orderedIds
+        let published = PostStatus.published.rawValue
+        let active = PostStatus.active.rawValue
+        let posts = try context.fetch(FetchDescriptor<PostEntity>(
+            predicate: #Predicate { idList.contains($0.id) && ($0.statusRaw == published || $0.statusRaw == active) }
+        ))
+        let byId = Dictionary(uniqueKeysWithValues: posts.map { ($0.id, $0) })
+        return orderedIds.compactMap { byId[$0] }
+    }
+
+    func fetchLikedPosts() async throws -> [PostEntity] {
+        let published = PostStatus.published.rawValue
+        let active = PostStatus.active.rawValue
+        return try context.fetch(FetchDescriptor<PostEntity>(
+            predicate: #Predicate { $0.isLikedByCurrentUser && ($0.statusRaw == published || $0.statusRaw == active) },
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        ))
+    }
+
+    func fetchBookmarkedPosts() async throws -> [PostEntity] {
+        let published = PostStatus.published.rawValue
+        let active = PostStatus.active.rawValue
+        return try context.fetch(FetchDescriptor<PostEntity>(
+            predicate: #Predicate { $0.isBookmarkedByCurrentUser && ($0.statusRaw == published || $0.statusRaw == active) },
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        ))
+    }
+
+    func fetchMedia(postId: String) async throws -> [MediaEntity] {
+        try context.fetch(FetchDescriptor<MediaEntity>(
+            predicate: #Predicate { $0.postId == postId },
+            sortBy: [SortDescriptor(\.createdAt)]
+        ))
+    }
+
+    func fetchMedia(for posts: [PostEntity]) async throws -> [String: [MediaEntity]] {
+        let ids = Set(posts.map(\.id))
+        guard !ids.isEmpty else { return [:] }
+        let idList = Array(ids)
+        let media = try context.fetch(FetchDescriptor<MediaEntity>(
+            predicate: #Predicate { idList.contains($0.postId) },
+            sortBy: [SortDescriptor(\.createdAt)]
+        ))
+        return Dictionary(grouping: media, by: \.postId)
+    }
+
+    func createPost(
+        authorId: String,
+        content: String,
+        mediaDrafts: [MediaDraft],
+        hashtags: [String] = [],
+        region: KaiXRegionDirectory.Region? = nil,
+        contentType: ContentType = .dynamic,
+        attributes: [String: KaiXAttributeValue] = [:],
+        language: String = ""
+    ) async throws -> PostEntity {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let storedHashtags = hashtags.normalizedDisplayHashtags.isEmpty ? trimmed.extractedHashtags : hashtags.normalizedDisplayHashtags
+        // Typed content can legitimately have no body text — e.g. a
+        // secondhand listing whose "content" is the typed fields. So
+        // we keep the empty-body check only for the dynamic path.
+        if contentType == .dynamic {
+            guard trimmed.isEmpty == false || mediaDrafts.isEmpty == false || storedHashtags.isEmpty == false else {
+                throw RepositoryError.validationFailed
+            }
+        }
+
+        let post = PostEntity(
+            authorId: authorId,
+            content: trimmed,
+            status: mediaDrafts.isEmpty ? .published : .uploading,
+            hashtags: storedHashtags,
+            country: region?.countryCode ?? "",
+            province: region?.provinceCode ?? "",
+            city: region?.cityCode ?? "",
+            regionCode: region?.regionCode ?? "",
+            contentType: contentType,
+            attributesRaw: Self.encodeAttributesLocal(attributes),
+            language: language
+        )
+        context.insert(post)
+
+        for draft in mediaDrafts {
+            context.insert(MediaEntity(
+                id: draft.id,
+                postId: post.id,
+                type: draft.type,
+                localURL: draft.localURL.path,
+                thumbnailURL: draft.thumbnailURL.path,
+                width: draft.width,
+                height: draft.height,
+                duration: draft.duration,
+                uploadState: .local,
+                uploadProgress: 1
+            ))
+        }
+
+        post.status = .published
+        heatService.refresh(post)
+        try rebuildTopics()
+        try context.save()
+        // Mirror to the unified backend BEFORE we hand the post back
+        // to the UI. Previously this ran in a detached task: the user
+        // could like / edit / delete the post before the remote id
+        // arrived, and the write-through path (`remoteId ?? id`) would
+        // ship a local UUID to the server → 404 → silently dropped
+        // because every detached path is `try?`. The fix: wait for the
+        // remote id when a session is present. Pure-offline use still
+        // works (no token → no mirror), and the network call is short
+        // because composing is already a deliberate, infrequent
+        // action.
+        if KaiXBackend.token != nil {
+            var mediaIds: [String] = []
+            for draft in mediaDrafts {
+                guard let data = try? Data(contentsOf: draft.localURL) else { continue }
+                let mime = draft.type == .video ? "video/mp4" : "image/jpeg"
+                if let dto = try? await KaiXAPIClient.shared.uploadMedia(data: data, mime: mime) {
+                    mediaIds.append(dto.id)
+                }
+            }
+            do {
+                let remote = try await KaiXAPIClient.shared.createPost(
+                    content: trimmed,
+                    mediaIds: mediaIds,
+                    tags: storedHashtags,
+                    country: region?.countryCode,
+                    province: region?.provinceCode.isEmpty == true ? nil : region?.provinceCode,
+                    city: region?.cityCode,
+                    regionCode: region?.regionCode,
+                    contentType: contentType.rawValue,
+                    attributes: attributes.isEmpty ? nil : attributes
+                )
+                post.remoteId = remote.id
+                post.syncStatus = .synced
+                try? context.save()
+            } catch {
+                // Remote mirror failed. The local post still exists so
+                // the user sees their content. Flag it `.failed` so a
+                // later sync pass (or a manual retry) can finish the
+                // job — and so the write-through guards in `setLike`
+                // / `setBookmark` / `addComment` know not to ship the
+                // local id to the server.
+                post.syncStatus = .failed
+                try? context.save()
+            }
+        }
+        return post
+    }
+
+    /// Internal helper for write-through mirroring; resolves the local
+    /// PostEntity by its locally-issued id.
+    static func findLocalPost(id: String, in context: ModelContext) throws -> PostEntity? {
+        var d = FetchDescriptor<PostEntity>(predicate: #Predicate { $0.id == id })
+        d.fetchLimit = 1
+        return try context.fetch(d).first
+    }
+
+    /// Serialise a typed-attributes map to the canonical JSON string
+    /// used both on disk (PostEntity.attributesRaw) and on the wire.
+    /// Kept here so the repository and the sync layer agree on
+    /// exactly the same encoding.
+    static func encodeAttributesLocal(_ map: [String: KaiXAttributeValue]) -> String {
+        guard !map.isEmpty else { return "" }
+        var plain: [String: Any] = [:]
+        for (k, v) in map {
+            switch v.kind {
+            case .string(let s): plain[k] = s
+            case .double(let n): plain[k] = n
+            case .bool(let b):   plain[k] = b
+            case .null:          continue
+            }
+        }
+        guard !plain.isEmpty,
+              let data = try? JSONSerialization.data(withJSONObject: plain, options: [.sortedKeys]),
+              let str = String(data: data, encoding: .utf8) else {
+            return ""
+        }
+        return str
+    }
+
+    func saveDraft(
+        authorId: String,
+        content: String,
+        mediaDrafts: [MediaDraft],
+        hashtags: [String] = [],
+        region: KaiXRegionDirectory.Region? = nil,
+        contentType: ContentType = .dynamic,
+        attributes: [String: KaiXAttributeValue] = [:],
+        language: String = ""
+    ) async throws -> PostEntity {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let storedHashtags = hashtags.normalizedDisplayHashtags.isEmpty ? trimmed.extractedHashtags : hashtags.normalizedDisplayHashtags
+        guard trimmed.isEmpty == false || mediaDrafts.isEmpty == false || storedHashtags.isEmpty == false || attributes.isEmpty == false else {
+            throw RepositoryError.validationFailed
+        }
+
+        let post = PostEntity(
+            authorId: authorId,
+            content: trimmed,
+            status: .draft,
+            hashtags: storedHashtags,
+            country: region?.countryCode ?? "",
+            province: region?.provinceCode ?? "",
+            city: region?.cityCode ?? "",
+            regionCode: region?.regionCode ?? "",
+            contentType: contentType,
+            attributesRaw: Self.encodeAttributesLocal(attributes),
+            language: language
+        )
+        context.insert(post)
+
+        for draft in mediaDrafts {
+            context.insert(MediaEntity(
+                id: draft.id,
+                postId: post.id,
+                type: draft.type,
+                localURL: draft.localURL.path,
+                thumbnailURL: draft.thumbnailURL.path,
+                width: draft.width,
+                height: draft.height,
+                duration: draft.duration,
+                uploadState: .local,
+                uploadProgress: 1
+            ))
+        }
+
+        try context.save()
+        return post
+    }
+
+    func updateDraft(post: PostEntity, content: String) async throws {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let postId = post.id
+        var mediaDescriptor = FetchDescriptor<MediaEntity>(
+            predicate: #Predicate { $0.postId == postId }
+        )
+        mediaDescriptor.fetchLimit = 1
+        let hasMedia = try context.fetch(mediaDescriptor).isEmpty == false
+        guard trimmed.isEmpty == false || hasMedia else { throw RepositoryError.validationFailed }
+        post.content = trimmed
+        post.hashtags = trimmed.extractedHashtags
+        post.updatedAt = .now
+        try context.save()
+    }
+
+    func publishDraft(post: PostEntity) async throws {
+        post.status = .published
+        post.updatedAt = .now
+        heatService.refresh(post)
+        try rebuildTopics()
+        try context.save()
+    }
+
+    func incrementView(post: PostEntity) async throws {
+        let previousHeat = post.heatScore
+        post.viewCount += 1
+        try refreshHeatAndTopics(for: post, previousHeat: previousHeat)
+        try context.save()
+    }
+
+    func toggleLike(post: PostEntity, currentUserId: String) async throws {
+        try await setLike(post: post, isLiked: !post.isLikedByCurrentUser, currentUserId: currentUserId)
+    }
+
+    func setLike(
+        post: PostEntity,
+        isLiked: Bool,
+        currentUserId: String,
+        countAlreadyUpdated: Bool = false
+    ) async throws {
+        let likeDelta = isLiked ? 1 : -1
+        let previousHeat = countAlreadyUpdated
+            ? heatScore(for: post, likeDelta: likeDelta)
+            : post.heatScore
+        if !countAlreadyUpdated, post.isLikedByCurrentUser != isLiked {
+            post.likeCount = max(0, post.likeCount + likeDelta)
+        }
+        post.isLikedByCurrentUser = isLiked
+        try refreshHeatAndTopics(for: post, previousHeat: previousHeat)
+
+        if isLiked && post.authorId != currentUserId && NotificationPreferenceService.isEnabled(.like, recipientUserId: post.authorId) {
+            try upsertNotification(type: .like, actorId: currentUserId, targetPostId: post.id, content: "喜欢了你的帖子")
+        }
+
+        try context.save()
+    }
+
+    func toggleBookmark(post: PostEntity, currentUserId: String) async throws {
+        try await setBookmark(post: post, isBookmarked: !post.isBookmarkedByCurrentUser, currentUserId: currentUserId)
+    }
+
+    func setBookmark(
+        post: PostEntity,
+        isBookmarked: Bool,
+        currentUserId: String,
+        countAlreadyUpdated: Bool = false
+    ) async throws {
+        let bookmarkDelta = isBookmarked ? 1 : -1
+        let previousHeat = countAlreadyUpdated
+            ? heatScore(for: post, bookmarkDelta: bookmarkDelta)
+            : post.heatScore
+        if !countAlreadyUpdated, post.isBookmarkedByCurrentUser != isBookmarked {
+            post.bookmarkCount = max(0, post.bookmarkCount + bookmarkDelta)
+        }
+        post.isBookmarkedByCurrentUser = isBookmarked
+        try refreshHeatAndTopics(for: post, previousHeat: previousHeat)
+
+        if isBookmarked && post.authorId != currentUserId && NotificationPreferenceService.isEnabled(.bookmark, recipientUserId: post.authorId) {
+            try upsertNotification(type: .bookmark, actorId: currentUserId, targetPostId: post.id, content: "收藏了你的帖子")
+        }
+
+        try context.save()
+    }
+
+    func repost(post: PostEntity, currentUserId: String) async throws -> PostEntity {
+        let existing = try existingReposts(for: post, currentUserId: currentUserId)
+        if let repost = existing.first {
+            if existing.count > 1 {
+                for duplicate in existing.dropFirst() {
+                    context.delete(duplicate)
+                }
+                post.repostCount = max(1, post.repostCount - (existing.count - 1))
+                try context.save()
+            }
+            post.isRepostedByCurrentUser = true
+            return repost
+        }
+
+        if let repost = try await setRepost(post: post, isReposted: true, currentUserId: currentUserId) {
+            return repost
+        }
+
+        guard let repost = try existingReposts(for: post, currentUserId: currentUserId).first else {
+            throw RepositoryError.notFound
+        }
+        return repost
+    }
+
+    func quoteRepost(
+        post: PostEntity,
+        currentUserId: String,
+        content: String,
+        countAlreadyUpdated: Bool = false
+    ) async throws -> PostEntity {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw RepositoryError.validationFailed }
+
+        let previousHeat = countAlreadyUpdated
+            ? heatScore(for: post, repostDelta: 1)
+            : post.heatScore
+        let quote = PostEntity(
+            authorId: currentUserId,
+            content: trimmed,
+            viewCount: 0,
+            status: .published,
+            hashtags: trimmed.extractedHashtags,
+            repostOfPostId: post.id
+        )
+        context.insert(quote)
+        if !countAlreadyUpdated {
+            post.repostCount = max(0, post.repostCount + 1)
+        }
+        try refreshHeatAndTopics(for: post, previousHeat: previousHeat)
+
+        if post.authorId != currentUserId && NotificationPreferenceService.isEnabled(.repost, recipientUserId: post.authorId) {
+            try upsertNotification(type: .repost, actorId: currentUserId, targetPostId: post.id, content: trimmed)
+        }
+
+        try context.save()
+        return quote
+    }
+
+    func setRepost(
+        post: PostEntity,
+        isReposted: Bool,
+        currentUserId: String,
+        countAlreadyUpdated: Bool = false
+    ) async throws -> PostEntity? {
+        let existing = try existingReposts(for: post, currentUserId: currentUserId)
+        let wasReposted = post.isRepostedByCurrentUser || !existing.isEmpty
+        let repostDelta = isReposted ? 1 : -1
+        let previousHeat = countAlreadyUpdated
+            ? heatScore(for: post, repostDelta: repostDelta)
+            : post.heatScore
+        var resolvedRepost: PostEntity?
+
+        if !countAlreadyUpdated, wasReposted != isReposted {
+            post.repostCount = max(0, post.repostCount + repostDelta)
+        }
+        post.isRepostedByCurrentUser = isReposted
+
+        if isReposted {
+            if existing.isEmpty {
+                let repost = PostEntity(
+                    authorId: currentUserId,
+                    content: "",
+                    viewCount: 0,
+                    status: .published,
+                    hashtags: [],
+                    repostOfPostId: post.id
+                )
+                context.insert(repost)
+                resolvedRepost = repost
+            } else {
+                resolvedRepost = existing.first
+                if countAlreadyUpdated {
+                    post.repostCount = max(1, post.repostCount - 1)
+                }
+                if existing.count > 1 {
+                    for duplicate in existing.dropFirst() {
+                        context.delete(duplicate)
+                    }
+                    post.repostCount = max(1, post.repostCount - (existing.count - 1))
+                }
+            }
+
+            if post.authorId != currentUserId && NotificationPreferenceService.isEnabled(.repost, recipientUserId: post.authorId) {
+                try upsertNotification(type: .repost, actorId: currentUserId, targetPostId: post.id, content: "转发了你的帖子")
+            }
+        } else {
+            for repost in existing {
+                context.delete(repost)
+            }
+        }
+
+        try refreshHeatAndTopics(for: post, previousHeat: previousHeat)
+        try context.save()
+        return resolvedRepost
+    }
+
+    func undoRepost(post: PostEntity, currentUserId: String) async throws {
+        _ = try await setRepost(post: post, isReposted: false, currentUserId: currentUserId)
+    }
+
+    func addComment(
+        post: PostEntity,
+        authorId: String,
+        content: String,
+        parentCommentId: String? = nil,
+        commentCountAlreadyUpdated: Bool = false
+    ) async throws -> CommentEntity {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else { throw RepositoryError.validationFailed }
+
+        let previousHeat = commentCountAlreadyUpdated
+            ? heatScore(for: post, commentDelta: 1)
+            : post.heatScore
+        let comment = CommentEntity(postId: post.id, authorId: authorId, content: trimmed, parentCommentId: parentCommentId)
+        context.insert(comment)
+        if !commentCountAlreadyUpdated {
+            post.commentCount += 1
+        }
+        try refreshHeatAndTopics(for: post, previousHeat: previousHeat)
+
+        if let parentCommentId,
+           let parent = try fetchComment(id: parentCommentId),
+           parent.authorId != authorId,
+           NotificationPreferenceService.isEnabled(.reply, recipientUserId: parent.authorId) {
+            try upsertNotification(
+                type: .reply,
+                actorId: authorId,
+                targetPostId: post.id,
+                targetCommentId: comment.id,
+                content: trimmed
+            )
+        } else if post.authorId != authorId && NotificationPreferenceService.isEnabled(.comment, recipientUserId: post.authorId) {
+            try upsertNotification(
+                type: .comment,
+                actorId: authorId,
+                targetPostId: post.id,
+                targetCommentId: comment.id,
+                content: trimmed
+            )
+        }
+
+        try context.save()
+        // Mirror the comment to the unified backend. Best-effort: if
+        // the server later rejects, the next refresh will reconcile by
+        // remote upsert. Only fire when we have a confirmed remote id
+        // — otherwise the request would 404 with our local UUID and
+        // the comment would silently disappear from Web's view.
+        if KaiXBackend.token != nil, let remotePostId = post.remoteId {
+            let parentId = parentCommentId
+            Task.detached {
+                _ = try? await KaiXAPIClient.shared.createComment(
+                    postId: remotePostId,
+                    content: trimmed,
+                    parentId: parentId,
+                )
+            }
+        }
+        return comment
+    }
+
+    func deleteComment(comment: CommentEntity, commentCountAlreadyUpdated: Bool = false) async throws {
+        let postId = comment.postId
+        let parentId = comment.id
+        let descendants = try context.fetch(FetchDescriptor<CommentEntity>(
+            predicate: #Predicate { $0.parentCommentId == parentId }
+        ))
+        let deleteCount = 1 + descendants.count
+        if let post = try await fetchPost(id: postId) {
+            if commentCountAlreadyUpdated {
+                let previousHeat = heatScore(for: post, commentDelta: -deleteCount)
+                try applyTopicHeatDelta(for: post, previousHeat: previousHeat)
+            } else {
+                let previousHeat = post.heatScore
+                post.commentCount = max(0, post.commentCount - deleteCount)
+                try refreshHeatAndTopics(for: post, previousHeat: previousHeat)
+            }
+        }
+        descendants.forEach(context.delete)
+        context.delete(comment)
+        try context.save()
+    }
+
+    func deletePost(post: PostEntity) async throws {
+        let postId = post.id
+        let remoteId = post.remoteId
+        let reposts = try context.fetch(FetchDescriptor<PostEntity>(
+            predicate: #Predicate { $0.repostOfPostId == postId }
+        ))
+        let affectedPostIds = [postId] + reposts.map(\.id)
+        let comments = try context.fetch(FetchDescriptor<CommentEntity>(
+            predicate: #Predicate { affectedPostIds.contains($0.postId) }
+        ))
+        let media = try context.fetch(FetchDescriptor<MediaEntity>(
+            predicate: #Predicate { affectedPostIds.contains($0.postId) }
+        ))
+        let notifications = try context.fetch(FetchDescriptor<NotificationEntity>()).filter { notification in
+            notification.targetPostId.map { affectedPostIds.contains($0) } ?? false
+        }
+
+        comments.forEach(context.delete)
+        media.forEach(context.delete)
+        notifications.forEach(context.delete)
+        reposts.forEach(context.delete)
+        context.delete(post)
+        try rebuildTopics()
+        try context.save()
+        // Only forward the delete when we have the server's id —
+        // posts that never synced (no token, or sync still pending)
+        // exist purely locally and don't need a remote round-trip.
+        if KaiXBackend.token != nil, let remoteId {
+            Task.detached { try? await KaiXAPIClient.shared.deletePost(remoteId) }
+        }
+    }
+
+    func updatePost(post: PostEntity, content: String) async throws {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else { throw RepositoryError.validationFailed }
+
+        let remoteId = post.remoteId
+        post.content = trimmed
+        post.hashtags = trimmed.extractedHashtags
+        post.updatedAt = .now
+        heatService.refresh(post)
+        try rebuildTopics()
+        try context.save()
+        if KaiXBackend.token != nil, let remoteId {
+            Task.detached { _ = try? await KaiXAPIClient.shared.editPost(remoteId, content: trimmed) }
+        }
+    }
+
+    private func followingIds(for userId: String) throws -> Set<String> {
+        let follows = try context.fetch(FetchDescriptor<FollowEntity>(
+            predicate: #Predicate { $0.followerId == userId }
+        ))
+        return Set(follows.map(\.followingId))
+    }
+
+    private func existingReposts(for post: PostEntity, currentUserId: String) throws -> [PostEntity] {
+        let postId = post.id
+        let reposts = try context.fetch(FetchDescriptor<PostEntity>(
+            predicate: #Predicate { $0.authorId == currentUserId && $0.repostOfPostId == postId },
+            sortBy: [SortDescriptor(\.createdAt)]
+        ))
+        return reposts.filter { repost in
+            let trimmed = repost.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty || trimmed == post.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    private func refreshRepostState(for posts: [PostEntity], currentUserId: String) throws {
+        guard !posts.isEmpty else { return }
+        let authoredPosts = try context.fetch(FetchDescriptor<PostEntity>(
+            predicate: #Predicate { $0.authorId == currentUserId && $0.repostOfPostId != nil }
+        ))
+        let repostedIds = Set(authoredPosts.compactMap(\.repostOfPostId))
+        for post in posts {
+            post.isRepostedByCurrentUser = repostedIds.contains(post.id)
+        }
+    }
+
+    private func fetchComment(id: String) throws -> CommentEntity? {
+        var descriptor = FetchDescriptor<CommentEntity>(predicate: #Predicate { $0.id == id })
+        descriptor.fetchLimit = 1
+        return try context.fetch(descriptor).first
+    }
+
+    private func upsertNotification(
+        type: NotificationType,
+        actorId: String,
+        targetPostId: String?,
+        targetCommentId: String? = nil,
+        content: String
+    ) throws {
+        let typeRaw = type.rawValue
+        let matches = try context.fetch(FetchDescriptor<NotificationEntity>(
+            predicate: #Predicate {
+                $0.typeRaw == typeRaw
+                && $0.actorId == actorId
+                && $0.targetPostId == targetPostId
+                && $0.targetCommentId == targetCommentId
+            },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        ))
+
+        if let first = matches.first {
+            first.content = content
+            first.targetCommentId = targetCommentId
+            first.createdAt = .now
+            first.isRead = false
+            for duplicate in matches.dropFirst() {
+                context.delete(duplicate)
+            }
+        } else {
+            context.insert(NotificationEntity(
+                type: type,
+                actorId: actorId,
+                targetPostId: targetPostId,
+                targetCommentId: targetCommentId,
+                content: content
+            ))
+        }
+    }
+
+    private func refreshHeatAndTopics(for post: PostEntity, previousHeat: Double) throws {
+        heatService.refresh(post)
+        try applyTopicHeatDelta(for: post, previousHeat: previousHeat)
+    }
+
+    private func applyTopicHeatDelta(for post: PostEntity, previousHeat: Double) throws {
+        let delta = post.heatScore - previousHeat
+        guard abs(delta) > 0.0001 else { return }
+
+        for name in post.hashtags.map(\.normalizedTopicName) where !name.isEmpty {
+            var descriptor = FetchDescriptor<TopicEntity>(predicate: #Predicate { $0.name == name })
+            descriptor.fetchLimit = 1
+            if let topic = try context.fetch(descriptor).first {
+                topic.heatScore = max(0, topic.heatScore + delta)
+                topic.updatedAt = .now
+            } else {
+                context.insert(TopicEntity(name: name, postCount: 1, heatScore: max(0, post.heatScore)))
+            }
+        }
+    }
+
+    private func heatScore(
+        for post: PostEntity,
+        viewDelta: Int = 0,
+        likeDelta: Int = 0,
+        commentDelta: Int = 0,
+        repostDelta: Int = 0,
+        bookmarkDelta: Int = 0
+    ) -> Double {
+        heatService.calculate(
+            viewCount: max(0, post.viewCount - viewDelta),
+            likeCount: max(0, post.likeCount - likeDelta),
+            commentCount: max(0, post.commentCount - commentDelta),
+            repostCount: max(0, post.repostCount - repostDelta),
+            bookmarkCount: max(0, post.bookmarkCount - bookmarkDelta),
+            reportCount: post.reportCount,
+            boostWeight: post.boostWeight,
+            boostedUntil: post.boostedUntil,
+            createdAt: post.createdAt
+        )
+    }
+
+    private func rebuildTopics() throws {
+        let topics = try context.fetch(FetchDescriptor<TopicEntity>())
+        topics.forEach(context.delete)
+
+        let published = PostStatus.published.rawValue
+        let active = PostStatus.active.rawValue
+        let posts = try context.fetch(FetchDescriptor<PostEntity>(
+            predicate: #Predicate { $0.statusRaw == published || $0.statusRaw == active }
+        ))
+        let grouped = Dictionary(grouping: posts.flatMap { post in
+            post.hashtags.map { ($0.normalizedTopicName, post.heatScore) }
+        }, by: { $0.0 })
+
+        for (name, values) in grouped where !name.isEmpty {
+            context.insert(TopicEntity(
+                name: name,
+                postCount: values.count,
+                heatScore: values.reduce(0) { $0 + $1.1 }
+            ))
+        }
+    }
+}

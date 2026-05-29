@@ -1,0 +1,169 @@
+import Foundation
+import SwiftData
+
+@Model
+final class UserEntity {
+    @Attribute(.unique) var id: String
+    @Attribute(.unique) var username: String
+    var displayName: String
+    var avatarURL: String
+    var coverURL: String
+    var bio: String
+    var location: String
+    var joinDate: Date
+    var isVerified: Bool
+    var roleRaw: String
+    var followerCount: Int
+    var followingCount: Int
+    var createdAt: Date
+    var updatedAt: Date
+    var passwordHash: String
+    var avatarSymbol: String
+    var avatarColorName: String
+    var remoteId: String?
+    var syncStatusRaw: String
+    var deletedAt: Date?
+    var cursor: String?
+    // Phase 1: declared home + currently-browsing region. Persisted
+    // here so the data survives even if the user clears their
+    // app-side caches; `currentRegionCode` may differ from
+    // `country/province/city` while travelling.
+    var country: String = ""
+    var province: String = ""
+    var city: String = ""
+    var currentRegionCode: String = ""
+    var recentRegionCodesRaw: String = ""
+    var membershipLevel: String = "free"
+    var totalHeat: Double = 0
+    var creatorBadge: String = ""
+    var isMerchant: Bool = false
+    var merchantVerified: Bool = false
+    var profileViewCount: Int = 0
+    // Phase 3: explicit App / content language preferences. Stored
+    // alongside the user so they survive a logout-relogin and so the
+    // server can mirror them for cross-device parity. `appLanguage`
+    // mirrors the `AppLanguage` rawValue; `contentLanguagePreference`
+    // mirrors `ContentLanguage.rawValue`. Empty defaults preserve
+    // the "no explicit choice → follow system / follow app" behavior.
+    var appLanguage: String = ""
+    var contentLanguagePreference: String = ""
+    var preferredContentLanguagesRaw: String = ""
+
+    init(
+        id: String = UUID().uuidString,
+        username: String,
+        displayName: String,
+        avatarURL: String = "",
+        coverURL: String = "",
+        bio: String = "",
+        location: String = "",
+        joinDate: Date = .now,
+        isVerified: Bool = false,
+        role: UserRole = .member,
+        followerCount: Int = 0,
+        followingCount: Int = 0,
+        createdAt: Date = .now,
+        updatedAt: Date = .now,
+        passwordHash: String = "",
+        avatarSymbol: String = "person.fill",
+        avatarColorName: String = "blue",
+        remoteId: String? = nil,
+        syncStatus: SyncStatus = .local,
+        deletedAt: Date? = nil,
+        cursor: String? = nil,
+        country: String = "",
+        province: String = "",
+        city: String = "",
+        currentRegionCode: String = "",
+        recentRegionCodesRaw: String = "",
+        membershipLevel: String = "free",
+        totalHeat: Double = 0,
+        creatorBadge: String = "",
+        isMerchant: Bool = false,
+        merchantVerified: Bool = false,
+        profileViewCount: Int = 0,
+        appLanguage: String = "",
+        contentLanguagePreference: String = "",
+        preferredContentLanguagesRaw: String = ""
+    ) {
+        self.id = id
+        self.username = username.normalizedUsername
+        self.displayName = displayName
+        self.avatarURL = avatarURL
+        self.coverURL = coverURL
+        self.bio = bio
+        self.location = location
+        self.joinDate = joinDate
+        self.isVerified = isVerified
+        self.roleRaw = role.rawValue
+        self.followerCount = followerCount
+        self.followingCount = followingCount
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.passwordHash = passwordHash
+        self.avatarSymbol = avatarSymbol
+        self.avatarColorName = avatarColorName
+        self.remoteId = remoteId
+        self.syncStatusRaw = syncStatus.rawValue
+        self.deletedAt = deletedAt
+        self.cursor = cursor
+        self.country = country
+        self.province = province
+        self.city = city
+        self.currentRegionCode = currentRegionCode
+        self.recentRegionCodesRaw = recentRegionCodesRaw
+        self.membershipLevel = membershipLevel
+        self.totalHeat = totalHeat
+        self.creatorBadge = creatorBadge
+        self.isMerchant = isMerchant
+        self.merchantVerified = merchantVerified
+        self.profileViewCount = profileViewCount
+        self.appLanguage = appLanguage
+        self.contentLanguagePreference = contentLanguagePreference
+        self.preferredContentLanguagesRaw = preferredContentLanguagesRaw
+    }
+}
+
+extension UserEntity {
+    var role: UserRole {
+        get { UserRole(rawValue: roleRaw) ?? .member }
+        set {
+            roleRaw = newValue.rawValue
+            updatedAt = .now
+        }
+    }
+
+    var syncStatus: SyncStatus {
+        get { SyncStatus(rawValue: syncStatusRaw) ?? .local }
+        set {
+            syncStatusRaw = newValue.rawValue
+            updatedAt = .now
+        }
+    }
+
+    var recentRegionCodes: [String] {
+        get { recentRegionCodesRaw.storedHashtags }
+        set {
+            recentRegionCodesRaw = newValue
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                .filter { !$0.isEmpty }
+                .removingDuplicates()
+                .joined(separator: "|")
+            updatedAt = .now
+        }
+    }
+
+    /// Pipe-delimited list of preferred content-language tags
+    /// ("zh|en|ja"). Empty string defaults to "no extras configured".
+    var preferredContentLanguages: [String] {
+        get { preferredContentLanguagesRaw.storedHashtags }
+        set {
+            preferredContentLanguagesRaw = newValue
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                .filter { !$0.isEmpty }
+                .removingDuplicates()
+                .joined(separator: "|")
+            updatedAt = .now
+        }
+    }
+}
