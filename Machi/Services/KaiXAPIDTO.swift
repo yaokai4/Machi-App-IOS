@@ -211,6 +211,9 @@ struct KaiXPostDTO: Codable, Equatable {
     // Phase 3 — content language tag ("zh" / "en" / "ja" / …).
     // Optional so responses from older servers still decode.
     let language: String?
+    // City Seed Bot (城市内容助手). Optional so older servers decode cleanly.
+    let is_seed_content: Bool?
+    let seed_author_type: String?
 
     struct OptionalPost: Codable, Equatable {
         let id: String

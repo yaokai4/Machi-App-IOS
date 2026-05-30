@@ -331,6 +331,8 @@ final class RemoteSyncService {
             if let v = dto.boost_weight { existing.boostWeight = v }
             if let v = dto.boosted_until { existing.boostedUntil = parsedDate(v) }
             if let v = dto.language { existing.language = v }
+            if let v = dto.is_seed_content { existing.isSeedContent = v }
+            if let v = dto.seed_author_type { existing.seedAuthorType = v }
             return existing
         }
         let entity = PostEntity(
@@ -363,7 +365,9 @@ final class RemoteSyncService {
             isBoosted: dto.is_boosted ?? false,
             boostWeight: dto.boost_weight ?? 0,
             boostedUntil: dto.boosted_until.flatMap { parsedDate($0) },
-            language: dto.language ?? ""
+            language: dto.language ?? "",
+            isSeedContent: dto.is_seed_content ?? false,
+            seedAuthorType: dto.seed_author_type ?? ""
         )
         context.insert(entity)
         return entity

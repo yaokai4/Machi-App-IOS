@@ -48,6 +48,11 @@ final class PostEntity {
     // — feeds treat such rows as universal and de-prioritize them
     // relative to language-matched content.
     var language: String = ""
+    // City Seed Bot (城市内容助手). True for official cold-start content
+    // (城市助手 / 编辑部); rendered with an official identity + light badge,
+    // never as a real user. `seedAuthorType` ∈ {"official_bot","editorial"}.
+    var isSeedContent: Bool = false
+    var seedAuthorType: String = ""
 
     init(
         id: String = UUID().uuidString,
@@ -81,7 +86,9 @@ final class PostEntity {
         isBoosted: Bool = false,
         boostWeight: Double = 0,
         boostedUntil: Date? = nil,
-        language: String = ""
+        language: String = "",
+        isSeedContent: Bool = false,
+        seedAuthorType: String = ""
     ) {
         self.id = id
         self.authorId = authorId
@@ -115,6 +122,8 @@ final class PostEntity {
         self.boostWeight = boostWeight
         self.boostedUntil = boostedUntil
         self.language = language
+        self.isSeedContent = isSeedContent
+        self.seedAuthorType = seedAuthorType
     }
 }
 

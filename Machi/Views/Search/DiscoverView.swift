@@ -50,20 +50,6 @@ struct DiscoverView: View {
         return uniqueUsers.values.sorted { $0.followerCount > $1.followerCount }
     }
 
-    private var topicNames: [String] {
-        let city = currentRegion?.cityName ?? "本地"
-        let defaults = [
-            "\(city)生活", "\(currentRegion?.countryName ?? "")租房", "找工作", "二手转让",
-            "约饭", "留学", "避坑", "本地新闻"
-        ]
-        var seen = Set<String>()
-        return (viewModel.topics.map(\.name) + defaults)
-            .map { $0.normalizedTopicName }
-            .filter { !$0.isEmpty && seen.insert($0).inserted }
-            .prefix(12)
-            .map { $0 }
-    }
-
     var body: some View {
         Group {
             switch viewModel.state {
@@ -116,8 +102,7 @@ struct DiscoverView: View {
                     regionSection
                     categorySection
                     rankingSection
-                    topicSection
-                    citySection
+                    editorialSection
                     DiscoverSegmentedTabs(selection: $selectedSegment)
                     contentListSection
                 }
@@ -156,22 +141,21 @@ struct DiscoverView: View {
         )
     }
 
-    private var topicSection: some View {
-        HotTopicChipsView(topics: topicNames) { topic in
-            router.open(.topic(tag: topic))
-        }
+    /// Official 编辑部精选 / 城市助手 content for the current city. These are
+    /// City Seed Bot posts (`isSeedContent`) authored by official accounts —
+    /// surfaced here in place of the old 热门话题/热门城市 chips, which were
+    /// redundant with the segmented "话题" tab and the city card above.
+    private var editorialPosts: [PostEntity] {
+        Array(sortedPosts.filter { $0.isSeedContent }.prefix(6))
     }
 
-    private var citySection: some View {
-        HotCityChipsView(
+    private var editorialSection: some View {
+        DiscoverEditorialView(
             region: currentRegion,
-            cities: hotCityRegions,
-            onPickByProvince: { isShowingRegionSelector = true },
-            onSelect: { region in
-                withAnimation(.snappy(duration: 0.22)) {
-                    regionStore.setCurrent(region)
-                }
-            }
+            posts: editorialPosts,
+            authors: viewModel.authors,
+            language: language,
+            onOpen: openPost
         )
     }
 
@@ -299,28 +283,6 @@ struct DiscoverView: View {
         .init(id: "localinfo", title: "本地资讯", subtitle: "社区告示", icon: "megaphone", types: [.local_info], channel: .news, tint: Color.orange),
         .init(id: "roommate", title: "找室友", subtitle: "合租找人", icon: "person.2.fill", types: [.roommate], channel: .housing, tint: Color.cyan),
     ]
-
-    private var hotCityRegions: [KaiXRegionDirectory.Region] {
-        let preferredCodes: [String]
-        switch currentRegion?.countryCode {
-        case "cn":
-            preferredCodes = [
-                "cn.beijing.beijing", "cn.shanghai.shanghai", "cn.guangdong.shenzhen",
-                "cn.guangdong.guangzhou", "cn.zhejiang.hangzhou", "cn.sichuan.chengdu",
-                "cn.hubei.wuhan", "cn.jiangsu.nanjing", "cn.jiangsu.suzhou", "cn.fujian.xiamen",
-            ]
-        case "jp":
-            preferredCodes = ["jp.tokyo.tokyo", "jp.osaka.osaka", "jp.kyoto.kyoto", "jp.fukuoka.fukuoka", "jp.aichi.nagoya"]
-        default:
-            preferredCodes = [
-                "cn.beijing.beijing", "cn.shanghai.shanghai", "cn.guangdong.shenzhen",
-                "cn.guangdong.guangzhou", "cn.zhejiang.hangzhou", "cn.sichuan.chengdu",
-                "jp.tokyo.tokyo", "jp.osaka.osaka", "us.ny.nyc", "us.ca.la",
-                "uk.london", "ca.vancouver",
-            ]
-        }
-        return preferredCodes.compactMap { KaiXRegionDirectory.resolve(regionCode: $0) }
-    }
 
     private func openCategory(_ category: DiscoverCategory) {
         guard let region = currentRegion else {
@@ -699,69 +661,86 @@ private struct CityHotRankingRow: View {
     }
 }
 
-private struct HotTopicChipsView: View {
-    let topics: [String]
-    let onOpen: (String) -> Void
+/// 编辑部精选 / 城市助手 — the official City Seed Bot row that replaced the
+/// old 热门话题 + 热门城市 chips. Renders official cold-start content with a
+/// clear official identity (account name + light "编辑部整理/城市助手" badge +
+/// the account's official avatar), never as a real user. Hidden entirely when
+/// the current city has no seed content yet, so the page stays clean.
+private struct DiscoverEditorialView: View {
+    let region: KaiXRegionDirectory.Region?
+    let posts: [PostEntity]
+    let authors: [String: UserEntity]
+    let language: AppLanguage
+    let onOpen: (PostEntity) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: KXSpacing.sm) {
-            DiscoverSectionTitle(title: "热门话题", trailing: nil)
-            FlowLayout(spacing: 8) {
-                ForEach(topics, id: \.self) { topic in
-                    Button {
-                        onOpen(topic)
-                    } label: {
-                        Label("#\(topic)", systemImage: "number")
-                            .font(.subheadline.weight(.semibold))
-                            .labelStyle(.titleAndIcon)
-                            .foregroundStyle(KXColor.accent)
-                            .padding(.horizontal, 12)
-                            .frame(height: 38)
-                            .kxGlassCapsule()
+        if !posts.isEmpty {
+            VStack(alignment: .leading, spacing: KXSpacing.sm) {
+                DiscoverSectionTitle(
+                    title: region.map { "\($0.cityName)编辑部精选" } ?? "编辑部精选",
+                    trailing: nil
+                )
+                VStack(spacing: 0) {
+                    ForEach(Array(posts.prefix(5).enumerated()), id: \.element.id) { index, post in
+                        Button {
+                            onOpen(post)
+                        } label: {
+                            DiscoverEditorialRow(post: post, author: authors[post.authorId])
+                        }
+                        .buttonStyle(.plain)
+
+                        if index < min(posts.count, 5) - 1 {
+                            Divider().padding(.leading, 56)
+                        }
                     }
-                    .buttonStyle(.plain)
                 }
+                .kxGlassSurface(radius: KXRadius.lg, elevated: true)
             }
         }
     }
 }
 
-private struct HotCityChipsView: View {
-    let region: KaiXRegionDirectory.Region?
-    let cities: [KaiXRegionDirectory.Region]
-    let onPickByProvince: () -> Void
-    let onSelect: (KaiXRegionDirectory.Region) -> Void
+private struct DiscoverEditorialRow: View {
+    let post: PostEntity
+    let author: UserEntity?
 
-    private var pickerTitle: String {
-        switch region?.countryCode {
-        case "cn": "按省份选择"
-        case "jp": "按都道府县选择"
-        default: "选择更多城市"
-        }
+    /// Light, honest label. We never present seed content as a real person —
+    /// the badge + the official account name make the source explicit.
+    private var badge: String {
+        post.seedAuthorType == "editorial" ? "编辑部整理" : "城市助手"
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: KXSpacing.sm) {
-            DiscoverSectionTitle(title: "热门城市", trailing: pickerTitle, trailingAction: onPickByProvince)
-            FlowLayout(spacing: 8) {
-                ForEach(cities, id: \.regionCode) { city in
-                    Button {
-                        onSelect(city)
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text(city.flagEmoji)
-                            Text(city.cityName)
-                        }
+        HStack(spacing: KXSpacing.sm) {
+            AvatarView(user: author, size: 38)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(author?.displayName ?? "Machi 城市助手")
                         .font(.subheadline.weight(.bold))
-                        .foregroundStyle(city.regionCode == region?.regionCode ? KXColor.accent : .primary)
-                        .padding(.horizontal, 13)
-                        .frame(height: 38)
-                        .kxGlassCapsule(isSelected: city.regionCode == region?.regionCode)
-                    }
-                    .buttonStyle(.plain)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text(badge)
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(KXColor.accent)
+                        .padding(.horizontal, 6)
+                        .frame(height: 18)
+                        .background(KXColor.accent.opacity(0.12), in: Capsule())
                 }
+                Text(post.discoverTitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.tertiary)
         }
+        .padding(.horizontal, KXSpacing.md)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
     }
 }
 
