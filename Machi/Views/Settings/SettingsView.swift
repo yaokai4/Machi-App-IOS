@@ -99,6 +99,16 @@ struct SettingsView: View {
 
     private var accountSection: some View {
         SettingsSectionCard(title: L("accountEssentials", language)) {
+            SettingsRowLink(
+                icon: "checkmark.seal.fill",
+                tint: .blue,
+                title: L("membershipSettingsTitle", language),
+                value: currentUser.isVerifiedMember ? L("membershipStatusActive", language) : nil,
+                subtitle: L("membershipSettingsSubtitle", language)
+            ) {
+                MembershipView(currentUser: currentUser)
+            }
+            SettingsDivider()
             SettingsRowLink(icon: "arrow.triangle.2.circlepath", tint: .purple, title: L("switchAccount", language), subtitle: L("switchAccountSubtitle", language)) {
                 AccountSwitcherView(currentUser: currentUser, onSwitch: { user in
                     onSwitchAccount?(user)
@@ -243,7 +253,7 @@ private struct SettingsAccountCard: View {
                             .foregroundStyle(.primary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
-                        if user.isVerified {
+                        if user.displaysVerifiedBadge {
                             KXVerifiedBadge()
                         }
                     }

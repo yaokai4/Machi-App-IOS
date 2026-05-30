@@ -39,6 +39,14 @@ final class UserEntity {
     var isMerchant: Bool = false
     var merchantVerified: Bool = false
     var profileViewCount: Int = 0
+    // Machi Verified membership cache (authoritative truth lives on the
+    // server in user_memberships; these mirror /api/auth/me so the badge
+    // and publish-gating work offline). Added with defaults so SwiftData
+    // lightweight-migrates existing local stores with no data loss.
+    var isVerifiedMember: Bool = false
+    var verifiedMemberUntil: Date? = nil
+    var membershipStatus: String = "inactive"
+    var membershipPlanKey: String = ""
     // Phase 3: explicit App / content language preferences. Stored
     // alongside the user so they survive a logout-relogin and so the
     // server can mirror them for cross-device parity. `appLanguage`
@@ -82,6 +90,10 @@ final class UserEntity {
         isMerchant: Bool = false,
         merchantVerified: Bool = false,
         profileViewCount: Int = 0,
+        isVerifiedMember: Bool = false,
+        verifiedMemberUntil: Date? = nil,
+        membershipStatus: String = "inactive",
+        membershipPlanKey: String = "",
         appLanguage: String = "",
         contentLanguagePreference: String = "",
         preferredContentLanguagesRaw: String = ""
@@ -118,6 +130,10 @@ final class UserEntity {
         self.isMerchant = isMerchant
         self.merchantVerified = merchantVerified
         self.profileViewCount = profileViewCount
+        self.isVerifiedMember = isVerifiedMember
+        self.verifiedMemberUntil = verifiedMemberUntil
+        self.membershipStatus = membershipStatus
+        self.membershipPlanKey = membershipPlanKey
         self.appLanguage = appLanguage
         self.contentLanguagePreference = contentLanguagePreference
         self.preferredContentLanguagesRaw = preferredContentLanguagesRaw
@@ -125,6 +141,11 @@ final class UserEntity {
 }
 
 extension UserEntity {
+    /// Whether to show the blue Machi Verified badge. True for active
+    /// verified members AND legacy/admin-verified accounts, so the
+    /// existing badge behaviour is preserved while membership lights it up.
+    var displaysVerifiedBadge: Bool { isVerified || isVerifiedMember }
+
     var role: UserRole {
         get { UserRole(rawValue: roleRaw) ?? .member }
         set {

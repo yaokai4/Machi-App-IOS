@@ -237,7 +237,7 @@ private struct NewConversationView: View {
                                                     .font(.subheadline.weight(.semibold))
                                                     .foregroundStyle(.primary)
                                                     .lineLimit(1)
-                                                if user.isVerified {
+                                                if user.displaysVerifiedBadge {
                                                     KXVerifiedBadge()
                                                 }
                                             }
@@ -306,7 +306,7 @@ private struct MessageConversationCard: View {
                     Text(peer?.displayName ?? L("unknownUser", language))
                         .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
-                    if peer?.isVerified == true {
+                    if peer?.displaysVerifiedBadge == true {
                         Image(systemName: "checkmark.seal.fill")
                             .font(.caption)
                             .foregroundStyle(.blue)

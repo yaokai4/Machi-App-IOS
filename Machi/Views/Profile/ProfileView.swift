@@ -395,7 +395,7 @@ struct ProfileView: View {
                             .font(.title3.weight(.semibold))
                             .lineLimit(1)
                             .minimumScaleFactor(0.82)
-                        if profileUser.isVerified {
+                        if profileUser.displaysVerifiedBadge {
                             Image(systemName: "checkmark.seal.fill")
                                 .font(.title3)
                                 .foregroundStyle(.blue)
@@ -888,7 +888,7 @@ private struct FollowListView: View {
                                         .font(.subheadline.weight(.semibold))
                                         .foregroundStyle(.primary)
                                         .lineLimit(1)
-                                    if user.isVerified {
+                                    if user.displaysVerifiedBadge {
                                         KXVerifiedBadge()
                                     }
                                 }

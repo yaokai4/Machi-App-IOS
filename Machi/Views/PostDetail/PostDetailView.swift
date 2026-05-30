@@ -711,7 +711,7 @@ private struct CommentRowView: View {
                         Text(author?.displayName ?? L("unknownUser", language))
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.primary)
-                        if author?.isVerified == true {
+                        if author?.displaysVerifiedBadge == true {
                             Image(systemName: "checkmark.seal.fill")
                                 .font(.caption2)
                                 .foregroundStyle(.blue)

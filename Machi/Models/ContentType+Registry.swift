@@ -100,4 +100,17 @@ extension ContentType {
             return false
         }
     }
+
+    /// High-trust types that require an active Machi Verified membership
+    /// to publish. Mirrors REQUIRES_VERIFIED_MEMBERSHIP in web/server.py —
+    /// the server is authoritative (returns 403 MEMBERSHIP_REQUIRED); the
+    /// composer only uses this to gate the UX. Ordinary content stays free.
+    var requiresVerifiedMembership: Bool {
+        switch self {
+        case .job_post, .housing, .roommate, .service, .coupon, .merchant, .referral:
+            return true
+        default:
+            return false
+        }
+    }
 }

@@ -242,6 +242,10 @@ final class RemoteSyncService {
             if let v = dto.is_merchant { existing.isMerchant = v }
             if let v = dto.merchant_verified { existing.merchantVerified = v }
             if let v = dto.profile_view_count { existing.profileViewCount = v }
+            if let v = dto.is_verified_member { existing.isVerifiedMember = v }
+            if let v = dto.membership_status { existing.membershipStatus = v }
+            if let v = dto.membership_plan_key { existing.membershipPlanKey = v }
+            if let v = dto.verified_member_until { existing.verifiedMemberUntil = parsedDate(v) }
             if let v = dto.app_language { existing.appLanguage = v }
             if let v = dto.content_language_preference { existing.contentLanguagePreference = v }
             if let v = dto.preferred_content_languages { existing.preferredContentLanguagesRaw = v }
@@ -283,6 +287,10 @@ final class RemoteSyncService {
             isMerchant: dto.is_merchant ?? false,
             merchantVerified: dto.merchant_verified ?? false,
             profileViewCount: dto.profile_view_count ?? 0,
+            isVerifiedMember: dto.is_verified_member ?? false,
+            verifiedMemberUntil: parsedDate(dto.verified_member_until),
+            membershipStatus: dto.membership_status ?? "inactive",
+            membershipPlanKey: dto.membership_plan_key ?? "",
             appLanguage: dto.app_language ?? "",
             contentLanguagePreference: dto.content_language_preference ?? "",
             preferredContentLanguagesRaw: dto.preferred_content_languages ?? ""

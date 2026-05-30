@@ -125,7 +125,7 @@ struct EditProfileView: View {
                         Text(displayName.isEmpty ? user.displayName : displayName)
                             .font(.title2.weight(.semibold))
                             .lineLimit(1)
-                        if user.isVerified {
+                        if user.displaysVerifiedBadge {
                             Image(systemName: "checkmark.seal.fill")
                                 .foregroundStyle(.blue)
                         }

@@ -106,7 +106,7 @@ struct PostCardView: View, Equatable {
                                         .foregroundStyle(.primary)
                                         .lineLimit(1)
                                         .minimumScaleFactor(0.82)
-                                    if contentAuthor?.isVerified == true {
+                                    if contentAuthor?.displaysVerifiedBadge == true {
                                         KXVerifiedBadge()
                                     }
                                 }
@@ -613,7 +613,7 @@ private struct QuotedPostPreview: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
-                        if author?.isVerified == true {
+                        if author?.displaysVerifiedBadge == true {
                             KXVerifiedBadge()
                         }
                         Text("@\(author?.username ?? "unknown")")

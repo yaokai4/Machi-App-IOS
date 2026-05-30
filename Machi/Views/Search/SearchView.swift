@@ -1303,7 +1303,7 @@ private struct SearchUserRow: View {
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.primary)
                                 .lineLimit(1)
-                            if user.isVerified {
+                            if user.displaysVerifiedBadge {
                                 Image(systemName: "checkmark.seal.fill")
                                     .foregroundStyle(.blue)
                             }

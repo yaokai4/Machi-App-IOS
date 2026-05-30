@@ -1,0 +1,53 @@
+{
+  "identifier" : "B2F1C0A4-2E10-4D33-9A77-MACHIVERIFIED1",
+  "nonRenewingSubscriptions" : [],
+  "products" : [],
+  "settings" : {
+    "_applicationInternalID" : "machicity",
+    "_developerTeamID" : "",
+    "_failTransactionsEnabled" : false,
+    "_lastSynchronizedDate" : 0,
+    "_locale" : "zh_CN",
+    "_storefront" : "CHN",
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "21490000",
+      "localizations" : [],
+      "name" : "Machi Verified",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "10.00",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "21490001",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Machi 认证会员，蓝色认证标识与高信任内容发布权限。",
+              "displayName" : "Machi 认证会员",
+              "locale" : "zh_CN"
+            },
+            {
+              "description" : "Machi Verified — a blue badge and high-trust posting.",
+              "displayName" : "Machi Verified",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "machi_verified_monthly_cny_10",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Machi Verified Monthly",
+          "subscriptionGroupID" : "21490000",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

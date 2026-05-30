@@ -139,6 +139,46 @@ final class KaiXAPIClient {
         return try decode(data)
     }
 
+    // MARK: - membership + payments
+
+    /// Current user's authoritative membership status + the plan.
+    func membershipMe() async throws -> KaiXMembershipMeResponse {
+        let data = try await request("GET", "/api/membership/me")
+        return try decode(data)
+    }
+
+    /// Public plan info (price + names + Apple product id).
+    func membershipPlan() async throws -> KaiXMembershipPlanResponse {
+        let data = try await request("GET", "/api/membership/plan")
+        return try decode(data)
+    }
+
+    /// Member-only basic analytics over the caller's own posts.
+    func membershipInsights() async throws -> KaiXMembershipInsightsResponse {
+        let data = try await request("GET", "/api/membership/insights")
+        return try decode(data)
+    }
+
+    /// Verify a StoreKit2 transaction server-side. The server is the only
+    /// place a purchase is trusted; it opens/extends membership and is
+    /// idempotent on the transaction id (safe to call on restore).
+    @discardableResult
+    func verifyAppleTransaction(productId: String,
+                               transactionId: String,
+                               originalTransactionId: String,
+                               signedTransaction: String,
+                               environment: String) async throws -> KaiXAppleVerifyResponse {
+        let body: [String: String] = [
+            "productId": productId,
+            "transactionId": transactionId,
+            "originalTransactionId": originalTransactionId,
+            "signedTransaction": signedTransaction,
+            "environment": environment,
+        ]
+        let data = try await request("POST", "/api/payments/apple/verify", body: body)
+        return try decode(data)
+    }
+
     // MARK: - regions
 
     func countries() async throws -> [KaiXCountryDTO] {

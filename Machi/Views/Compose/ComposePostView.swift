@@ -14,8 +14,16 @@ struct ComposePostView: View {
     @State private var showDiscardDialog = false
     @State private var isShowingRegionPicker = false
     @State private var isShowingTypePicker = false
+    @State private var showMembership = false
 
     let currentUser: UserEntity
+
+    /// High-trust content type chosen but the user isn't a verified
+    /// member yet. The server enforces this too (403 MEMBERSHIP_REQUIRED);
+    /// this gates the UX and routes to the membership page.
+    private var needsMembership: Bool {
+        viewModel.contentType.requiresVerifiedMembership && !currentUser.isVerifiedMember
+    }
     /// Optional pre-selection — passed in when the composer is
     /// opened from the type-picker entry flow so the user doesn't
     /// have to re-pick. Falls back to .dynamic.
@@ -30,6 +38,7 @@ struct ComposePostView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
                         typeRow
+                        if needsMembership { membershipGate }
                         composer
                         typedForm
                         missingFieldsHint
@@ -90,6 +99,37 @@ struct ComposePostView: View {
         .onChange(of: viewModel.selectedTopics) { _, _ in
             syncComposeStore()
         }
+        .sheet(isPresented: $showMembership) {
+            NavigationStack { MembershipView(currentUser: currentUser) }
+        }
+    }
+
+    /// Inline notice shown when a member-only content type is selected by
+    /// a non-member. Tapping the button opens the membership page.
+    private var membershipGate: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.seal.fill").foregroundStyle(.blue)
+                Text(L("composeMembershipRequired", language))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Button {
+                showMembership = true
+            } label: {
+                Text(L("composeMembershipCTA", language))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .frame(height: 34)
+                    .background(Capsule().fill(KXColor.accent))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 12).fill(KXColor.softBackground))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(KXColor.accent.opacity(0.3), lineWidth: 0.8))
     }
 
     private func syncComposeStore() {
@@ -120,6 +160,10 @@ struct ComposePostView: View {
             Spacer()
 
             Button {
+                if needsMembership {
+                    showMembership = true
+                    return
+                }
                 Task {
                     let ok = await viewModel.publish(context: modelContext, currentUser: currentUser, language: language)
                     if ok {

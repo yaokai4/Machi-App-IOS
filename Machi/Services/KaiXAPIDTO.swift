@@ -96,6 +96,64 @@ struct KaiXUserDTO: Codable, Equatable {
     let app_language: String?
     let content_language_preference: String?
     let preferred_content_languages: String?
+    // Machi Verified membership cache (all optional so older responses
+    // still decode). is_verified_member drives the blue badge.
+    let is_verified_member: Bool?
+    let verified_member_until: String?
+    let membership_status: String?
+    let membership_plan_key: String?
+    let verified_badge_type: String?
+}
+
+// MARK: - membership + payments
+
+struct KaiXMembershipStatusDTO: Codable, Equatable {
+    let is_active: Bool
+    let status: String
+    let plan_key: String?
+    let current_period_end: String?
+    let source: String?
+    let cancel_at_period_end: Bool?
+}
+
+struct KaiXMembershipPlanDTO: Codable, Equatable {
+    let plan_key: String
+    let name_zh: String?
+    let name_en: String?
+    let name_ja: String?
+    let amount: Double
+    let currency: String
+    let billing_cycle: String?
+}
+
+struct KaiXMembershipMeResponse: Codable {
+    let membership: KaiXMembershipStatusDTO
+    let plan: KaiXMembershipPlanDTO?
+    let user: KaiXUserDTO
+}
+
+struct KaiXMembershipPlanResponse: Codable {
+    let plan: KaiXMembershipPlanDTO?
+    let apple_product_id: String?
+}
+
+struct KaiXAppleVerifyResponse: Codable {
+    let membershipActive: Bool
+    let currentPeriodEnd: String?
+    let status: String?
+}
+
+struct KaiXMembershipInsightsTotals: Codable, Equatable {
+    let post_count: Int
+    let total_views: Int
+    let total_likes: Int
+    let total_bookmarks: Int
+    let total_reposts: Int
+    let total_comments: Int
+}
+
+struct KaiXMembershipInsightsResponse: Codable {
+    let totals: KaiXMembershipInsightsTotals
 }
 
 struct KaiXMediaDTO: Codable, Equatable {
