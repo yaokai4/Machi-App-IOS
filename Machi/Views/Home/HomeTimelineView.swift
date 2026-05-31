@@ -198,6 +198,12 @@ struct HomeTimelineView: View {
     private var feed: some View {
         ScrollView {
             LazyVStack(spacing: 10) {
+                LocalNewsDeskStripView(
+                    country: regionStore.current?.countryCode ?? currentUser.country,
+                    city: regionStore.current?.cityCode ?? currentUser.city,
+                    title: "本地资讯台",
+                    variant: .home
+                )
                 if viewModel.mode == .hot {
                     hotScopePicker
                 }

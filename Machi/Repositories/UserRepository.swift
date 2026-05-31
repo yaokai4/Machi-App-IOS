@@ -54,7 +54,7 @@ final class UserRepository {
 
     func register(username: String, displayName: String, password: String, region: KaiXRegionDirectory.Region? = nil) async throws -> UserEntity {
         let normalized = username.normalizedUsername
-        guard normalized.isEmpty == false, password.count >= 6 else {
+        guard normalized.isEmpty == false, password.count >= AuthValidation.passwordMinLength else {
             throw RepositoryError.validationFailed
         }
 

@@ -152,6 +152,12 @@ struct CityChannelView: View {
     private var feed: some View {
         ScrollView {
             LazyVStack(spacing: 10) {
+                LocalNewsDeskStripView(
+                    country: viewModel.region?.countryCode,
+                    city: viewModel.region?.cityCode,
+                    title: "本地快讯",
+                    variant: .city
+                )
                 ForEach(viewModel.posts) { post in
                     let displayedPost = postStore.post(id: post.id) ?? post
                     let originalPost = displayedPost.repostOfPostId.flatMap { postStore.post(id: $0) }

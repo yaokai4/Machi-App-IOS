@@ -9,6 +9,8 @@ enum KXRoute: Hashable {
     case topic(tag: String)
     case city(regionCode: String)
     case cityChannel(regionCode: String, channel: CityChannel)
+    case localNews(country: String, city: String)
+    case localNewsDetail(newsId: String)
     case conversation(conversationId: String)
     case search(initialQuery: String?)
 }
@@ -123,16 +125,16 @@ extension KXRoute {
             return .none
         case .postDetailComment(_, let commentId):
             return commentId.map { .comment($0) } ?? .comments
-        case .profile, .topic, .city, .cityChannel, .conversation, .search:
+        case .profile, .topic, .city, .cityChannel, .localNews, .localNewsDetail, .conversation, .search:
             return .none
         }
     }
 
     var requiresHiddenTabBar: Bool {
         switch self {
-        case .postDetail, .postDetailComment, .conversation:
+        case .postDetail, .postDetailComment, .localNewsDetail, .conversation:
             true
-        case .profile, .topic, .city, .cityChannel, .search:
+        case .profile, .topic, .city, .cityChannel, .localNews, .search:
             false
         }
     }
@@ -145,8 +147,10 @@ extension KXRoute {
             L("unknownUser", language)
         case .topic:
             L("noTopicPosts", language)
-        case .city, .cityChannel:
+        case .city, .cityChannel, .localNews:
             L("emptyFeed", language)
+        case .localNewsDetail:
+            "资讯暂时无法打开。"
         case .conversation:
             L("emptyMessages", language)
         case .search:
@@ -181,6 +185,10 @@ private struct KXRouteDestinations: ViewModifier {
                     CityChannelView(regionCode: regionCode, currentUser: currentUser)
                 case .cityChannel(let regionCode, let channel):
                     CityChannelView(regionCode: regionCode, currentUser: currentUser, initialChannel: channel)
+                case .localNews(let country, let city):
+                    LocalNewsDeskListView(country: country, city: city)
+                case .localNewsDetail(let newsId):
+                    LocalNewsDetailView(newsId: newsId, currentUser: currentUser)
                 case .conversation(let conversationId):
                     ConversationView(conversationId: conversationId, currentUser: currentUser)
                 case .search(let initialQuery):
@@ -251,6 +259,13 @@ private extension KXRoute {
         case .cityChannel(let regionCode, let channel):
             let code = regionCode.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             return KaiXRegionDirectory.resolve(regionCode: code) == nil ? nil : .cityChannel(regionCode: code, channel: channel)
+        case .localNews(let country, let city):
+            let normalizedCountry = country.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let normalizedCity = city.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return .localNews(country: normalizedCountry, city: normalizedCity)
+        case .localNewsDetail(let newsId):
+            let id = newsId.trimmingCharacters(in: .whitespacesAndNewlines)
+            return id.isEmpty ? nil : .localNewsDetail(newsId: id)
         case .conversation(let conversationId):
             let id = conversationId.trimmingCharacters(in: .whitespacesAndNewlines)
             return id.isEmpty ? nil : .conversation(conversationId: id)

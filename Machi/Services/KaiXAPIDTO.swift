@@ -63,24 +63,38 @@ struct KaiXUserDTO: Codable, Equatable {
     let remote_id: String?
     let handle: String
     let display_name: String
+    let displayName: String?
     let email: String?
     let bio: String?
     let location: String?
     let avatar_symbol: String?
     let avatar_color: String?
     let avatar_url: String?
+    let avatarUrl: String?
     let cover_url: String?
     let membership_tier: String?
     let is_verified: Bool?
     let role: String?
+    let isOfficial: Bool?
+    let is_official: Bool?
+    let officialRole: String?
+    let official_role: String?
     let joined_at: String?
     let created_at: String?
+    let createdAt: String?
     let updated_at: String?
+    let updatedAt: String?
     let follower_count: Int?
+    let followerCount: Int?
     let following_count: Int?
+    let followingCount: Int?
     let post_count: Int?
+    let postCount: Int?
     let is_following: Bool?
+    let isFollowing: Bool?
     let is_blocked: Bool?
+    let can_message: Bool?
+    let canMessage: Bool?
     // Phase 1: region. All optional so old responses still decode.
     let country: String?
     let province: String?
@@ -99,21 +113,51 @@ struct KaiXUserDTO: Codable, Equatable {
     // Machi Verified membership cache (all optional so older responses
     // still decode). is_verified_member drives the blue badge.
     let is_verified_member: Bool?
+    let isVerifiedMember: Bool?
     let verified_member_until: String?
+    let verifiedMemberUntil: String?
     let membership_status: String?
+    let membershipStatus: String?
     let membership_plan_key: String?
+    let membershipPlanKey: String?
     let verified_badge_type: String?
+    let verifiedBadgeType: String?
 }
 
 // MARK: - membership + payments
 
 struct KaiXMembershipStatusDTO: Codable, Equatable {
+    let user_id: String?
+    let userId: String?
     let is_active: Bool
+    let isActive: Bool?
     let status: String
     let plan_key: String?
+    let planKey: String?
     let current_period_end: String?
+    let expires_at: String?
+    let expiresAt: String?
+    let started_at: String?
+    let startedAt: String?
     let source: String?
+    let provider: String?
+    let price: Double?
+    let currency: String?
+    let benefits: [String]?
+    let verified_badge_type: String?
+    let verifiedBadgeType: String?
+    let can_post_high_trust_content: Bool?
+    let canPostHighTrustContent: Bool?
+    let can_access_exclusive_page: Bool?
+    let canAccessExclusivePage: Bool?
+    let daily_post_limit: Int?
+    let dailyPostLimit: Int?
+    let priority_review: Bool?
+    let priorityReview: Bool?
+    let light_boost: Bool?
+    let lightBoost: Bool?
     let cancel_at_period_end: Bool?
+    let cancelAtPeriodEnd: Bool?
 }
 
 struct KaiXMembershipPlanDTO: Codable, Equatable {
@@ -135,6 +179,20 @@ struct KaiXMembershipMeResponse: Codable {
 struct KaiXMembershipPlanResponse: Codable {
     let plan: KaiXMembershipPlanDTO?
     let apple_product_id: String?
+}
+
+struct KaiXMembershipBenefitDTO: Codable, Equatable, Identifiable {
+    let key: String
+    let title: String
+    let description: String
+    var id: String { key }
+}
+
+struct KaiXMembershipBenefitsResponse: Codable {
+    let benefits: [KaiXMembershipBenefitDTO]
+    let plan: KaiXMembershipPlanDTO?
+    let disclaimer: String?
+    let requires_membership_content_types: [String]?
 }
 
 struct KaiXAppleVerifyResponse: Codable {
@@ -176,20 +234,41 @@ struct KaiXPostDTO: Codable, Equatable {
     let author_id: String
     let content: String
     let created_at: String
+    let createdAt: String?
     let updated_at: String
+    let updatedAt: String?
     let deleted_at: String?
     let repost_of_id: String?
     let view_count: Int
+    let viewCount: Int?
     let like_count: Int
+    let likeCount: Int?
     let repost_count: Int
+    let repostCount: Int?
     let bookmark_count: Int
+    let bookmarkCount: Int?
+    let save_count: Int?
+    let saveCount: Int?
     let comment_count: Int
+    let commentCount: Int?
+    let share_count: Int?
+    let shareCount: Int?
     let heat_score: Double
+    let heatScore: Double?
     let liked: Bool
+    let isLiked: Bool?
     let bookmarked: Bool
+    let saved: Bool?
+    let isSaved: Bool?
     let reposted: Bool
+    let isReposted: Bool?
+    let canEdit: Bool?
+    let canDelete: Bool?
     let tags: [String]
     let media: [KaiXMediaDTO]
+    let images: [String]?
+    let videoUrl: String?
+    let video_url: String?
     let author: KaiXUserDTO?
     // original_post is a recursive optional — represented as Data when
     // we don't want to decode it eagerly.
@@ -201,9 +280,17 @@ struct KaiXPostDTO: Codable, Equatable {
     let province: String?
     let city: String?
     let region_code: String?
+    let cityPath: String?
+    let city_path: String?
     // Phase 2 — content type + typed attributes.
     let content_type: String?
+    let contentType: String?
+    let category: String?
     let attributes: [String: KaiXAttributeValue]?
+    let requiresMembership: Bool?
+    let requires_membership: Bool?
+    let sourceType: String?
+    let source_type: String?
     let report_count: Int?
     let is_boosted: Bool?
     let boost_weight: Double?
@@ -305,6 +392,96 @@ struct KaiXTopicDTO: Codable, Equatable {
     let post_count: Int
 }
 
+// MARK: - Local News Desk
+
+struct KaiXEditorialPostDTO: Codable, Equatable, Identifiable {
+    let id: String
+    let news_item_id: String?
+    let author_type: String
+    let authorType: String?
+    let author_display_name: String
+    let authorDisplayName: String?
+    let country: String
+    let city: String
+    let language: String
+    let category: String
+    let title: String
+    let summary: String
+    let body: String
+    let source_name: String?
+    let sourceName: String?
+    let source_url: String?
+    let sourceUrl: String?
+    let original_url: String?
+    let originalUrl: String?
+    let source_published_at: String?
+    let sourcePublishedAt: String?
+    let status: String
+    let review_status: String
+    let reviewed_by_admin_id: String?
+    let reviewed_at: String?
+    let published_at: String?
+    let publishedAt: String?
+    let view_count: Int?
+    let viewCount: Int?
+    let share_count: Int?
+    let shareCount: Int?
+    let click_source_count: Int?
+    let clickSourceCount: Int?
+    let risk_level: String?
+    let riskLevel: String?
+    let official_source_required: Bool?
+    let officialSourceRequired: Bool?
+    let is_demo: Bool?
+    let is_ai_assisted: Bool?
+    let isAiAssisted: Bool?
+    let ai_model: String?
+    let ai_prompt_version: String?
+    let created_by_admin_id: String?
+    let created_at: String
+    let updated_at: String
+    let tags: [String]
+    let save_count: Int
+    let saveCount: Int?
+    let comment_count: Int
+    let commentCount: Int?
+    let saved: Bool
+    let is_saved: Bool?
+    let isSaved: Bool?
+    let can_interact: Bool?
+    let canInteract: Bool?
+    let source_note: String?
+    let sourceNote: String?
+    let editorial_disclaimer: String?
+    let editorialDisclaimer: String?
+}
+
+struct KaiXEditorialCommentDTO: Codable, Equatable, Identifiable {
+    let id: String
+    let editorial_post_id: String
+    let author_id: String
+    let content: String
+    let created_at: String
+    let updated_at: String
+    let author: KaiXUserDTO?
+}
+
+struct KaiXNewsListResponse: Codable {
+    let items: [KaiXEditorialPostDTO]
+    let page: Int
+    let limit: Int
+    let total: Int
+}
+
+struct KaiXNewsDetailResponse: Codable {
+    let post: KaiXEditorialPostDTO
+    let related: [KaiXEditorialPostDTO]
+}
+
+struct KaiXNewsCommentsResponse: Codable {
+    let items: [KaiXEditorialCommentDTO]
+}
+
 struct KaiXPageDTO<Item: Codable>: Codable {
     let items: [Item]
     let next_cursor: String?
@@ -313,6 +490,23 @@ struct KaiXPageDTO<Item: Codable>: Codable {
 struct KaiXLoginResponse: Codable {
     let token: String
     let user: KaiXUserDTO
+}
+
+struct KaiXAvailabilityResponse: Codable, Equatable {
+    let available: Bool
+    let message: String
+    let code: String?
+}
+
+struct KaiXEmailCodeResponse: Codable, Equatable {
+    let ok: Bool
+    let expires_in: Int
+}
+
+struct KaiXVerifyCodeResponse: Codable, Equatable {
+    let ok: Bool?
+    let success: Bool?
+    let message: String?
 }
 
 struct KaiXFeedResponse: Codable {

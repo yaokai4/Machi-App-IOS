@@ -130,10 +130,14 @@ final class AuthViewModel: ObservableObject {
 }
 
 enum AuthValidation {
-    static let passwordMinLength = 6
+    static let passwordMinLength = 8
     static let displayNameMaxLength = 32
-    private static let handlePattern = #"^[a-z0-9_]{2,24}$"#
+    private static let handlePattern = #"^[a-z0-9_.]{3,20}$"#
     private static let emailPattern = #"^[^\s@]+@[^\s@.]+\.[^\s@.]+$"#
+    private static let reservedHandles: Set<String> = [
+        "admin", "administrator", "root", "machi", "machicity", "kaix",
+        "official", "support", "help", "news",
+    ]
 
     static func normalizedHandle(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -142,8 +146,8 @@ enum AuthValidation {
     }
 
     static func sanitizedRegisterHandle(_ value: String) -> String {
-        let allowed = Set("abcdefghijklmnopqrstuvwxyz0123456789_")
-        return String(normalizedHandle(value).filter { allowed.contains($0) }.prefix(24))
+        let allowed = Set("abcdefghijklmnopqrstuvwxyz0123456789_.")
+        return String(normalizedHandle(value).filter { allowed.contains($0) }.prefix(20))
     }
 
     static func limitedDisplayName(_ value: String) -> String {
@@ -175,6 +179,8 @@ enum AuthValidation {
             errors[.username] = L("authUsernameRequired", language)
         } else if handle.range(of: handlePattern, options: .regularExpression) == nil {
             errors[.username] = L("authInvalidHandle", language)
+        } else if reservedHandles.contains(handle) {
+            errors[.username] = L("authInvalidHandle", language)
         }
 
         let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -192,6 +198,9 @@ enum AuthValidation {
         if password.isEmpty {
             errors[.password] = L("authPasswordRequired", language)
         } else if password.count < passwordMinLength {
+            errors[.password] = L("passwordTooShort", language)
+        } else if password.range(of: #"[A-Za-z]"#, options: .regularExpression) == nil
+                    || password.range(of: #"\d"#, options: .regularExpression) == nil {
             errors[.password] = L("passwordTooShort", language)
         }
 

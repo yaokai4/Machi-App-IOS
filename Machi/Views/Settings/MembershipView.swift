@@ -12,6 +12,7 @@ struct MembershipView: View {
     @Environment(\.modelContext) private var modelContext
     @StateObject private var store = MembershipStore()
     @State private var insights: KaiXMembershipInsightsTotals?
+    @State private var remoteBenefits: [KaiXMembershipBenefitDTO] = []
 
     let currentUser: UserEntity
 
@@ -48,7 +49,12 @@ struct MembershipView: View {
                 Button(L("done", language)) { dismiss() }
             }
         }
-        .task { store.start() }
+        .task {
+            store.start()
+            if let response = try? await KaiXAPIClient.shared.membershipBenefits() {
+                remoteBenefits = response.benefits
+            }
+        }
         .task(id: isActive) {
             if isActive {
                 insights = try? await KaiXAPIClient.shared.membershipInsights().totals
@@ -142,13 +148,28 @@ struct MembershipView: View {
     private var benefits: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(L("membershipBenefitsTitle", language)).font(.headline)
-            ForEach(benefitKeys, id: \.self) { key in
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.blue)
-                        .font(.subheadline)
-                    Text(L(key, language)).font(.subheadline)
-                    Spacer()
+            if !remoteBenefits.isEmpty {
+                ForEach(remoteBenefits) { benefit in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.blue)
+                            .font(.subheadline)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(benefit.title).font(.subheadline.weight(.semibold))
+                            Text(benefit.description).font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+                }
+            } else {
+                ForEach(benefitKeys, id: \.self) { key in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.blue)
+                            .font(.subheadline)
+                        Text(L(key, language)).font(.subheadline)
+                        Spacer()
+                    }
                 }
             }
         }

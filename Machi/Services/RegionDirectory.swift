@@ -163,7 +163,7 @@ enum KaiXRegionDirectory {
         // Flat countries
         "uk":      [.init(code: "london", name: "伦敦"), .init(code: "manchester", name: "曼彻斯特"),
                     .init(code: "edinburgh", name: "爱丁堡")],
-        "ca_flat": [.init(code: "toronto", name: "多伦多"), .init(code: "vancouver", name: "温哥华")],
+        "ca_flat": [.init(code: "toronto", name: "多伦多"), .init(code: "vancouver", name: "温哥华"), .init(code: "montreal", name: "蒙特利尔")],
         "au":      [.init(code: "sydney", name: "悉尼"), .init(code: "melbourne", name: "墨尔本"),
                     .init(code: "brisbane", name: "布里斯班"), .init(code: "perth", name: "珀斯")],
         "sg":      [.init(code: "singapore", name: "新加坡")],
@@ -199,7 +199,7 @@ enum KaiXRegionDirectory {
         // US
         "us.ny.nyc", "us.ca.la", "us.ca.sf", "us.wa.seattle",
         // Canada
-        "ca.toronto", "ca.vancouver",
+        "ca.toronto", "ca.vancouver", "ca.montreal",
         // Australia
         "au.sydney", "au.melbourne",
         // UK

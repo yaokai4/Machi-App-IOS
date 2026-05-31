@@ -110,6 +110,30 @@ final class KaiXAPIClient {
         return response
     }
 
+    func checkUsername(_ username: String) async throws -> KaiXAvailabilityResponse {
+        let data = try await request("GET", "/api/auth/check-username",
+                                     queryItems: [URLQueryItem(name: "username", value: username)])
+        return try decode(data)
+    }
+
+    func checkEmail(_ email: String) async throws -> KaiXAvailabilityResponse {
+        let data = try await request("GET", "/api/auth/check-email",
+                                     queryItems: [URLQueryItem(name: "email", value: email)])
+        return try decode(data)
+    }
+
+    func sendVerificationCode(email: String, purpose: String = "register") async throws -> KaiXEmailCodeResponse {
+        let data = try await request("POST", "/api/auth/send-verification-code",
+                                     body: ["email": email, "purpose": purpose])
+        return try decode(data)
+    }
+
+    func verifyEmailCode(email: String, code: String, purpose: String = "register") async throws -> KaiXVerifyCodeResponse {
+        let data = try await request("POST", "/api/auth/verify-code",
+                                     body: ["email": email, "code": code, "purpose": purpose])
+        return try decode(data)
+    }
+
     func logout() async throws {
         _ = try await request("POST", "/api/auth/logout")
         KaiXBackend.token = nil
@@ -150,6 +174,11 @@ final class KaiXAPIClient {
     /// Public plan info (price + names + Apple product id).
     func membershipPlan() async throws -> KaiXMembershipPlanResponse {
         let data = try await request("GET", "/api/membership/plan")
+        return try decode(data)
+    }
+
+    func membershipBenefits() async throws -> KaiXMembershipBenefitsResponse {
+        let data = try await request("GET", "/api/membership/benefits")
         return try decode(data)
     }
 
@@ -318,6 +347,65 @@ final class KaiXAPIClient {
         struct Wrapper: Codable { let post: KaiXPostDTO }
         let data = try await request("GET", "/api/posts/\(id.encodedPathSegment)")
         return try decode(data) as Wrapper |> \.post
+    }
+
+    // MARK: - Local News Desk
+
+    func news(
+        country: String? = nil,
+        city: String? = nil,
+        language: String? = nil,
+        category: String? = nil,
+        sort: String = "latest",
+        page: Int = 1,
+        limit: Int = 20
+    ) async throws -> KaiXNewsListResponse {
+        var q: [URLQueryItem] = [
+            URLQueryItem(name: "sort", value: sort),
+            URLQueryItem(name: "page", value: String(page)),
+            URLQueryItem(name: "limit", value: String(limit)),
+        ]
+        if let country, !country.isEmpty { q.append(URLQueryItem(name: "country", value: country)) }
+        if let city, !city.isEmpty { q.append(URLQueryItem(name: "city", value: city)) }
+        if let language, !language.isEmpty { q.append(URLQueryItem(name: "language", value: language)) }
+        if let category, !category.isEmpty { q.append(URLQueryItem(name: "category", value: category)) }
+        let data = try await request("GET", "/api/news", queryItems: q)
+        return try decode(data)
+    }
+
+    func newsDetail(_ id: String) async throws -> KaiXNewsDetailResponse {
+        let data = try await request("GET", "/api/news/\(id.encodedPathSegment)")
+        return try decode(data)
+    }
+
+    func setNewsSaved(_ id: String, _ on: Bool) async throws -> KaiXEditorialPostDTO {
+        struct Wrapper: Codable { let post: KaiXEditorialPostDTO }
+        let data = try await request(on ? "POST" : "DELETE", "/api/news/\(id.encodedPathSegment)/save")
+        return try decode(data) as Wrapper |> \.post
+    }
+
+    func shareNews(_ id: String) async throws -> KaiXEditorialPostDTO {
+        struct Wrapper: Codable { let post: KaiXEditorialPostDTO }
+        let data = try await request("POST", "/api/news/\(id.encodedPathSegment)/share")
+        return try decode(data) as Wrapper |> \.post
+    }
+
+    func trackNewsSourceClick(_ id: String) async throws -> KaiXEditorialPostDTO {
+        struct Wrapper: Codable { let post: KaiXEditorialPostDTO }
+        let data = try await request("POST", "/api/news/\(id.encodedPathSegment)/source-click")
+        return try decode(data) as Wrapper |> \.post
+    }
+
+    func newsComments(_ id: String) async throws -> [KaiXEditorialCommentDTO] {
+        let data = try await request("GET", "/api/news/\(id.encodedPathSegment)/comments")
+        let response: KaiXNewsCommentsResponse = try decode(data)
+        return response.items
+    }
+
+    func createNewsComment(_ id: String, content: String) async throws -> KaiXEditorialCommentDTO {
+        struct Wrapper: Codable { let comment: KaiXEditorialCommentDTO }
+        let data = try await request("POST", "/api/news/\(id.encodedPathSegment)/comments", body: ["content": content])
+        return try decode(data) as Wrapper |> \.comment
     }
 
     func editPost(_ id: String, content: String) async throws -> KaiXPostDTO {
