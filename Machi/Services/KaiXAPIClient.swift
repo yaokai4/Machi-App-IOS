@@ -95,9 +95,10 @@ final class KaiXAPIClient {
     }
 
     @discardableResult
-    func register(handle: String, displayName: String, password: String, email: String? = nil, region: KaiXRegionDirectory.Region? = nil) async throws -> KaiXLoginResponse {
+    func register(handle: String, displayName: String, password: String, email: String? = nil, code: String? = nil, region: KaiXRegionDirectory.Region? = nil) async throws -> KaiXLoginResponse {
         var body: [String: String] = ["handle": handle, "display_name": displayName, "password": password]
         if let email { body["email"] = email }
+        if let code, !code.isEmpty { body["code"] = code }
         if let region {
             body["country"] = region.countryCode
             body["province"] = region.provinceCode
@@ -262,6 +263,28 @@ final class KaiXAPIClient {
 
     func setBlock(_ id: String, _ on: Bool) async throws {
         _ = try await request(on ? "POST" : "DELETE", "/api/users/\(id.encodedPathSegment)/block")
+    }
+
+    /// Server-side list of users the current account has blocked. Mirrors
+    /// web `api.blocks()` (GET /api/blocks); unblock reuses `setBlock`.
+    func blockedUsers() async throws -> [KaiXUserDTO] {
+        struct Wrapper: Codable { let items: [KaiXUserDTO] }
+        let data = try await request("GET", "/api/blocks")
+        let wrapper: Wrapper = try decode(data)
+        return wrapper.items
+    }
+
+    /// Active login devices / sessions. Mirrors web `api.devices()`.
+    func loginDevices() async throws -> [KaiXDeviceDTO] {
+        struct Wrapper: Codable { let items: [KaiXDeviceDTO] }
+        let data = try await request("GET", "/api/devices")
+        let wrapper: Wrapper = try decode(data)
+        return wrapper.items
+    }
+
+    /// Revoke a login device / session. Mirrors web `api.revokeDevice()`.
+    func revokeDevice(_ id: String) async throws {
+        _ = try await request("DELETE", "/api/devices/\(id.encodedPathSegment)")
     }
 
     func reportUser(_ id: String, reason: String, note: String? = nil) async throws {

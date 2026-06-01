@@ -724,14 +724,116 @@ struct RecommendationSettingsView: View {
 
 struct LoginDevicesView: View {
     @Environment(\.appLanguage) private var language
+    @State private var devices: [KaiXDeviceDTO] = []
+    @State private var state: ScreenState = .idle
+    @State private var revoking: Set<String> = []
 
     var body: some View {
         SettingsFormPage(title: L("loginDevices", language)) {
-            Label(L("currentDevice", language), systemImage: "iphone")
-                .font(.headline.weight(.bold))
-            Text(L("lastActiveNow", language))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            switch state {
+            case .idle, .loading:
+                HStack { Spacer(); ProgressView(); Spacer() }
+                    .padding(.vertical, KXSpacing.lg)
+            case .error(let message):
+                VStack(alignment: .leading, spacing: KXSpacing.sm) {
+                    Label(message, systemImage: "xmark.octagon.fill")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.red)
+                    Button(L("retry", language)) { Task { await load() } }
+                        .font(.footnote.weight(.semibold))
+                }
+                .padding(KXSpacing.md)
+                .kxGlassSurface(radius: KXRadius.md)
+            default:
+                if devices.isEmpty {
+                    Label(L("currentDevice", language), systemImage: "iphone")
+                        .font(.headline.weight(.bold))
+                    Text(L("noOtherDevices", language))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(devices) { device in
+                            deviceRow(device)
+                            if device.id != devices.last?.id {
+                                Divider().padding(.leading, 54)
+                            }
+                        }
+                    }
+                    .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
+                            .stroke(KXColor.separator, lineWidth: 0.6)
+                    }
+                }
+            }
+        }
+        .task { await load() }
+    }
+
+    private func deviceRow(_ device: KaiXDeviceDTO) -> some View {
+        HStack(spacing: KXSpacing.md) {
+            Image(systemName: "desktopcomputer")
+                .foregroundStyle(KXColor.accent)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(device.displayName)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                if let seen = deviceLastSeen(device) {
+                    Text(seen)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer()
+            if revoking.contains(device.id) {
+                ProgressView().scaleEffect(0.8)
+            } else {
+                Button(L("revoke", language)) { Task { await revoke(device) } }
+                    .font(.caption.weight(.semibold))
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+            }
+        }
+        .padding(.horizontal, KXSpacing.md)
+        .padding(.vertical, 10)
+    }
+
+    private func deviceLastSeen(_ device: KaiXDeviceDTO) -> String? {
+        guard let raw = device.last_seen_at, !raw.isEmpty else { return nil }
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        var date = iso.date(from: raw)
+        if date == nil {
+            iso.formatOptions = [.withInternetDateTime]
+            date = iso.date(from: raw)
+        }
+        guard let date else { return nil }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    private func load() async {
+        state = devices.isEmpty ? .loading : state
+        do {
+            devices = try await KaiXAPIClient.shared.loginDevices()
+            state = .loaded
+        } catch {
+            state = .error(error.kaixUserMessage)
+        }
+    }
+
+    private func revoke(_ device: KaiXDeviceDTO) async {
+        revoking.insert(device.id)
+        defer { revoking.remove(device.id) }
+        do {
+            try await KaiXAPIClient.shared.revokeDevice(device.id)
+            await load()
+        } catch {
+            state = .error(error.kaixUserMessage)
         }
     }
 }
@@ -822,6 +924,14 @@ struct BlocklistSettingsView: View {
     }
 
     private func loadBlockedUsers() async {
+        // The server blocklist is the source of truth (shared with web);
+        // merge any ids it returns into the local mirror that the rest of
+        // the app uses for content filtering.
+        if let serverBlocked = try? await KaiXAPIClient.shared.blockedUsers() {
+            let merged = (blockedUserIds + serverBlocked.map(\.id)).removingDuplicates()
+            let joined = merged.joined(separator: "|")
+            if joined != blockedUserIdsRaw { blockedUserIdsRaw = joined }
+        }
         guard !blockedUserIds.isEmpty else {
             blockedUsers = []
             errorMessage = nil
@@ -839,6 +949,8 @@ struct BlocklistSettingsView: View {
         blockedUserIdsRaw = blockedUserIds
             .filter { $0 != userId }
             .joined(separator: "|")
+        // Propagate to the server so the unblock sticks across devices/web.
+        Task { try? await KaiXAPIClient.shared.setBlock(userId, false) }
     }
 }
 

@@ -408,6 +408,12 @@ struct LocalNewsDetailView: View {
                         Text("\(post.author_display_name) · \(relativeDate(post.published_at ?? post.created_at))")
                             .font(.caption.weight(.medium))
                             .foregroundStyle(.secondary)
+                        HStack(spacing: 8) {
+                            NewsTrustBadge(trust: sourceTrust(post))
+                            if let scope = japanWideScope(post) {
+                                NewsScopeBadge(text: scope)
+                            }
+                        }
                     }
 
                     if !post.summary.isEmpty {
@@ -599,6 +605,12 @@ private struct LocalNewsRow: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
+            HStack(spacing: 6) {
+                NewsTrustBadge(trust: sourceTrust(post))
+                if let scope = japanWideScope(post) {
+                    NewsScopeBadge(text: scope)
+                }
+            }
             HStack(spacing: 10) {
                 Label("\(post.save_count)", systemImage: "bookmark")
                 Label("\(post.share_count ?? 0)", systemImage: "square.and.arrow.up")
@@ -610,6 +622,64 @@ private struct LocalNewsRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .kxGlassSurface(radius: KXRadius.lg)
+    }
+}
+
+// MARK: - Source trust + scope (parity with web NewsListClient / NewsCard)
+
+private struct NewsTrust {
+    let label: String
+    let systemImage: String
+    let tint: Color
+    let soft: Color
+}
+
+/// Mirrors the web source-trust badge: official sources first, then
+/// editor/AI-assisted, otherwise simply "source labelled". Gives readers
+/// the same provenance signal the web /news surface shows.
+private func sourceTrust(_ post: KaiXEditorialPostDTO) -> NewsTrust {
+    let official = post.official_source_required ?? post.officialSourceRequired ?? false
+    let aiAssisted = post.is_ai_assisted ?? post.isAiAssisted ?? false
+    if official {
+        return NewsTrust(label: "官方来源优先", systemImage: "checkmark.shield.fill", tint: .orange, soft: KXColor.warningSoft)
+    }
+    if aiAssisted {
+        return NewsTrust(label: "编辑部辅助整理", systemImage: "sparkles", tint: .blue, soft: KXColor.infoSoft)
+    }
+    return NewsTrust(label: "来源已标注", systemImage: "checkmark.seal.fill", tint: .green, soft: KXColor.successSoft)
+}
+
+/// Country-wide editorial (empty city) is labelled Japan-wide with the
+/// city it currently applies to — mirrors the web NewsCard scope chip so
+/// a nationwide item shown inside a single city reads unambiguously.
+private func japanWideScope(_ post: KaiXEditorialPostDTO, contextCity: String = "") -> String? {
+    guard post.city.isEmpty else { return nil }
+    let trimmed = contextCity.trimmingCharacters(in: .whitespaces)
+    let city = trimmed.isEmpty ? "本城" : trimmed.capitalized
+    return "Japan-wide · 适用于 \(city)"
+}
+
+private struct NewsTrustBadge: View {
+    let trust: NewsTrust
+    var body: some View {
+        Label(trust.label, systemImage: trust.systemImage)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(trust.tint)
+            .padding(.horizontal, 8)
+            .frame(height: 22)
+            .background(trust.soft, in: Capsule())
+    }
+}
+
+private struct NewsScopeBadge: View {
+    let text: String
+    var body: some View {
+        Text(text)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .frame(height: 22)
+            .overlay(Capsule().stroke(KXColor.glassStroke, lineWidth: 1))
     }
 }
 

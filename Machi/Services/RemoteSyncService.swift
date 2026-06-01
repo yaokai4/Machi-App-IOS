@@ -61,8 +61,8 @@ final class RemoteSyncService {
     /// Register a brand-new account against the unified backend and
     /// upsert into SwiftData.
     @discardableResult
-    func registerAndSync(handle: String, displayName: String, password: String, email: String? = nil, region: KaiXRegionDirectory.Region, context: ModelContext) async throws -> UserEntity {
-        let response = try await api.register(handle: handle, displayName: displayName, password: password, email: email, region: region)
+    func registerAndSync(handle: String, displayName: String, password: String, email: String? = nil, code: String? = nil, region: KaiXRegionDirectory.Region, context: ModelContext) async throws -> UserEntity {
+        let response = try await api.register(handle: handle, displayName: displayName, password: password, email: email, code: code, region: region)
         let entity = upsertUser(response.user, context: context)
         AuthService.shared.persistSession(user: entity)
         try? context.save()

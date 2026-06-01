@@ -51,6 +51,32 @@ struct AuthView: View {
         }
     }
 
+    private var codeBinding: Binding<String> {
+        Binding {
+            viewModel.code
+        } set: { value in
+            viewModel.code = String(value.filter(\.isNumber).prefix(6))
+            viewModel.clearError(for: .code)
+        }
+    }
+
+    @ViewBuilder
+    private func availabilityHint(_ state: AuthViewModel.FieldAvailability, takenKey: String, okKey: String) -> some View {
+        switch state {
+        case .checking:
+            Label(L("authChecking", language), systemImage: "ellipsis")
+                .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+        case .available:
+            Label(L(okKey, language), systemImage: "checkmark.circle.fill")
+                .font(.caption2.weight(.semibold)).foregroundStyle(.green)
+        case .taken:
+            Label(L(takenKey, language), systemImage: "xmark.circle.fill")
+                .font(.caption2.weight(.semibold)).foregroundStyle(Color.red.opacity(0.78))
+        case .idle:
+            EmptyView()
+        }
+    }
+
     var body: some View {
         ZStack {
             KXGlassBackground()
@@ -141,6 +167,8 @@ struct AuthView: View {
                 )
 
                 if viewModel.mode == .register {
+                    availabilityHint(viewModel.usernameAvailability, takenKey: "handleTaken", okKey: "authUsernameAvailable")
+
                     AuthInputField(
                         title: L("displayName", language),
                         placeholder: "Machi User",
@@ -158,6 +186,16 @@ struct AuthView: View {
                         accessibilityIdentifier: "auth.email",
                         error: viewModel.fieldError(.email),
                         keyboardType: .emailAddress
+                    )
+                    availabilityHint(viewModel.emailAvailability, takenKey: "authEmailTaken", okKey: "authEmailAvailable")
+
+                    AuthCodeField(
+                        code: codeBinding,
+                        sending: viewModel.sendingCode,
+                        cooldown: viewModel.codeCooldown,
+                        canSend: viewModel.email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false,
+                        error: viewModel.fieldError(.code),
+                        onSend: { Task { await viewModel.sendCode(language: language) } }
                     )
 
                     AuthRegionField(region: viewModel.selectedRegion, error: viewModel.fieldError(.region)) {
@@ -180,6 +218,16 @@ struct AuthView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 9)
                     .background(KXColor.warningSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if let info = viewModel.infoMessage {
+                Label(info, systemImage: "checkmark.circle")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.green)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .background(KXColor.successSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
@@ -217,6 +265,71 @@ struct AuthView: View {
         }
         .padding(18)
         .kxGlassSurface(radius: KXRadius.sheet)
+        .task(id: viewModel.username) {
+            guard viewModel.mode == .register else { return }
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            await viewModel.checkUsernameAvailability(language: language)
+        }
+        .task(id: viewModel.email) {
+            guard viewModel.mode == .register else { return }
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            await viewModel.checkEmailAvailability(language: language)
+        }
+    }
+}
+
+private struct AuthCodeField: View {
+    @Environment(\.appLanguage) private var language
+    @Binding var code: String
+    let sending: Bool
+    let cooldown: Int
+    let canSend: Bool
+    var error: String?
+    let onSend: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L("authVerificationCode", language))
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 10) {
+                HStack(spacing: 13) {
+                    Image(systemName: "number")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24)
+                    TextField("000000", text: $code)
+                        .keyboardType(.numberPad)
+                        .accessibilityIdentifier("auth.code")
+                }
+                .padding(.horizontal, 16)
+                .frame(height: 56)
+                .frame(maxWidth: .infinity)
+                .kxGlassSurface(radius: KXRadius.md, stroke: error == nil ? KXColor.glassStroke : Color.red.opacity(0.36))
+
+                Button(action: onSend) {
+                    HStack(spacing: 6) {
+                        if sending { ProgressView().scaleEffect(0.8) }
+                        Text(cooldown > 0 ? "\(cooldown)s" : L("authSendCode", language))
+                            .font(.subheadline.weight(.bold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                    .padding(.horizontal, 14)
+                    .frame(height: 56)
+                    .foregroundStyle((canSend && cooldown == 0 && !sending) ? KXColor.accent : .secondary)
+                    .kxGlassCapsule(isSelected: canSend && cooldown == 0 && !sending)
+                }
+                .buttonStyle(.plain)
+                .disabled(!canSend || cooldown > 0 || sending)
+                .accessibilityIdentifier("auth.sendCode")
+            }
+
+            if let error {
+                AuthFieldErrorText(error)
+            }
+        }
     }
 }
 

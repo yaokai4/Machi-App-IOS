@@ -65,7 +65,7 @@ final class AuthService {
         }
     }
 
-    func register(username: String, displayName: String, password: String, email: String? = nil, region: KaiXRegionDirectory.Region, context: ModelContext) async throws -> UserEntity {
+    func register(username: String, displayName: String, password: String, email: String? = nil, code: String? = nil, region: KaiXRegionDirectory.Region, context: ModelContext) async throws -> UserEntity {
         if usesLocalAuthOnly {
             let user = try await UserRepository(context: context).register(
                 username: username, displayName: displayName, password: password, region: region,
@@ -76,7 +76,7 @@ final class AuthService {
 
         do {
             return try await RemoteSyncService.shared.registerAndSync(
-                handle: username, displayName: displayName, password: password, email: email, region: region, context: context,
+                handle: username, displayName: displayName, password: password, email: email, code: code, region: region, context: context,
             )
         } catch {
             // Offline fallback — register locally so the user can keep using

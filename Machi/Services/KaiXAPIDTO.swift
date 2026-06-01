@@ -394,6 +394,26 @@ struct KaiXTopicDTO: Codable, Equatable {
 
 // MARK: - Local News Desk
 
+// MARK: - Login devices / sessions (parity with web /settings/devices)
+
+struct KaiXDeviceDTO: Codable, Equatable, Identifiable {
+    let id: String
+    let token: String?
+    let device_name: String?
+    let user_agent: String?
+    let ip: String?
+    let created_at: String?
+    let last_seen_at: String?
+    let expires_at: String?
+
+    var displayName: String {
+        let name = (device_name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty { return name }
+        let ua = (user_agent ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return ua.isEmpty ? "未知设备" : String(ua.prefix(40))
+    }
+}
+
 struct KaiXEditorialPostDTO: Codable, Equatable, Identifiable {
     let id: String
     let news_item_id: String?
