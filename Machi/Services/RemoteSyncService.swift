@@ -209,6 +209,7 @@ final class RemoteSyncService {
         if let existing = fetchUser(remoteId: serverId, context: context) {
             existing.username = dto.handle
             existing.displayName = dto.display_name
+            existing.email = dto.email ?? existing.email
             existing.bio = dto.bio ?? existing.bio
             existing.location = dto.location ?? existing.location
             existing.avatarSymbol = dto.avatar_symbol ?? existing.avatarSymbol
@@ -260,6 +261,7 @@ final class RemoteSyncService {
             id: serverId,
             username: dto.handle,
             displayName: dto.display_name,
+            email: dto.email ?? "",
             avatarURL: dto.avatar_url ?? "",
             coverURL: dto.cover_url ?? "",
             bio: dto.bio ?? "",

@@ -57,6 +57,19 @@ final class RegionStore: ObservableObject {
         if next.count > recentCap { next = Array(next.prefix(recentCap)) }
         recent = next
         UserDefaults.standard.set(next.map(\.regionCode), forKey: recentKey)
+        syncBrowseRegionToBackend(region)
+    }
+
+    /// Persist the chosen browse region to the signed-in account so it syncs
+    /// across devices and to the Web client (which reads
+    /// `user.current_region_code`). Only `current_region_code` is sent — the
+    /// declared profile region (country/province/city) is intentionally left
+    /// untouched, matching the backend's separation of "browsing" vs "home".
+    /// No-op for guests / logged-out (token == nil) — they stay local-only.
+    private func syncBrowseRegionToBackend(_ region: KaiXRegionDirectory.Region) {
+        guard KaiXBackend.token != nil else { return }
+        let code = region.regionCode
+        Task { _ = try? await KaiXAPIClient.shared.updateMe(["current_region_code": code]) }
     }
 
     /// Restore the app-side browsing region from the signed-in user's

@@ -129,10 +129,79 @@ final class KaiXAPIClient {
         return try decode(data)
     }
 
+    func sendSecurityCode(purpose: String, email: String? = nil) async throws -> KaiXEmailCodeResponse {
+        var body = ["purpose": purpose]
+        if let email, !email.isEmpty {
+            body["email"] = email
+            body["new_email"] = email
+        }
+        let data = try await request("POST", "/api/auth/send-verification-code", body: body)
+        return try decode(data)
+    }
+
     func verifyEmailCode(email: String, code: String, purpose: String = "register") async throws -> KaiXVerifyCodeResponse {
         let data = try await request("POST", "/api/auth/verify-code",
                                      body: ["email": email, "code": code, "purpose": purpose])
         return try decode(data)
+    }
+
+    func changePassword(oldPassword: String, newPassword: String) async throws {
+        _ = try await request("POST", "/api/auth/change-password",
+                              body: ["old_password": oldPassword, "new_password": newPassword])
+    }
+
+    func verifyPassword(_ password: String) async throws {
+        _ = try await request("POST", "/api/account/verify-password", body: ["password": password])
+    }
+
+    func changePassword(currentPassword: String? = nil,
+                        code: String? = nil,
+                        challengeId: String? = nil,
+                        newPassword: String) async throws {
+        var body = ["new_password": newPassword]
+        if let currentPassword, !currentPassword.isEmpty {
+            body["current_password"] = currentPassword
+        }
+        if let code, !code.isEmpty {
+            body["code"] = code
+        }
+        if let challengeId, !challengeId.isEmpty {
+            body["challenge_id"] = challengeId
+        }
+        _ = try await request("POST", "/api/account/change-password", body: body)
+    }
+
+    func changeEmail(currentPassword: String? = nil,
+                     oldCode: String? = nil,
+                     oldChallengeId: String? = nil,
+                     newEmail: String,
+                     newCode: String,
+                     newChallengeId: String? = nil) async throws -> KaiXUserDTO {
+        struct Wrapper: Codable { let user: KaiXUserDTO }
+        var body: [String: String] = [
+            "new_email": newEmail,
+            "new_code": newCode,
+        ]
+        if let currentPassword, !currentPassword.isEmpty {
+            body["current_password"] = currentPassword
+        }
+        if let oldCode, !oldCode.isEmpty {
+            body["old_code"] = oldCode
+        }
+        if let oldChallengeId, !oldChallengeId.isEmpty {
+            body["old_challenge_id"] = oldChallengeId
+        }
+        if let newChallengeId, !newChallengeId.isEmpty {
+            body["new_challenge_id"] = newChallengeId
+        }
+        let data = try await request("POST", "/api/account/change-email", body: body)
+        return try decode(data) as Wrapper |> \.user
+    }
+
+    func updateRegionLanguage(_ patch: [String: String]) async throws -> KaiXUserDTO {
+        struct Wrapper: Codable { let user: KaiXUserDTO }
+        let data = try await request("PATCH", "/api/account/region-language", body: patch)
+        return try decode(data) as Wrapper |> \.user
     }
 
     func logout() async throws {
@@ -291,6 +360,11 @@ final class KaiXAPIClient {
         _ = try await request("POST", "/api/users/\(id.encodedPathSegment)/report", body: ["reason": reason, "note": note ?? ""])
     }
 
+    /// Submit in-app feedback. Mirrors web `POST /api/feedback`; requires auth.
+    func submitFeedback(category: String = "general", content: String) async throws {
+        _ = try await request("POST", "/api/feedback", body: ["category": category, "content": content])
+    }
+
     func followers(_ id: String) async throws -> [KaiXUserDTO] {
         struct Wrapper: Codable { let items: [KaiXUserDTO] }
         let data = try await request("GET", "/api/users/\(id.encodedPathSegment)/followers")
@@ -372,63 +446,385 @@ final class KaiXAPIClient {
         return try decode(data) as Wrapper |> \.post
     }
 
-    // MARK: - Local News Desk
+    // MARK: - Machi Guide / 日本指南
 
-    func news(
-        country: String? = nil,
+    func guideHome(country: String = "jp", language: String = "zh-CN") async throws -> KaiXGuideHomeResponse {
+        let data = try await request("GET", "/api/guide/home", queryItems: [
+            URLQueryItem(name: "country", value: country),
+            URLQueryItem(name: "language", value: language),
+        ])
+        return try decode(data)
+    }
+
+    func guideCategories(country: String = "jp") async throws -> KaiXGuideCategoriesResponse {
+        let data = try await request("GET", "/api/guide/categories", queryItems: [
+            URLQueryItem(name: "country", value: country),
+        ])
+        return try decode(data)
+    }
+
+    func guideArticles(
+        country: String = "jp",
         city: String? = nil,
         language: String? = nil,
-        category: String? = nil,
-        sort: String = "latest",
+        categoryKey: String? = nil,
+        subCategoryKey: String? = nil,
+        contentType: String? = nil,
+        keyword: String? = nil,
         page: Int = 1,
-        limit: Int = 20
-    ) async throws -> KaiXNewsListResponse {
+        pageSize: Int = 20
+    ) async throws -> KaiXGuideListResponse<KaiXGuideArticleDTO> {
+        let data = try await request("GET", "/api/guide/articles", queryItems: guideQuery(
+            country: country,
+            city: city,
+            language: language,
+            categoryKey: categoryKey,
+            subCategoryKey: subCategoryKey,
+            contentType: contentType,
+            keyword: keyword,
+            page: page,
+            pageSize: pageSize
+        ))
+        return try decode(data)
+    }
+
+    func guideArticle(_ idOrSlug: String, country: String = "jp") async throws -> KaiXGuideArticleDetailResponse {
+        let data = try await request("GET", "/api/guide/articles/\(idOrSlug.encodedPathSegment)", queryItems: [
+            URLQueryItem(name: "country", value: country),
+        ])
+        return try decode(data)
+    }
+
+    func guideProducts(
+        country: String = "jp",
+        categoryKey: String? = nil,
+        subCategoryKey: String? = nil,
+        productType: String? = nil,
+        priceType: String? = nil,
+        keyword: String? = nil,
+        page: Int = 1,
+        pageSize: Int = 20
+    ) async throws -> KaiXGuideListResponse<KaiXGuideProductDTO> {
+        let data = try await request("GET", "/api/guide/products", queryItems: guideQuery(
+            country: country,
+            categoryKey: categoryKey,
+            subCategoryKey: subCategoryKey,
+            productType: productType,
+            priceType: priceType,
+            keyword: keyword,
+            page: page,
+            pageSize: pageSize
+        ))
+        return try decode(data)
+    }
+
+    func guideMemberResources(
+        country: String = "jp",
+        categoryKey: String? = nil,
+        keyword: String? = nil,
+        page: Int = 1,
+        pageSize: Int = 20
+    ) async throws -> KaiXGuideListResponse<KaiXGuideProductDTO> {
+        let data = try await request("GET", "/api/guide/member-resources", queryItems: guideQuery(
+            country: country,
+            categoryKey: categoryKey,
+            keyword: keyword,
+            page: page,
+            pageSize: pageSize
+        ))
+        return try decode(data)
+    }
+
+    func guideProduct(_ idOrSlug: String, country: String = "jp") async throws -> KaiXGuideProductDetailResponse {
+        let data = try await request("GET", "/api/guide/products/\(idOrSlug.encodedPathSegment)", queryItems: [
+            URLQueryItem(name: "country", value: country),
+        ])
+        return try decode(data)
+    }
+
+    func guideSchools(
+        country: String = "jp",
+        regionGroup: String? = nil,
+        prefecture: String? = nil,
+        city: String? = nil,
+        schoolType: String? = nil,
+        field: String? = nil,
+        acceptsInternationalStudents: Bool? = nil,
+        hasEnglishProgram: Bool? = nil,
+        hasJapaneseProgram: Bool? = nil,
+        hasScholarship: Bool? = nil,
+        hasDormitory: Bool? = nil,
+        hasCareerSupport: Bool? = nil,
+        hasLanguageSupport: Bool? = nil,
+        jlptLevel: String? = nil,
+        ejuRequired: Bool? = nil,
+        toeflRequired: String? = nil,
+        ieltsRequired: String? = nil,
+        admissionMonth: String? = nil,
+        tuitionMin: Int? = nil,
+        tuitionMax: Int? = nil,
+        keyword: String? = nil,
+        sort: String? = nil,
+        page: Int = 1,
+        pageSize: Int = 20
+    ) async throws -> KaiXGuideListResponse<KaiXGuideSchoolDTO> {
+        let data = try await request("GET", "/api/guide/schools", queryItems: guideQuery(
+            country: country,
+            regionGroup: regionGroup,
+            prefecture: prefecture,
+            city: city,
+            schoolType: schoolType,
+            field: field,
+            acceptsInternationalStudents: acceptsInternationalStudents,
+            hasEnglishProgram: hasEnglishProgram,
+            hasJapaneseProgram: hasJapaneseProgram,
+            hasScholarship: hasScholarship,
+            hasDormitory: hasDormitory,
+            hasCareerSupport: hasCareerSupport,
+            hasLanguageSupport: hasLanguageSupport,
+            jlptLevel: jlptLevel,
+            ejuRequired: ejuRequired,
+            toeflRequired: toeflRequired,
+            ieltsRequired: ieltsRequired,
+            admissionMonth: admissionMonth,
+            tuitionMin: tuitionMin,
+            tuitionMax: tuitionMax,
+            keyword: keyword,
+            sort: sort,
+            page: page,
+            pageSize: pageSize
+        ))
+        return try decode(data)
+    }
+
+    func guideSchool(_ idOrSlug: String, country: String = "jp") async throws -> KaiXGuideSchoolDetailResponse {
+        let data = try await request("GET", "/api/guide/schools/\(idOrSlug.encodedPathSegment)", queryItems: [
+            URLQueryItem(name: "country", value: country)
+        ])
+        return try decode(data)
+    }
+
+    func guideCompanies(
+        country: String = "jp",
+        regionGroup: String? = nil,
+        prefecture: String? = nil,
+        city: String? = nil,
+        industry: String? = nil,
+        subIndustry: String? = nil,
+        companySize: String? = nil,
+        employmentType: String? = nil,
+        supportsWorkVisa: Bool? = nil,
+        acceptsForeignApplicants: Bool? = nil,
+        hasEnglishPositions: Bool? = nil,
+        hasGlobalRoles: Bool? = nil,
+        hasForeignEmployees: Bool? = nil,
+        japaneseLevel: String? = nil,
+        englishLevel: String? = nil,
+        interviewLanguage: String? = nil,
+        keyword: String? = nil,
+        sort: String? = nil,
+        page: Int = 1,
+        pageSize: Int = 20
+    ) async throws -> KaiXGuideListResponse<KaiXGuideCompanyDTO> {
+        let data = try await request("GET", "/api/guide/companies", queryItems: guideQuery(
+            country: country,
+            regionGroup: regionGroup,
+            prefecture: prefecture,
+            city: city,
+            industry: industry,
+            subIndustry: subIndustry,
+            companySize: companySize,
+            employmentType: employmentType,
+            supportsWorkVisa: supportsWorkVisa,
+            acceptsForeignApplicants: acceptsForeignApplicants,
+            hasEnglishPositions: hasEnglishPositions,
+            hasGlobalRoles: hasGlobalRoles,
+            hasForeignEmployees: hasForeignEmployees,
+            japaneseLevel: japaneseLevel,
+            englishLevel: englishLevel,
+            interviewLanguage: interviewLanguage,
+            keyword: keyword,
+            sort: sort,
+            page: page,
+            pageSize: pageSize
+        ))
+        return try decode(data)
+    }
+
+    func guideCompany(_ idOrSlug: String) async throws -> KaiXGuideCompanyDetailResponse {
+        let data = try await request("GET", "/api/guide/companies/\(idOrSlug.encodedPathSegment)")
+        return try decode(data)
+    }
+
+    func guideCompanyReviews(_ idOrSlug: String) async throws -> KaiXGuideCompanyReviewsResponse {
+        let data = try await request("GET", "/api/guide/companies/\(idOrSlug.encodedPathSegment)/reviews")
+        return try decode(data)
+    }
+
+    func guideInterviewReviews(
+        country: String = "jp",
+        city: String? = nil,
+        industry: String? = nil,
+        position: String? = nil,
+        companyId: String? = nil,
+        keyword: String? = nil,
+        page: Int = 1,
+        pageSize: Int = 20
+    ) async throws -> KaiXGuideListResponse<KaiXGuideInterviewReviewDTO> {
+        let data = try await request("GET", "/api/guide/interview-reviews", queryItems: guideQuery(
+            country: country,
+            city: city,
+            industry: industry,
+            position: position,
+            companyId: companyId,
+            keyword: keyword,
+            page: page,
+            pageSize: pageSize
+        ))
+        return try decode(data)
+    }
+
+    func submitGuideCompanyReview(_ payload: KaiXGuideCompanyReviewPayload) async throws -> KaiXGuideSubmitResponse {
+        let data = try await request("POST", "/api/guide/company-reviews", body: payload)
+        return try decode(data)
+    }
+
+    func submitGuideInterviewReview(_ payload: KaiXGuideInterviewReviewPayload) async throws -> KaiXGuideSubmitResponse {
+        let data = try await request("POST", "/api/guide/interview-reviews", body: payload)
+        return try decode(data)
+    }
+
+    func submitGuideServiceRequest(_ payload: KaiXGuideServiceRequestPayload) async throws -> KaiXGuideSubmitResponse {
+        let data = try await request("POST", "/api/guide/service-requests", body: payload)
+        return try decode(data)
+    }
+
+    func submitGuideCorrection(targetType: String, targetId: String, message: String, sourceUrl: String = "") async throws -> KaiXGuideSubmitResponse {
+        let data = try await request("POST", "/api/guide/corrections", body: [
+            "targetType": targetType,
+            "targetId": targetId,
+            "message": message,
+            "sourceUrl": sourceUrl
+        ])
+        return try decode(data)
+    }
+
+    func saveGuideSchool(_ idOrSlug: String, on: Bool) async throws {
+        _ = try await request(on ? "POST" : "DELETE", "/api/guide/schools/\(idOrSlug.encodedPathSegment)/save", body: [String: String]())
+    }
+
+    func saveGuideCompany(_ idOrSlug: String, on: Bool) async throws {
+        _ = try await request(on ? "POST" : "DELETE", "/api/guide/companies/\(idOrSlug.encodedPathSegment)/save", body: [String: String]())
+    }
+
+    func purchaseGuideProduct(_ idOrSlug: String) async throws -> KaiXGuideSubmitResponse {
+        let data = try await request("POST", "/api/guide/products/\(idOrSlug.encodedPathSegment)/purchase", body: [String: String]())
+        return try decode(data)
+    }
+
+    private func guideQuery(
+        country: String,
+        regionGroup: String? = nil,
+        prefecture: String? = nil,
+        city: String? = nil,
+        language: String? = nil,
+        categoryKey: String? = nil,
+        subCategoryKey: String? = nil,
+        contentType: String? = nil,
+        productType: String? = nil,
+        priceType: String? = nil,
+        industry: String? = nil,
+        subIndustry: String? = nil,
+        companySize: String? = nil,
+        employmentType: String? = nil,
+        supportsWorkVisa: Bool? = nil,
+        acceptsForeignApplicants: Bool? = nil,
+        hasEnglishPositions: Bool? = nil,
+        hasGlobalRoles: Bool? = nil,
+        hasForeignEmployees: Bool? = nil,
+        japaneseLevel: String? = nil,
+        englishLevel: String? = nil,
+        interviewLanguage: String? = nil,
+        position: String? = nil,
+        companyId: String? = nil,
+        schoolType: String? = nil,
+        field: String? = nil,
+        acceptsInternationalStudents: Bool? = nil,
+        hasEnglishProgram: Bool? = nil,
+        hasJapaneseProgram: Bool? = nil,
+        hasScholarship: Bool? = nil,
+        hasDormitory: Bool? = nil,
+        hasCareerSupport: Bool? = nil,
+        hasLanguageSupport: Bool? = nil,
+        jlptLevel: String? = nil,
+        ejuRequired: Bool? = nil,
+        toeflRequired: String? = nil,
+        ieltsRequired: String? = nil,
+        admissionMonth: String? = nil,
+        enrollmentMonth: String? = nil,
+        tuitionMin: Int? = nil,
+        tuitionMax: Int? = nil,
+        keyword: String? = nil,
+        sort: String? = nil,
+        page: Int,
+        pageSize: Int
+    ) -> [URLQueryItem] {
         var q: [URLQueryItem] = [
-            URLQueryItem(name: "sort", value: sort),
+            URLQueryItem(name: "country", value: country),
             URLQueryItem(name: "page", value: String(page)),
-            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "pageSize", value: String(pageSize)),
         ]
-        if let country, !country.isEmpty { q.append(URLQueryItem(name: "country", value: country)) }
-        if let city, !city.isEmpty { q.append(URLQueryItem(name: "city", value: city)) }
-        if let language, !language.isEmpty { q.append(URLQueryItem(name: "language", value: language)) }
-        if let category, !category.isEmpty { q.append(URLQueryItem(name: "category", value: category)) }
-        let data = try await request("GET", "/api/news", queryItems: q)
-        return try decode(data)
-    }
-
-    func newsDetail(_ id: String) async throws -> KaiXNewsDetailResponse {
-        let data = try await request("GET", "/api/news/\(id.encodedPathSegment)")
-        return try decode(data)
-    }
-
-    func setNewsSaved(_ id: String, _ on: Bool) async throws -> KaiXEditorialPostDTO {
-        struct Wrapper: Codable { let post: KaiXEditorialPostDTO }
-        let data = try await request(on ? "POST" : "DELETE", "/api/news/\(id.encodedPathSegment)/save")
-        return try decode(data) as Wrapper |> \.post
-    }
-
-    func shareNews(_ id: String) async throws -> KaiXEditorialPostDTO {
-        struct Wrapper: Codable { let post: KaiXEditorialPostDTO }
-        let data = try await request("POST", "/api/news/\(id.encodedPathSegment)/share")
-        return try decode(data) as Wrapper |> \.post
-    }
-
-    func trackNewsSourceClick(_ id: String) async throws -> KaiXEditorialPostDTO {
-        struct Wrapper: Codable { let post: KaiXEditorialPostDTO }
-        let data = try await request("POST", "/api/news/\(id.encodedPathSegment)/source-click")
-        return try decode(data) as Wrapper |> \.post
-    }
-
-    func newsComments(_ id: String) async throws -> [KaiXEditorialCommentDTO] {
-        let data = try await request("GET", "/api/news/\(id.encodedPathSegment)/comments")
-        let response: KaiXNewsCommentsResponse = try decode(data)
-        return response.items
-    }
-
-    func createNewsComment(_ id: String, content: String) async throws -> KaiXEditorialCommentDTO {
-        struct Wrapper: Codable { let comment: KaiXEditorialCommentDTO }
-        let data = try await request("POST", "/api/news/\(id.encodedPathSegment)/comments", body: ["content": content])
-        return try decode(data) as Wrapper |> \.comment
+        func append(_ name: String, _ value: String?) {
+            guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            q.append(URLQueryItem(name: name, value: value))
+        }
+        func appendBool(_ name: String, _ value: Bool?) {
+            guard let value else { return }
+            q.append(URLQueryItem(name: name, value: value ? "true" : "false"))
+        }
+        append("regionGroup", regionGroup)
+        append("prefecture", prefecture)
+        append("city", city)
+        append("language", language)
+        append("categoryKey", categoryKey)
+        append("subCategoryKey", subCategoryKey)
+        append("contentType", contentType)
+        append("productType", productType)
+        append("priceType", priceType)
+        append("industry", industry)
+        append("subIndustry", subIndustry)
+        append("companySize", companySize)
+        append("employmentType", employmentType)
+        appendBool("supportsWorkVisa", supportsWorkVisa)
+        appendBool("acceptsForeignApplicants", acceptsForeignApplicants)
+        appendBool("hasEnglishPositions", hasEnglishPositions)
+        appendBool("hasGlobalRoles", hasGlobalRoles)
+        appendBool("hasForeignEmployees", hasForeignEmployees)
+        append("japaneseLevel", japaneseLevel)
+        append("englishLevel", englishLevel)
+        append("interviewLanguage", interviewLanguage)
+        append("position", position)
+        append("companyId", companyId)
+        append("schoolType", schoolType)
+        append("field", field)
+        appendBool("acceptsInternationalStudents", acceptsInternationalStudents)
+        appendBool("hasEnglishProgram", hasEnglishProgram)
+        appendBool("hasJapaneseProgram", hasJapaneseProgram)
+        appendBool("hasScholarship", hasScholarship)
+        appendBool("hasDormitory", hasDormitory)
+        appendBool("hasCareerSupport", hasCareerSupport)
+        appendBool("hasLanguageSupport", hasLanguageSupport)
+        append("jlptLevel", jlptLevel)
+        appendBool("ejuRequired", ejuRequired)
+        append("toeflRequired", toeflRequired)
+        append("ieltsRequired", ieltsRequired)
+        append("admissionMonth", admissionMonth)
+        append("enrollmentMonth", enrollmentMonth)
+        if let tuitionMin { append("tuitionMin", String(tuitionMin)) }
+        if let tuitionMax { append("tuitionMax", String(tuitionMax)) }
+        append("keyword", keyword)
+        append("sort", sort)
+        return q
     }
 
     func editPost(_ id: String, content: String) async throws -> KaiXPostDTO {

@@ -547,7 +547,7 @@ struct PostDetailView: View {
 
             if let replyingTo {
                 HStack {
-                    Text("\(L("reply", language)) @\(viewModel.commentAuthors[replyingTo.authorId]?.username ?? "unknown")")
+                    Text("\(L("reply", language)) @\(viewModel.commentAuthors[replyingTo.authorId]?.username ?? L("unknownUser", language))")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -570,6 +570,7 @@ struct PostDetailView: View {
                     .kxGlassSurface(radius: KXRadius.md)
 
                 Button {
+                    if currentUser.isGuest { GuestGate.shared.requireLogin(); return }
                     let parentId = replyingTo?.id
                     Task {
                         await viewModel.sendComment(context: modelContext, currentUser: currentUser, postStore: postStore, commentStore: commentStore, parentCommentId: parentId)

@@ -333,8 +333,8 @@ struct ComposePostView: View {
         }
         .sheet(isPresented: $isShowingRegionPicker) {
             RegionPickerView(
-                initialCountry: currentUser.country.isEmpty ? viewModel.selectedRegion?.countryCode : currentUser.country,
-                allowsAnyCountry: currentUser.country.isEmpty
+                initialCountry: currentUser.country.isEmpty ? (viewModel.selectedRegion?.countryCode ?? "jp") : currentUser.country,
+                allowsAnyCountry: false
             ) { region in
                 viewModel.selectedRegion = region
             }

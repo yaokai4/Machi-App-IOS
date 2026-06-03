@@ -9,8 +9,17 @@ enum KXRoute: Hashable {
     case topic(tag: String)
     case city(regionCode: String)
     case cityChannel(regionCode: String, channel: CityChannel)
-    case localNews(country: String, city: String)
-    case localNewsDetail(newsId: String)
+    case guideCategory(categoryKey: String)
+    case guideServices
+    case guideMemberResources
+    case guideArticle(slug: String)
+    case guideProduct(slug: String)
+    case guideSchools
+    case guideSchool(id: String)
+    case guideCompanies
+    case guideCompany(id: String)
+    case guideCompanyReviews(id: String)
+    case guideInterviewReviews
     case conversation(conversationId: String)
     case search(initialQuery: String?)
 }
@@ -19,7 +28,7 @@ enum KXRoute: Hashable {
 final class AppRouter: ObservableObject {
     @Published private var homePath: [KXRoute] = []
     @Published private var searchPath: [KXRoute] = []
-    @Published private var notificationsPath: [KXRoute] = []
+    @Published private var guidePath: [KXRoute] = []
     @Published private var messagesPath: [KXRoute] = []
     @Published private var profilePath: [KXRoute] = []
     @Published var routeErrorMessage: String?
@@ -57,7 +66,7 @@ final class AppRouter: ObservableObject {
     func resetAll() {
         homePath = []
         searchPath = []
-        notificationsPath = []
+        guidePath = []
         messagesPath = []
         profilePath = []
         activeTab = .home
@@ -83,8 +92,8 @@ final class AppRouter: ObservableObject {
             homePath
         case .search:
             searchPath
-        case .notifications:
-            notificationsPath
+        case .guide:
+            guidePath
         case .messages:
             messagesPath
         case .profile:
@@ -99,8 +108,8 @@ final class AppRouter: ObservableObject {
             homePath = normalizedPath
         case .search:
             searchPath = normalizedPath
-        case .notifications:
-            notificationsPath = normalizedPath
+        case .guide:
+            guidePath = normalizedPath
         case .messages:
             messagesPath = normalizedPath
         case .profile:
@@ -125,16 +134,16 @@ extension KXRoute {
             return .none
         case .postDetailComment(_, let commentId):
             return commentId.map { .comment($0) } ?? .comments
-        case .profile, .topic, .city, .cityChannel, .localNews, .localNewsDetail, .conversation, .search:
+        case .profile, .topic, .city, .cityChannel, .guideCategory, .guideServices, .guideMemberResources, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .conversation, .search:
             return .none
         }
     }
 
     var requiresHiddenTabBar: Bool {
         switch self {
-        case .postDetail, .postDetailComment, .localNewsDetail, .conversation:
+        case .postDetail, .postDetailComment, .guideArticle, .guideProduct, .guideSchool, .guideCompany, .guideCompanyReviews, .conversation:
             true
-        case .profile, .topic, .city, .cityChannel, .localNews, .search:
+        case .profile, .topic, .city, .cityChannel, .guideCategory, .guideServices, .guideMemberResources, .guideSchools, .guideCompanies, .guideInterviewReviews, .search:
             false
         }
     }
@@ -147,10 +156,10 @@ extension KXRoute {
             L("unknownUser", language)
         case .topic:
             L("noTopicPosts", language)
-        case .city, .cityChannel, .localNews:
+        case .city, .cityChannel:
             L("emptyFeed", language)
-        case .localNewsDetail:
-            "资讯暂时无法打开。"
+        case .guideCategory, .guideServices, .guideMemberResources, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews:
+            L("guideOpenFailed", language)
         case .conversation:
             L("emptyMessages", language)
         case .search:
@@ -185,10 +194,28 @@ private struct KXRouteDestinations: ViewModifier {
                     CityChannelView(regionCode: regionCode, currentUser: currentUser)
                 case .cityChannel(let regionCode, let channel):
                     CityChannelView(regionCode: regionCode, currentUser: currentUser, initialChannel: channel)
-                case .localNews(let country, let city):
-                    LocalNewsDeskListView(country: country, city: city)
-                case .localNewsDetail(let newsId):
-                    LocalNewsDetailView(newsId: newsId, currentUser: currentUser)
+                case .guideCategory(let categoryKey):
+                    GuideCategoryView(categoryKey: categoryKey)
+                case .guideServices:
+                    GuideServicesView()
+                case .guideMemberResources:
+                    GuideMemberResourcesView()
+                case .guideArticle(let slug):
+                    GuideArticleDetailView(slug: slug)
+                case .guideProduct(let slug):
+                    GuideProductDetailView(slug: slug)
+                case .guideSchools:
+                    GuideSchoolListView()
+                case .guideSchool(let id):
+                    GuideSchoolDetailView(schoolId: id)
+                case .guideCompanies:
+                    GuideCompanyListView()
+                case .guideCompany(let id):
+                    GuideCompanyDetailView(companyId: id)
+                case .guideCompanyReviews(let id):
+                    GuideCompanyReviewsView(companyId: id)
+                case .guideInterviewReviews:
+                    GuideInterviewReviewListView()
                 case .conversation(let conversationId):
                     ConversationView(conversationId: conversationId, currentUser: currentUser)
                 case .search(let initialQuery):
@@ -259,13 +286,34 @@ private extension KXRoute {
         case .cityChannel(let regionCode, let channel):
             let code = regionCode.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             return KaiXRegionDirectory.resolve(regionCode: code) == nil ? nil : .cityChannel(regionCode: code, channel: channel)
-        case .localNews(let country, let city):
-            let normalizedCountry = country.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            let normalizedCity = city.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            return .localNews(country: normalizedCountry, city: normalizedCity)
-        case .localNewsDetail(let newsId):
-            let id = newsId.trimmingCharacters(in: .whitespacesAndNewlines)
-            return id.isEmpty ? nil : .localNewsDetail(newsId: id)
+        case .guideCategory(let categoryKey):
+            let key = categoryKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            return key.isEmpty ? nil : .guideCategory(categoryKey: key)
+        case .guideServices:
+            return .guideServices
+        case .guideMemberResources:
+            return .guideMemberResources
+        case .guideArticle(let slug):
+            let id = slug.trimmingCharacters(in: .whitespacesAndNewlines)
+            return id.isEmpty ? nil : .guideArticle(slug: id)
+        case .guideProduct(let slug):
+            let id = slug.trimmingCharacters(in: .whitespacesAndNewlines)
+            return id.isEmpty ? nil : .guideProduct(slug: id)
+        case .guideSchools:
+            return .guideSchools
+        case .guideSchool(let id):
+            let normalizedId = id.trimmingCharacters(in: .whitespacesAndNewlines)
+            return normalizedId.isEmpty ? nil : .guideSchool(id: normalizedId)
+        case .guideCompanies:
+            return .guideCompanies
+        case .guideCompany(let id):
+            let normalizedId = id.trimmingCharacters(in: .whitespacesAndNewlines)
+            return normalizedId.isEmpty ? nil : .guideCompany(id: normalizedId)
+        case .guideCompanyReviews(let id):
+            let normalizedId = id.trimmingCharacters(in: .whitespacesAndNewlines)
+            return normalizedId.isEmpty ? nil : .guideCompanyReviews(id: normalizedId)
+        case .guideInterviewReviews:
+            return .guideInterviewReviews
         case .conversation(let conversationId):
             let id = conversationId.trimmingCharacters(in: .whitespacesAndNewlines)
             return id.isEmpty ? nil : .conversation(conversationId: id)

@@ -119,11 +119,7 @@ final class HomeViewModel: ObservableObject {
 
             let repository = PostRepository(context: context)
             let page = try await repository.fetchPage(mode: mode, currentUserId: currentUser.id, page: currentPage, pageSize: KaiXConfig.pageSize)
-            if reset {
-                posts = page
-            } else {
-                posts.append(contentsOf: page)
-            }
+            posts = balanceOfficialRuns(reset ? page : posts + page)
             postStore.setFeed(posts, append: false)
             currentPage += 1
             canLoadMore = page.count == KaiXConfig.pageSize
@@ -173,6 +169,48 @@ final class HomeViewModel: ObservableObject {
             )
         } catch {
             // Silent — the local fallback below still produces a usable feed.
+        }
+    }
+
+    private func balanceOfficialRuns(_ input: [PostEntity]) -> [PostEntity] {
+        var output = input
+        var previousKey = ""
+        var runCount = 0
+
+        for index in output.indices {
+            let key = officialFeedKey(for: output[index])
+            if !key.isEmpty && key == previousKey && runCount >= 2 {
+                if let swapIndex = output[(index + 1)...].firstIndex(where: { officialFeedKey(for: $0) != key }) {
+                    output.swapAt(index, swapIndex)
+                }
+            }
+            let nextKey = officialFeedKey(for: output[index])
+            if nextKey.isEmpty {
+                previousKey = ""
+                runCount = 0
+            } else if nextKey == previousKey {
+                runCount += 1
+            } else {
+                previousKey = nextKey
+                runCount = 1
+            }
+        }
+        return output
+    }
+
+    private func officialFeedKey(for post: PostEntity) -> String {
+        guard post.isSeedContent else { return "" }
+        switch post.contentType {
+        case .question:
+            return "assistant"
+        case .event, .news, .local_info:
+            return post.country == "jp" && post.city == "tokyo" ? "tokyo_editorial" : "japan_life_editorial"
+        case .service, .merchant, .coupon:
+            return "local_life_editorial"
+        case .guide, .housing, .roommate, .job_seek, .job_post, .referral, .warning:
+            return "japan_life_editorial"
+        default:
+            return post.seedAuthorType.isEmpty ? "assistant" : post.seedAuthorType
         }
     }
 

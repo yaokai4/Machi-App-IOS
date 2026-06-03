@@ -160,14 +160,72 @@ struct KaiXMembershipStatusDTO: Codable, Equatable {
     let cancelAtPeriodEnd: Bool?
 }
 
+enum KaiXPriceFormatter {
+    static func format(_ amount: Double, currency: String, billingPeriod: String? = nil) -> String {
+        let code = currency.uppercased()
+        let base: String
+        if code == "CNY" || code == "JPY" {
+            base = "¥\(Int(amount.rounded()))"
+        } else if code == "USD" {
+            base = amount.truncatingRemainder(dividingBy: 1) == 0
+                ? "$\(Int(amount))"
+                : String(format: "$%.2f", amount)
+        } else {
+            base = amount.truncatingRemainder(dividingBy: 1) == 0
+                ? "\(code) \(Int(amount))"
+                : "\(code) \(String(format: "%.2f", amount))"
+        }
+        if billingPeriod == "monthly" { return "\(base) / 月" }
+        if billingPeriod == "yearly" { return "\(base) / 年" }
+        return base
+    }
+}
+
 struct KaiXMembershipPlanDTO: Codable, Equatable {
     let plan_key: String
+    let planKey: String?
+    let name: String?
+    let subtitle: String?
+    let description: String?
     let name_zh: String?
     let name_en: String?
     let name_ja: String?
     let amount: Double
+    let price: Double?
     let currency: String
+    let price_label: String?
+    let priceLabel: String?
+    let original_price: Double?
+    let originalPrice: Double?
+    let discount_label: String?
+    let discountLabel: String?
     let billing_cycle: String?
+    let billingPeriod: String?
+    let billing_period: String?
+    let intervalCount: Int?
+    let interval_count: Int?
+    let stripePriceId: String?
+    let stripe_price_id: String?
+    let iosIapProductId: String?
+    let ios_iap_product_id: String?
+    let appleProductId: String?
+    let apple_product_id: String?
+    let isRecommended: Bool?
+    let is_recommended: Bool?
+    let isDefault: Bool?
+    let is_default: Bool?
+    let benefits: [KaiXMembershipBenefitDTO]?
+
+    var canonicalPlanKey: String { planKey ?? plan_key }
+    var displayName: String { name ?? name_zh ?? "Machi 认证会员" }
+    var displayPriceLabel: String {
+        if let label = priceLabel ?? price_label, !label.isEmpty { return label }
+        return KaiXPriceFormatter.format(price ?? amount, currency: currency, billingPeriod: billingPeriod ?? billing_period ?? billing_cycle)
+    }
+    var appleProductID: String {
+        appleProductId ?? apple_product_id ?? iosIapProductId ?? ios_iap_product_id ?? canonicalPlanKey
+    }
+    var recommended: Bool { isRecommended ?? is_recommended ?? false }
 }
 
 struct KaiXMembershipMeResponse: Codable {
@@ -178,6 +236,8 @@ struct KaiXMembershipMeResponse: Codable {
 
 struct KaiXMembershipPlanResponse: Codable {
     let plan: KaiXMembershipPlanDTO?
+    let plans: [KaiXMembershipPlanDTO]?
+    let items: [KaiXMembershipPlanDTO]?
     let apple_product_id: String?
 }
 
@@ -185,6 +245,9 @@ struct KaiXMembershipBenefitDTO: Codable, Equatable, Identifiable {
     let key: String
     let title: String
     let description: String
+    let icon: String?
+    let benefit_icon: String?
+    let sort_order: Int?
     var id: String { key }
 }
 
@@ -392,8 +455,6 @@ struct KaiXTopicDTO: Codable, Equatable {
     let post_count: Int
 }
 
-// MARK: - Local News Desk
-
 // MARK: - Login devices / sessions (parity with web /settings/devices)
 
 struct KaiXDeviceDTO: Codable, Equatable, Identifiable {
@@ -414,92 +475,512 @@ struct KaiXDeviceDTO: Codable, Equatable, Identifiable {
     }
 }
 
-struct KaiXEditorialPostDTO: Codable, Equatable, Identifiable {
+// MARK: - Machi Guide / 日本指南
+
+struct KaiXGuideHeroDTO: Codable, Equatable {
+    let title: String
+    let subtitle: String
+    let note: String
+    let searchPlaceholder: String
+    let quickTags: [String]
+}
+
+struct KaiXGuideEmptyStateDTO: Codable, Equatable {
+    let title: String
+    let body: String
+    let action: String
+    let actionCountry: String
+}
+
+struct KaiXGuideCategoryDTO: Codable, Equatable, Identifiable, Hashable {
     let id: String
-    let news_item_id: String?
-    let author_type: String
-    let authorType: String?
-    let author_display_name: String
-    let authorDisplayName: String?
+    let key: String
+    let parentKey: String
+    let title: String
+    let subtitle: String
+    let description: String
+    let icon: String
+    let color: String
+    let country: String
+    let sortOrder: Int
+    let subCategories: [KaiXGuideCategoryDTO]?
+}
+
+struct KaiXGuideGoalEntryDTO: Codable, Equatable, Identifiable {
+    let targetKey: String
+    let title: String
+    let categoryKey: String
+    let subCategoryKey: String
+    var id: String { targetKey }
+}
+
+struct KaiXGuideResourceEntryDTO: Codable, Equatable, Identifiable, Hashable {
+    let key: String
+    let title: String
+    let description: String
+    let icon: String
+    let href: String
+    var id: String { key }
+}
+
+struct KaiXGuideGoalsDTO: Codable, Equatable {
+    let title: String
+    let entries: [KaiXGuideGoalEntryDTO]
+}
+
+struct KaiXGuideArticleDTO: Codable, Equatable, Identifiable, Hashable {
+    let id: String
+    let title: String
+    let slug: String
+    let summary: String
+    let body: String?
+    let categoryKey: String
+    let subCategoryKey: String
+    let contentType: String
     let country: String
     let city: String
     let language: String
-    let category: String
-    let title: String
-    let summary: String
-    let body: String
-    let source_name: String?
-    let sourceName: String?
-    let source_url: String?
-    let sourceUrl: String?
-    let original_url: String?
-    let originalUrl: String?
-    let source_published_at: String?
-    let sourcePublishedAt: String?
-    let status: String
-    let review_status: String
-    let reviewed_by_admin_id: String?
-    let reviewed_at: String?
-    let published_at: String?
-    let publishedAt: String?
-    let view_count: Int?
-    let viewCount: Int?
-    let share_count: Int?
-    let shareCount: Int?
-    let click_source_count: Int?
-    let clickSourceCount: Int?
-    let risk_level: String?
-    let riskLevel: String?
-    let official_source_required: Bool?
-    let officialSourceRequired: Bool?
-    let is_demo: Bool?
-    let is_ai_assisted: Bool?
-    let isAiAssisted: Bool?
-    let ai_model: String?
-    let ai_prompt_version: String?
-    let created_by_admin_id: String?
-    let created_at: String
-    let updated_at: String
+    let coverImage: String
     let tags: [String]
-    let save_count: Int
-    let saveCount: Int?
-    let comment_count: Int
-    let commentCount: Int?
-    let saved: Bool
-    let is_saved: Bool?
-    let isSaved: Bool?
-    let can_interact: Bool?
-    let canInteract: Bool?
-    let source_note: String?
-    let sourceNote: String?
-    let editorial_disclaimer: String?
-    let editorialDisclaimer: String?
+    let authorType: String
+    let authorName: String
+    let isFeatured: Bool
+    let isFree: Bool
+    let isPaid: Bool
+    let status: String
+    let viewCount: Int
+    let saveCount: Int
+    let publishedAt: String?
+    let updatedAt: String?
 }
 
-struct KaiXEditorialCommentDTO: Codable, Equatable, Identifiable {
+struct KaiXGuideProductDTO: Codable, Equatable, Identifiable, Hashable {
     let id: String
-    let editorial_post_id: String
-    let author_id: String
-    let content: String
-    let created_at: String
-    let updated_at: String
-    let author: KaiXUserDTO?
+    let title: String
+    let slug: String
+    let subtitle: String
+    let description: String
+    let categoryKey: String
+    let subCategoryKey: String
+    let productType: String
+    let price: Int
+    let currency: String
+    let priceLabel: String
+    let originalPrice: Int?
+    let discountLabel: String?
+    let memberPriceLabel: String?
+    let isPriceHidden: Bool?
+    let isAppointmentOnly: Bool?
+    let billingType: String?
+    let billingPeriod: String?
+    let servicePriceType: String?
+    let startingPrice: Int?
+    let memberDiscountPercent: Int?
+    let serviceDurationMinutes: Int?
+    let depositRequired: Bool?
+    let depositAmount: Int?
+    let cancellationPolicy: String?
+    let canView: Bool?
+    let canPurchase: Bool?
+    let ctaLabel: String?
+    let coverImage: String
+    let tags: [String]
+    let targetAudience: String
+    let deliveryMethod: String
+    let country: String
+    let language: String
+    let isDigital: Bool
+    let isService: Bool
+    let isFree: Bool
+    let isPaid: Bool
+    let isComingSoon: Bool
+    let status: String
+    let purchaseCount: Int
+    let rating: Double
+    let publishedAt: String?
+    let fileCount: Int?
+    // Member / payment / gating fields from the unified Guide API. All optional so
+    // older payloads still decode. `purchaseContent`/`fileUrl` appear only for an
+    // entitled viewer (owned order or active member). iOS shows digital purchases as
+    // 即将开放 (no external Stripe button) until Apple IAP is wired.
+    let previewContent: String?
+    let hasPurchaseContent: Bool?
+    let hasFile: Bool?
+    let isMemberIncluded: Bool?
+    let isMemberDiscount: Bool?
+    let memberPrice: Int?
+    let memberEffectivePrice: Int?
+    let isFeatured: Bool?
+    let refundPolicy: String?
+    let notes: String?
+    let sortOrder: Int?
+    let iosIapProductId: String?
+    let appleProductId: String?
+    let stripeAvailable: Bool?
+    let purchaseContent: String?
+    let fileUrl: String?
+    let access: KaiXGuideProductAccess?
 }
 
-struct KaiXNewsListResponse: Codable {
-    let items: [KaiXEditorialPostDTO]
+struct KaiXGuideProductAccess: Codable, Equatable, Hashable {
+    let owned: Bool?
+    let memberUnlocked: Bool?
+    let canAccess: Bool?
+    let signedIn: Bool?
+}
+
+struct KaiXGuideCompanyScoresDTO: Codable, Equatable, Hashable {
+    let foreignerFriendly: Double
+    let visaSupport: Double?
+    let interviewDifficulty: Double
+    let overtime: Double
+    let salaryBenefit: Double
+    let workLifeBalance: Double
+    let careerGrowth: Double?
+}
+
+struct KaiXGuideCompanyDTO: Codable, Equatable, Identifiable, Hashable {
+    let id: String
+    let corporateNumber: String?
+    let companyName: String
+    let companyNameJp: String
+    let companyNameEn: String?
+    let slug: String
+    let industry: String
+    let subIndustry: String?
+    let country: String
+    let prefecture: String?
+    let city: String
+    let ward: String?
+    let address: String?
+    let postalCode: String?
+    let latitude: Double?
+    let longitude: Double?
+    let website: String
+    let careerUrl: String?
+    let newGraduateUrl: String?
+    let midCareerUrl: String?
+    let globalCareerUrl: String?
+    let size: String
+    let companySize: String?
+    let foundedYear: Int
+    let description: String
+    let shortDescription: String?
+    let isForeignerFriendly: Bool?
+    let acceptsForeignApplicants: Bool?
+    let supportsWorkVisa: Bool?
+    let supportsNewGraduate: Bool?
+    let supportsMidCareer: Bool?
+    let hasEnglishPositions: Bool?
+    let hasGlobalRoles: Bool?
+    let hasForeignEmployees: Bool?
+    let requiredJapaneseLevel: String?
+    let requiredEnglishLevel: String?
+    let employmentTypes: [String]?
+    let averageSalaryMin: Int?
+    let averageSalaryMax: Int?
+    let currency: String?
+    let scores: KaiXGuideCompanyScoresDTO?
+    let reviewCount: Int
+    let interviewReviewCount: Int?
+    let saveCount: Int?
+    let sourceType: String?
+    let sourceName: String?
+    let sourceUrl: String?
+    let sourceLastCheckedAt: String?
+    let verificationStatus: String?
+    let dataQualityScore: Int?
+    let isFeatured: Bool?
+    let status: String
+}
+
+struct KaiXGuideSchoolDTO: Codable, Equatable, Identifiable, Hashable {
+    let id: String
+    let slug: String
+    let schoolName: String
+    let schoolNameJp: String
+    let schoolNameEn: String
+    let schoolType: String
+    let country: String
+    let prefecture: String
+    let city: String
+    let ward: String?
+    let address: String?
+    let postalCode: String?
+    let latitude: Double?
+    let longitude: Double?
+    let website: String
+    let admissionUrl: String?
+    let internationalAdmissionUrl: String
+    let applicationUrl: String?
+    let scholarshipUrl: String?
+    let careerSupportUrl: String?
+    let languageSupportUrl: String?
+    let dormitoryUrl: String?
+    let description: String
+    let shortDescription: String
+    let isAcceptingInternationalStudents: Bool?
+    let hasEnglishProgram: Bool?
+    let hasJapaneseProgram: Bool?
+    let hasScholarship: Bool?
+    let hasDormitory: Bool?
+    let hasCareerSupport: Bool?
+    let hasLanguageSupport: Bool?
+    let tuitionMin: Int
+    let tuitionMax: Int
+    let currency: String
+    let applicationPeriods: [String]?
+    let admissionMonths: [String]
+    let requiredJapaneseLevel: String
+    let requiredEnglishLevel: String
+    let ejuRequired: String?
+    let jlptRequired: String?
+    let toeflRequired: String?
+    let ieltsRequired: String?
+    let fieldsOfStudy: [String]
+    let departments: [String]?
+    let faculties: [String]?
+    let graduateSchools: [String]?
+    let tags: [String]?
+    let sourceType: String?
+    let sourceName: String?
+    let sourceUrl: String
+    let sourceLastCheckedAt: String?
+    let verificationStatus: String
+    let dataQualityScore: Int?
+    let isFeatured: Bool
+    let viewCount: Int?
+    let saveCount: Int
+    let savedByMe: Bool?
+    let status: String
+}
+
+struct KaiXGuideSchoolProgramDTO: Codable, Equatable, Identifiable, Hashable {
+    let id: String
+    let schoolId: String
+    let programName: String
+    let programNameJp: String
+    let programNameEn: String
+    let degreeLevel: String
+    let programType: String
+    let field: String
+    let subField: String?
+    let facultyName: String?
+    let departmentName: String?
+    let graduateSchoolName: String?
+    let languageOfInstruction: String
+    let durationMonths: Int
+    let admissionMonths: [String]
+    let applicationPeriod: String
+    let tuition: Int
+    let currency: String
+    let description: String
+    let applicationUrl: String
+    let sourceUrl: String?
+    let verificationStatus: String?
+    let status: String
+}
+
+struct KaiXGuideSchoolAdmissionDTO: Codable, Equatable, Identifiable, Hashable {
+    let id: String
+    let schoolId: String
+    let programId: String
+    let admissionType: String
+    let enrollmentMonth: String
+    let requiredDocuments: [String]
+    let selectionMethod: String
+    let scholarshipInfo: String
+    let notes: String
+    let sourceUrl: String
+    let verificationStatus: String?
+    let status: String
+}
+
+struct KaiXGuideCompanyPositionDTO: Codable, Equatable, Identifiable, Hashable {
+    let id: String
+    let companyId: String
+    let positionTitle: String
+    let positionTitleJp: String
+    let positionCategory: String
+    let employmentType: String
+    let city: String
+    let remoteType: String
+    let salaryMin: Int
+    let salaryMax: Int
+    let currency: String
+    let requiredJapaneseLevel: String
+    let requiredEnglishLevel: String
+    let visaSupport: String
+    let description: String
+    let requirements: String
+    let sourceUrl: String
+    let verificationStatus: String?
+    let status: String
+}
+
+struct KaiXGuideCompanyReviewDTO: Codable, Equatable, Identifiable, Hashable {
+    let id: String
+    let companyId: String
+    let anonymous: Bool
+    let position: String
+    let employmentType: String
+    let pros: String
+    let cons: String
+    let overtimeLevel: String
+    let foreignerSupport: String
+    let salaryBenefits: String
+    let careerGrowth: String
+    let recommendationScore: Double
+    let createdAt: String
+}
+
+struct KaiXGuideInterviewReviewDTO: Codable, Equatable, Identifiable, Hashable {
+    let id: String
+    let companyId: String
+    let companyName: String?
+    let companySlug: String?
+    let anonymous: Bool
+    let position: String
+    let employmentType: String
+    let interviewRounds: Int
+    let interviewLanguage: String
+    let difficulty: String
+    let questions: String
+    let processDescription: String
+    let result: String
+    let interviewYear: Int
+    let city: String
+    let createdAt: String
+}
+
+struct KaiXGuideFaqDTO: Codable, Equatable, Identifiable, Hashable {
+    let id: String
+    let question: String
+    let answer: String
+    let categoryKey: String
+}
+
+struct KaiXGuideHomeResponse: Codable {
+    let status: String
+    let country: String
+    let language: String?
+    let hero: KaiXGuideHeroDTO
+    let emptyState: KaiXGuideEmptyStateDTO?
+    let categories: [KaiXGuideCategoryDTO]
+    let goals: KaiXGuideGoalsDTO?
+    let goalEntries: [KaiXGuideGoalEntryDTO]
+    let resourceEntries: [KaiXGuideResourceEntryDTO]?
+    let featuredArticles: [KaiXGuideArticleDTO]
+    let featuredProducts: [KaiXGuideProductDTO]
+    let featuredServices: [KaiXGuideProductDTO]
+    let featuredSchools: [KaiXGuideSchoolDTO]?
+    let companyHighlights: [KaiXGuideCompanyDTO]
+    let latestArticles: [KaiXGuideArticleDTO]
+    let faq: [KaiXGuideFaqDTO]
+    let reviewDisclaimer: String?
+    let schoolDisclaimer: String?
+    let companyDisclaimer: String?
+}
+
+struct KaiXGuideCategoriesResponse: Codable {
+    let status: String
+    let country: String
+    let categories: [KaiXGuideCategoryDTO]
+    let emptyState: KaiXGuideEmptyStateDTO?
+}
+
+struct KaiXGuideListResponse<Item: Codable>: Codable {
+    let status: String
+    let country: String
+    let items: [Item]
     let page: Int
-    let limit: Int
+    let pageSize: Int
     let total: Int
+    let emptyState: KaiXGuideEmptyStateDTO?
+    let disclaimer: String?
+    let membershipActive: Bool?
 }
 
-struct KaiXNewsDetailResponse: Codable {
-    let post: KaiXEditorialPostDTO
-    let related: [KaiXEditorialPostDTO]
+struct KaiXGuideArticleDetailResponse: Codable {
+    let status: String
+    let article: KaiXGuideArticleDTO
+    let related: [KaiXGuideArticleDTO]
 }
 
-struct KaiXNewsCommentsResponse: Codable {
-    let items: [KaiXEditorialCommentDTO]
+struct KaiXGuideProductDetailResponse: Codable {
+    let status: String
+    let product: KaiXGuideProductDTO
+}
+
+struct KaiXGuideCompanyDetailResponse: Codable {
+    let status: String
+    let company: KaiXGuideCompanyDTO
+    let interviewReviewCount: Int
+    let workReviewCount: Int
+    let positions: [KaiXGuideCompanyPositionDTO]?
+    let relatedArticles: [KaiXGuideArticleDTO]?
+    let disclaimer: String
+}
+
+struct KaiXGuideSchoolDetailResponse: Codable {
+    let status: String
+    let school: KaiXGuideSchoolDTO
+    let programs: [KaiXGuideSchoolProgramDTO]
+    let admissions: [KaiXGuideSchoolAdmissionDTO]
+    let relatedArticles: [KaiXGuideArticleDTO]
+    let relatedProducts: [KaiXGuideProductDTO]
+    let disclaimer: String
+}
+
+struct KaiXGuideCompanyReviewsResponse: Codable {
+    let status: String
+    let companyId: String
+    let workReviews: [KaiXGuideCompanyReviewDTO]
+    let interviewReviews: [KaiXGuideInterviewReviewDTO]
+    let disclaimer: String
+}
+
+struct KaiXGuideSubmitResponse: Codable {
+    let status: String
+    let id: String?
+    let message: String
+    let orderId: String?
+}
+
+struct KaiXGuideCompanyReviewPayload: Encodable {
+    let companyId: String
+    let position: String
+    let employmentType: String
+    let pros: String
+    let cons: String
+    let overtimeLevel: String
+    let foreignerSupport: String
+    let salaryBenefits: String
+    let careerGrowth: String
+    let recommendationScore: Double
+    let anonymous: Bool
+}
+
+struct KaiXGuideInterviewReviewPayload: Encodable {
+    let companyId: String
+    let position: String
+    let employmentType: String
+    let interviewRounds: Int
+    let interviewLanguage: String
+    let difficulty: String
+    let questions: String
+    let processDescription: String
+    let result: String
+    let interviewYear: Int
+    let city: String
+    let anonymous: Bool
+}
+
+struct KaiXGuideServiceRequestPayload: Encodable {
+    let productId: String
+    let serviceType: String
+    let contactMethod: String
+    let message: String
 }
 
 struct KaiXPageDTO<Item: Codable>: Codable {
@@ -520,6 +1001,8 @@ struct KaiXAvailabilityResponse: Codable, Equatable {
 
 struct KaiXEmailCodeResponse: Codable, Equatable {
     let ok: Bool
+    let challenge_id: String?
+    let email_hint: String?
     let expires_in: Int
 }
 

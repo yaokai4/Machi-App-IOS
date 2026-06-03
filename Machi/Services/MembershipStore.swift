@@ -25,6 +25,8 @@ final class MembershipStore: ObservableObject {
     static let defaultProductID = "machi_verified_monthly_cny_10"
 
     @Published private(set) var product: Product?
+    @Published private(set) var plans: [KaiXMembershipPlanDTO] = []
+    @Published private(set) var selectedPlanKey: String = ""
     @Published private(set) var state: PurchaseState = .idle
     @Published private(set) var membershipActive = false
     @Published private(set) var currentPeriodEnd: String = ""
@@ -32,6 +34,7 @@ final class MembershipStore: ObservableObject {
     @Published private(set) var displayPrice: String = ""
 
     private var productID: String = MembershipStore.defaultProductID
+    private var productsByID: [String: Product] = [:]
     private var updatesTask: Task<Void, Never>?
 
     /// Begin listening for transaction updates and load product + status.
@@ -55,18 +58,42 @@ final class MembershipStore: ObservableObject {
     func loadProductAndStatus() async {
         // Prefer the server-configured Apple product id + plan price.
         if let planResp = try? await KaiXAPIClient.shared.membershipPlan() {
-            if let pid = planResp.apple_product_id, !pid.isEmpty { productID = pid }
-            if let plan = planResp.plan { displayPrice = "¥\(Int(plan.amount))" }
+            let remotePlans = planResp.plans ?? planResp.items ?? planResp.plan.map { [$0] } ?? []
+            if !remotePlans.isEmpty {
+                plans = remotePlans
+                if selectedPlanKey.isEmpty {
+                    selectedPlanKey = (remotePlans.first(where: { $0.recommended }) ?? remotePlans.first)?.canonicalPlanKey ?? ""
+                }
+            }
+            if let selected = selectedPlan {
+                productID = selected.appleProductID
+                displayPrice = selected.displayPriceLabel
+            } else if let pid = planResp.apple_product_id, !pid.isEmpty {
+                productID = pid
+            }
         }
         do {
-            let products = try await Product.products(for: [productID])
-            product = products.first
+            let ids = Set((plans.map { $0.appleProductID } + [productID]).filter { !$0.isEmpty })
+            let products = try await Product.products(for: Array(ids))
+            productsByID = Dictionary(uniqueKeysWithValues: products.map { ($0.id, $0) })
+            product = productsByID[productID] ?? products.first
             if let p = product { displayPrice = p.displayPrice }
         } catch {
             // Leave product nil — the UI still shows the plan price and a
             // disabled buy button rather than crashing.
         }
         await refreshMembership()
+    }
+
+    var selectedPlan: KaiXMembershipPlanDTO? {
+        plans.first { $0.canonicalPlanKey == selectedPlanKey } ?? plans.first
+    }
+
+    func selectPlan(_ plan: KaiXMembershipPlanDTO) {
+        selectedPlanKey = plan.canonicalPlanKey
+        productID = plan.appleProductID
+        product = productsByID[productID]
+        displayPrice = product?.displayPrice ?? plan.displayPriceLabel
     }
 
     /// Pull the authoritative membership status from the backend.

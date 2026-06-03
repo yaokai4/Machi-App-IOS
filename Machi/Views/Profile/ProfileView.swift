@@ -92,6 +92,42 @@ struct ProfileView: View {
         !tracksChrome || chrome.selectedTab == sourceTab
     }
 
+    /// Shown on the "我的" tab when browsing as a guest: a clear login /
+    /// register call-to-action instead of an empty placeholder profile.
+    private var guestProfilePrompt: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            Image(systemName: "person.crop.circle.badge.plus")
+                .font(.system(size: 58, weight: .semibold))
+                .foregroundStyle(KXColor.accent)
+            Text(L("guestProfileTitle", language))
+                .font(.title3.weight(.bold))
+                .multilineTextAlignment(.center)
+            Text(L("guestProfileSubtitle", language))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 28)
+            Button {
+                GuestGate.shared.requireLogin()
+            } label: {
+                Text(L("loginOrRegister", language))
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(KXColor.accent, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 36)
+            .padding(.top, 4)
+            Spacer()
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.bottom, chrome.bottomContentPadding)
+    }
+
     private var displayedFollowerCount: Int {
         userStore.followerCounts[profileUser.id] ?? profileUser.followerCount
     }
@@ -102,6 +138,9 @@ struct ProfileView: View {
 
     var body: some View {
         Group {
+            if isCurrentUser && currentUser.isGuest {
+                guestProfilePrompt
+            } else {
             switch profileLoadState {
             case .idle, .loading:
                 LoadingView()
@@ -144,6 +183,7 @@ struct ProfileView: View {
                         await loadProfileAndContent(showLoading: false)
                     }
                 }
+            }
             }
         }
         .kxPageBackground()
@@ -431,15 +471,11 @@ struct ProfileView: View {
             profileStatsStrip
             contentSummaryStrip
         }
-        .padding(KXSpacing.lg)
-        .kxGlassSurface(radius: KXRadius.sheet)
+        .padding(14)
+        .kxGlassSurface(radius: KXRadius.lg)
     }
 
     private var profileRegionLabel: String? {
-        if !profileUser.currentRegionCode.isEmpty,
-           let region = KaiXRegionDirectory.resolve(regionCode: profileUser.currentRegionCode) {
-            return "\(region.countryName) · \(region.shortLabel)"
-        }
         if !profileUser.country.isEmpty, !profileUser.city.isEmpty,
            let region = KaiXRegionDirectory.make(
             country: profileUser.country,
@@ -467,9 +503,7 @@ struct ProfileView: View {
             // strip — these are categorical not numeric, so they
             // belong on their own line.
             FlowLayout(spacing: 6) {
-                if profileUser.role != .member {
-                    ProfileRoleBadge(title: roleTitle)
-                }
+                ProfileRoleBadge(title: roleTitle, isOfficial: profileUser.isMachiOfficialAccount)
                 if !profileUser.creatorBadge.isEmpty {
                     ProfileRoleBadge(title: profileUser.creatorBadge)
                 }
@@ -693,7 +727,7 @@ struct ProfileView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
                     .padding(.horizontal, KXSpacing.md)
-                    .frame(height: 36)
+                    .frame(height: 34)
                     .kxGlassCapsule()
             }
             .buttonStyle(.plain)
@@ -716,19 +750,20 @@ struct ProfileView: View {
                     Image(systemName: "envelope")
                         .font(.headline.weight(.semibold))
                         .foregroundStyle(.primary)
-                        .frame(width: 38, height: 38)
+                        .frame(width: 36, height: 36)
                         .kxGlassCircle()
                 }
                 .buttonStyle(.plain)
 
                 Button {
+                    if currentUser.isGuest { GuestGate.shared.requireLogin(); return }
                     Task { await toggleFollow() }
                 } label: {
                     Text(isFollowing ? L("followed", language) : L("follow", language))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(isFollowing ? Color.primary : KXColor.accent)
                         .padding(.horizontal, KXSpacing.md)
-                        .frame(height: 38)
+                        .frame(height: 36)
                         .kxGlassCapsule(isSelected: !isFollowing)
                 }
                 .disabled(isFollowWorking)
@@ -769,20 +804,35 @@ struct ProfileView: View {
     private func toggleBlockUser() {
         guard !isCurrentUser else { return }
         var ids = blockedUserIds
+        let isNowBlocking: Bool
         if ids.contains(profileUserId) {
             ids.removeAll { $0 == profileUserId }
             menuMessage = L("userUnblocked", language)
+            isNowBlocking = false
         } else {
             ids.append(profileUserId)
             menuMessage = L("userBlocked", language)
+            isNowBlocking = true
         }
         blockedUserIdsRaw = ids.removingDuplicates().joined(separator: "|")
+        // Sync the block to the unified backend so it persists across devices
+        // and the web client, and is enforced server-side — not just hidden
+        // locally. Optimistic: the local list above already updated the UI;
+        // the network call is fire-and-forget and a no-op when unauthenticated.
+        let targetId = profileUserId
+        Task { try? await KaiXAPIClient.shared.setBlock(targetId, isNowBlocking) }
     }
 
     private var roleTitle: String {
+        if profileUser.isMachiOfficialAccount {
+            return L("machiOfficial", language)
+        }
+        if profileUser.isVerifiedMember {
+            return L("machiVerifiedMember", language)
+        }
         switch profileUser.role {
-        case .admin, .creator: L("creator", language)
-        case .member: L("member", language)
+        case .admin, .creator: return L("creator", language)
+        case .member: return L("regularUser", language)
         }
     }
 }
@@ -838,11 +888,12 @@ private struct ProfileMetricInline: View {
 
 private struct ProfileRoleBadge: View {
     let title: String
+    var isOfficial = false
 
     var body: some View {
-        Label(title, systemImage: "checkmark.seal.fill")
+        Label(title, systemImage: isOfficial ? "checkmark.shield.fill" : "checkmark.seal.fill")
             .font(.caption.weight(.semibold))
-            .foregroundStyle(KXColor.accent)
+            .foregroundStyle(isOfficial ? Color(red: 0.05, green: 0.48, blue: 0.45) : KXColor.accent)
             .lineLimit(1)
             .labelStyle(.titleAndIcon)
             .frame(height: 22)

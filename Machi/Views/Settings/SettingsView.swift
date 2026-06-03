@@ -7,7 +7,7 @@ struct SettingsView: View {
     @Environment(\.appLanguage) private var language
     @EnvironmentObject private var postStore: PostStore
     @AppStorage("appLanguageCode") private var appLanguageCode = AppLanguage.system.rawValue
-    @AppStorage("appAppearance") private var appAppearance = AppAppearance.system.rawValue
+    @AppStorage("appAppearance") private var appAppearance = AppAppearance.light.rawValue
     @AppStorage("accountEmail") private var accountEmail = ""
     @AppStorage("blockedUserIds") private var blockedUserIdsRaw = ""
     @StateObject private var viewModel = ProfileViewModel()
@@ -30,10 +30,8 @@ struct SettingsView: View {
                     )
 
                     accountSection
-                    preferenceSection
-                    securitySection
                     contentSection
-                    supportSection
+                    serviceSection
 
                     Button {
                         showLogoutConfirm = true
@@ -98,7 +96,14 @@ struct SettingsView: View {
     }
 
     private var accountSection: some View {
-        SettingsSectionCard(title: L("accountEssentials", language)) {
+        SettingsSectionCard(title: L("accountGroup", language)) {
+            SettingsRowLink(icon: "lock.shield", tint: .purple, title: L("accountSecurity", language), value: securityEmailValue, subtitle: L("accountSecuritySubtitle", language)) {
+                AccountSecuritySettingsView(currentUser: currentUser) {
+                    onLogout?()
+                    dismiss()
+                }
+            }
+            SettingsDivider()
             SettingsRowLink(
                 icon: "checkmark.seal.fill",
                 tint: .blue,
@@ -109,19 +114,16 @@ struct SettingsView: View {
                 MembershipView(currentUser: currentUser)
             }
             SettingsDivider()
-            SettingsRowLink(icon: "arrow.triangle.2.circlepath", tint: .purple, title: L("switchAccount", language), subtitle: L("switchAccountSubtitle", language)) {
-                AccountSwitcherView(currentUser: currentUser, onSwitch: { user in
-                    onSwitchAccount?(user)
-                    dismiss()
-                })
+            SettingsRowLink(icon: "globe.asia.australia", tint: .teal, title: L("regionAndLanguage", language), value: AppAppearance.from(appAppearance).title(language), subtitle: L("regionAndLanguageSubtitle", language)) {
+                RegionLanguageSettingsView(currentUser: currentUser)
             }
             SettingsDivider()
-            SettingsRowLink(icon: "lock.shield", tint: .indigo, title: L("accountPassword", language), subtitle: L("accountPasswordSubtitle", language)) {
-                AccountPasswordSettingsView(user: currentUser)
+            SettingsRowLink(icon: "bell.badge", tint: .orange, title: L("notificationSettings", language), value: L("enabled", language), subtitle: L("notificationsHere", language)) {
+                NotificationPreferencesView(currentUser: currentUser)
             }
             SettingsDivider()
-            SettingsRowLink(icon: "envelope.badge", tint: .mint, title: L("contactInfo", language), value: accountEmail.isEmpty ? nil : accountEmail, subtitle: L("contactSubtitle", language)) {
-                ContactSettingsView()
+            SettingsRowLink(icon: "hand.raised.fill", tint: .indigo, title: L("privacySettings", language), value: L("public", language), subtitle: L("privacySettingsSubtitle", language)) {
+                PrivacySettingsView()
             }
         }
     }
@@ -139,34 +141,6 @@ struct SettingsView: View {
             SettingsRowLink(icon: "photo.on.rectangle", tint: .cyan, title: L("mediaLibrary", language), value: "\(viewModel.mediaCount)", subtitle: L("navigationReady", language)) {
                 MediaLibraryView(currentUser: currentUser)
             }
-            SettingsDivider()
-            SettingsRowLink(icon: "storefront", tint: .teal, title: L("becomeMerchant", language), value: currentUser.merchantVerified ? L("merchantVerified", language) : (currentUser.isMerchant ? L("merchantPending", language) : ""), subtitle: L("merchantStatusNone", language)) {
-                MerchantSettingsView(currentUser: currentUser)
-            }
-        }
-    }
-
-    private var preferenceSection: some View {
-        SettingsSectionCard(title: L("preferences", language)) {
-            SettingsRowLink(icon: "mappin.and.ellipse", tint: .red, title: L("regionSettings", language), value: regionDisplayLabel, subtitle: L("currentRegion", language)) {
-                RegionSettingsView(currentUser: currentUser)
-            }
-            SettingsDivider()
-            SettingsRowLink(icon: "globe", tint: .blue, title: L("language", language), value: AppLanguage.resolved(from: appLanguageCode).title, subtitle: L("currentLanguage", language)) {
-                LanguageSettingsView()
-            }
-            SettingsDivider()
-            SettingsRowLink(icon: "character.bubble", tint: .purple, title: L("contentLanguage", language), value: contentLanguageLabel, subtitle: L("contentLanguageSubtitle", language)) {
-                ContentLanguageSettingsView(currentUser: currentUser)
-            }
-            SettingsDivider()
-            SettingsRowLink(icon: "circle.lefthalf.filled", tint: .gray, title: L("appearance", language), value: AppAppearance.from(appAppearance).title(language), subtitle: L("appearanceSubtitle", language)) {
-                AppearanceSettingsView()
-            }
-            SettingsDivider()
-            SettingsRowLink(icon: "bell.badge", tint: .orange, title: L("notificationSettings", language), value: L("enabled", language), subtitle: L("notificationsHere", language)) {
-                NotificationPreferencesView(currentUser: currentUser)
-            }
         }
     }
 
@@ -181,34 +155,12 @@ struct SettingsView: View {
         LanguageManager.shared.preferred.title(language)
     }
 
-    private var securitySection: some View {
-        SettingsSectionCard(title: L("privacyAndSafety", language)) {
-            SettingsRowLink(icon: "hand.raised.fill", tint: .indigo, title: L("privacySettings", language), value: L("public", language), subtitle: L("privacySettingsSubtitle", language)) {
-                PrivacySettingsView()
+    private var serviceSection: some View {
+        SettingsSectionCard(title: L("serviceGroup", language)) {
+            SettingsRowLink(icon: "storefront", tint: .teal, title: L("becomeMerchant", language), value: currentUser.merchantVerified ? L("merchantVerified", language) : (currentUser.isMerchant ? L("merchantPending", language) : ""), subtitle: L("merchantStatusNone", language)) {
+                MerchantSettingsView(currentUser: currentUser)
             }
             SettingsDivider()
-            SettingsRowLink(icon: "desktopcomputer", tint: .teal, title: L("loginDevices", language), value: "1", subtitle: L("navigationReady", language)) {
-                LoginDevicesView()
-            }
-            SettingsDivider()
-            SettingsRowLink(icon: "person.crop.circle.badge.xmark", tint: .red, title: L("blocklist", language), value: "\(blockedUserCount)", subtitle: blocklistSubtitle) {
-                BlocklistSettingsView()
-            }
-            SettingsDivider()
-            SettingsRowLink(icon: "trash", tint: .orange, title: L("clearCache", language), subtitle: L("clearCacheSubtitle", language)) {
-                CacheSettingsView()
-            }
-            SettingsDivider()
-            SettingsRowLink(icon: "person.crop.circle.badge.minus", tint: .red, title: L("deleteAccount", language), subtitle: L("deleteAccountSubtitle", language)) {
-                DeleteAccountView(currentUser: currentUser) {
-                    onLogout?()
-                }
-            }
-        }
-    }
-
-    private var supportSection: some View {
-        SettingsSectionCard(title: L("support", language)) {
             SettingsRowLink(icon: "questionmark.circle", tint: .blue, title: L("helpCenter", language), subtitle: L("navigationReady", language)) {
                 HelpCenterView()
             }
@@ -230,6 +182,11 @@ struct SettingsView: View {
     private var blocklistSubtitle: String {
         blockedUserCount == 0 ? L("noBlockedUsers", language) : "\(blockedUserCount) \(L("blockedUsers", language))"
     }
+
+    private var securityEmailValue: String? {
+        let email = currentUser.email.isEmpty ? accountEmail : currentUser.email
+        return email.isEmpty ? nil : email
+    }
 }
 
 private struct SettingsAccountCard: View {
@@ -241,19 +198,21 @@ private struct SettingsAccountCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
                 AvatarView(user: user, size: 58)
                     .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 3))
-                    .shadow(color: .black.opacity(0.08), radius: 9, x: 0, y: 5)
+                    .shadow(color: .black.opacity(0.055), radius: 8, x: 0, y: 4)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 5) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text(user.displayName)
                             .font(.title3.weight(.semibold))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
-                        if user.displaysVerifiedBadge {
+                        if user.isMachiOfficialAccount {
+                            KXOfficialBadge()
+                        } else if user.displaysVerifiedBadge {
                             KXVerifiedBadge()
                         }
                     }
@@ -269,41 +228,17 @@ private struct SettingsAccountCard: View {
             }
 
             Text(user.bio.isEmpty ? L("defaultBio", language) : user.bio)
-                .font(.subheadline)
+                .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
-                .lineSpacing(2)
+                .lineSpacing(3)
+                .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: 14) {
+            HStack(spacing: 8) {
                 SettingsInlineStat(value: postCount, title: L("posts", language))
                 SettingsInlineStat(value: bookmarkCount, title: L("bookmarks", language))
                 SettingsInlineStat(value: draftCount, title: L("drafts", language))
             }
-            .padding(.top, 1)
-
-            HStack(spacing: 10) {
-                NavigationLink {
-                    ProfileView(currentUser: user, profileUserId: user.id, showsBackButton: true)
-                } label: {
-                    Label(L("profile", language), systemImage: "person.crop.circle")
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 38)
-                        .background(KXColor.softBackground, in: Capsule())
-                        .overlay(Capsule().stroke(KXColor.separator.opacity(0.7), lineWidth: 0.6))
-                }
-
-                NavigationLink {
-                    EditProfileView(user: user)
-                } label: {
-                    Label(L("editProfile", language), systemImage: "pencil")
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 38)
-                        .background(KXColor.softBackground, in: Capsule())
-                        .overlay(Capsule().stroke(KXColor.separator.opacity(0.7), lineWidth: 0.6))
-                }
-            }
-            .font(.subheadline.weight(.semibold))
-            .buttonStyle(.plain)
         }
         .padding(14)
         .kxGlassSurface(radius: KXRadius.lg)
@@ -316,14 +251,33 @@ private struct SettingsRolePill: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            Image(systemName: user.role == .member ? "person.fill" : "checkmark.seal.fill")
-            Text(user.role == .member ? L("member", language) : L("creator", language))
+            Image(systemName: icon)
+            Text(title)
         }
         .font(.caption2.weight(.bold))
-        .foregroundStyle(user.role == .member ? Color.secondary : KXColor.accent)
+        .foregroundStyle(tint)
         .padding(.horizontal, 8)
         .frame(height: 24)
-        .background((user.role == .member ? Color.secondary : KXColor.accent).opacity(0.10), in: Capsule())
+        .background(tint.opacity(0.10), in: Capsule())
+    }
+
+    private var title: String {
+        if user.isMachiOfficialAccount { return L("machiOfficial", language) }
+        if user.isVerifiedMember { return L("machiVerifiedMember", language) }
+        if user.role == .member { return L("regularUser", language) }
+        return user.creatorBadge.isEmpty ? L("creator", language) : user.creatorBadge
+    }
+
+    private var icon: String {
+        if user.isMachiOfficialAccount { return "checkmark.shield.fill" }
+        if user.isVerifiedMember { return "checkmark.seal.fill" }
+        return user.role == .member ? "person.fill" : "sparkles"
+    }
+
+    private var tint: Color {
+        if user.isMachiOfficialAccount { return Color(red: 0.05, green: 0.48, blue: 0.45) }
+        if user.isVerifiedMember { return .blue }
+        return user.role == .member ? .secondary : KXColor.accent
     }
 }
 
@@ -332,17 +286,23 @@ private struct SettingsInlineStat: View {
     let title: String
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
+        VStack(spacing: 3) {
             Text(NumberFormatterUtils.compact(value))
-                .font(.subheadline.weight(.bold))
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
             Text(title)
-                .font(.caption.weight(.semibold))
+                .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.78)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .background(KXColor.softBackground.opacity(0.86), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(KXColor.separator.opacity(0.45), lineWidth: 0.55)
+        }
     }
 }
 
@@ -424,7 +384,7 @@ private enum ProfileCollectionDestination: Identifiable, Hashable {
     }
 }
 
-private struct LanguageSettingsView: View {
+struct LanguageSettingsView: View {
     @Environment(\.appLanguage) private var language
     @AppStorage("appLanguageCode") private var appLanguageCode = AppLanguage.system.rawValue
 

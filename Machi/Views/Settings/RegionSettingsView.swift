@@ -4,7 +4,8 @@ import SwiftData
 /// Browsing-region settings — separate from the user's declared home
 /// (the latter lives in their profile). Pushing through here updates
 /// the global `RegionStore` so every feed query immediately rebinds
-/// to the new city.
+/// to the new city without rewriting the profile city shown on the
+/// account page.
 struct RegionSettingsView: View {
     @Environment(\.appLanguage) private var language
     @Environment(\.modelContext) private var modelContext
@@ -43,7 +44,7 @@ struct RegionSettingsView: View {
                     ForEach(regionStore.recent, id: \.regionCode) { region in
                         Button {
                             regionStore.setCurrent(region)
-                            persistDeclaredRegion(region)
+                            persistBrowsingRegion(region)
                         } label: {
                             HStack {
                                 Text(region.countryEmoji)
@@ -64,21 +65,24 @@ struct RegionSettingsView: View {
         .navigationTitle(L("regionSettings", language))
         .sheet(isPresented: $isShowingPicker) {
             RegionPickerView(
-                initialCountry: currentUser.country.isEmpty ? regionStore.current?.countryCode : currentUser.country,
-                allowsAnyCountry: currentUser.country.isEmpty
+                initialCountry: regionStore.current?.countryCode ?? (currentUser.country.isEmpty ? "jp" : currentUser.country),
+                allowsAnyCountry: false
             ) { region in
                 regionStore.setCurrent(region)
-                persistDeclaredRegion(region)
+                persistBrowsingRegion(region)
             }
         }
     }
 
-    private func persistDeclaredRegion(_ region: KaiXRegionDirectory.Region) {
-        currentUser.country = region.countryCode
-        currentUser.province = region.provinceCode
-        currentUser.city = region.cityCode
+    private func persistBrowsingRegion(_ region: KaiXRegionDirectory.Region) {
         currentUser.currentRegionCode = region.regionCode
         currentUser.recentRegionCodes = regionStore.recent.map(\.regionCode)
         try? modelContext.save()
+        guard KaiXBackend.token != nil else { return }
+        Task {
+            _ = try? await KaiXAPIClient.shared.updateRegionLanguage([
+                "current_region_code": region.regionCode
+            ])
+        }
     }
 }

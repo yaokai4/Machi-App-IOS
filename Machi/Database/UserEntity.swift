@@ -6,6 +6,7 @@ final class UserEntity {
     @Attribute(.unique) var id: String
     @Attribute(.unique) var username: String
     var displayName: String
+    var email: String = ""
     var avatarURL: String
     var coverURL: String
     var bio: String
@@ -61,6 +62,7 @@ final class UserEntity {
         id: String = UUID().uuidString,
         username: String,
         displayName: String,
+        email: String = "",
         avatarURL: String = "",
         coverURL: String = "",
         bio: String = "",
@@ -101,6 +103,7 @@ final class UserEntity {
         self.id = id
         self.username = username.normalizedUsername
         self.displayName = displayName
+        self.email = email
         self.avatarURL = avatarURL
         self.coverURL = coverURL
         self.bio = bio

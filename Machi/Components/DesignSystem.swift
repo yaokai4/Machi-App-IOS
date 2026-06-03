@@ -16,7 +16,7 @@ enum KXRadius {
     static let sm: CGFloat = 9
     static let md: CGFloat = 13
     static let lg: CGFloat = 20
-    static let card: CGFloat = 18
+    static let card: CGFloat = 20
     static let sheet: CGFloat = 24
     static let pill: CGFloat = 999
 }
@@ -33,18 +33,28 @@ enum KXTypography {
 }
 
 enum KXColor {
-    static let pageBackground = Color(.secondarySystemGroupedBackground)
+    static let pageBackground = Color(UIColor { traits in
+        if traits.userInterfaceStyle == .dark {
+            return UIColor.secondarySystemGroupedBackground
+        }
+        return UIColor(red: 0.972, green: 0.967, blue: 0.958, alpha: 1)
+    })
     static let cardBackground = Color(.systemBackground)
     static let elevatedBackground = Color(.systemBackground)
-    static let softBackground = Color(.tertiarySystemGroupedBackground)
-    static let separator = Color(.separator).opacity(0.42)
-    static let glassStroke = Color(.separator).opacity(0.64)
+    static let softBackground = Color(UIColor { traits in
+        if traits.userInterfaceStyle == .dark {
+            return UIColor.tertiarySystemGroupedBackground
+        }
+        return UIColor(red: 0.948, green: 0.944, blue: 0.936, alpha: 1)
+    })
+    static let separator = Color(.separator).opacity(0.30)
+    static let glassStroke = Color(.separator).opacity(0.44)
     static let glassTint = Color(.systemBackground).opacity(0.10)
     static let glassSurfaceTint = Color(.systemBackground).opacity(0.86)
     static let glassControlTint = Color(.systemBackground).opacity(0.74)
     static let glassBarTint = Color(.systemBackground).opacity(0.66)
     static let glassHighlight = Color.white.opacity(0.34)
-    static let glassShadow = Color.black.opacity(0.075)
+    static let glassShadow = Color.black.opacity(0.052)
     static let accent = Color.accentColor
     static let accentSoft = Color.accentColor.opacity(0.11)
     static let heat = Color(red: 0.85, green: 0.45, blue: 0.12)
@@ -122,6 +132,15 @@ struct KXVerifiedBadge: View {
             .font(.caption2.weight(.semibold))
             .foregroundStyle(.blue)
             .accessibilityLabel("Verified")
+    }
+}
+
+struct KXOfficialBadge: View {
+    var body: some View {
+        Image(systemName: "checkmark.shield.fill")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(Color(red: 0.05, green: 0.48, blue: 0.45))
+            .accessibilityLabel("Machi Official")
     }
 }
 
@@ -269,8 +288,8 @@ struct KXGlassBackground: View {
             ]
         }
         return [
-            Color(.systemGroupedBackground),
-            Color(red: 0.966, green: 0.972, blue: 0.978),
+            Color(red: 0.982, green: 0.978, blue: 0.970),
+            Color(red: 0.960, green: 0.954, blue: 0.944),
         ]
     }
 }
@@ -367,10 +386,10 @@ private struct _SurfaceShadow: ViewModifier {
     func body(content: Content) -> some View {
         if elevated {
             content
-                .shadow(color: KXColor.glassShadow.opacity(0.55), radius: 9, y: 4)
-                .shadow(color: KXColor.glassShadow.opacity(0.22), radius: 1.5, y: 1)
+                .shadow(color: KXColor.glassShadow.opacity(0.42), radius: 7, y: 3)
+                .shadow(color: KXColor.glassShadow.opacity(0.16), radius: 1.2, y: 1)
         } else {
-            content.shadow(color: KXColor.glassShadow.opacity(0.32), radius: 5, y: 1)
+            content.shadow(color: KXColor.glassShadow.opacity(0.22), radius: 4, y: 1)
         }
     }
 }

@@ -1,9 +1,9 @@
 import SwiftUI
 
 enum AppAppearance: String, CaseIterable, Identifiable {
-    case system
     case light
     case dark
+    case system
 
     var id: String { rawValue }
 
@@ -32,6 +32,6 @@ enum AppAppearance: String, CaseIterable, Identifiable {
     }
 
     static func from(_ rawValue: String) -> AppAppearance {
-        AppAppearance(rawValue: rawValue) ?? .system
+        AppAppearance(rawValue: rawValue) ?? .light
     }
 }

@@ -5,7 +5,7 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage("currentUserID") private var currentUserID = ""
     @AppStorage("appLanguageCode") private var appLanguageCode = AppLanguage.system.rawValue
-    @AppStorage("appAppearance") private var appAppearance = AppAppearance.system.rawValue
+    @AppStorage("appAppearance") private var appAppearance = AppAppearance.light.rawValue
     @StateObject private var appState = AppState()
     @StateObject private var appRouter = AppRouter()
     @StateObject private var appChrome = AppChromeState()
@@ -19,6 +19,7 @@ struct ContentView: View {
     @StateObject private var composeStore = ComposeStore()
     @StateObject private var toastManager = ToastManager()
     @StateObject private var connectivityMonitor = ConnectivityMonitor()
+    @ObservedObject private var guestGate = GuestGate.shared
     @State private var displayedDatabaseNoticeKey: String?
 
     private var language: AppLanguage {
@@ -35,27 +36,13 @@ struct ContentView: View {
                     Task { await appState.bootstrap(context: modelContext, currentUserId: currentUserID) }
                 }
             case .empty:
-                AuthView { user in
-                    AuthService.shared.persistSession(user: user)
-                    currentUserID = user.id
-                    appState.currentUser = user
-                    sessionStore.setCurrentUser(user.id)
-                    userStore.setCurrentUser(user)
-                    appState.state = .loaded
-                }
+                AuthView(onAuthenticated: completeLogin, onBrowseAsGuest: enterAsGuest)
             case .loaded:
                 if let currentUser = appState.currentUser {
                     MainTabView(currentUser: currentUser, onLogout: logout, onSwitchAccount: switchAccount)
                         .id(currentUser.id)
                 } else {
-                    AuthView { user in
-                    AuthService.shared.persistSession(user: user)
-                    currentUserID = user.id
-                    appState.currentUser = user
-                    sessionStore.setCurrentUser(user.id)
-                    userStore.setCurrentUser(user)
-                    appState.state = .loaded
-                }
+                    AuthView(onAuthenticated: completeLogin, onBrowseAsGuest: enterAsGuest)
                 }
             }
         }
@@ -75,6 +62,16 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .kxPageBackground()
         .toastHost(toastManager)
+        // Login prompt for guests: any gated action calls
+        // GuestGate.shared.requireLogin(); we present the auth flow here and
+        // upgrade the guest to the real account on success.
+        .sheet(isPresented: $guestGate.isPromptingLogin) {
+            AuthView { user in
+                guestGate.dismiss()
+                completeLogin(user)
+            }
+            .environment(\.appLanguage, language)
+        }
         .task(id: currentUserID) {
             await appState.bootstrap(context: modelContext, currentUserId: currentUserID)
             if let user = appState.currentUser {
@@ -108,6 +105,29 @@ struct ContentView: View {
                 toastManager.dismiss()
             }
         }
+    }
+
+    /// Shared success path for a real (non-guest) login or registration.
+    private func completeLogin(_ user: UserEntity) {
+        AuthService.shared.persistSession(user: user)
+        currentUserID = user.id
+        appState.currentUser = user
+        sessionStore.setCurrentUser(user.id)
+        userStore.setCurrentUser(user)
+        appState.state = .loaded
+    }
+
+    /// Enter the app as a guest (logged-out browsing). The guest is a local
+    /// UserEntity with no backend token, so authenticated sync stays a no-op.
+    /// We persist `currentUserID = guestID` so the choice survives relaunch
+    /// and the user isn't nagged to log in every cold start.
+    private func enterAsGuest() {
+        let guest = GuestSession.ensureGuestUser(context: modelContext)
+        currentUserID = GuestSession.guestID
+        appState.currentUser = guest
+        sessionStore.setCurrentUser(guest.id)
+        userStore.setCurrentUser(guest)
+        appState.state = .loaded
     }
 
     private func logout() {

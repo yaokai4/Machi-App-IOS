@@ -42,6 +42,32 @@
           "referenceName" : "Machi Verified Monthly",
           "subscriptionGroupID" : "21490000",
           "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "98.00",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "21490002",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Machi 认证会员包年套餐，蓝色认证标识与高信任内容发布权限。",
+              "displayName" : "Machi 认证会员 · 包年",
+              "locale" : "zh_CN"
+            },
+            {
+              "description" : "Machi Verified yearly subscription.",
+              "displayName" : "Machi Verified Yearly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "machi_verified_yearly_cny_98",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Machi Verified Yearly",
+          "subscriptionGroupID" : "21490000",
+          "type" : "RecurringSubscription"
         }
       ]
     }

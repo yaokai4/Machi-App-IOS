@@ -204,7 +204,7 @@ struct ChatView: View {
                             .foregroundStyle(.blue)
                     }
                 }
-                Text("@\(peer?.username ?? "unknown")")
+                Text("@\(peer?.username ?? L("unknownUser", language))")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }

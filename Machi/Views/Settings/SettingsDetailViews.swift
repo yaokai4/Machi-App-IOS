@@ -1,15 +1,37 @@
 import SwiftData
 import SwiftUI
 
+private enum AccountSecurityVerificationMethod: String, CaseIterable, Identifiable {
+    case password
+    case emailCode
+
+    var id: String { rawValue }
+
+    func title(_ language: AppLanguage) -> String {
+        switch self {
+        case .password:
+            return "当前密码"
+        case .emailCode:
+            return "邮箱验证码"
+        }
+    }
+}
+
 struct AccountPasswordSettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
     @State private var username: String
+    @State private var verificationMethod: AccountSecurityVerificationMethod = .password
+    @State private var currentPassword = ""
+    @State private var passwordCode = ""
+    @State private var passwordChallengeId: String?
     @State private var newPassword = ""
     @State private var confirmPassword = ""
     @State private var usernameMessage: String?
     @State private var message: String?
     @State private var isSavingUsername = false
+    @State private var isSavingPassword = false
+    @State private var isSendingPasswordCode = false
     let user: UserEntity
 
     init(user: UserEntity) {
@@ -56,6 +78,46 @@ struct AccountPasswordSettingsView: View {
 
             Divider()
 
+            VStack(alignment: .leading, spacing: 10) {
+                Text("安全验证")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Picker("安全验证", selection: $verificationMethod) {
+                    ForEach(AccountSecurityVerificationMethod.allCases) { method in
+                        Text(method.title(language)).tag(method)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                if verificationMethod == .password {
+                    SecureField(L("currentPassword", language), text: $currentPassword)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.body)
+                        .controlSize(.large)
+                } else {
+                    HStack(spacing: 10) {
+                        TextField("输入当前邮箱验证码", text: $passwordCode)
+                            .keyboardType(.numberPad)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.body)
+                            .controlSize(.large)
+                        Button {
+                            Task { await sendPasswordCode() }
+                        } label: {
+                            if isSendingPasswordCode {
+                                ProgressView()
+                            } else {
+                                Text("发送")
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(isSendingPasswordCode || user.email.isEmpty)
+                    }
+                    Text(user.email.isEmpty ? "当前账号未绑定邮箱，请使用当前密码验证。" : "验证码将发送到 \(maskedEmail(user.email))。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
             SecureField(L("newPassword", language), text: $newPassword)
                 .textFieldStyle(.roundedBorder)
                 .font(.body)
@@ -64,26 +126,19 @@ struct AccountPasswordSettingsView: View {
                 .textFieldStyle(.roundedBorder)
                 .font(.body)
                 .controlSize(.large)
-            Button(L("savePassword", language)) {
-                guard newPassword.count >= 6, newPassword == confirmPassword else {
-                    message = L("passwordValidationMessage", language)
-                    return
-                }
-                user.passwordHash = PasswordHasher.hash(newPassword)
-                user.updatedAt = .now
-                do {
-                    try modelContext.save()
-                    newPassword = ""
-                    confirmPassword = ""
-                    message = L("passwordUpdated", language)
-                } catch {
-                    message = L("databaseSaveFailed", language)
+            Button {
+                Task { await savePassword() }
+            } label: {
+                if isSavingPassword {
+                    ProgressView()
+                } else {
+                    Text(L("savePassword", language))
                 }
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
-            .disabled(!canSavePassword)
-            if !newPassword.isEmpty || !confirmPassword.isEmpty, !canSavePassword {
+            .disabled(!canSavePassword || isSavingPassword)
+            if (hasPasswordDraft), !canSavePassword {
                 Text(L("passwordValidationMessage", language))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -95,7 +150,15 @@ struct AccountPasswordSettingsView: View {
     }
 
     private var canSavePassword: Bool {
-        newPassword.count >= 6 && newPassword == confirmPassword
+        if KaiXBackend.token == nil {
+            return !currentPassword.isEmpty && isStrongPassword(newPassword) && newPassword == confirmPassword
+        }
+        let hasVerification = verificationMethod == .password ? !currentPassword.isEmpty : !passwordCode.isEmpty
+        return hasVerification && isStrongPassword(newPassword) && newPassword == confirmPassword
+    }
+
+    private var hasPasswordDraft: Bool {
+        !currentPassword.isEmpty || !passwordCode.isEmpty || !newPassword.isEmpty || !confirmPassword.isEmpty
     }
 
     private var canSaveUsername: Bool {
@@ -120,29 +183,689 @@ struct AccountPasswordSettingsView: View {
             usernameMessage = error.kaixUserMessage
         }
     }
+
+    private func savePassword() async {
+        guard canSavePassword else {
+            message = L("passwordValidationMessage", language)
+            return
+        }
+        guard newPassword != currentPassword else {
+            message = L("passwordSameAsOld", language)
+            return
+        }
+
+        isSavingPassword = true
+        defer { isSavingPassword = false }
+
+        do {
+            if KaiXBackend.token != nil {
+                if verificationMethod == .password {
+                    try await KaiXAPIClient.shared.changePassword(currentPassword: currentPassword, newPassword: newPassword)
+                } else {
+                    try await KaiXAPIClient.shared.changePassword(
+                        code: passwordCode,
+                        challengeId: passwordChallengeId,
+                        newPassword: newPassword
+                    )
+                }
+            } else if !user.passwordHash.isEmpty {
+                guard PasswordHasher.verify(currentPassword, storedHash: user.passwordHash) else {
+                    message = L("currentPasswordIncorrect", language)
+                    return
+                }
+            }
+
+            user.passwordHash = PasswordHasher.hash(newPassword)
+            user.updatedAt = .now
+            try modelContext.save()
+            currentPassword = ""
+            passwordCode = ""
+            passwordChallengeId = nil
+            newPassword = ""
+            confirmPassword = ""
+            message = "密码已更新，请使用新密码登录。"
+        } catch let apiError as KaiXAPIError {
+            if apiError.error.code == "invalid_credentials" {
+                message = L("currentPasswordIncorrect", language)
+            } else if apiError.error.code == "password_reuse" {
+                message = L("passwordSameAsOld", language)
+            } else if apiError.error.code == "invalid_code" || apiError.error.code == "code_expired" {
+                message = "验证码无效或已过期"
+            } else {
+                message = apiError.error.message
+            }
+        } catch {
+            message = error.kaixUserMessage
+        }
+    }
+
+    private func isStrongPassword(_ password: String) -> Bool {
+        password.count >= AuthValidation.passwordMinLength
+        && password.range(of: #"[A-Za-z]"#, options: .regularExpression) != nil
+        && password.range(of: #"[0-9]"#, options: .regularExpression) != nil
+    }
+
+    private func sendPasswordCode() async {
+        guard !user.email.isEmpty else {
+            message = "当前账号未绑定邮箱，请使用当前密码验证。"
+            return
+        }
+        isSendingPasswordCode = true
+        defer { isSendingPasswordCode = false }
+        do {
+            let response = try await KaiXAPIClient.shared.sendSecurityCode(purpose: "change_password")
+            passwordChallengeId = response.challenge_id
+            message = "验证码已发送到 \(response.email_hint ?? maskedEmail(user.email))。"
+        } catch {
+            message = error.kaixUserMessage
+        }
+    }
+
+    private func maskedEmail(_ email: String) -> String {
+        let parts = email.split(separator: "@", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return email }
+        let local = parts[0]
+        let first = local.first.map(String.init) ?? "*"
+        let last = local.count > 2 ? String(local.last!) : ""
+        return "\(first)***\(last)@\(parts[1])"
+    }
 }
 
 struct ContactSettingsView: View {
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
-    @AppStorage("accountEmail") private var email = ""
+    @AppStorage("accountEmail") private var storedEmail = ""
     @AppStorage("accountPhone") private var phone = ""
+    @State private var verificationMethod: AccountSecurityVerificationMethod = .password
+    @State private var currentPassword = ""
+    @State private var currentEmailCode = ""
+    @State private var currentEmailChallengeId: String?
+    @State private var email: String
+    @State private var newEmailCode = ""
+    @State private var newEmailChallengeId: String?
+    @State private var message: String?
+    @State private var isSavingEmail = false
+    @State private var isSendingCurrentCode = false
+    @State private var isSendingNewCode = false
+    let user: UserEntity
+
+    init(user: UserEntity) {
+        self.user = user
+        let fallbackEmail = UserDefaults.standard.string(forKey: "accountEmail") ?? ""
+        _email = State(initialValue: user.email.isEmpty ? fallbackEmail : user.email)
+    }
 
     var body: some View {
         SettingsFormPage(title: L("contactInfo", language)) {
-            TextField(L("email", language), text: $email)
-                .keyboardType(.emailAddress)
-                .textInputAutocapitalization(.never)
-                .textFieldStyle(.roundedBorder)
-                .font(.body)
-                .controlSize(.large)
-            TextField(L("phone", language), text: $phone)
-                .keyboardType(.phonePad)
-                .textFieldStyle(.roundedBorder)
-                .font(.body)
-                .controlSize(.large)
-            Text(L("contactStored", language))
+            contactHero
+            formBlock(title: "绑定邮箱", subtitle: user.email.isEmpty ? "当前账号尚未绑定邮箱。" : "当前邮箱：\(maskedEmail(user.email))", icon: "envelope.badge", tint: .teal) {
+                textField(L("email", language), text: $email, keyboard: .emailAddress)
+            }
+            formBlock(title: "安全验证", subtitle: verificationMethod == .password ? "输入当前密码后才可以修改绑定邮箱。" : "验证码将发送到当前邮箱。", icon: "shield.lefthalf.filled", tint: .purple) {
+                Picker("安全验证", selection: $verificationMethod) {
+                    ForEach(AccountSecurityVerificationMethod.allCases) { method in
+                        Text(method.title(language)).tag(method)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                if verificationMethod == .password {
+                    secureField(L("currentPassword", language), text: $currentPassword)
+                } else {
+                    HStack(spacing: 10) {
+                        textField("当前邮箱验证码", text: $currentEmailCode, keyboard: .numberPad)
+                        sendCodeButton(isLoading: isSendingCurrentCode, disabled: user.email.isEmpty) {
+                            await sendCurrentEmailCode()
+                        }
+                    }
+                    Text(user.email.isEmpty ? "没有当前邮箱时，请使用当前密码验证。" : "验证码将发送到当前邮箱。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            formBlock(title: "新邮箱验证", subtitle: "发送验证码到新的邮箱，验证通过后两端同步更新。", icon: "checkmark.message", tint: .blue) {
+                HStack(spacing: 10) {
+                    textField("新邮箱验证码", text: $newEmailCode, keyboard: .numberPad)
+                    sendCodeButton(isLoading: isSendingNewCode, disabled: !canSendNewEmailCode) {
+                        await sendNewEmailCode()
+                    }
+                }
+            }
+            saveEmailButton
+            formBlock(title: L("phone", language), subtitle: L("contactStored", language), icon: "iphone", tint: .orange) {
+                textField(L("phone", language), text: $phone, keyboard: .phonePad)
+            }
+            if let message {
+                statusBanner(message)
+            }
+        }
+    }
+
+    private var contactHero: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "lock.shield.fill")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(width: 42, height: 42)
+                .background(LinearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .shadow(color: .blue.opacity(0.18), radius: 10, x: 0, y: 6)
+            VStack(alignment: .leading, spacing: 5) {
+                Text("安全修改联系方式")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text("邮箱会同步到 Machi 账号，Web 和 iOS 登录状态会一起更新。手机号目前只保存在本机。")
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .background(KXColor.softBackground.opacity(0.9), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(KXColor.separator.opacity(0.45), lineWidth: 0.6)
+        }
+    }
+
+    private func formBlock<Content: View>(title: String, subtitle: String, icon: String, tint: Color, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: icon)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(tint)
+                    .frame(width: 22, height: 22)
+                    .background(tint.opacity(0.10), in: Circle())
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 0)
+            }
+            Text(subtitle)
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(.secondary)
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+            content()
+        }
+        .padding(12)
+        .background(KXColor.softBackground.opacity(0.72), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(KXColor.separator.opacity(0.45), lineWidth: 0.6)
+        }
+    }
+
+    private func textField(_ placeholder: String, text: Binding<String>, keyboard: UIKeyboardType) -> some View {
+        TextField(placeholder, text: text)
+            .keyboardType(keyboard)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .font(.body.weight(.medium))
+            .padding(.horizontal, 12)
+            .frame(height: 46)
+            .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(KXColor.separator.opacity(0.65), lineWidth: 0.65)
+            }
+    }
+
+    private func secureField(_ placeholder: String, text: Binding<String>) -> some View {
+        SecureField(placeholder, text: text)
+            .font(.body.weight(.medium))
+            .padding(.horizontal, 12)
+            .frame(height: 46)
+            .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(KXColor.separator.opacity(0.65), lineWidth: 0.65)
+            }
+    }
+
+    private func sendCodeButton(isLoading: Bool, disabled: Bool, action: @escaping () async -> Void) -> some View {
+        Button {
+            Task { await action() }
+        } label: {
+            Group {
+                if isLoading {
+                    ProgressView()
+                } else {
+                    Text("发送")
+                }
+            }
+            .font(.subheadline.weight(.semibold))
+            .frame(width: 64, height: 44)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(disabled ? Color.secondary : Color.white)
+        .background(disabled ? KXColor.softBackground : KXColor.accent, in: Capsule())
+        .overlay {
+            Capsule().stroke(KXColor.separator.opacity(disabled ? 0.6 : 0), lineWidth: 0.6)
+        }
+        .disabled(disabled || isLoading)
+    }
+
+    private var saveEmailButton: some View {
+        Button {
+            Task { await saveEmail() }
+        } label: {
+            Group {
+                if isSavingEmail {
+                    ProgressView()
+                } else {
+                    Text(L("saveEmail", language))
+                }
+            }
+            .font(.subheadline.weight(.semibold))
+            .frame(maxWidth: .infinity)
+            .frame(height: 46)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(canSaveEmail ? Color.white : Color.secondary)
+        .background(canSaveEmail ? KXColor.accent : KXColor.softBackground, in: Capsule())
+        .overlay {
+            Capsule().stroke(KXColor.separator.opacity(canSaveEmail ? 0 : 0.55), lineWidth: 0.65)
+        }
+        .disabled(!canSaveEmail || isSavingEmail)
+    }
+
+    private func statusBanner(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "info.circle.fill")
+                .foregroundStyle(KXColor.accent)
+            Text(text)
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(KXColor.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var normalizedEmail: String {
+        email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private var canSaveEmail: Bool {
+        guard canSendNewEmailCode, !newEmailCode.isEmpty else { return false }
+        if KaiXBackend.token == nil {
+            return !currentPassword.isEmpty || user.passwordHash.isEmpty
+        }
+        if verificationMethod == .password {
+            return !currentPassword.isEmpty
+        }
+        return !currentEmailCode.isEmpty
+    }
+
+    private var canSendNewEmailCode: Bool {
+        normalizedEmail.range(of: AuthValidation.emailRegex, options: .regularExpression) != nil
+        && normalizedEmail != user.email.lowercased()
+    }
+
+    private func saveEmail() async {
+        guard canSaveEmail else {
+            message = L("emailValidationMessage", language)
+            return
+        }
+
+        isSavingEmail = true
+        defer { isSavingEmail = false }
+
+        do {
+            if KaiXBackend.token != nil {
+                let dto = try await KaiXAPIClient.shared.changeEmail(
+                    currentPassword: verificationMethod == .password ? currentPassword : nil,
+                    oldCode: verificationMethod == .emailCode ? currentEmailCode : nil,
+                    oldChallengeId: currentEmailChallengeId,
+                    newEmail: normalizedEmail,
+                    newCode: newEmailCode,
+                    newChallengeId: newEmailChallengeId
+                )
+                user.email = dto.email ?? normalizedEmail
+            } else {
+                if !user.passwordHash.isEmpty, !PasswordHasher.verify(currentPassword, storedHash: user.passwordHash) {
+                    message = L("currentPasswordIncorrect", language)
+                    return
+                }
+                user.email = normalizedEmail
+            }
+            storedEmail = user.email
+            user.updatedAt = .now
+            try modelContext.save()
+            currentPassword = ""
+            currentEmailCode = ""
+            currentEmailChallengeId = nil
+            newEmailCode = ""
+            newEmailChallengeId = nil
+            message = L("emailUpdated", language)
+        } catch let apiError as KaiXAPIError {
+            if apiError.error.code == "invalid_credentials" {
+                message = L("currentPasswordIncorrect", language)
+            } else if apiError.error.code == "invalid_code" || apiError.error.code == "code_expired" {
+                message = "验证码无效或已过期"
+            } else {
+                message = apiError.error.message
+            }
+        } catch {
+            message = error.kaixUserMessage
+        }
+    }
+
+    private func sendCurrentEmailCode() async {
+        guard !user.email.isEmpty else {
+            message = "当前账号未绑定邮箱，请使用当前密码验证。"
+            return
+        }
+        isSendingCurrentCode = true
+        defer { isSendingCurrentCode = false }
+        do {
+            let response = try await KaiXAPIClient.shared.sendSecurityCode(purpose: "change_email_old")
+            currentEmailChallengeId = response.challenge_id
+            message = "验证码已发送到 \(response.email_hint ?? maskedEmail(user.email))。"
+        } catch {
+            message = error.kaixUserMessage
+        }
+    }
+
+    private func sendNewEmailCode() async {
+        guard canSendNewEmailCode else {
+            message = L("emailValidationMessage", language)
+            return
+        }
+        isSendingNewCode = true
+        defer { isSendingNewCode = false }
+        do {
+            let response = try await KaiXAPIClient.shared.sendSecurityCode(purpose: "change_email_new", email: normalizedEmail)
+            newEmailChallengeId = response.challenge_id
+            message = "验证码已发送到 \(response.email_hint ?? maskedEmail(normalizedEmail))。"
+        } catch {
+            message = error.kaixUserMessage
+        }
+    }
+
+    private func maskedEmail(_ email: String) -> String {
+        let parts = email.split(separator: "@", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return email }
+        let local = parts[0]
+        let first = local.first.map(String.init) ?? "*"
+        let last = local.count > 2 ? String(local.last!) : ""
+        return "\(first)***\(last)@\(parts[1])"
+    }
+}
+
+struct AccountProfileSettingsView: View {
+    @Environment(\.appLanguage) private var language
+    let currentUser: UserEntity
+    var onSwitchAccount: ((UserEntity) -> Void)?
+    var onDismissSettings: () -> Void
+
+    var body: some View {
+        SettingsFormPage(title: L("accountProfile", language)) {
+            SettingsRowLink(icon: "person.crop.circle", tint: .blue, title: L("profile", language), subtitle: L("profileSubtitle", language)) {
+                ProfileView(currentUser: currentUser, profileUserId: currentUser.id, showsBackButton: true)
+            }
+            SettingsDivider()
+            SettingsRowLink(icon: "pencil", tint: .indigo, title: L("editProfile", language), subtitle: L("editProfileSubtitle", language)) {
+                EditProfileView(user: currentUser)
+            }
+            SettingsDivider()
+            SettingsRowLink(icon: "arrow.triangle.2.circlepath", tint: .purple, title: L("switchAccount", language), subtitle: L("switchAccountSubtitle", language)) {
+                AccountSwitcherView(currentUser: currentUser) { user in
+                    onSwitchAccount?(user)
+                    onDismissSettings()
+                }
+            }
+        }
+    }
+}
+
+struct RegionLanguageSettingsView: View {
+    @Environment(\.appLanguage) private var language
+    @AppStorage("appAppearance") private var appAppearance = AppAppearance.light.rawValue
+    @ObservedObject private var regionStore = RegionStore.shared
+    let currentUser: UserEntity
+
+    var body: some View {
+        SettingsFormPage(title: L("regionAndLanguage", language)) {
+            SettingsRowLink(icon: "globe.asia.australia.fill", tint: .blue, title: "国家", value: countryLabel, subtitle: "国家只能在设置中切换") {
+                CountrySettingsView(currentUser: currentUser)
+            }
+            SettingsDivider()
+            SettingsRowLink(icon: "location.fill", tint: .red, title: L("currentRegion", language), value: browsingRegionLabel, subtitle: L("currentRegionSubtitle", language)) {
+                RegionSettingsView(currentUser: currentUser)
+            }
+            SettingsDivider()
+            SettingsRowLink(icon: "house.fill", tint: .orange, title: L("profileRegion", language), value: profileRegionLabel, subtitle: L("profileRegionSubtitle", language)) {
+                ProfileRegionSettingsView(currentUser: currentUser)
+            }
+            SettingsDivider()
+            SettingsRowLink(icon: "globe", tint: .blue, title: L("language", language), value: AppLanguage.resolved(from: UserDefaults.standard.string(forKey: "appLanguageCode") ?? AppLanguage.system.rawValue).title, subtitle: L("currentLanguage", language)) {
+                LanguageSettingsView()
+            }
+            SettingsDivider()
+            SettingsRowLink(icon: "captions.bubble", tint: .purple, title: L("contentLanguage", language), value: LanguageManager.shared.preferred.title(language), subtitle: L("contentLanguageSubtitle", language)) {
+                ContentLanguageSettingsView(currentUser: currentUser)
+            }
+            SettingsDivider()
+            SettingsRowLink(icon: "circle.lefthalf.filled", tint: .gray, title: L("appearance", language), value: AppAppearance.from(appAppearance).title(language), subtitle: L("appearanceSubtitle", language)) {
+                AppearanceSettingsView()
+            }
+        }
+    }
+
+    private var browsingRegionLabel: String {
+        if let region = regionStore.current { return "\(region.countryEmoji) \(region.cityName)" }
+        return L("pickRegion", language)
+    }
+
+    private var countryLabel: String {
+        switch (currentUser.country.isEmpty ? "jp" : currentUser.country).lowercased() {
+        case "cn": return "🇨🇳 China"
+        case "us": return "🇺🇸 United States"
+        case "ca": return "🇨🇦 Canada"
+        default: return "🇯🇵 Japan"
+        }
+    }
+
+    private var profileRegionLabel: String {
+        if let region = KaiXRegionDirectory.make(country: currentUser.country, province: currentUser.province.isEmpty ? nil : currentUser.province, city: currentUser.city) {
+            return "\(region.countryEmoji) \(region.cityName)"
+        }
+        return L("notSet", language)
+    }
+}
+
+struct CountrySettingsView: View {
+    @Environment(\.modelContext) private var modelContext
+    @ObservedObject private var regionStore = RegionStore.shared
+    @State private var pendingCountry: CountryOption?
+    @State private var message: String?
+
+    let currentUser: UserEntity
+
+    private struct CountryOption: Identifiable, Equatable {
+        let code: String
+        let title: String
+        let regionCode: String
+        var id: String { code }
+    }
+
+    private let options: [CountryOption] = [
+        .init(code: "jp", title: "🇯🇵 Japan", regionCode: "jp.tokyo.tokyo"),
+        .init(code: "cn", title: "🇨🇳 China", regionCode: "cn.shanghai.shanghai"),
+        .init(code: "us", title: "🇺🇸 United States", regionCode: "us.ca.la"),
+        .init(code: "ca", title: "🇨🇦 Canada", regionCode: "ca.montreal"),
+    ]
+
+    var body: some View {
+        SettingsFormPage(title: "国家") {
+            Text("切换国家会同时把当前浏览城市切换到该国家的默认城市；其他入口只能切换当前国家下的城市。")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+            ForEach(options) { option in
+                Button {
+                    pendingCountry = option
+                } label: {
+                    HStack {
+                        Text(option.title)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        if option.code == currentCountry {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(KXColor.accent)
+                                .fontWeight(.semibold)
+                        }
+                    }
+                    .padding(.vertical, 10)
+                }
+                .buttonStyle(.plain)
+                SettingsDivider()
+            }
+            if let message {
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .alert("确认切换国家？", isPresented: Binding(get: { pendingCountry != nil }, set: { if !$0 { pendingCountry = nil } })) {
+            Button("取消", role: .cancel) { pendingCountry = nil }
+            Button("确认切换") {
+                if let pendingCountry {
+                    Task { await save(pendingCountry) }
+                }
+                pendingCountry = nil
+            }
+        } message: {
+            Text("国家切换会影响首页、发现、资讯和发布页可选择的城市。")
+        }
+    }
+
+    private var currentCountry: String {
+        currentUser.country.isEmpty ? "jp" : currentUser.country.lowercased()
+    }
+
+    private func save(_ option: CountryOption) async {
+        guard let region = KaiXRegionDirectory.resolve(regionCode: option.regionCode) else { return }
+        currentUser.country = region.countryCode
+        currentUser.province = region.provinceCode
+        currentUser.city = region.cityCode
+        currentUser.currentRegionCode = region.regionCode
+        regionStore.setCurrent(region)
+        currentUser.recentRegionCodes = regionStore.recent.map(\.regionCode)
+        currentUser.updatedAt = .now
+        do {
+            if KaiXBackend.token != nil {
+                let dto = try await KaiXAPIClient.shared.updateRegionLanguage([
+                    "country": region.countryCode,
+                    "province": region.provinceCode,
+                    "city": region.cityCode,
+                    "current_region_code": region.regionCode,
+                ])
+                _ = RemoteSyncService.shared.upsertUser(dto, context: modelContext)
+            } else {
+                try modelContext.save()
+            }
+            message = "国家已更新"
+        } catch {
+            message = error.kaixUserMessage
+        }
+    }
+}
+
+struct ProfileRegionSettingsView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.appLanguage) private var language
+    @State private var isShowingPicker = false
+    @State private var message: String?
+    let currentUser: UserEntity
+
+    var body: some View {
+        SettingsFormPage(title: L("profileRegion", language)) {
+            Text(L("profileRegionHelp", language))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Button {
+                isShowingPicker = true
+            } label: {
+                Label(profileRegionLabel, systemImage: "mappin.and.ellipse")
+                    .font(.headline.weight(.semibold))
+            }
+            .buttonStyle(.borderedProminent)
+            if let message {
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .sheet(isPresented: $isShowingPicker) {
+            RegionPickerView(initialCountry: currentUser.country.isEmpty ? "jp" : currentUser.country, allowsAnyCountry: false) { region in
+                Task { await save(region) }
+            }
+        }
+    }
+
+    private var profileRegionLabel: String {
+        if let region = KaiXRegionDirectory.make(country: currentUser.country, province: currentUser.province.isEmpty ? nil : currentUser.province, city: currentUser.city) {
+            return "\(region.countryEmoji) \(region.displayName)"
+        }
+        return L("pickRegion", language)
+    }
+
+    private func save(_ region: KaiXRegionDirectory.Region) async {
+        currentUser.country = region.countryCode
+        currentUser.province = region.provinceCode
+        currentUser.city = region.cityCode
+        currentUser.updatedAt = .now
+        do {
+            if KaiXBackend.token != nil {
+                let dto = try await KaiXAPIClient.shared.updateRegionLanguage([
+                    "country": region.countryCode,
+                    "province": region.provinceCode,
+                    "city": region.cityCode
+                ])
+                _ = RemoteSyncService.shared.upsertUser(dto, context: modelContext)
+            } else {
+                try modelContext.save()
+            }
+            message = L("profileRegionUpdated", language)
+        } catch {
+            message = error.kaixUserMessage
+        }
+    }
+}
+
+struct AccountSecuritySettingsView: View {
+    @Environment(\.appLanguage) private var language
+    let currentUser: UserEntity
+    let onDeleted: () -> Void
+
+    var body: some View {
+        SettingsFormPage(title: L("accountSecurity", language)) {
+            SettingsRowLink(icon: "lock.rotation", tint: .purple, title: L("accountPassword", language), subtitle: L("accountPasswordSubtitle", language)) {
+                AccountPasswordSettingsView(user: currentUser)
+            }
+            SettingsDivider()
+            SettingsRowLink(icon: "envelope.badge", tint: .teal, title: L("contactInfo", language), value: currentUser.email.isEmpty ? nil : currentUser.email, subtitle: L("contactSubtitle", language)) {
+                ContactSettingsView(user: currentUser)
+            }
+            SettingsDivider()
+            SettingsRowLink(icon: "desktopcomputer", tint: .cyan, title: L("loginDevices", language), subtitle: L("loginDevicesSubtitle", language)) {
+                LoginDevicesView()
+            }
+            SettingsDivider()
+            SettingsRowLink(icon: "person.crop.circle.badge.xmark", tint: .red, title: L("blocklist", language), subtitle: L("blocklistSubtitle", language)) {
+                BlocklistSettingsView()
+            }
+            SettingsDivider()
+            SettingsRowLink(icon: "trash", tint: .orange, title: L("clearCache", language), subtitle: L("clearCacheSubtitle", language)) {
+                CacheSettingsView()
+            }
+            SettingsDivider()
+            SettingsRowLink(icon: "person.crop.circle.badge.minus", tint: .red, title: L("deleteAccount", language), subtitle: L("deleteAccountSubtitle", language)) {
+                DeleteAccountView(currentUser: currentUser, onDeleted: onDeleted)
+            }
         }
     }
 }
@@ -612,7 +1335,7 @@ private struct DraftEditorView: View {
 
 struct AppearanceSettingsView: View {
     @Environment(\.appLanguage) private var language
-    @AppStorage("appAppearance") private var appAppearance = AppAppearance.system.rawValue
+    @AppStorage("appAppearance") private var appAppearance = AppAppearance.light.rawValue
 
     var body: some View {
         SettingsFormPage(title: L("appearance", language)) {
@@ -1029,24 +1752,62 @@ struct HelpCenterView: View {
 struct FeedbackView: View {
     @Environment(\.appLanguage) private var language
     @State private var text = ""
+    @State private var isSending = false
     @State private var submitted = false
+    @State private var failed = false
+
+    private var trimmed: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var body: some View {
         SettingsFormPage(title: L("feedback", language)) {
             TextField(L("feedbackPlaceholder", language), text: $text, axis: .vertical)
                 .lineLimit(5...8)
                 .textFieldStyle(.roundedBorder)
-            Button(L("submitFeedback", language)) {
-                submitted = true
-                text = ""
+                .onChange(of: text) { _, _ in
+                    // Editing again resets the result banners.
+                    submitted = false
+                    failed = false
+                }
+            Button {
+                Task { await submit() }
+            } label: {
+                HStack(spacing: 6) {
+                    if isSending { ProgressView().scaleEffect(0.8) }
+                    Text(isSending ? L("feedbackSending", language) : L("submitFeedback", language))
+                }
             }
             .buttonStyle(.borderedProminent)
-            .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(trimmed.isEmpty || isSending)
             if submitted {
                 Text(L("feedbackSaved", language))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.green)
             }
+            if failed {
+                Text(L("feedbackFailed", language))
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            }
+            // Fallback channel if the user prefers email or is offline.
+            if let mail = URL(string: "mailto:\(KaiXBackend.supportEmail)") {
+                LegalLinkRow(icon: "envelope.fill", title: L("contactSupport", language), subtitle: KaiXBackend.supportEmail, url: mail)
+                    .padding(.top, 4)
+            }
+        }
+    }
+
+    private func submit() async {
+        guard !trimmed.isEmpty, !isSending else { return }
+        isSending = true
+        failed = false
+        submitted = false
+        defer { isSending = false }
+        do {
+            try await KaiXAPIClient.shared.submitFeedback(content: trimmed)
+            submitted = true
+            text = ""
+        } catch {
+            failed = true
         }
     }
 }
@@ -1062,6 +1823,53 @@ struct AboutKaiXView: View {
                 .foregroundStyle(.secondary)
             Text("\(L("version", language)) 1.0.0")
                 .font(.footnote.weight(.bold))
+
+            Divider().padding(.vertical, 4)
+
+            Text(L("legalAndSupport", language))
+                .font(.headline.weight(.semibold))
+            LegalLinkRow(icon: "hand.raised.fill", title: L("privacyPolicy", language), url: KaiXBackend.privacyPolicyURL)
+            LegalLinkRow(icon: "doc.plaintext.fill", title: L("termsOfService", language), url: KaiXBackend.termsOfServiceURL)
+            if let mail = URL(string: "mailto:\(KaiXBackend.supportEmail)") {
+                LegalLinkRow(icon: "envelope.fill", title: L("contactSupport", language), subtitle: KaiXBackend.supportEmail, url: mail)
+            }
+        }
+    }
+}
+
+/// A tappable row that opens an external URL (web legal page or mailto).
+/// Used for Privacy Policy / Terms / support so they're reachable in-app
+/// as Apple requires. `Link` gives VoiceOver + a clear chevron affordance.
+struct LegalLinkRow: View {
+    let icon: String
+    let title: String
+    var subtitle: String? = nil
+    let url: URL
+
+    var body: some View {
+        Link(destination: url) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.subheadline)
+                    .foregroundStyle(KXColor.accent)
+                    .frame(width: 24)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "arrow.up.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+            .padding(.vertical, 4)
         }
     }
 }
@@ -1163,12 +1971,15 @@ struct DeleteAccountView: View {
         defer { isDeleting = false }
 
         do {
+            if KaiXBackend.token != nil {
+                try await KaiXAPIClient.shared.deleteMe()
+            }
             try await UserRepository(context: modelContext).deleteAccount(user: currentUser)
             AuthService.shared.logout()
             onDeleted()
             dismiss()
         } catch {
-            errorMessage = L("databaseSaveFailed", language)
+            errorMessage = error.kaixUserMessage
         }
     }
 }

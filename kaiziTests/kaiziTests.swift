@@ -150,7 +150,7 @@ struct kaiziTests {
 
     @Test func newAccountAndComposerDoNotInjectPlaceholderContent() async throws {
         let context = try makeContext()
-        let user = try await UserRepository(context: context).register(username: "real_user", displayName: "Real User", password: "123456")
+        let user = try await UserRepository(context: context).register(username: "real_user", displayName: "Real User", password: "secret123")
         let composer = ComposePostViewModel()
 
         await composer.loadSuggestedTopics(context: context)
@@ -195,11 +195,14 @@ struct kaiziTests {
         #expect(popularCodes.contains("jp.tokyo.tokyo"))
         #expect(popularCodes.contains("jp.osaka.osaka"))
         #expect(popularCodes.contains("jp.aichi.nagoya"))
+        #expect(popularCodes.contains("jp.kanagawa.yokohama"))
+        #expect(popularCodes.contains("jp.hokkaido.sapporo"))
 
         #expect(KaiXRegionDirectory.resolve(regionCode: "jp.tokyo.tokyo")?.cityName == "东京")
         #expect(KaiXRegionDirectory.resolve(regionCode: "jp.osaka.osaka")?.cityName == "大阪")
         #expect(KaiXRegionDirectory.resolve(regionCode: "jp.aichi.nagoya")?.cityName == "名古屋")
-        #expect(KaiXRegionDirectory.resolve(regionCode: "jp.kanagawa.yokohama") == nil)
+        #expect(KaiXRegionDirectory.resolve(regionCode: "jp.kanagawa.yokohama")?.cityName == "横滨")
+        #expect(KaiXRegionDirectory.resolve(regionCode: "jp.hokkaido.sapporo")?.cityName == "札幌")
         #expect(KaiXRegionDirectory.resolve(regionCode: "cn.zhejiang.hangzhou")?.cityName == "杭州")
         #expect(KaiXRegionDirectory.resolve(regionCode: "cn.jiangsu.suzhou")?.cityName == "苏州")
         #expect(KaiXRegionDirectory.cities(country: "cn", province: "zhejiang").map(\.code) == ["hangzhou", "ningbo"])

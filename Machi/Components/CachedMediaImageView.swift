@@ -4,6 +4,7 @@ struct CachedMediaImageView: View {
     @Environment(\.appLanguage) private var language
     let url: URL?
     var targetPixelSize: CGFloat = 900
+    var failureMode: CachedMediaImageFailureMode = .quietPlaceholder
 
     @State private var image: UIImage?
     @State private var failed = false
@@ -18,21 +19,7 @@ struct CachedMediaImageView: View {
                     .resizable()
                     .scaledToFill()
             } else if failed {
-                VStack(spacing: KXSpacing.xs) {
-                    Image(systemName: "photo")
-                        .font(.title3.weight(.semibold))
-                    Button {
-                        failed = false
-                        reloadToken = UUID()
-                    } label: {
-                        Label(L("retry", language), systemImage: "arrow.clockwise")
-                            .font(KXTypography.tiny.weight(.semibold))
-                    }
-                    .buttonStyle(.plain)
-                }
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(KXColor.softBackground)
+                failureView
             } else {
                 RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
                     .fill(KXColor.softBackground)
@@ -45,6 +32,22 @@ struct CachedMediaImageView: View {
         }
         .task(id: loadKey) {
             await load()
+        }
+    }
+
+    @ViewBuilder
+    private var failureView: some View {
+        switch failureMode {
+        case .transparent:
+            Color.clear
+        case .quietPlaceholder:
+            ZStack {
+                KXColor.softBackground
+                Image(systemName: "photo")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.secondary.opacity(0.56))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -78,4 +81,9 @@ struct CachedMediaImageView: View {
             failed = true
         }
     }
+}
+
+enum CachedMediaImageFailureMode {
+    case quietPlaceholder
+    case transparent
 }

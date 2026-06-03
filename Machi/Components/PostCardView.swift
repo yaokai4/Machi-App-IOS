@@ -16,6 +16,7 @@ struct PostCardView: View, Equatable {
     @State private var quoteText = ""
     @State private var cardMessage: String?
     @State private var cardError: String?
+    @State private var isTextExpanded = false
 
     let post: PostEntity
     let author: UserEntity?
@@ -77,12 +78,13 @@ struct PostCardView: View, Equatable {
         let contentMedia = isQuoteRepost ? mediaItems : (originalPost == nil ? mediaItems : originalMediaItems)
         let inlineHashtags = Set(contentPost.previewText.extractedHashtags)
         let visibleHashtags = visibleHashtags(for: contentPost, inlineHashtags: inlineHashtags)
+        let authorPresentation = officialAuthorPresentation(for: contentPost, author: contentAuthor)
 
         return Group {
             if isHiddenAfterDelete {
                 EmptyView()
             } else {
-                VStack(alignment: .leading, spacing: KXSpacing.md) {
+                VStack(alignment: .leading, spacing: KXSpacing.sm) {
                     if post.repostOfPostId != nil {
                         Label("\(author?.displayName ?? L("unknownUser", language)) \(isQuoteRepost ? L("quotePost", language) : L("repostedBy", language))", systemImage: "arrow.2.squarepath")
                             .font(KXTypography.metaEmphasis)
@@ -93,25 +95,34 @@ struct PostCardView: View, Equatable {
 
                     HStack(alignment: .top, spacing: KXSpacing.sm) {
                         Button(action: onAuthor) {
-                            KXAvatar(user: contentAuthor, size: KXAvatarSize.md)
+                            if authorPresentation.isOfficial {
+                                MachiOfficialAvatarView(size: 38)
+                            } else {
+                                KXAvatar(user: contentAuthor, size: 38)
+                            }
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel(contentAuthor?.displayName ?? L("unknownUser", language))
+                        .accessibilityLabel(authorPresentation.displayName)
 
                         Button(action: onAuthor) {
                             VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                                 HStack(spacing: 4) {
-                                    Text(contentAuthor?.displayName ?? L("unknownUser", language))
+                                    Text(authorPresentation.displayName)
                                         .font(.subheadline.weight(.semibold))
                                         .foregroundStyle(.primary)
                                         .lineLimit(1)
                                         .minimumScaleFactor(0.82)
-                                    if contentAuthor?.displaysVerifiedBadge == true {
+                                    if authorPresentation.isOfficial {
+                                        KXOfficialBadge()
+                                    } else if contentAuthor?.displaysVerifiedBadge == true {
                                         KXVerifiedBadge()
+                                    }
+                                    if let label = authorPresentation.label {
+                                        OfficialSourceChip(title: label)
                                     }
                                 }
                                 HStack(spacing: 5) {
-                                    Text("@\(contentAuthor?.username ?? "unknown")")
+                                    Text("@\(authorPresentation.username)")
                                         .font(KXTypography.meta)
                                         .foregroundStyle(.secondary)
                                         .lineLimit(1)
@@ -163,13 +174,27 @@ struct PostCardView: View, Equatable {
                     if !contentPost.previewText.isEmpty {
                         Button(action: onOpen) {
                             Text(contentPost.previewText)
-                                .font(.system(size: 16, weight: .regular))
+                                .font(.system(size: 15, weight: .regular))
                                 .foregroundStyle(.primary)
-                                .lineSpacing(3)
+                                .lineSpacing(2)
+                                .lineLimit(isTextExpanded ? nil : 4)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .buttonStyle(.plain)
+                        if shouldShowExpand(for: contentPost.previewText) {
+                            Button {
+                                withAnimation(.snappy(duration: 0.18)) {
+                                    isTextExpanded.toggle()
+                                }
+                            } label: {
+                                Text(isTextExpanded ? L("collapseText", language) : L("viewFullText", language))
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(KXColor.accent)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.top, -2)
+                        }
                     }
 
                     if !visibleHashtags.isEmpty {
@@ -196,12 +221,13 @@ struct PostCardView: View, Equatable {
                     KXInteractionBar(
                         post: contentPost,
                         onComment: onComment,
-                        onRepost: handleRepostTap,
-                        onLike: onLike,
-                        onBookmark: onBookmark
+                        onRepost: guestGated(handleRepostTap),
+                        onLike: guestGated(onLike),
+                        onBookmark: guestGated(onBookmark)
                     )
                 }
-                .padding(KXSpacing.lg)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 13)
                 .kxGlassSurface(radius: KXRadius.lg)
                 .contentShape(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
             }
@@ -266,6 +292,51 @@ struct PostCardView: View, Equatable {
         guard !post.country.isEmpty, !post.city.isEmpty else { return nil }
         let province = post.province.isEmpty ? nil : post.province
         return KaiXRegionDirectory.make(country: post.country, province: province, city: post.city)
+    }
+
+    private func officialAuthorPresentation(for post: PostEntity, author: UserEntity?) -> PostAuthorPresentation {
+        guard post.isSeedContent else {
+            return PostAuthorPresentation(
+                displayName: author?.displayName ?? L("unknownUser", language),
+                username: author?.username ?? L("unknownUser", language),
+                isOfficial: author?.isMachiOfficialAccount == true,
+                label: author?.isMachiOfficialAccount == true ? L("machiOfficial", language) : nil
+            )
+        }
+
+        let region = postRegion(post)
+        let isTokyo = region?.countryCode == "jp" && region?.cityCode == "tokyo"
+        let account: (name: String, username: String, label: String)
+        switch post.contentType {
+        case .question:
+            account = ("Machi 城市助手", "machi_assistant_zh", L("cityAssistant", language))
+        case .event, .news, .local_info:
+            account = isTokyo
+                ? ("Machi 东京编辑部", "machi_tokyo_editorial", L("editorialCurated", language))
+                : ("Machi 日本生活编辑部", "machi_japan_life_editorial", L("editorialCurated", language))
+        case .service, .merchant, .coupon:
+            account = ("Machi 本地生活编辑部", "machi_local_life_editorial", L("localLifeDesk", language))
+        case .guide, .housing, .roommate, .job_seek, .job_post, .referral, .warning:
+            account = ("Machi 日本生活编辑部", "machi_japan_life_editorial", L("editorialCurated", language))
+        default:
+            if post.seedAuthorType == "editorial" {
+                account = isTokyo
+                    ? ("Machi 东京编辑部", "machi_tokyo_editorial", L("editorialCurated", language))
+                    : ("Machi 日本生活编辑部", "machi_japan_life_editorial", L("editorialCurated", language))
+            } else {
+                account = ("Machi 城市助手", "machi_assistant_zh", L("cityAssistant", language))
+            }
+        }
+        return PostAuthorPresentation(
+            displayName: account.name,
+            username: account.username,
+            isOfficial: true,
+            label: account.label
+        )
+    }
+
+    private func shouldShowExpand(for text: String) -> Bool {
+        text.count > 96 || text.components(separatedBy: .newlines).count > 4
     }
 
     private func metadataRow(for post: PostEntity) -> some View {
@@ -542,6 +613,12 @@ struct PostCardView: View, Equatable {
             onRepost()
         }
     }
+
+    /// Wrap a write action so a guest gets a login prompt instead. Reading /
+    /// navigation actions (open comments, open profile) are NOT wrapped.
+    private func guestGated(_ action: @escaping () -> Void) -> () -> Void {
+        { if currentUser?.isGuest == true { GuestGate.shared.requireLogin() } else { action() } }
+    }
 }
 
 private struct TypedSummaryView: View {
@@ -566,6 +643,27 @@ private struct TypedSummaryView: View {
     }
 }
 
+private struct PostAuthorPresentation {
+    let displayName: String
+    let username: String
+    let isOfficial: Bool
+    let label: String?
+}
+
+private struct OfficialSourceChip: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(Color(red: 0.05, green: 0.48, blue: 0.45))
+            .lineLimit(1)
+            .padding(.horizontal, 5)
+            .frame(height: 17)
+            .background(Color(red: 0.05, green: 0.48, blue: 0.45).opacity(0.10), in: Capsule())
+    }
+}
+
 private struct CategoryChip: View {
     let title: String
     let icon: String?
@@ -578,12 +676,12 @@ private struct CategoryChip: View {
                     .font(.caption2.weight(.semibold))
             }
             Text(title)
-                .font(.caption.weight(.bold))
+                .font(.caption2.weight(.bold))
                 .lineLimit(1)
         }
         .foregroundStyle(tint)
-        .padding(.horizontal, 9)
-        .frame(height: 24)
+        .padding(.horizontal, 8)
+        .frame(height: 22)
         .background(tint.opacity(0.095), in: Capsule())
         .overlay(Capsule().stroke(tint.opacity(0.14), lineWidth: 0.6))
     }
@@ -616,7 +714,7 @@ private struct QuotedPostPreview: View {
                         if author?.displaysVerifiedBadge == true {
                             KXVerifiedBadge()
                         }
-                        Text("@\(author?.username ?? "unknown")")
+                        Text("@\(author?.username ?? L("unknownUser", language))")
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -655,14 +753,13 @@ struct KXInteractionBar: View {
     let onBookmark: () -> Void
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 2) {
             MetricButton(icon: "bubble.left", value: post.commentCount, isActive: false, label: L("comments", language), tint: .teal, action: onComment)
             MetricButton(icon: "arrow.2.squarepath", value: post.repostCount, isActive: post.isRepostedByCurrentUser, label: L("repost", language), tint: .green, action: onRepost)
             MetricButton(icon: post.isLikedByCurrentUser ? "heart.fill" : "heart", value: post.likeCount, isActive: post.isLikedByCurrentUser, label: L("like", language), tint: .pink, action: onLike)
             MetricButton(icon: post.isBookmarkedByCurrentUser ? "bookmark.fill" : "bookmark", value: post.bookmarkCount, isActive: post.isBookmarkedByCurrentUser, label: L("bookmark", language), tint: .blue, action: onBookmark)
-            MetricLabel(icon: "flame.fill", value: Int(post.heatScore), label: L("heat", language), tint: KXColor.heat.opacity(0.86))
         }
-        .padding(.top, 6)
+        .padding(.top, 4)
     }
 }
 
@@ -678,14 +775,14 @@ private struct MetricButton: View {
         Button(action: action) {
             HStack(spacing: 5) {
                 Image(systemName: icon)
-                    .font(.system(size: 16, weight: .regular))
+                    .font(.system(size: 15, weight: .regular))
                     .symbolRenderingMode(.hierarchical)
                     // Smoothly cross-fade the heart/bookmark glyph
                     // when the user toggles it instead of snapping.
                     .contentTransition(.symbolEffect(.replace.downUp))
-                    .frame(width: 18, height: 18)
+                    .frame(width: 17, height: 17)
                 Text(NumberFormatterUtils.compact(value))
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                     .monospacedDigit()
                     .contentTransition(.numericText(value: Double(value)))
                     .lineLimit(1)
@@ -694,7 +791,7 @@ private struct MetricButton: View {
             .foregroundStyle(isActive ? tint.opacity(0.92) : .secondary)
             .animation(.snappy(duration: 0.18), value: isActive)
             .frame(maxWidth: .infinity)
-            .frame(height: 34, alignment: .center)
+            .frame(height: 30, alignment: .center)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -712,10 +809,10 @@ private struct MetricLabel: View {
     var body: some View {
         HStack(spacing: 5) {
             Image(systemName: icon)
-                .font(.system(size: 16, weight: .regular))
-                .frame(width: 18, height: 18)
+                .font(.system(size: 15, weight: .regular))
+                .frame(width: 17, height: 17)
             Text(NumberFormatterUtils.compact(value))
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 12, weight: .medium))
                 .monospacedDigit()
                 .contentTransition(.numericText(value: Double(value)))
                 .lineLimit(1)
@@ -723,7 +820,7 @@ private struct MetricLabel: View {
         }
             .foregroundStyle(tint)
             .frame(maxWidth: .infinity)
-            .frame(height: 34, alignment: .center)
+            .frame(height: 30, alignment: .center)
             .accessibilityLabel("\(label) \(value)")
     }
 }

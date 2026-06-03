@@ -40,9 +40,14 @@ struct RegionPickerView: View {
         return initialCountry.lowercased()
     }
 
+    private var supportedCountryCodes: Set<String> {
+        ["jp", "cn", "us", "ca"]
+    }
+
     private var availableCountries: [KaiXRegionDirectory.Country] {
-        guard let allowedCountryCode else { return KaiXRegionDirectory.countries }
-        return KaiXRegionDirectory.countries.filter { $0.code == allowedCountryCode }
+        let supported = KaiXRegionDirectory.countries.filter { supportedCountryCodes.contains($0.code) }
+        guard let allowedCountryCode else { return supported }
+        return supported.filter { $0.code == allowedCountryCode }
     }
 
     var body: some View {
@@ -77,8 +82,10 @@ struct RegionPickerView: View {
                         // → 省份 → 城市). Removed per user feedback —
                         // the country list is the single canonical
                         // drill-down path.
-                        section(L("allCountries", language)) {
-                            countryList
+                        if allowsAnyCountry {
+                            section(L("allCountries", language)) {
+                                countryList
+                            }
                         }
                     }
                 }
@@ -106,7 +113,8 @@ struct RegionPickerView: View {
             }
         }
         .onAppear {
-            if let initialCountry,
+            if allowsAnyCountry,
+               let initialCountry,
                let country = KaiXRegionDirectory.country(code: initialCountry) {
                 path.append(country)
             }
@@ -116,16 +124,34 @@ struct RegionPickerView: View {
     // MARK: - sub views
 
     private var domesticPopularRegions: [KaiXRegionDirectory.Region] {
-        KaiXRegionDirectory.popular.filter { $0.countryCode == "cn" }
+        canonicalRegions(for: "cn")
     }
 
     private var countryPopularRegions: [KaiXRegionDirectory.Region] {
         guard let allowedCountryCode else { return KaiXRegionDirectory.popular }
-        return KaiXRegionDirectory.popular.filter { $0.countryCode == allowedCountryCode }
+        let canonical = canonicalRegions(for: allowedCountryCode)
+        return canonical.isEmpty ? KaiXRegionDirectory.popular.filter { $0.countryCode == allowedCountryCode } : canonical
+    }
+
+    private func canonicalRegions(for countryCode: String) -> [KaiXRegionDirectory.Region] {
+        let codes: [String]
+        switch countryCode.lowercased() {
+        case "jp":
+            codes = ["jp.tokyo.tokyo", "jp.osaka.osaka", "jp.kyoto.kyoto"]
+        case "cn":
+            codes = ["cn.shanghai.shanghai", "cn.zhejiang.hangzhou"]
+        case "us":
+            codes = ["us.ca.la"]
+        case "ca":
+            codes = ["ca.montreal"]
+        default:
+            codes = []
+        }
+        return codes.compactMap { KaiXRegionDirectory.resolve(regionCode: $0) }
     }
 
     private var overseasPopularRegions: [KaiXRegionDirectory.Region] {
-        KaiXRegionDirectory.popular.filter { $0.countryCode != "cn" }
+        ["jp", "us", "ca"].flatMap { canonicalRegions(for: $0) }
     }
 
     private var searchField: some View {
@@ -263,39 +289,25 @@ struct RegionPickerView: View {
     }
 
     private func searchMatches(query: String) -> [KaiXRegionDirectory.Region] {
-        var results: [KaiXRegionDirectory.Region] = []
-        for country in availableCountries {
-            // Match against country name/code first — surface every
-            // city of a matched country.
-            let countryHit = country.name.localizedCaseInsensitiveContains(query) || country.code.contains(query)
-            // Iterate provinces or flat cities.
-            if country.hasProvinces {
-                for province in KaiXRegionDirectory.provinces(for: country.code) {
-                    let provinceHit = countryHit
-                        || province.name.localizedCaseInsensitiveContains(query)
-                        || province.code.contains(query)
-                    for city in KaiXRegionDirectory.cities(country: country.code, province: province.code) {
-                        let cityHit = provinceHit
-                            || city.name.localizedCaseInsensitiveContains(query)
-                            || city.code.contains(query)
-                        if cityHit, let region = KaiXRegionDirectory.make(country: country.code, province: province.code, city: city.code) {
-                            results.append(region)
-                        }
-                    }
-                }
-            } else {
-                for city in KaiXRegionDirectory.cities(country: country.code, province: nil) {
-                    let cityHit = countryHit
-                        || city.name.localizedCaseInsensitiveContains(query)
-                        || city.code.contains(query)
-                    if cityHit, let region = KaiXRegionDirectory.make(country: country.code, province: nil, city: city.code) {
-                        results.append(region)
-                    }
-                }
+        let supportedCanonicalRegions = ["jp", "cn", "us", "ca"].flatMap { canonicalRegions(for: $0) }
+        if let allowedCountryCode {
+            return canonicalRegions(for: allowedCountryCode).filter { region in
+                region.countryName.localizedCaseInsensitiveContains(query)
+                || region.countryCode.contains(query)
+                || region.provinceName.localizedCaseInsensitiveContains(query)
+                || region.provinceCode.contains(query)
+                || region.cityName.localizedCaseInsensitiveContains(query)
+                || region.cityCode.contains(query)
             }
-            if results.count >= 60 { break }
         }
-        return results
+        return supportedCanonicalRegions.filter { region in
+            region.countryName.localizedCaseInsensitiveContains(query)
+            || region.countryCode.contains(query)
+            || region.provinceName.localizedCaseInsensitiveContains(query)
+            || region.provinceCode.contains(query)
+            || region.cityName.localizedCaseInsensitiveContains(query)
+            || region.cityCode.contains(query)
+        }
     }
 
     private func deliver(_ region: KaiXRegionDirectory.Region) {
@@ -317,7 +329,21 @@ private struct ProvinceListView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                if country.hasProvinces {
+                if !canonicalRegions.isEmpty {
+                    ForEach(canonicalRegions, id: \.regionCode) { region in
+                        Button {
+                            onSelect(region)
+                        } label: {
+                            HStack {
+                                Text(region.cityName).font(.body)
+                                Spacer()
+                            }
+                            .padding(.vertical, 12)
+                        }
+                        .buttonStyle(.plain)
+                        Divider().opacity(0.25)
+                    }
+                } else if country.hasProvinces {
                     ForEach(KaiXRegionDirectory.provinces(for: country.code)) { province in
                         NavigationLink(value: ProvinceRoute(country: country, province: province)) {
                             HStack {
@@ -361,6 +387,23 @@ private struct ProvinceListView: View {
         .kxPageBackground()
         .navigationTitle(country.name)
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var canonicalRegions: [KaiXRegionDirectory.Region] {
+        let codes: [String]
+        switch country.code.lowercased() {
+        case "jp":
+            codes = ["jp.tokyo.tokyo", "jp.osaka.osaka", "jp.kyoto.kyoto"]
+        case "cn":
+            codes = ["cn.shanghai.shanghai", "cn.zhejiang.hangzhou"]
+        case "us":
+            codes = ["us.ca.la"]
+        case "ca":
+            codes = ["ca.montreal"]
+        default:
+            codes = []
+        }
+        return codes.compactMap { KaiXRegionDirectory.resolve(regionCode: $0) }
     }
 }
 

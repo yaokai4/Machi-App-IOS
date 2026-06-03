@@ -16,6 +16,7 @@ struct DiscoverView: View {
     @State private var selectedSegment: DiscoverSegment = .recommend
     @State private var isShowingRegionSelector = false
     @State private var isShowingMoreChannels = false
+    @State private var isShowingNotifications = false
 
     let currentUser: UserEntity
 
@@ -79,10 +80,11 @@ struct DiscoverView: View {
         }
         .sheet(isPresented: $isShowingRegionSelector) {
             RegionSelectorView(
-                initialCountry: currentUser.country.isEmpty ? currentRegion?.countryCode : currentUser.country,
-                allowsAnyCountry: currentUser.country.isEmpty
+                initialCountry: currentUser.country.isEmpty ? (currentRegion?.countryCode ?? "jp") : currentUser.country,
+                allowsAnyCountry: false
             ) { region in
                 regionStore.setCurrent(region)
+                persistBrowsingRegion(region)
             }
         }
         .sheet(isPresented: $isShowingMoreChannels) {
@@ -90,6 +92,24 @@ struct DiscoverView: View {
                 isShowingMoreChannels = false
                 openCategory(category)
             }
+        }
+        .sheet(isPresented: $isShowingNotifications) {
+            NavigationStack {
+                NotificationsView(currentUser: currentUser)
+                    .kxRouteDestinations(currentUser: currentUser)
+            }
+        }
+    }
+
+    private func persistBrowsingRegion(_ region: KaiXRegionDirectory.Region) {
+        currentUser.currentRegionCode = region.regionCode
+        currentUser.recentRegionCodes = regionStore.recent.map(\.regionCode)
+        try? modelContext.save()
+        guard KaiXBackend.token != nil else { return }
+        Task {
+            _ = try? await KaiXAPIClient.shared.updateRegionLanguage([
+                "current_region_code": region.regionCode
+            ])
         }
     }
 
@@ -195,9 +215,17 @@ struct DiscoverView: View {
 
                 Spacer(minLength: KXSpacing.sm)
 
-                // Region entry kept exclusively on the CurrentRegionCard
-                // below. The header chip was a duplicate that users
-                // bumped into twice in a row.
+                Button {
+                    isShowingNotifications = true
+                } label: {
+                    Image(systemName: "bell")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 40, height: 40)
+                        .kxGlassCircle()
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(L("notifications", language))
             }
 
             Button {

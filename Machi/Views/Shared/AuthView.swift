@@ -10,6 +10,9 @@ struct AuthView: View {
     @State private var isShowingRegionPicker = false
 
     let onAuthenticated: (UserEntity) -> Void
+    /// When provided, shows a "browse as guest" affordance so people can
+    /// look around before creating an account (App Store 5.1.1(v)).
+    var onBrowseAsGuest: (() -> Void)? = nil
 
     private var isFormReady: Bool {
         viewModel.validate(language: language).isEmpty
@@ -261,6 +264,23 @@ struct AuthView: View {
                 AuthFeature(icon: "briefcase.fill", title: L("work", language))
                 AuthFeature(icon: "bag.fill", title: L("secondhand", language))
                 AuthFeature(icon: "calendar", title: L("events", language))
+            }
+
+            if let onBrowseAsGuest {
+                Button(action: onBrowseAsGuest) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "eye")
+                        Text(L("browseAsGuest", language))
+                        Image(systemName: "chevron.right")
+                            .font(.caption2.weight(.bold))
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("auth.browseAsGuest")
             }
         }
         .padding(18)

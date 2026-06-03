@@ -18,18 +18,6 @@
       "platform" : "ios",
       "size" : "1024x1024"
     },
-    {
-      "appearances" : [
-        {
-          "appearance" : "luminosity",
-          "value" : "tinted"
-        }
-      ],
-      "filename" : "DD387D87-3047-42F3-9348-12D23B446E65 2.png",
-      "idiom" : "universal",
-      "platform" : "ios",
-      "size" : "1024x1024"
-    }
   ],
   "info" : {
     "author" : "xcode",

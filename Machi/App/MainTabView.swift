@@ -5,6 +5,7 @@ struct MainTabView: View {
     @EnvironmentObject private var chrome: AppChromeState
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var composeStore: ComposeStore
+    @ObservedObject private var regionStore = RegionStore.shared
     let currentUser: UserEntity
     let onLogout: () -> Void
     let onSwitchAccount: (UserEntity) -> Void
@@ -65,6 +66,13 @@ struct MainTabView: View {
             syncChromeForActiveRoute()
         }
         .onChange(of: isShowingComposer) { _, isPresented in
+            // Guests can browse but not publish — intercept every compose
+            // trigger (FAB / Guide / channel shortcuts) and prompt login.
+            if isPresented && currentUser.isGuest {
+                isShowingComposer = false
+                GuestGate.shared.requireLogin()
+                return
+            }
             chrome.setHidden(isPresented, reason: .compose)
             if !isPresented { presetComposeType = nil }
         }
@@ -116,9 +124,9 @@ struct MainTabView: View {
                 DiscoverView(currentUser: currentUser)
                     .kxRouteDestinations(currentUser: currentUser)
             }
-        case .notifications:
-            NavigationStack(path: router.binding(for: .notifications)) {
-                NotificationsView(currentUser: currentUser)
+        case .guide:
+            NavigationStack(path: router.binding(for: .guide)) {
+                GuideHomeView(currentUser: currentUser)
                     .kxRouteDestinations(currentUser: currentUser)
             }
         case .messages:
@@ -143,7 +151,7 @@ struct MainTabView: View {
 enum AppTab: String, CaseIterable, Identifiable, Hashable {
     case home
     case search
-    case notifications
+    case guide
     case messages
     case profile
 
@@ -153,7 +161,7 @@ enum AppTab: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .home: L("home", language)
         case .search: L("discover", language)
-        case .notifications: L("notifications", language)
+        case .guide: L("guide", language)
         case .messages: L("messages", language)
         case .profile: L("me", language)
         }
@@ -163,7 +171,7 @@ enum AppTab: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .home: "house.fill"
         case .search: "safari.fill"
-        case .notifications: "bell.fill"
+        case .guide: "text.book.closed.fill"
         case .messages: "envelope"
         case .profile: "person.crop.circle.fill"
         }

@@ -200,7 +200,7 @@ enum RichDemoSeeder {
             // Guide
             .init(type: .guide, content: "整理了本地三个月生活的清单,从看房、办卡到搬家。", tags: ["攻略", "生活指南"], attributes: [
                 "title": "新人 30 天本地生活清单",
-                "summary": "看房 / 银行 / 手机卡 / 交通 / 医院 一站清单"
+                "summary": "看房、银行、手机卡、交通、医院一站清单"
             ], heatBoost: 220),
             .init(type: .guide, content: "学习语言这两年总结的 5 个真有用的方法。", tags: ["语言学习"], attributes: [
                 "title": "语言学习 5 个真有用的方法",
@@ -232,7 +232,7 @@ enum RichDemoSeeder {
                 "status": "available"
             ], heatBoost: 140),
             .init(type: .housing, content: "合租找室友,2 室 1 厅其中一间,朝南。", tags: ["合租", "租房"], attributes: [
-                "title": "合租找室友 朝南次卧",
+                "title": "合租找室友，朝南次卧",
                 "rent": "2100",
                 "currency": "CNY",
                 "area": "近大学城",

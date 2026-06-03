@@ -73,8 +73,8 @@ struct HomeTimelineView: View {
         }
         .sheet(isPresented: $isShowingRegionPicker) {
             RegionPickerView(
-                initialCountry: currentUser.country.isEmpty ? regionStore.current?.countryCode : currentUser.country,
-                allowsAnyCountry: currentUser.country.isEmpty
+                initialCountry: regionStore.current?.countryCode ?? (currentUser.country.isEmpty ? "jp" : currentUser.country),
+                allowsAnyCountry: false
             ) { region in
                 regionStore.setCurrent(region)
                 Task {
@@ -136,7 +136,6 @@ struct HomeTimelineView: View {
             selection: $viewModel.mode,
             currentRegion: regionStore.current,
             onAvatar: { isShowingSettings = true },
-            onBell: { selectedTab = .notifications },
             onRegion: { isShowingRegionPicker = true },
             onCity: {
                 if let region = regionStore.current {
@@ -149,18 +148,12 @@ struct HomeTimelineView: View {
     }
 
     private func persistCurrentRegion(_ region: KaiXRegionDirectory.Region) async {
-        currentUser.country = region.countryCode
-        currentUser.province = region.provinceCode
-        currentUser.city = region.cityCode
         currentUser.currentRegionCode = region.regionCode
         currentUser.recentRegionCodes = regionStore.recent.map(\.regionCode)
         try? modelContext.save()
 
         guard KaiXBackend.token != nil else { return }
-        _ = try? await KaiXAPIClient.shared.updateMe([
-            "country": region.countryCode,
-            "province": region.provinceCode,
-            "city": region.cityCode,
+        _ = try? await KaiXAPIClient.shared.updateRegionLanguage([
             "current_region_code": region.regionCode,
         ])
     }
@@ -197,13 +190,7 @@ struct HomeTimelineView: View {
 
     private var feed: some View {
         ScrollView {
-            LazyVStack(spacing: 10) {
-                LocalNewsDeskStripView(
-                    country: regionStore.current?.countryCode ?? currentUser.country,
-                    city: regionStore.current?.cityCode ?? currentUser.city,
-                    title: "本地资讯台",
-                    variant: .home
-                )
+            LazyVStack(spacing: 8) {
                 if viewModel.mode == .hot {
                     hotScopePicker
                 }
@@ -247,8 +234,8 @@ struct HomeTimelineView: View {
                 }
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
-            .padding(.vertical, KXSpacing.sm)
-            .padding(.bottom, chrome.bottomContentPadding)
+            .padding(.vertical, 7)
+            .padding(.bottom, chrome.bottomContentPadding + 18)
         }
         .refreshable {
             await viewModel.refresh(context: modelContext, currentUser: currentUser, postStore: postStore)
@@ -335,7 +322,6 @@ private struct HomeHeaderView: View {
     @Binding var selection: TimelineMode
     let currentRegion: KaiXRegionDirectory.Region?
     let onAvatar: () -> Void
-    let onBell: () -> Void
     let onRegion: () -> Void
     let onCity: () -> Void
 
@@ -361,15 +347,6 @@ private struct HomeHeaderView: View {
                 // jump into the city channel.
                 RegionPickerButton(region: currentRegion, onTap: onRegion)
 
-                Button(action: onBell) {
-                    Image(systemName: "bell")
-                        .font(.system(size: KXIconSize.md, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .frame(width: 44, height: 44)
-                        .kxGlassCircle()
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(L("notifications", language))
             }
 
             TimelinePicker(selection: $selection)

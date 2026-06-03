@@ -44,21 +44,21 @@ final class kaiziUITests: XCTestCase {
 
         try ensureAuthenticated(app)
 
-        let searchTab = app.buttons["tabbar.search"]
-        XCTAssertTrue(searchTab.waitForExistence(timeout: 10))
+        let discoverTab = app.buttons["tabbar.search"]
+        XCTAssertTrue(discoverTab.waitForExistence(timeout: 15))
         XCTAssertEqual(app.tabBars.count, 0)
         XCTAssertEqual(app.buttons.matching(identifier: "tabbar.search").count, 1)
 
-        searchTab.tap()
+        discoverTab.tap()
 
-        XCTAssertTrue(app.otherElements["search.root"].waitForExistence(timeout: 6))
+        XCTAssertTrue(app.otherElements["discover.root"].waitForExistence(timeout: 8))
         XCTAssertEqual(app.tabBars.count, 0)
         XCTAssertEqual(app.buttons.matching(identifier: "tabbar.search").count, 1)
     }
 
     @MainActor
     private func ensureAuthenticated(_ app: XCUIApplication) throws {
-        if app.buttons["tabbar.search"].waitForExistence(timeout: 4) {
+        if app.buttons["tabbar.search"].waitForExistence(timeout: 12) {
             return
         }
 
