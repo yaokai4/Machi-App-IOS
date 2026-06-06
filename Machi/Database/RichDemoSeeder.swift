@@ -257,29 +257,29 @@ enum RichDemoSeeder {
                 "work_location": "市中心"
             ], heatBoost: 60),
             // Meetup
-            .init(type: .meetup, content: "周日下午约一起打球,4 人。", tags: ["搭子", "运动"], attributes: [
+            .init(type: .meetup, content: "周日下午发起篮球小组,4 人。", tags: ["本地小组", "运动"], attributes: [
                 "title": "周日篮球局",
                 "meetup_type": "运动",
                 "meetup_time": "周日 14:00",
                 "location": "市民体育中心",
                 "people_limit": "4"
             ], heatBoost: 110),
-            .init(type: .meetup, content: "找学习搭子一起去图书馆,每周末两次。", tags: ["搭子", "学习"], attributes: [
-                "title": "周末学习搭子",
+            .init(type: .meetup, content: "发起周末图书馆学习小组,每周末两次。", tags: ["本地小组", "学习"], attributes: [
+                "title": "周末学习小组",
                 "meetup_type": "学习",
                 "meetup_time": "周末 9:00-12:00",
                 "location": "图书馆",
                 "people_limit": "2"
             ], heatBoost: 80),
             // Dining
-            .init(type: .dining, content: "周五晚上一起吃烤肉,人多更便宜。", tags: ["约饭", "烤肉"], attributes: [
-                "title": "周五约烤肉",
+            .init(type: .dining, content: "周五晚上整理烤肉店信息,欢迎补充预算和排队情况。", tags: ["美食", "烤肉"], attributes: [
+                "title": "周五烤肉店讨论",
                 "restaurant_or_area": "韩餐街",
                 "meetup_time": "周五 19:00",
                 "people_limit": "5",
                 "budget": "人均 120"
             ], heatBoost: 95),
-            .init(type: .dining, content: "下班一起咖啡,聊聊本地的开发者圈子。", tags: ["约饭", "咖啡"], attributes: [
+            .init(type: .dining, content: "下班咖啡店讨论,聊聊本地的开发者圈子。", tags: ["美食", "咖啡"], attributes: [
                 "title": "Coffee chat",
                 "restaurant_or_area": "市中心咖啡店",
                 "meetup_time": "下班后",
@@ -420,12 +420,12 @@ enum RichDemoSeeder {
         .init(handle: "beijing_dev", displayName: "北京工程师", bio: "技术 + 生活。", location: "北京", regionCode: "cn.beijing.beijing", language: "zh", isMerchant: false, isVerified: false, role: .member),
         .init(handle: "guangzhou_jobs", displayName: "广州招聘", bio: "广州本地招人。", location: "广州", regionCode: "cn.guangdong.guangzhou", language: "zh", isMerchant: false, isVerified: false, role: .member),
         .init(handle: "hangzhou_jobs", displayName: "杭州招聘", bio: "杭州本地招人。", location: "杭州", regionCode: "cn.zhejiang.hangzhou", language: "zh", isMerchant: false, isVerified: false, role: .member),
-        .init(handle: "hangzhou_meetup", displayName: "杭州搭子", bio: "杭州学习搭子。", location: "杭州", regionCode: "cn.zhejiang.hangzhou", language: "zh", isMerchant: false, isVerified: false, role: .member),
-        .init(handle: "chengdu_meetup", displayName: "成都搭子", bio: "约饭约咖啡。", location: "成都", regionCode: "cn.sichuan.chengdu", language: "zh", isMerchant: false, isVerified: false, role: .member),
+        .init(handle: "hangzhou_meetup", displayName: "杭州小组", bio: "杭州学习小组。", location: "杭州", regionCode: "cn.zhejiang.hangzhou", language: "zh", isMerchant: false, isVerified: false, role: .member),
+        .init(handle: "chengdu_meetup", displayName: "成都美食", bio: "成都美食与咖啡。", location: "成都", regionCode: "cn.sichuan.chengdu", language: "zh", isMerchant: false, isVerified: false, role: .member),
         .init(handle: "chengdu_jobs", displayName: "成都招聘", bio: "成都本地招人。", location: "成都", regionCode: "cn.sichuan.chengdu", language: "zh", isMerchant: false, isVerified: false, role: .member),
         .init(handle: "wuhan_food", displayName: "武汉美食", bio: "热干面与本地味道。", location: "武汉", regionCode: "cn.hubei.wuhan", language: "zh", isMerchant: false, isVerified: false, role: .member),
         .init(handle: "nanjing_jobs", displayName: "南京招聘", bio: "南京本地招人。", location: "南京", regionCode: "cn.jiangsu.nanjing", language: "zh", isMerchant: false, isVerified: false, role: .member),
-        .init(handle: "suzhou_meetup", displayName: "苏州搭子", bio: "苏州学习搭子。", location: "苏州", regionCode: "cn.jiangsu.suzhou", language: "zh", isMerchant: false, isVerified: false, role: .member),
+        .init(handle: "suzhou_meetup", displayName: "苏州小组", bio: "苏州学习小组。", location: "苏州", regionCode: "cn.jiangsu.suzhou", language: "zh", isMerchant: false, isVerified: false, role: .member),
         .init(handle: "xiamen_jobs", displayName: "厦门招聘", bio: "厦门本地招人。", location: "厦门", regionCode: "cn.fujian.xiamen", language: "zh", isMerchant: false, isVerified: false, role: .member),
         .init(handle: "nyc_food", displayName: "NYC Eats", bio: "NYC food spots.", location: "纽约", regionCode: "us.ny.nyc", language: "en", isMerchant: false, isVerified: false, role: .member),
         .init(handle: "la_meetups", displayName: "LA Meetups", bio: "Meetups in LA.", location: "洛杉矶", regionCode: "us.ca.la", language: "en", isMerchant: false, isVerified: false, role: .member),

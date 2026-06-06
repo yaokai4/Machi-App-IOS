@@ -61,15 +61,20 @@ final class RegionStore: ObservableObject {
     }
 
     /// Persist the chosen browse region to the signed-in account so it syncs
-    /// across devices and to the Web client (which reads
-    /// `user.current_region_code`). Only `current_region_code` is sent — the
-    /// declared profile region (country/province/city) is intentionally left
-    /// untouched, matching the backend's separation of "browsing" vs "home".
+    /// across devices and to the Web client. The full region payload is sent
+    /// because Web and App both use `country/province/city` to decide the
+    /// active country scope.
     /// No-op for guests / logged-out (token == nil) — they stay local-only.
     private func syncBrowseRegionToBackend(_ region: KaiXRegionDirectory.Region) {
         guard KaiXBackend.token != nil else { return }
-        let code = region.regionCode
-        Task { _ = try? await KaiXAPIClient.shared.updateMe(["current_region_code": code]) }
+        Task {
+            _ = try? await KaiXAPIClient.shared.updateRegionLanguage([
+                "country": region.countryCode,
+                "province": region.provinceCode,
+                "city": region.cityCode,
+                "current_region_code": region.regionCode,
+            ])
+        }
     }
 
     /// Restore the app-side browsing region from the signed-in user's

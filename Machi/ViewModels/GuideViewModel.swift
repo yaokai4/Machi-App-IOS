@@ -11,6 +11,7 @@ final class GuideViewModel: ObservableObject {
     @Published var searchText = ""
 
     private var loadedCountry = ""
+    private var loadedLanguage = ""
 
     var isComingSoon: Bool {
         home?.status == "coming_soon"
@@ -18,13 +19,15 @@ final class GuideViewModel: ObservableObject {
 
     func load(country: String, force: Bool = false) async {
         let normalizedCountry = country.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if !force, loadedCountry == normalizedCountry, home != nil { return }
+        let language = currentGuideLanguage()
+        if !force, loadedCountry == normalizedCountry, loadedLanguage == language, home != nil { return }
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
         do {
-            home = try await KaiXAPIClient.shared.guideHome(country: normalizedCountry.isEmpty ? "jp" : normalizedCountry)
+            home = try await KaiXAPIClient.shared.guideHome(country: normalizedCountry.isEmpty ? "jp" : normalizedCountry, language: language)
             loadedCountry = normalizedCountry
+            loadedLanguage = language
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -40,7 +43,7 @@ final class GuideViewModel: ObservableObject {
         errorMessage = nil
         defer { isSearching = false }
         do {
-            let response = try await KaiXAPIClient.shared.guideArticles(country: country, keyword: q, pageSize: 20)
+            let response = try await KaiXAPIClient.shared.guideArticles(country: country, language: currentGuideLanguage(), keyword: q, pageSize: 20)
             searchResults = response.items
         } catch {
             errorMessage = error.localizedDescription
@@ -50,5 +53,17 @@ final class GuideViewModel: ObservableObject {
     func clearSearch() {
         searchText = ""
         searchResults = []
+    }
+
+    private func currentGuideLanguage() -> String {
+        let appLanguage = AppLanguage.resolved(from: UserDefaults.standard.string(forKey: "appLanguageCode") ?? "")
+        switch appLanguage {
+        case .ja:
+            return "ja"
+        case .en:
+            return "en"
+        case .zh, .system:
+            return "zh-CN"
+        }
     }
 }

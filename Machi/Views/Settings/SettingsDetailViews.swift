@@ -800,7 +800,7 @@ struct ProfileRegionSettingsView: View {
             }
         }
         .sheet(isPresented: $isShowingPicker) {
-            RegionPickerView(initialCountry: currentUser.country.isEmpty ? "jp" : currentUser.country, allowsAnyCountry: false) { region in
+            RegionPickerView(initialCountry: currentUser.country.isEmpty ? "jp" : currentUser.country, allowsAnyCountry: true) { region in
                 Task { await save(region) }
             }
         }
@@ -847,6 +847,10 @@ struct AccountSecuritySettingsView: View {
                 AccountPasswordSettingsView(user: currentUser)
             }
             SettingsDivider()
+            SettingsRowLink(icon: "g.circle.fill", tint: .blue, title: "Google 账号", subtitle: "绑定后可用 Google 一键登录") {
+                GoogleAccountSettingsView(currentUser: currentUser)
+            }
+            SettingsDivider()
             SettingsRowLink(icon: "envelope.badge", tint: .teal, title: L("contactInfo", language), value: currentUser.email.isEmpty ? nil : currentUser.email, subtitle: L("contactSubtitle", language)) {
                 ContactSettingsView(user: currentUser)
             }
@@ -870,9 +874,134 @@ struct AccountSecuritySettingsView: View {
     }
 }
 
+/// Bind / unbind a Google account for the current Machi account. State is read
+/// live from `me()` (no SwiftData column needed) and refreshed after each
+/// action. Binding reuses the zero-dependency ASWebAuthenticationSession flow.
+struct GoogleAccountSettingsView: View {
+    @Environment(\.appLanguage) private var language
+    let currentUser: UserEntity
+
+    @State private var hasGoogle = false
+    @State private var canUnlink = false
+    @State private var isLoading = true
+    @State private var isWorking = false
+    @State private var message: String?
+    @State private var showUnlinkConfirm = false
+
+    var body: some View {
+        SettingsFormPage(title: "Google 账号") {
+            VStack(alignment: .leading, spacing: 10) {
+                Label(hasGoogle ? "已绑定 Google" : "未绑定 Google",
+                      systemImage: hasGoogle ? "checkmark.seal.fill" : "g.circle")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(hasGoogle ? .blue : .secondary)
+                Text(hasGoogle
+                     ? "你可以使用 Google 一键登录这个 Machi 账号。"
+                     : "绑定后，下次可直接用 Google 一键登录，无需输入密码。")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            if isLoading {
+                ProgressView().controlSize(.large)
+            } else if hasGoogle {
+                Button(role: .destructive) {
+                    showUnlinkConfirm = true
+                } label: {
+                    if isWorking { ProgressView() } else { Text("解绑 Google") }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .disabled(isWorking || !canUnlink)
+                if !canUnlink {
+                    Text("该账号通过 Google 创建，请先绑定邮箱并设置登录密码，再解绑 Google，以免无法再次登录。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Button {
+                    Task { await link() }
+                } label: {
+                    if isWorking { ProgressView() } else { Text("绑定 Google 账号") }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(isWorking)
+            }
+
+            if let message {
+                Text(message).font(.subheadline).foregroundStyle(.secondary)
+            }
+        }
+        .task { await refresh() }
+        .confirmationDialog("解绑 Google 账号？", isPresented: $showUnlinkConfirm, titleVisibility: .visible) {
+            Button("解绑", role: .destructive) { Task { await unlink() } }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("解绑后将无法使用 Google 一键登录，仍可用用户名 / 邮箱和密码登录。")
+        }
+    }
+
+    private func refresh() async {
+        do {
+            let me = try await KaiXAPIClient.shared.me()
+            hasGoogle = me.has_google ?? false
+            canUnlink = me.can_unlink_google ?? false
+        } catch {
+            message = error.kaixUserMessage
+        }
+        isLoading = false
+    }
+
+    private func link() async {
+        guard !isWorking else { return }
+        isWorking = true
+        message = nil
+        defer { isWorking = false }
+        do {
+            try await GoogleAuthService.shared.linkAccount()
+            await refresh()
+            message = "已绑定 Google 账号。"
+        } catch let apiError as KaiXAPIError {
+            message = Self.linkErrorMessage(apiError.error.code, fallback: apiError.error.message)
+        } catch {
+            // User cancelled the web auth session — leave silently.
+            message = nil
+        }
+    }
+
+    private func unlink() async {
+        guard !isWorking else { return }
+        isWorking = true
+        message = nil
+        defer { isWorking = false }
+        do {
+            let me = try await KaiXAPIClient.shared.googleUnlink()
+            hasGoogle = me.has_google ?? false
+            canUnlink = me.can_unlink_google ?? false
+            message = "已解绑 Google 账号。"
+        } catch let apiError as KaiXAPIError {
+            message = apiError.error.message
+        } catch {
+            message = error.kaixUserMessage
+        }
+    }
+
+    private static func linkErrorMessage(_ code: String, fallback: String) -> String {
+        switch code {
+        case "google_already_linked": return "该 Google 账号已绑定到其他 Machi 账号。"
+        case "already_linked_other": return "当前账号已绑定了另一个 Google 账号，请先解绑。"
+        case "state_expired": return "绑定会话已过期，请重试。"
+        case "google_denied": return "已取消 Google 授权。"
+        default: return fallback.isEmpty ? "Google 绑定失败，请重试。" : fallback
+        }
+    }
+}
+
 struct MembershipSettingsView: View {
     @Environment(\.appLanguage) private var language
     @State private var message: String?
+    @State private var isSubmitting = false
     let user: UserEntity
 
     var body: some View {
@@ -882,14 +1011,36 @@ struct MembershipSettingsView: View {
                 .foregroundStyle(user.isVerified ? .blue : .secondary)
             Text(user.role == .member ? L("memberVerificationHelp", language) : L("creatorAccountHelp", language))
                 .foregroundStyle(.secondary)
-            Button(L("applyVerification", language)) {
-                message = user.isVerified ? L("alreadyVerifiedMessage", language) : L("verificationSaved", language)
+            Button(isSubmitting ? "提交中" : L("applyVerification", language)) {
+                Task { await applyVerification() }
             }
                 .buttonStyle(.borderedProminent)
-                .disabled(user.isVerified)
+                .disabled(user.isVerified || isSubmitting)
             if let message {
                 Text(message).font(.footnote).foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private func applyVerification() async {
+        if user.isVerified {
+            message = L("alreadyVerifiedMessage", language)
+            return
+        }
+        isSubmitting = true
+        defer { isSubmitting = false }
+        do {
+            try await KaiXAPIClient.shared.submitFeedback(
+                category: "identity_verification",
+                content: """
+                iOS 账号认证申请
+                用户: @\(user.username) / \(user.displayName)
+                当前角色: \(user.role.rawValue)
+                """
+            )
+            message = "认证申请已提交，后台会人工审核并联系你补充材料。"
+        } catch {
+            message = error.kaixUserMessage
         }
     }
 }
@@ -1830,6 +1981,7 @@ struct AboutKaiXView: View {
                 .font(.headline.weight(.semibold))
             LegalLinkRow(icon: "hand.raised.fill", title: L("privacyPolicy", language), url: KaiXBackend.privacyPolicyURL)
             LegalLinkRow(icon: "doc.plaintext.fill", title: L("termsOfService", language), url: KaiXBackend.termsOfServiceURL)
+            LegalLinkRow(icon: "building.columns.fill", title: L("commercialDisclosure", language), url: KaiXBackend.commercialDisclosureURL)
             if let mail = URL(string: "mailto:\(KaiXBackend.supportEmail)") {
                 LegalLinkRow(icon: "envelope.fill", title: L("contactSupport", language), subtitle: KaiXBackend.supportEmail, url: mail)
             }

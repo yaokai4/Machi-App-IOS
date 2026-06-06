@@ -9,6 +9,9 @@ enum KXRoute: Hashable {
     case topic(tag: String)
     case city(regionCode: String)
     case cityChannel(regionCode: String, channel: CityChannel)
+    case cityListings(regionCode: String, type: String)
+    case cityListingDetail(listingId: String)
+    case createCityListing(type: String, citySlug: String?)
     case guideCategory(categoryKey: String)
     case guideServices
     case guideMemberResources
@@ -134,16 +137,16 @@ extension KXRoute {
             return .none
         case .postDetailComment(_, let commentId):
             return commentId.map { .comment($0) } ?? .comments
-        case .profile, .topic, .city, .cityChannel, .guideCategory, .guideServices, .guideMemberResources, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .conversation, .search:
+        case .profile, .topic, .city, .cityChannel, .cityListings, .cityListingDetail, .createCityListing, .guideCategory, .guideServices, .guideMemberResources, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .conversation, .search:
             return .none
         }
     }
 
     var requiresHiddenTabBar: Bool {
         switch self {
-        case .postDetail, .postDetailComment, .guideArticle, .guideProduct, .guideSchool, .guideCompany, .guideCompanyReviews, .conversation:
+        case .postDetail, .postDetailComment, .cityListingDetail, .guideArticle, .guideProduct, .guideSchool, .guideCompany, .guideCompanyReviews, .conversation:
             true
-        case .profile, .topic, .city, .cityChannel, .guideCategory, .guideServices, .guideMemberResources, .guideSchools, .guideCompanies, .guideInterviewReviews, .search:
+        case .profile, .topic, .city, .cityChannel, .cityListings, .createCityListing, .guideCategory, .guideServices, .guideMemberResources, .guideSchools, .guideCompanies, .guideInterviewReviews, .search:
             false
         }
     }
@@ -156,7 +159,7 @@ extension KXRoute {
             L("unknownUser", language)
         case .topic:
             L("noTopicPosts", language)
-        case .city, .cityChannel:
+        case .city, .cityChannel, .cityListings, .cityListingDetail, .createCityListing:
             L("emptyFeed", language)
         case .guideCategory, .guideServices, .guideMemberResources, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews:
             L("guideOpenFailed", language)
@@ -194,6 +197,12 @@ private struct KXRouteDestinations: ViewModifier {
                     CityChannelView(regionCode: regionCode, currentUser: currentUser)
                 case .cityChannel(let regionCode, let channel):
                     CityChannelView(regionCode: regionCode, currentUser: currentUser, initialChannel: channel)
+                case .cityListings(let regionCode, let type):
+                    CityListingChannelView(regionCode: regionCode, listingType: type, currentUser: currentUser)
+                case .cityListingDetail(let listingId):
+                    CityListingDetailView(listingId: listingId, currentUser: currentUser)
+                case .createCityListing(let type, let citySlug):
+                    CreateCityListingView(listingType: type, citySlug: citySlug, currentUser: currentUser)
                 case .guideCategory(let categoryKey):
                     GuideCategoryView(categoryKey: categoryKey)
                 case .guideServices:
@@ -286,6 +295,21 @@ private extension KXRoute {
         case .cityChannel(let regionCode, let channel):
             let code = regionCode.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             return KaiXRegionDirectory.resolve(regionCode: code) == nil ? nil : .cityChannel(regionCode: code, channel: channel)
+        case .cityListings(let regionCode, let type):
+            let code = regionCode.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let normalizedType = type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return KaiXRegionDirectory.resolve(regionCode: code) == nil || normalizedType.isEmpty
+                ? nil
+                : .cityListings(regionCode: code, type: normalizedType)
+        case .cityListingDetail(let listingId):
+            let id = listingId.trimmingCharacters(in: .whitespacesAndNewlines)
+            return id.isEmpty ? nil : .cityListingDetail(listingId: id)
+        case .createCityListing(let type, let citySlug):
+            let normalizedType = type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let normalizedCity = citySlug?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return normalizedType.isEmpty
+                ? nil
+                : .createCityListing(type: normalizedType, citySlug: normalizedCity?.isEmpty == true ? nil : normalizedCity)
         case .guideCategory(let categoryKey):
             let key = categoryKey.trimmingCharacters(in: .whitespacesAndNewlines)
             return key.isEmpty ? nil : .guideCategory(categoryKey: key)

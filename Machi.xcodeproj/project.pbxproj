@@ -397,10 +397,18 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = P22K8NF89K;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Machi;
-				INFOPLIST_KEY_CFBundleName = Machi;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Machi uses the camera when you choose to capture media for posts or messages.";
+					GENERATE_INFOPLIST_FILE = YES;
+					INFOPLIST_KEY_CFBundleDisplayName = Machi;
+					INFOPLIST_KEY_CFBundleName = Machi;
+					INFOPLIST_KEY_CFBundleURLTypes = (
+						{
+							CFBundleURLName = "com.yaokai.kaizi.google";
+							CFBundleURLSchemes = (
+								machi,
+							);
+						},
+					);
+					INFOPLIST_KEY_NSCameraUsageDescription = "Machi uses the camera when you choose to capture media for posts or messages.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Machi uses the microphone when you choose to record video for posts or messages.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Machi saves edited media only when you explicitly choose to export or keep it.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Machi accesses your photo library when you choose images or videos for posts and messages.";
@@ -436,10 +444,18 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = P22K8NF89K;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Machi;
-				INFOPLIST_KEY_CFBundleName = Machi;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Machi uses the camera when you choose to capture media for posts or messages.";
+					GENERATE_INFOPLIST_FILE = YES;
+					INFOPLIST_KEY_CFBundleDisplayName = Machi;
+					INFOPLIST_KEY_CFBundleName = Machi;
+					INFOPLIST_KEY_CFBundleURLTypes = (
+						{
+							CFBundleURLName = "com.yaokai.kaizi.google";
+							CFBundleURLSchemes = (
+								machi,
+							);
+						},
+					);
+					INFOPLIST_KEY_NSCameraUsageDescription = "Machi uses the camera when you choose to capture media for posts or messages.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Machi uses the microphone when you choose to record video for posts or messages.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Machi saves edited media only when you explicitly choose to export or keep it.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Machi accesses your photo library when you choose images or videos for posts and messages.";

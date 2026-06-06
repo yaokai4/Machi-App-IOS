@@ -100,7 +100,7 @@ enum KaiXDatabaseContainer {
     private static func makeContainer(
         schema: Schema,
         name: String,
-        migrationPlan: (any SchemaMigrationPlan.Type)? = KaiXMigrationPlan.self
+        migrationPlan: (any SchemaMigrationPlan.Type)? = nil
     ) throws -> ModelContainer {
         try copyLegacyStoreIfNeeded(named: name)
         let configuration = ModelConfiguration(

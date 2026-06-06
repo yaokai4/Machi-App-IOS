@@ -5,9 +5,11 @@ import UIKit
 struct AuthView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
+    @AppStorage("appLanguageCode") private var appLanguageCode = AppLanguage.system.rawValue
     @StateObject private var viewModel = AuthViewModel()
     @State private var isPasswordVisible = false
     @State private var isShowingRegionPicker = false
+    @State private var isGoogleLoading = false
 
     let onAuthenticated: (UserEntity) -> Void
     /// When provided, shows a "browse as guest" affordance so people can
@@ -125,17 +127,40 @@ struct AuthView: View {
 
                 Spacer()
 
-                HStack(spacing: 7) {
-                    Circle()
-                        .fill(.green)
-                        .frame(width: 9, height: 9)
-                    Text(L("localDatabaseOnline", language))
+                HStack(spacing: 10) {
+                    Menu {
+                        ForEach([AppLanguage.zh, .ja, .en]) { option in
+                            Button(option.title) {
+                                appLanguageCode = option.rawValue
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "globe")
+                            Text(language.title)
+                            Image(systemName: "chevron.down")
+                                .font(.caption2.weight(.bold))
+                        }
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
+                    }
+                    .accessibilityIdentifier("auth.language")
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .kxGlassCapsule()
+
+                    HStack(spacing: 7) {
+                        Circle()
+                            .fill(.green)
+                            .frame(width: 9, height: 9)
+                        Text(L("localDatabaseOnline", language))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 13)
+                    .padding(.vertical, 8)
+                    .kxGlassCapsule()
                 }
-                .padding(.horizontal, 13)
-                .padding(.vertical, 8)
-                .kxGlassCapsule()
             }
 
             VStack(alignment: .leading, spacing: 10) {
@@ -157,6 +182,42 @@ struct AuthView: View {
     private var authCard: some View {
         VStack(spacing: 18) {
             AuthModePicker(selection: $viewModel.mode)
+
+            Button {
+                Task {
+                    guard !isGoogleLoading else { return }
+                    isGoogleLoading = true
+                    defer { isGoogleLoading = false }
+                    do {
+                        let user = try await GoogleAuthService.shared.signIn(context: modelContext)
+                        onAuthenticated(user)
+                    } catch {
+                        viewModel.errorMessage = L("googleLoginFailed", language)
+                    }
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    if isGoogleLoading {
+                        ProgressView()
+                            .tint(KXColor.accent)
+                    } else {
+                        Text("G")
+                            .font(.headline.weight(.black))
+                            .foregroundStyle(KXColor.accent)
+                            .frame(width: 24, height: 24)
+                            .background(.white, in: Circle())
+                    }
+                    Text(isGoogleLoading ? L("googleSigningIn", language) : L("continueWithGoogle", language))
+                }
+                .font(.headline.weight(.bold))
+                .foregroundStyle(KXColor.accent)
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .kxGlassCapsule(isSelected: false)
+            }
+            .buttonStyle(.plain)
+            .disabled(isGoogleLoading || viewModel.isLoading)
+            .accessibilityIdentifier("auth.google")
 
             VStack(spacing: 14) {
                 AuthInputField(

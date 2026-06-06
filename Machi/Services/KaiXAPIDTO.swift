@@ -122,6 +122,69 @@ struct KaiXUserDTO: Codable, Equatable {
     let membershipPlanKey: String?
     let verified_badge_type: String?
     let verifiedBadgeType: String?
+    // Google account binding (mirrors serialize_user in server.py). All
+    // optional so older responses keep decoding.
+    let email_verified: Bool?
+    let auth_provider: String?
+    let has_google: Bool?
+    let can_unlink_google: Bool?
+}
+
+struct KaiXListingMediaDTO: Codable, Equatable, Hashable {
+    let id: String
+    let listing_id: String?
+    let media_type: String?
+    let url: String
+    let thumbnail_url: String?
+    let sort_order: Int?
+    let is_cover: Bool?
+}
+
+struct KaiXCityListingDTO: Codable, Identifiable, Equatable {
+    let id: String
+    let country_code: String?
+    let city_id: String?
+    let city_slug: String?
+    let region_code: String?
+    let language: String?
+    let type: String
+    let category: String?
+    let title: String
+    let description: String?
+    let price: Double?
+    let currency: String?
+    let price_type: String?
+    let location_text: String?
+    let status: String
+    let verification_status: String
+    let seller_user_id: String?
+    let business_id: String?
+    let contact_method: String?
+    let view_count: Int?
+    let inquiry_count: Int?
+    let favorite_count: Int?
+    let report_count: Int?
+    let published_at: String?
+    let expires_at: String?
+    let created_at: String?
+    let updated_at: String?
+    let media: [KaiXListingMediaDTO]?
+    let cover_url: String?
+    let attributes: [String: KaiXAttributeValue]?
+    let seller: KaiXUserDTO?
+    let favorited: Bool?
+    let can_manage: Bool?
+}
+
+struct KaiXListingsResponse: Codable {
+    let items: [KaiXCityListingDTO]
+    let next_cursor: String?
+    let type: String?
+}
+
+struct KaiXListingDetailResponse: Codable {
+    let listing: KaiXCityListingDTO
+    let safety_tips: [String]?
 }
 
 // MARK: - membership + payments
@@ -291,6 +354,49 @@ struct KaiXMediaDTO: Codable, Equatable {
     let created_at: String
 }
 
+struct KaiXUploadedFileDTO: Codable, Equatable {
+    let id: String
+    let uploadId: String?
+    let objectKey: String?
+    let url: String?
+    let cdnUrl: String?
+    let thumbnailUrl: String?
+    let contentType: String?
+    let fileSize: Int?
+    let fileType: String?
+    let purpose: String?
+    let entityType: String?
+    let entityId: String?
+    let status: String?
+    let isPrivate: Bool?
+    let width: Int?
+    let height: Int?
+    let duration: Double?
+}
+
+struct KaiXUploadPresignDTO: Codable {
+    struct Payload: Codable {
+        let uploadId: String
+        let uploadUrl: String
+        let fileKey: String
+        let cdnUrl: String
+        let expiresIn: Int
+        let headers: [String: String]
+        let file: KaiXUploadedFileDTO?
+    }
+    let ok: Bool
+    let data: Payload
+}
+
+struct KaiXUploadCompleteDTO: Codable {
+    struct Payload: Codable {
+        let file: KaiXUploadedFileDTO
+        let media: KaiXMediaDTO
+    }
+    let ok: Bool
+    let data: Payload
+}
+
 struct KaiXPostDTO: Codable, Equatable {
     let id: String
     let remote_id: String?
@@ -422,6 +528,33 @@ struct KaiXMessageDTO: Codable, Equatable {
     let created_at: String
     let is_read: Bool
     let media: [KaiXMediaDTO]?
+    let attachments: [KaiXMessageAttachmentDTO]?
+}
+
+struct KaiXMessageAttachmentDTO: Codable, Equatable, Identifiable {
+    let id: String
+    let message_id: String
+    let thread_id: String?
+    let uploaded_file_id: String
+    let type: String
+    let attachment_type: String?
+    let url: String?
+    let thumb_url: String?
+    let needsSignedUrl: Bool?
+    let viewUrlEndpoint: String?
+    let thumbnail_file_id: String?
+    let duration: Double?
+    let duration_seconds: Double?
+    let width: Int?
+    let height: Int?
+    let file_name: String?
+    let file_size: Int?
+    let byte_size: Int?
+    let content_type: String?
+    let mime: String?
+    let visibility: String?
+    let status: String?
+    let created_at: String?
 }
 
 struct KaiXConversationDTO: Codable, Equatable {
@@ -991,6 +1124,13 @@ struct KaiXPageDTO<Item: Codable>: Codable {
 struct KaiXLoginResponse: Codable {
     let token: String
     let user: KaiXUserDTO
+}
+
+struct KaiXGoogleAuthStartResponse: Codable {
+    let authorization_url: String
+    let url: String?
+    let state: String
+    let expires_in: Int
 }
 
 struct KaiXAvailabilityResponse: Codable, Equatable {

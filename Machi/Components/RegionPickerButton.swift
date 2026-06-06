@@ -23,25 +23,31 @@ struct RegionPickerButton: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 6) {
+            HStack(spacing: compact ? 6 : 7) {
                 regionIcon
                 Text(label)
-                    .font(.system(size: compact ? 12 : 13, weight: .semibold))
+                    .font(.system(size: compact ? 14 : 14, weight: .bold))
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
                     .allowsTightening(true)
                     .truncationMode(.tail)
                     .layoutPriority(1)
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.tertiary)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(KXColor.accent.opacity(compact ? 0.85 : 0.7))
             }
-            .padding(.horizontal, 12)
-            .frame(minHeight: 32)
-            .frame(maxWidth: 180, alignment: .leading)
-            .fixedSize(horizontal: true, vertical: false)
-            .kxGlassCapsule()
-            .foregroundStyle(.primary)
+            .padding(.leading, compact ? 6 : 10)
+            .padding(.trailing, compact ? 10 : 12)
+            .frame(minHeight: compact ? 38 : 36)
+            .frame(maxWidth: compact ? 150 : 180, alignment: .leading)
+            .fixedSize(horizontal: !compact, vertical: false)
+            .background(Color(.systemBackground).opacity(0.92), in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(KXColor.accent.opacity(compact ? 0.22 : 0.16), lineWidth: 1)
+            }
+            .shadow(color: KXColor.accent.opacity(0.10), radius: 14, y: 5)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
@@ -71,12 +77,24 @@ struct RegionPickerButton: View {
     @ViewBuilder
     private var regionIcon: some View {
         if let region {
-            Text(region.countryEmoji)
-                .font(.system(size: compact ? 13 : 15))
+            ZStack(alignment: .bottomTrailing) {
+                Image(systemName: "location.fill")
+                    .font(.system(size: compact ? 13 : 15, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: compact ? 28 : 28, height: compact ? 28 : 28)
+                    .background(KXColor.accent, in: Circle())
+                Text(region.countryEmoji)
+                    .font(.system(size: compact ? 9 : 10))
+                    .padding(1)
+                    .background(Color(.systemBackground), in: Circle())
+                    .offset(x: 4, y: 4)
+            }
         } else {
-            Image(systemName: "globe.asia.australia.fill")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(KXColor.accent)
+            Image(systemName: "location.fill")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: compact ? 28 : 28, height: compact ? 28 : 28)
+                .background(KXColor.accent, in: Circle())
         }
     }
 

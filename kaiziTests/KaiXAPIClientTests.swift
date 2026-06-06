@@ -59,6 +59,7 @@ final class KaiXAPIClientTests: XCTestCase {
     }
 
     private func backendReachable() async -> Bool {
+        guard shouldRunBackendSmokeTests else { return false }
         var req = URLRequest(url: KaiXBackend.baseURL.appendingPathComponent("/api/trending"))
         req.timeoutInterval = 1
         do {
@@ -67,5 +68,13 @@ final class KaiXAPIClientTests: XCTestCase {
         } catch {
             return false
         }
+    }
+
+    private var shouldRunBackendSmokeTests: Bool {
+        if ProcessInfo.processInfo.environment["KAIX_RUN_BACKEND_SMOKE_TESTS"] == "1" {
+            return true
+        }
+        let host = KaiXBackend.baseURL.host?.lowercased() ?? ""
+        return host == "localhost" || host == "127.0.0.1" || host == "::1"
     }
 }

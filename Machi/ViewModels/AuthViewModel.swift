@@ -69,6 +69,7 @@ final class AuthViewModel: ObservableObject {
                         email: optionalEmail,
                         code: code.trimmingCharacters(in: .whitespacesAndNewlines),
                         region: selectedRegion,
+                        appLanguage: language,
                         context: context
                     )
                 } catch RepositoryError.duplicate {

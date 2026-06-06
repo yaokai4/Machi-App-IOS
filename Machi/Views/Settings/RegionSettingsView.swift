@@ -39,34 +39,12 @@ struct RegionSettingsView: View {
                 }
             }
 
-            if !regionStore.recent.isEmpty {
-                Section(L("recentRegions", language)) {
-                    ForEach(regionStore.recent, id: \.regionCode) { region in
-                        Button {
-                            regionStore.setCurrent(region)
-                            persistBrowsingRegion(region)
-                        } label: {
-                            HStack {
-                                Text(region.countryEmoji)
-                                Text(region.displayName)
-                                    .foregroundStyle(.primary)
-                                Spacer()
-                                if region.regionCode == regionStore.current?.regionCode {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(KXColor.accent)
-                                        .fontWeight(.semibold)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
         }
         .navigationTitle(L("regionSettings", language))
         .sheet(isPresented: $isShowingPicker) {
             RegionPickerView(
                 initialCountry: regionStore.current?.countryCode ?? (currentUser.country.isEmpty ? "jp" : currentUser.country),
-                allowsAnyCountry: false
+                allowsAnyCountry: true
             ) { region in
                 regionStore.setCurrent(region)
                 persistBrowsingRegion(region)
@@ -75,12 +53,18 @@ struct RegionSettingsView: View {
     }
 
     private func persistBrowsingRegion(_ region: KaiXRegionDirectory.Region) {
+        currentUser.country = region.countryCode
+        currentUser.province = region.provinceCode
+        currentUser.city = region.cityCode
         currentUser.currentRegionCode = region.regionCode
         currentUser.recentRegionCodes = regionStore.recent.map(\.regionCode)
         try? modelContext.save()
         guard KaiXBackend.token != nil else { return }
         Task {
             _ = try? await KaiXAPIClient.shared.updateRegionLanguage([
+                "country": region.countryCode,
+                "province": region.provinceCode,
+                "city": region.cityCode,
                 "current_region_code": region.regionCode
             ])
         }

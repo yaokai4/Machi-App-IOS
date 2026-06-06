@@ -9,18 +9,19 @@ import Foundation
 /// QA / staging can be flipped without rebuilding.
 enum KaiXBackend {
     /// Default base URL used when no override is set.
-    static let defaultBaseURL = URL(string: "https://www.machicity.com")!
+    static let defaultBaseURL = URL(string: "https://machicity.com")!
 
     // MARK: - Public-facing legal & support links
     //
     // These always point at the production marketing site, independent of
     // any `KAIX_API_BASE` override (a QA/staging API host has no published
-    // /privacy or /terms page). Apple requires functional Privacy Policy +
+    // /legal/privacy or /legal/terms page). Apple requires functional Privacy Policy +
     // Terms of Use links to be reachable in-app and on any auto-renewable
     // subscription screen (App Store Review Guideline 3.1.2 / 5.1.1).
-    static let marketingSiteURL = URL(string: "https://www.machicity.com")!
-    static let privacyPolicyURL = URL(string: "https://www.machicity.com/privacy")!
-    static let termsOfServiceURL = URL(string: "https://www.machicity.com/terms")!
+    static let marketingSiteURL = URL(string: "https://machicity.com")!
+    static let privacyPolicyURL = URL(string: "https://machicity.com/legal/privacy")!
+    static let termsOfServiceURL = URL(string: "https://machicity.com/legal/terms")!
+    static let commercialDisclosureURL = URL(string: "https://machicity.com/legal/commercial-disclosure")!
     /// Public support inbox (matches the web client's contact address).
     static let supportEmail = "hi@machicity.com"
 

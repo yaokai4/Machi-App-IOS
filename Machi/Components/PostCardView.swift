@@ -487,14 +487,11 @@ struct PostCardView: View, Equatable {
                 .disabled(isPostMutationInFlight)
 
                 Button {
-                    // Boost is a commercialization placeholder — once
-                    // payments are wired this opens a sheet to pick a
-                    // duration + heat weight. For now flag the post
-                    // optimistically so the UI badge shows.
-                    cardMessage = L("boostPost", language)
+                    cardMessage = "推广暂由后台运营开通，不会在 App 内假提交。"
                 } label: {
-                    Label(L("boostPost", language), systemImage: "flame")
+                    Label("推广由后台开通", systemImage: "flame")
                 }
+                .disabled(true)
 
                 Button(role: .destructive) {
                     isShowingDeleteConfirm = true

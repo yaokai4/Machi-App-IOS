@@ -93,19 +93,33 @@ final class MessageRepository {
             let peerId = participants.first(where: { $0 != senderId })
             let messageText = trimmed
             if let peerId {
-                let mediaPaths: [(MediaType, URL)] = mediaDrafts.map { ($0.type, $0.localURL) }
+                let mediaPaths: [(MediaType, URL, Double, Double, Double)] = mediaDrafts.map {
+                    ($0.type, $0.localURL, $0.width, $0.height, $0.duration)
+                }
                 Task.detached {
                     do {
                         let conv = try await KaiXAPIClient.shared.openConversation(with: peerId)
-                        var remoteMediaIds: [String] = []
-                        for (type, url) in mediaPaths {
+                        var remoteAttachmentIds: [String] = []
+                        for (type, url, width, height, duration) in mediaPaths {
                             guard let data = try? Data(contentsOf: url) else { continue }
                             let mime = type == .video ? "video/mp4" : "image/jpeg"
-                            if let dto = try? await KaiXAPIClient.shared.uploadMedia(data: data, mime: mime) {
-                                remoteMediaIds.append(dto.id)
+                            let purpose = type == .video ? "message_video" : "message_image"
+                            let fileName = type == .video ? "message.mp4" : "message.jpg"
+                            if let uploaded = try? await KaiXAPIClient.shared.uploadFile(
+                                data: data,
+                                mime: mime,
+                                fileName: fileName,
+                                purpose: purpose,
+                                entityType: "message",
+                                threadId: conv.id,
+                                width: Int(width.rounded()),
+                                height: Int(height.rounded()),
+                                duration: duration
+                            ) {
+                                remoteAttachmentIds.append(uploaded.file.id)
                             }
                         }
-                        _ = try? await KaiXAPIClient.shared.sendMessage(conv.id, content: messageText, mediaIds: remoteMediaIds)
+                        _ = try? await KaiXAPIClient.shared.sendMessage(conv.id, content: messageText, attachmentIds: remoteAttachmentIds)
                     } catch {
                         // Best-effort; local message is already saved.
                     }

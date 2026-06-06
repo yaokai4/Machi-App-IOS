@@ -15,8 +15,8 @@ struct RegionSelectorView: View {
 }
 
 /// Modal region picker. Three-pane navigation (国家 → 省 → 城市) with
-/// a search box and shortcut rows for "popular cities" + "recently
-/// used" up top. Built on top of the in-process `KaiXRegionDirectory`
+/// a search box, a current-country city drilldown, and an optional
+/// country switcher. Built on top of the in-process `KaiXRegionDirectory`
 /// — no network calls, fully usable offline.
 ///
 /// Result is delivered via `onSelect(region)`. Callers are free to
@@ -40,14 +40,9 @@ struct RegionPickerView: View {
         return initialCountry.lowercased()
     }
 
-    private var supportedCountryCodes: Set<String> {
-        ["jp", "cn", "us", "ca"]
-    }
-
     private var availableCountries: [KaiXRegionDirectory.Country] {
-        let supported = KaiXRegionDirectory.countries.filter { supportedCountryCodes.contains($0.code) }
-        guard let allowedCountryCode else { return supported }
-        return supported.filter { $0.code == allowedCountryCode }
+        guard let allowedCountryCode else { return KaiXRegionDirectory.countries }
+        return KaiXRegionDirectory.countries.filter { $0.code == allowedCountryCode }
     }
 
     var body: some View {
@@ -59,32 +54,14 @@ struct RegionPickerView: View {
                     if !searchText.isEmpty {
                         searchResults
                     } else {
-                        if !store.recent.isEmpty {
-                            section(L("recentRegions", language)) {
-                                regionChipsGrid(store.recent)
-                            }
-                        }
                         if allowsAnyCountry {
-                            section("热门国内城市") {
-                                regionChipsGrid(domesticPopularRegions)
-                            }
-                            section("海外热门城市") {
-                                overseasPopularGroups
-                            }
-                        } else {
-                            section(L("availableCities", language)) {
-                                regionChipsGrid(countryPopularRegions)
-                            }
-                        }
-                        // The "中国 · 按省份选择" block lived here in
-                        // an earlier draft, but it duplicated what the
-                        // country list below already offers (tap 中国
-                        // → 省份 → 城市). Removed per user feedback —
-                        // the country list is the single canonical
-                        // drill-down path.
-                        if allowsAnyCountry {
-                            section(L("allCountries", language)) {
+                            section(L("switchCountry", language)) {
                                 countryList
+                            }
+                        }
+                        if let landingCountry {
+                            section(L("switchLocalRegion", language)) {
+                                landingCountryDrilldown(landingCountry)
                             }
                         }
                     }
@@ -112,46 +89,13 @@ struct RegionPickerView: View {
                 }
             }
         }
-        .onAppear {
-            if allowsAnyCountry,
-               let initialCountry,
-               let country = KaiXRegionDirectory.country(code: initialCountry) {
-                path.append(country)
-            }
-        }
     }
 
     // MARK: - sub views
 
-    private var domesticPopularRegions: [KaiXRegionDirectory.Region] {
-        canonicalRegions(for: "cn")
-    }
-
-    private var countryPopularRegions: [KaiXRegionDirectory.Region] {
-        guard let allowedCountryCode else { return KaiXRegionDirectory.popular }
-        let canonical = canonicalRegions(for: allowedCountryCode)
-        return canonical.isEmpty ? KaiXRegionDirectory.popular.filter { $0.countryCode == allowedCountryCode } : canonical
-    }
-
-    private func canonicalRegions(for countryCode: String) -> [KaiXRegionDirectory.Region] {
-        let codes: [String]
-        switch countryCode.lowercased() {
-        case "jp":
-            codes = ["jp.tokyo.tokyo", "jp.osaka.osaka", "jp.kyoto.kyoto"]
-        case "cn":
-            codes = ["cn.shanghai.shanghai", "cn.zhejiang.hangzhou"]
-        case "us":
-            codes = ["us.ca.la"]
-        case "ca":
-            codes = ["ca.montreal"]
-        default:
-            codes = []
-        }
-        return codes.compactMap { KaiXRegionDirectory.resolve(regionCode: $0) }
-    }
-
-    private var overseasPopularRegions: [KaiXRegionDirectory.Region] {
-        ["jp", "us", "ca"].flatMap { canonicalRegions(for: $0) }
+    private var landingCountry: KaiXRegionDirectory.Country? {
+        let code = (allowedCountryCode ?? initialCountry ?? store.current?.countryCode ?? "jp").lowercased()
+        return availableCountries.first(where: { $0.code == code }) ?? availableCountries.first
     }
 
     private var searchField: some View {
@@ -187,42 +131,46 @@ struct RegionPickerView: View {
         }
     }
 
-    private var overseasPopularGroups: some View {
-        VStack(alignment: .leading, spacing: KXSpacing.md) {
-            ForEach(groupedOverseasCountries, id: \.country.code) { group in
-                VStack(alignment: .leading, spacing: KXSpacing.sm) {
-                    Text("\(group.country.emoji) \(group.country.name)")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.secondary)
-                    regionChipsGrid(group.regions)
+    @ViewBuilder
+    private func landingCountryDrilldown(_ country: KaiXRegionDirectory.Country) -> some View {
+        VStack(spacing: 0) {
+            if country.hasProvinces {
+                ForEach(KaiXRegionDirectory.provinces(for: country.code)) { province in
+                    NavigationLink(value: ProvinceRoute(country: country, province: province)) {
+                        HStack(spacing: KXSpacing.sm) {
+                            Text(province.name).font(.body)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.footnote.weight(.medium))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.vertical, 12)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    Divider().opacity(0.25)
+                }
+            } else {
+                ForEach(KaiXRegionDirectory.cities(country: country.code, province: nil)) { city in
+                    Button {
+                        if let region = KaiXRegionDirectory.make(country: country.code, province: nil, city: city.code) {
+                            deliver(region)
+                        }
+                    } label: {
+                        HStack(spacing: KXSpacing.sm) {
+                            Text(city.name).font(.body)
+                            Spacer()
+                        }
+                        .padding(.vertical, 12)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    Divider().opacity(0.25)
                 }
             }
         }
-    }
-
-    private var groupedOverseasCountries: [(country: KaiXRegionDirectory.Country, regions: [KaiXRegionDirectory.Region])] {
-        KaiXRegionDirectory.countries.compactMap { country in
-            guard country.code != "cn" else { return nil }
-            let regions = overseasPopularRegions.filter { $0.countryCode == country.code }
-            return regions.isEmpty ? nil : (country, regions)
-        }
-    }
-
-    private func regionChipsGrid(_ regions: [KaiXRegionDirectory.Region]) -> some View {
-        FlowLayout(spacing: 8) {
-            ForEach(regions, id: \.regionCode) { region in
-                Button {
-                    deliver(region)
-                } label: {
-                    Text(region.headerLabel)
-                        .font(.subheadline.weight(.medium))
-                        .padding(.horizontal, 12)
-                        .frame(height: 34)
-                        .kxGlassCapsule(isSelected: region.regionCode == store.current?.regionCode)
-                }
-                .buttonStyle(.plain)
-            }
-        }
+        .padding(.horizontal, KXSpacing.md)
+        .kxGlassSurface(radius: KXRadius.lg)
     }
 
     private var countryList: some View {
@@ -256,7 +204,7 @@ struct RegionPickerView: View {
         } else {
             let matches = searchMatches(query: q)
             if matches.isEmpty {
-                Text("没有匹配的地区")
+                Text(L("regionNoMatches", language))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
@@ -289,24 +237,29 @@ struct RegionPickerView: View {
     }
 
     private func searchMatches(query: String) -> [KaiXRegionDirectory.Region] {
-        let supportedCanonicalRegions = ["jp", "cn", "us", "ca"].flatMap { canonicalRegions(for: $0) }
-        if let allowedCountryCode {
-            return canonicalRegions(for: allowedCountryCode).filter { region in
-                region.countryName.localizedCaseInsensitiveContains(query)
-                || region.countryCode.contains(query)
-                || region.provinceName.localizedCaseInsensitiveContains(query)
-                || region.provinceCode.contains(query)
-                || region.cityName.localizedCaseInsensitiveContains(query)
-                || region.cityCode.contains(query)
-            }
-        }
-        return supportedCanonicalRegions.filter { region in
+        Array(allSelectableRegions().filter { region in
             region.countryName.localizedCaseInsensitiveContains(query)
             || region.countryCode.contains(query)
             || region.provinceName.localizedCaseInsensitiveContains(query)
             || region.provinceCode.contains(query)
             || region.cityName.localizedCaseInsensitiveContains(query)
             || region.cityCode.contains(query)
+            || region.regionCode.contains(query)
+        }.prefix(80))
+    }
+
+    private func allSelectableRegions() -> [KaiXRegionDirectory.Region] {
+        availableCountries.flatMap { country in
+            if country.hasProvinces {
+                return KaiXRegionDirectory.provinces(for: country.code).flatMap { province in
+                    KaiXRegionDirectory.cities(country: country.code, province: province.code).compactMap { city in
+                        KaiXRegionDirectory.make(country: country.code, province: province.code, city: city.code)
+                    }
+                }
+            }
+            return KaiXRegionDirectory.cities(country: country.code, province: nil).compactMap { city in
+                KaiXRegionDirectory.make(country: country.code, province: nil, city: city.code)
+            }
         }
     }
 
@@ -329,21 +282,7 @@ private struct ProvinceListView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                if !canonicalRegions.isEmpty {
-                    ForEach(canonicalRegions, id: \.regionCode) { region in
-                        Button {
-                            onSelect(region)
-                        } label: {
-                            HStack {
-                                Text(region.cityName).font(.body)
-                                Spacer()
-                            }
-                            .padding(.vertical, 12)
-                        }
-                        .buttonStyle(.plain)
-                        Divider().opacity(0.25)
-                    }
-                } else if country.hasProvinces {
+                if country.hasProvinces {
                     ForEach(KaiXRegionDirectory.provinces(for: country.code)) { province in
                         NavigationLink(value: ProvinceRoute(country: country, province: province)) {
                             HStack {
@@ -387,23 +326,6 @@ private struct ProvinceListView: View {
         .kxPageBackground()
         .navigationTitle(country.name)
         .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private var canonicalRegions: [KaiXRegionDirectory.Region] {
-        let codes: [String]
-        switch country.code.lowercased() {
-        case "jp":
-            codes = ["jp.tokyo.tokyo", "jp.osaka.osaka", "jp.kyoto.kyoto"]
-        case "cn":
-            codes = ["cn.shanghai.shanghai", "cn.zhejiang.hangzhou"]
-        case "us":
-            codes = ["us.ca.la"]
-        case "ca":
-            codes = ["ca.montreal"]
-        default:
-            codes = []
-        }
-        return codes.compactMap { KaiXRegionDirectory.resolve(regionCode: $0) }
     }
 }
 

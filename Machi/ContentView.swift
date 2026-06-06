@@ -105,6 +105,9 @@ struct ContentView: View {
                 toastManager.dismiss()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .kaiXSessionInvalidated)) { _ in
+            logout()
+        }
     }
 
     /// Shared success path for a real (non-guest) login or registration.

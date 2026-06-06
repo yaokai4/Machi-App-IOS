@@ -61,8 +61,8 @@ final class RemoteSyncService {
     /// Register a brand-new account against the unified backend and
     /// upsert into SwiftData.
     @discardableResult
-    func registerAndSync(handle: String, displayName: String, password: String, email: String? = nil, code: String? = nil, region: KaiXRegionDirectory.Region, context: ModelContext) async throws -> UserEntity {
-        let response = try await api.register(handle: handle, displayName: displayName, password: password, email: email, code: code, region: region)
+    func registerAndSync(handle: String, displayName: String, password: String, email: String? = nil, code: String? = nil, region: KaiXRegionDirectory.Region, appLanguage: AppLanguage? = nil, context: ModelContext) async throws -> UserEntity {
+        let response = try await api.register(handle: handle, displayName: displayName, password: password, email: email, code: code, region: region, appLanguage: appLanguage)
         let entity = upsertUser(response.user, context: context)
         AuthService.shared.persistSession(user: entity)
         try? context.save()
@@ -147,8 +147,8 @@ final class RemoteSyncService {
 
     /// Send a DM message through the unified API.
     @discardableResult
-    func sendMessage(conversationId: String, content: String, mediaIds: [String] = []) async throws -> KaiXMessageDTO {
-        try await api.sendMessage(conversationId, content: content, mediaIds: mediaIds)
+    func sendMessage(conversationId: String, content: String, mediaIds: [String] = [], attachmentIds: [String] = []) async throws -> KaiXMessageDTO {
+        try await api.sendMessage(conversationId, content: content, mediaIds: mediaIds, attachmentIds: attachmentIds)
     }
 
     /// Replace the local feed cache with the latest 30 server posts.

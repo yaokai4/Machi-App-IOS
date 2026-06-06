@@ -34,9 +34,9 @@ struct ChannelEmptyState: View {
         case .jobSeek:
             return .init(icon: "person.crop.rectangle", title: "还没有求职帖", body: "把你的求职方向告诉同城的人,招聘方会看到。", cta: "发布求职", tint: .mint)
         case .meetup:
-            return .init(icon: "person.2", title: "还没有搭子内容", body: "发起一个饭局、学习局或运动局,认识同城的人。", cta: "发布搭子", tint: .orange)
+            return .init(icon: "person.2", title: "还没有小组内容", body: "发起一个学习、运动或语言交换讨论,让本地社区参与进来。", cta: "发布小组", tint: .orange)
         case .dining:
-            return .init(icon: "fork.knife", title: "还没有约饭局", body: "约一顿饭、一杯咖啡,见见同城的朋友。", cta: "发布约饭", tint: KXColor.rankCoral)
+            return .init(icon: "fork.knife", title: "还没有美食讨论", body: "发布餐厅、咖啡或本地美食活动讨论。", cta: "发布美食", tint: KXColor.rankCoral)
         case .event:
             return .init(icon: "calendar", title: "还没有活动", body: "发布本地活动,把线下聚会同步给社群。", cta: "发布活动", tint: .purple)
         case .guide:

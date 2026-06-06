@@ -95,10 +95,13 @@ final class KaiXAPIClient {
     }
 
     @discardableResult
-    func register(handle: String, displayName: String, password: String, email: String? = nil, code: String? = nil, region: KaiXRegionDirectory.Region? = nil) async throws -> KaiXLoginResponse {
+    func register(handle: String, displayName: String, password: String, email: String? = nil, code: String? = nil, region: KaiXRegionDirectory.Region? = nil, appLanguage: AppLanguage? = nil) async throws -> KaiXLoginResponse {
         var body: [String: String] = ["handle": handle, "display_name": displayName, "password": password]
         if let email { body["email"] = email }
         if let code, !code.isEmpty { body["code"] = code }
+        if let appLanguage {
+            body["language"] = appLanguage == .zh ? "zh-Hans" : appLanguage.rawValue
+        }
         if let region {
             body["country"] = region.countryCode
             body["province"] = region.provinceCode
@@ -109,6 +112,23 @@ final class KaiXAPIClient {
         let response: KaiXLoginResponse = try decode(data)
         KaiXBackend.token = response.token
         return response
+    }
+
+    func googleAuthStart(redirect: String = "machi://auth/google", intent: String = "login") async throws -> KaiXGoogleAuthStartResponse {
+        let data = try await request("GET", "/api/auth/google/start", queryItems: [
+            URLQueryItem(name: "client", value: "ios"),
+            URLQueryItem(name: "intent", value: intent),
+            URLQueryItem(name: "redirect", value: redirect),
+        ])
+        return try decode(data)
+    }
+
+    /// Unbind Google from the current (logged-in) account; returns the refreshed user.
+    @discardableResult
+    func googleUnlink() async throws -> KaiXUserDTO {
+        struct Wrapper: Codable { let user: KaiXUserDTO }
+        let data = try await request("POST", "/api/auth/google/unlink")
+        return try decode(data) as Wrapper |> \.user
     }
 
     func checkUsername(_ username: String) async throws -> KaiXAvailabilityResponse {
@@ -444,6 +464,103 @@ final class KaiXAPIClient {
         struct Wrapper: Codable { let post: KaiXPostDTO }
         let data = try await request("GET", "/api/posts/\(id.encodedPathSegment)")
         return try decode(data) as Wrapper |> \.post
+    }
+
+    // MARK: - structured city listings
+
+    func listings(type: String, citySlug: String, regionCode: String? = nil, query: String? = nil) async throws -> [KaiXCityListingDTO] {
+        var q: [URLQueryItem] = [
+            URLQueryItem(name: "type", value: type),
+            URLQueryItem(name: "city_slug", value: citySlug),
+        ]
+        if let regionCode, !regionCode.isEmpty { q.append(URLQueryItem(name: "region_code", value: regionCode)) }
+        if let query, !query.isEmpty { q.append(URLQueryItem(name: "q", value: query)) }
+        let data = try await request("GET", "/api/listings", queryItems: q)
+        let response: KaiXListingsResponse = try decode(data)
+        return response.items
+    }
+
+    func cityListing(_ id: String) async throws -> KaiXCityListingDTO {
+        let data = try await request("GET", "/api/listings/\(id.encodedPathSegment)")
+        let response: KaiXListingDetailResponse = try decode(data)
+        return response.listing
+    }
+
+    func createListing(
+        type: String,
+        citySlug: String,
+        regionCode: String,
+        title: String,
+        description: String,
+        category: String,
+        price: Double?,
+        locationText: String,
+        mediaIds: [String] = [],
+        attributes: [String: KaiXAttributeValue] = [:]
+    ) async throws -> KaiXCityListingDTO {
+        struct Body: Encodable {
+            let type: String
+            let country_code: String
+            let city_slug: String
+            let region_code: String
+            let language: String
+            let title: String
+            let description: String
+            let category: String
+            let price: Double?
+            let currency: String
+            let price_type: String
+            let location_text: String
+            let contact_method: String
+            let media_ids: [String]
+            let attributes: [String: KaiXAttributeValue]
+        }
+        struct Wrapper: Codable { let listing: KaiXCityListingDTO }
+        let priceType: String = {
+            if type == "rental" { return "monthly" }
+            if type == "job" || type == "hiring" { return "hourly" }
+            if type == "local_service" { return "starting_from" }
+            if type == "discount" { return "discount" }
+            return "fixed"
+        }()
+        let data = try await request("POST", "/api/listings", body: Body(
+            type: type,
+            country_code: "jp",
+            city_slug: citySlug,
+            region_code: regionCode,
+            language: "zh-CN",
+            title: title,
+            description: description,
+            category: category,
+            price: price,
+            currency: "JPY",
+            price_type: priceType,
+            location_text: locationText,
+            contact_method: "app_message",
+            media_ids: mediaIds,
+            attributes: attributes
+        ))
+        return try decode(data) as Wrapper |> \.listing
+    }
+
+    func favoriteListing(_ id: String, on: Bool) async throws {
+        _ = try await request(on ? "POST" : "DELETE", "/api/listings/\(id.encodedPathSegment)/favorite")
+    }
+
+    func reportListing(_ id: String, reason: String = "suspicious", note: String = "") async throws {
+        _ = try await request("POST", "/api/listings/\(id.encodedPathSegment)/report", body: ["reason": reason, "note": note])
+    }
+
+    /// Contacting a listing opens (or reuses) a real DM thread server-side and
+    /// returns its conversation id so the caller can land the buyer in the chat
+    /// instead of a write-only confirmation. Empty string == no thread returned.
+    @discardableResult
+    func contactListing(_ id: String, message: String, details: [[String: String]] = []) async throws -> String {
+        struct InquiryBody: Encodable { let message: String; let details: [[String: String]] }
+        let data = try await request("POST", "/api/listings/\(id.encodedPathSegment)/inquiry", body: InquiryBody(message: message, details: details))
+        struct InquiryResponse: Decodable { let conversation_id: String? }
+        let resp: InquiryResponse? = try? decode(data)
+        return resp?.conversation_id ?? ""
     }
 
     // MARK: - Machi Guide / 日本指南
@@ -954,12 +1071,33 @@ final class KaiXAPIClient {
         return response.items
     }
 
-    func sendMessage(_ conversationId: String, content: String, mediaIds: [String] = []) async throws -> KaiXMessageDTO {
-        struct Body: Encodable { let content: String; let media_ids: [String] }
+    func sendMessage(_ conversationId: String, content: String, mediaIds: [String] = [], attachmentIds: [String] = []) async throws -> KaiXMessageDTO {
+        struct Body: Encodable { let content: String; let media_ids: [String]; let attachment_ids: [String] }
         struct Wrapper: Codable { let message: KaiXMessageDTO }
         let data = try await request("POST", "/api/conversations/\(conversationId.encodedPathSegment)/messages",
-                                     body: Body(content: content, media_ids: mediaIds))
+                                     body: Body(content: content, media_ids: mediaIds, attachment_ids: attachmentIds))
         return try decode(data) as Wrapper |> \.message
+    }
+
+    func messageAttachmentViewUrl(messageId: String, attachmentId: String) async throws -> String {
+        struct Payload: Codable {
+            let url: String
+            let expiresIn: Int?
+        }
+        struct Wrapper: Codable {
+            let ok: Bool?
+            let data: Payload?
+            let url: String?
+            let expiresIn: Int?
+        }
+        let data = try await request(
+            "POST",
+            "/api/messages/\(messageId.encodedPathSegment)/attachments/\(attachmentId.encodedPathSegment)/view-url"
+        )
+        let wrapper: Wrapper = try decode(data)
+        if let url = wrapper.data?.url, !url.isEmpty { return url }
+        if let url = wrapper.url, !url.isEmpty { return url }
+        throw KaiXAPIError(error: .init(code: "attachment_url_missing", message: "Attachment URL missing"))
     }
 
     func deleteMessage(_ id: String) async throws {
@@ -970,9 +1108,99 @@ final class KaiXAPIClient {
         _ = try await request("POST", "/api/conversations/\(id.encodedPathSegment)/read")
     }
 
-    // MARK: - media (base64 upload for simplicity & parity with Web)
+    // MARK: - media / S3 uploads
+
+    func uploadFile(
+        data: Data,
+        mime: String,
+        fileName: String = "upload",
+        purpose: String = "post_image",
+        entityType: String = "",
+        entityId: String = "",
+        threadId: String = "",
+        groupId: String = "",
+        width: Int = 0,
+        height: Int = 0,
+        duration: Double = 0
+    ) async throws -> (file: KaiXUploadedFileDTO, media: KaiXMediaDTO) {
+        struct PresignBody: Encodable {
+            let fileName: String
+            let contentType: String
+            let fileSize: Int
+            let purpose: String
+            let entityType: String
+            let entityId: String
+            let threadId: String
+            let groupId: String
+            let duration: Double
+        }
+        let presignData = try await request("POST", "/api/uploads/presign", body: PresignBody(
+            fileName: fileName,
+            contentType: mime,
+            fileSize: data.count,
+            purpose: purpose,
+            entityType: entityType,
+            entityId: entityId,
+            threadId: threadId,
+            groupId: groupId,
+            duration: duration
+        ))
+        let presign: KaiXUploadPresignDTO = try decode(presignData)
+        guard let uploadURL = URL(string: presign.data.uploadUrl) else {
+            throw URLError(.badURL)
+        }
+        var put = URLRequest(url: uploadURL)
+        put.httpMethod = "PUT"
+        for (key, value) in presign.data.headers {
+            put.setValue(value, forHTTPHeaderField: key)
+        }
+        let (_, putResponse) = try await session.upload(for: put, from: data)
+        guard let http = putResponse as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw KaiXAPIError(error: .init(code: "upload_failed", message: "Upload failed"))
+        }
+        let etag = (putResponse as? HTTPURLResponse)?.value(forHTTPHeaderField: "ETag")?.replacingOccurrences(of: "\"", with: "") ?? ""
+        struct CompleteBody: Encodable {
+            let uploadId: String
+            let fileKey: String
+            let etag: String
+            let width: Int
+            let height: Int
+            let duration: Double
+        }
+        let completedData = try await request("POST", "/api/uploads/complete", body: CompleteBody(
+            uploadId: presign.data.uploadId,
+            fileKey: presign.data.fileKey,
+            etag: etag,
+            width: width,
+            height: height,
+            duration: duration
+        ))
+        let completed: KaiXUploadCompleteDTO = try decode(completedData)
+        return (completed.data.file, completed.data.media)
+    }
 
     func uploadMedia(data: Data, mime: String, width: Int = 0, height: Int = 0, duration: Double = 0) async throws -> KaiXMediaDTO {
+        let ext: String
+        switch mime {
+        case "image/png": ext = "png"
+        case "image/webp": ext = "webp"
+        case "image/heic": ext = "heic"
+        case "application/pdf": ext = "pdf"
+        default: ext = "jpg"
+        }
+        let uploaded = try await uploadFile(
+            data: data,
+            mime: mime,
+            fileName: "upload.\(ext)",
+            purpose: mime == "application/pdf" ? "guide_product_file" : "post_image",
+            width: width,
+            height: height,
+            duration: duration
+        )
+        return uploaded.media
+    }
+
+    func uploadMediaLegacy(data: Data, mime: String, width: Int = 0, height: Int = 0, duration: Double = 0) async throws -> KaiXMediaDTO {
         struct Body: Encodable {
             let data: String
             let mime: String

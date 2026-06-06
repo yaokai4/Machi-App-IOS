@@ -148,12 +148,18 @@ struct HomeTimelineView: View {
     }
 
     private func persistCurrentRegion(_ region: KaiXRegionDirectory.Region) async {
+        currentUser.country = region.countryCode
+        currentUser.province = region.provinceCode
+        currentUser.city = region.cityCode
         currentUser.currentRegionCode = region.regionCode
         currentUser.recentRegionCodes = regionStore.recent.map(\.regionCode)
         try? modelContext.save()
 
         guard KaiXBackend.token != nil else { return }
         _ = try? await KaiXAPIClient.shared.updateRegionLanguage([
+            "country": region.countryCode,
+            "province": region.provinceCode,
+            "city": region.cityCode,
             "current_region_code": region.regionCode,
         ])
     }

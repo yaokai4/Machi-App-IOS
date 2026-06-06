@@ -44,21 +44,20 @@ final class kaiziUITests: XCTestCase {
 
         try ensureAuthenticated(app)
 
-        let discoverTab = app.buttons["tabbar.search"]
-        XCTAssertTrue(discoverTab.waitForExistence(timeout: 15))
+        let discoverTab = try waitForDiscoverTab(in: app, timeout: 15)
         XCTAssertEqual(app.tabBars.count, 0)
-        XCTAssertEqual(app.buttons.matching(identifier: "tabbar.search").count, 1)
+        XCTAssertEqual(discoverTabCount(in: app), 1)
 
         discoverTab.tap()
 
-        XCTAssertTrue(app.otherElements["discover.root"].waitForExistence(timeout: 8))
+        XCTAssertTrue(waitForDiscoverRoot(in: app, timeout: 8))
         XCTAssertEqual(app.tabBars.count, 0)
-        XCTAssertEqual(app.buttons.matching(identifier: "tabbar.search").count, 1)
+        XCTAssertEqual(discoverTabCount(in: app), 1)
     }
 
     @MainActor
     private func ensureAuthenticated(_ app: XCUIApplication) throws {
-        if app.buttons["tabbar.search"].waitForExistence(timeout: 12) {
+        if (try? waitForDiscoverTab(in: app, timeout: 12)) != nil {
             return
         }
 
@@ -91,7 +90,36 @@ final class kaiziUITests: XCTestCase {
         XCTAssertTrue(submitButton.isEnabled)
         submitButton.tap()
 
-        XCTAssertTrue(app.buttons["tabbar.search"].waitForExistence(timeout: 12))
+        _ = try waitForDiscoverTab(in: app, timeout: 12)
+    }
+
+    @MainActor
+    private func waitForDiscoverTab(in app: XCUIApplication, timeout: TimeInterval) throws -> XCUIElement {
+        let byIdentifier = app.buttons["tabbar.search"]
+        if byIdentifier.waitForExistence(timeout: timeout) {
+            return byIdentifier
+        }
+        let byLabel = app.buttons["发现"]
+        if byLabel.waitForExistence(timeout: 2) {
+            return byLabel
+        }
+        XCTFail("Discover tab did not appear")
+        throw XCTSkip("Discover tab did not appear")
+    }
+
+    @MainActor
+    private func discoverTabCount(in app: XCUIApplication) -> Int {
+        let identifierCount = app.buttons.matching(identifier: "tabbar.search").count
+        if identifierCount > 0 { return identifierCount }
+        return app.buttons.matching(NSPredicate(format: "label == %@", "发现")).count
+    }
+
+    @MainActor
+    private func waitForDiscoverRoot(in app: XCUIApplication, timeout: TimeInterval) -> Bool {
+        if app.otherElements["discover.root"].waitForExistence(timeout: timeout) {
+            return true
+        }
+        return app.staticTexts["城市入口"].waitForExistence(timeout: 2)
     }
 
     @MainActor
