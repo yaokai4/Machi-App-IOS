@@ -168,6 +168,7 @@ final class RemoteSyncService {
             existing.content = dto.content ?? existing.content
             existing.targetPostId = localPostId ?? existing.targetPostId
             existing.targetCommentId = dto.target_comment_id ?? existing.targetCommentId
+            existing.targetConversationId = dto.target_conversation_id ?? existing.targetConversationId
             existing.syncStatus = .synced
             return (existing, false)
         }
@@ -177,6 +178,7 @@ final class RemoteSyncService {
             actorId: localActorId,
             targetPostId: localPostId,
             targetCommentId: dto.target_comment_id,
+            targetConversationId: dto.target_conversation_id,
             content: dto.content ?? "",
             isRead: dto.is_read,
             createdAt: parsedDate(dto.created_at) ?? .now,
@@ -298,6 +300,7 @@ final class RemoteSyncService {
             if let v = dto.city     { existing.city     = v }
             if let v = dto.current_region_code { existing.currentRegionCode = v }
             if let v = dto.recent_region_codes { existing.recentRegionCodes = v }
+            if let v = dto.dm_privacy { existing.dmPrivacy = v }
             if let v = dto.membership_tier { existing.membershipLevel = v }
             if let v = dto.total_heat { existing.totalHeat = v }
             if let v = dto.creator_badge { existing.creatorBadge = v }
@@ -358,6 +361,7 @@ final class RemoteSyncService {
             contentLanguagePreference: dto.content_language_preference ?? "",
             preferredContentLanguagesRaw: dto.preferred_content_languages ?? ""
         )
+        entity.dmPrivacy = dto.dm_privacy ?? "everyone"
         context.insert(entity)
         return entity
     }

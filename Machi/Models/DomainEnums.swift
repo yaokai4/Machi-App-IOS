@@ -67,6 +67,11 @@ enum NotificationType: String, CaseIterable, Identifiable {
     case follow
     case mention
     case bookmark
+    // A new DM arrived (server inserts at most one unread row per
+    // conversation). Raw values mirror the backend `notifications.type`.
+    case message
+    // Someone contacted the user about one of their listings.
+    case listingInquiry = "listing_inquiry"
     case system
 
     var id: String { rawValue }

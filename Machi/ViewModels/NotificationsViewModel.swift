@@ -143,6 +143,7 @@ struct AggregatedNotification: Identifiable {
     var type: NotificationType { latest.type }
     var targetPostId: String? { latest.targetPostId }
     var targetCommentId: String? { latest.targetCommentId }
+    var targetConversationId: String? { latest.targetConversationId }
     var content: String { latest.content }
     var createdAt: Date { latest.createdAt }
     var isRead: Bool { notifications.allSatisfy(\.isRead) }
@@ -166,6 +167,10 @@ struct AggregatedNotification: Identifiable {
             return "\(notification.typeRaw)|\(notification.targetPostId ?? "none")"
         case .follow:
             return notification.typeRaw
+        case .message, .listingInquiry:
+            // One row per conversation, so parallel chats never collapse
+            // into each other.
+            return "\(notification.typeRaw)|\(notification.targetConversationId ?? notification.id)"
         case .system:
             return "\(notification.typeRaw)|\(notification.id)"
         }

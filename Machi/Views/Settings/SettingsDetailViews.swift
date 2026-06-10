@@ -1630,8 +1630,28 @@ struct PrivacySettingsView: View {
                     Text(L("dmNobody", language)).tag("nobody")
                 }
                 .pickerStyle(.segmented)
+                Text(L("dmPrivacyFootnote", language))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
             .padding(.top, 4)
+
+            Divider()
+
+            NavigationLink {
+                BlocklistSettingsView()
+            } label: {
+                HStack(spacing: KXSpacing.md) {
+                    Label(L("blocklist", language), systemImage: "person.crop.circle.badge.xmark")
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.vertical, KXSpacing.sm)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
         .task {
             guard KaiXBackend.token != nil else { return }
@@ -1662,21 +1682,6 @@ struct PrivacySettingsView: View {
             if KaiXBackend.token != nil {
                 Task.detached { _ = try? await KaiXAPIClient.shared.updateSettings(["privacy_allow_dm": AnyEncodable(value)]) }
             }
-        }
-    }
-}
-
-struct RecommendationSettingsView: View {
-    @Environment(\.appLanguage) private var language
-    @AppStorage("recommendLocalLife") private var recommendLocalLife = true
-    @AppStorage("recommendNews") private var recommendNews = true
-    @AppStorage("recommendTech") private var recommendTech = false
-
-    var body: some View {
-        SettingsFormPage(title: L("recommendationSettings", language)) {
-            Toggle(L("recommendLocalLife", language), isOn: $recommendLocalLife)
-            Toggle(L("recommendNews", language), isOn: $recommendNews)
-            Toggle(L("recommendTech", language), isOn: $recommendTech)
         }
     }
 }

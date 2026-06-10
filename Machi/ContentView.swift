@@ -111,12 +111,7 @@ struct ContentView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .kaiXSystemNotificationTapped)) { note in
-            guard appState.currentUser != nil else { return }
-            appChrome.select(.home)
-            appRouter.setActiveTab(.home)
-            if let postId = note.userInfo?["postId"] as? String, !postId.isEmpty {
-                appRouter.open(.postDetail(postId: postId), in: .home)
-            }
+            handleSystemNotificationTap(note)
         }
         .onChange(of: appState.databaseRecoveryNotice) { _, notice in
             #if DEBUG
@@ -139,6 +134,25 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .kaiXSessionInvalidated)) { _ in
             logout()
+        }
+    }
+
+    /// Route a tapped system banner. DM / inquiry banners land in the chat
+    /// itself; everything else routes to the post (or just the home feed).
+    private func handleSystemNotificationTap(_ note: Notification) {
+        guard appState.currentUser != nil else { return }
+        let conversationId = note.userInfo?["conversationId"] as? String
+        let postId = note.userInfo?["postId"] as? String
+        if let conversationId, !conversationId.isEmpty {
+            appChrome.select(.messages)
+            appRouter.setActiveTab(.messages)
+            appRouter.open(.conversation(conversationId: conversationId), in: .messages)
+            return
+        }
+        appChrome.select(.home)
+        appRouter.setActiveTab(.home)
+        if let postId, !postId.isEmpty {
+            appRouter.open(.postDetail(postId: postId), in: .home)
         }
     }
 

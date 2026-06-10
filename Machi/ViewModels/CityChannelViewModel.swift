@@ -14,6 +14,14 @@ final class CityChannelViewModel: ObservableObject {
     @Published var canLoadMore = true
 
     private var currentPage = 0
+    // Server cursor state — identical protocol to HomeViewModel. When the
+    // remote page is available the list renders exactly those ids in server
+    // order; the local offset query is only the offline fallback.
+    private var remoteCursor: String?
+    private var remoteHasMore = false
+    private var pendingRemoteIds: [String]?
+    // Ids already in `posts`, so an appended page can never repeat a row.
+    private var loadedIds = Set<String>()
 
     func configure(regionCode: String, channel: CityChannel = .recommend) {
         region = KaiXRegionDirectory.resolve(regionCode: regionCode)
@@ -27,6 +35,10 @@ final class CityChannelViewModel: ObservableObject {
         }
         currentPage = 0
         canLoadMore = true
+        remoteCursor = nil
+        remoteHasMore = false
+        pendingRemoteIds = nil
+        loadedIds = []
         if clearExisting {
             posts = []
             authors = [:]
@@ -100,36 +112,66 @@ final class CityChannelViewModel: ObservableObject {
         defer { isLoadingMore = false }
 
         do {
-            if reset, KaiXBackend.token != nil {
-                _ = try? await RemoteSyncService.shared.syncFeed(
-                    mode: channel == .hot ? .hot : .recommend,
-                    country: region.countryCode,
-                    province: region.provinceCode.isEmpty ? nil : region.provinceCode,
-                    city: region.cityCode,
-                    contentTypes: channel.contentTypes,
-                    context: context
-                )
+            // Advance the server cursor on every page (reset → page 1),
+            // not just on reset — "load more" used to re-read only the
+            // local cache, so deep scrolling recycled stale content.
+            if KaiXBackend.token != nil, reset || remoteHasMore {
+                await syncFromRemote(context: context, region: region, cursor: reset ? nil : remoteCursor)
             }
             let repository = PostRepository(context: context)
-            let page = try await repository.fetchCityPage(
-                region: region,
-                channel: channel,
-                currentUserId: currentUser.id,
-                page: currentPage,
-                pageSize: KaiXConfig.pageSize
-            )
-            if reset {
-                posts = page
+            let page: [PostEntity]
+            let usedRemotePage: Bool
+            if let remoteIds = pendingRemoteIds {
+                pendingRemoteIds = nil
+                usedRemotePage = true
+                let fetched = try await repository.fetchPosts(ids: Set(remoteIds), currentUserId: currentUser.id)
+                let byId = Dictionary(uniqueKeysWithValues: fetched.map { ($0.id, $0) })
+                page = remoteIds.compactMap { byId[$0] }
             } else {
-                posts.append(contentsOf: page)
+                usedRemotePage = false
+                page = try await repository.fetchCityPage(
+                    region: region,
+                    channel: channel,
+                    currentUserId: currentUser.id,
+                    page: currentPage,
+                    pageSize: KaiXConfig.pageSize
+                )
             }
+            let appended = page.filter { !loadedIds.contains($0.id) }
+            posts = reset ? page : posts + appended
+            loadedIds = Set(posts.map(\.id))
             postStore.register(posts)
             currentPage += 1
-            canLoadMore = page.count == KaiXConfig.pageSize
+            // Hot has no server cursor (single ranked page) — after it,
+            // deterministic local windows keep deeper browsing alive.
+            canLoadMore = usedRemotePage
+                ? (remoteHasMore || channel == .hot)
+                : page.count == KaiXConfig.pageSize
             try await hydrate(context: context, repository: repository, currentUser: currentUser, postStore: postStore)
             state = posts.isEmpty ? .empty : .loaded
         } catch {
             state = posts.isEmpty ? .error(error.kaixUserMessage) : .loaded
+        }
+    }
+
+    /// Pull one server page for this city/channel and remember its ids +
+    /// cursor. Best-effort: on failure the local cache keeps the view alive.
+    private func syncFromRemote(context: ModelContext, region: KaiXRegionDirectory.Region, cursor: String?) async {
+        do {
+            let page = try await RemoteSyncService.shared.syncFeed(
+                mode: channel == .hot ? .hot : .recommend,
+                cursor: cursor,
+                country: region.countryCode,
+                province: region.provinceCode.isEmpty ? nil : region.provinceCode,
+                city: region.cityCode,
+                contentTypes: channel.contentTypes,
+                context: context
+            )
+            remoteCursor = page.nextCursor
+            remoteHasMore = page.nextCursor != nil && !page.ids.isEmpty
+            pendingRemoteIds = page.ids.isEmpty ? nil : page.ids
+        } catch {
+            pendingRemoteIds = nil
         }
     }
 

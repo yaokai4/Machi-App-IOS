@@ -54,7 +54,7 @@ final class NotificationRepository {
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         ))
         let grouped = Dictionary(grouping: notifications) {
-            "\($0.typeRaw)|\($0.actorId)|\($0.targetPostId ?? "none")|\($0.targetCommentId ?? "none")"
+            "\($0.typeRaw)|\($0.actorId)|\($0.targetPostId ?? "none")|\($0.targetCommentId ?? "none")|\($0.targetConversationId ?? "none")"
         }
         var didDelete = false
         for items in grouped.values where items.count > 1 {

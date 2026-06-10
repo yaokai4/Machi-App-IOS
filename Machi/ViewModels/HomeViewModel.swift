@@ -19,6 +19,13 @@ final class HomeViewModel: ObservableObject {
     // into SwiftData instead of endlessly re-reading the local cache.
     private var remoteCursor: String?
     private var remoteHasMore = false
+    // The page syncFromRemote just pulled, in server order. When present,
+    // the visible list follows the server's cursor pagination exactly (the
+    // same protocol Web uses) — local offset paging is only the offline
+    // fallback. Paging a multi-source local cache by offset is what made
+    // the home feed visibly repeat content: other tabs keep inserting
+    // rows between windows, so window N+1 could re-serve window N's posts.
+    private var pendingRemoteIds: [String]?
     // Every post id currently in `posts` — appended pages are filtered
     // against this so a shifted local window can never show a duplicate.
     private var loadedIds = Set<String>()
@@ -33,6 +40,7 @@ final class HomeViewModel: ObservableObject {
         canLoadMore = true
         remoteCursor = nil
         remoteHasMore = false
+        pendingRemoteIds = nil
         loadedIds = []
         if clearExisting {
             posts = []
@@ -143,7 +151,21 @@ final class HomeViewModel: ObservableObject {
             }
 
             let repository = PostRepository(context: context)
-            let page = try await repository.fetchPage(mode: mode, currentUserId: currentUser.id, page: currentPage, pageSize: KaiXConfig.pageSize)
+            let page: [PostEntity]
+            let usedRemotePage: Bool
+            if let remoteIds = pendingRemoteIds {
+                // Server-paged path: render exactly the page the cursor
+                // returned, in server order. The local store is just the
+                // entity cache here, never the paginator.
+                pendingRemoteIds = nil
+                usedRemotePage = true
+                let fetched = try await repository.fetchPosts(ids: Set(remoteIds), currentUserId: currentUser.id)
+                let byId = Dictionary(uniqueKeysWithValues: fetched.map { ($0.id, $0) })
+                page = remoteIds.compactMap { byId[$0] }
+            } else {
+                usedRemotePage = false
+                page = try await repository.fetchPage(mode: mode, currentUserId: currentUser.id, page: currentPage, pageSize: KaiXConfig.pageSize)
+            }
             // Belt-and-braces: even if the local window shifted (new posts
             // synced in above us), an id can never appear twice in the list.
             let appended = page.filter { !loadedIds.contains($0.id) }
@@ -151,8 +173,11 @@ final class HomeViewModel: ObservableObject {
             loadedIds = Set(posts.map(\.id))
             postStore.setFeed(posts, append: false)
             currentPage += 1
-            canLoadMore = page.count == KaiXConfig.pageSize
-                || (KaiXBackend.token != nil && remoteHasMore)
+            // Hot has no server cursor (single ranked page) — after it,
+            // deterministic local windows keep deeper browsing alive.
+            canLoadMore = usedRemotePage
+                ? (remoteHasMore || mode == .hot)
+                : (page.count == KaiXConfig.pageSize || (KaiXBackend.token != nil && remoteHasMore))
             try await hydrate(
                 context: context,
                 repository: repository,
@@ -200,10 +225,12 @@ final class HomeViewModel: ObservableObject {
             )
             remoteCursor = page.nextCursor
             remoteHasMore = page.nextCursor != nil && !page.ids.isEmpty
+            pendingRemoteIds = page.ids.isEmpty ? nil : page.ids
         } catch {
             // Silent — the local fallback below still produces a usable
             // feed. Keep the previous cursor state so a transient network
             // error doesn't permanently stop remote pagination.
+            pendingRemoteIds = nil
         }
     }
 

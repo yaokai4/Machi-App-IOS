@@ -74,6 +74,7 @@ final class SystemNotificationService: NSObject {
             content.threadIdentifier = "machi.\(notification.typeRaw)"
             var info: [String: Any] = ["type": notification.typeRaw]
             if let postId = notification.targetPostId { info["postId"] = postId }
+            if let conversationId = notification.targetConversationId { info["conversationId"] = conversationId }
             content.userInfo = info
 
             let request = UNNotificationRequest(
@@ -121,6 +122,8 @@ final class SystemNotificationService: NSObject {
         case .mention:  action = L("notifMentioned", language)
         case .follow:   action = L("notifFollowed", language)
         case .bookmark: action = L("notifBookmarked", language)
+        case .message:  action = L("notifMessaged", language)
+        case .listingInquiry: action = L("notifInquired", language)
         case .system:   return L("systemNotification", language)
         }
         guard !actorName.isEmpty else { return action }
@@ -151,12 +154,14 @@ extension SystemNotificationService: UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse
     ) async {
         let userInfo = response.notification.request.content.userInfo
-        let postId = userInfo["postId"] as? String
+        var payload: [String: Any] = [:]
+        if let postId = userInfo["postId"] as? String { payload["postId"] = postId }
+        if let conversationId = userInfo["conversationId"] as? String { payload["conversationId"] = conversationId }
         await MainActor.run {
             NotificationCenter.default.post(
                 name: .kaiXSystemNotificationTapped,
                 object: nil,
-                userInfo: postId.map { ["postId": $0] }
+                userInfo: payload.isEmpty ? nil : payload
             )
         }
     }

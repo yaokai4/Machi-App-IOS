@@ -11,12 +11,33 @@ final class PostRepository {
         self.heatService = .shared
     }
 
+    /// SwiftData's `fetchOffset` silently returns the FIRST window again on
+    /// current iOS releases (observed on iOS 26 with sort descriptors set:
+    /// the offset is ignored), which made every local "page" identical —
+    /// the home/city feeds visibly looped the same posts. Page by fetching
+    /// `(page+1) * pageSize` rows and slicing in memory instead: the local
+    /// cache is small (hundreds of rows), so the linear over-fetch is cheap
+    /// and, unlike fetchOffset, deterministic everywhere.
+    private func fetchWindow(_ descriptor: FetchDescriptor<PostEntity>, page: Int, pageSize: Int) throws -> [PostEntity] {
+        var d = descriptor
+        d.fetchOffset = 0
+        d.fetchLimit = (page + 1) * pageSize
+        let rows = try context.fetch(d)
+        guard rows.count > page * pageSize else { return [] }
+        return Array(rows.dropFirst(page * pageSize))
+    }
+
     func fetchPage(mode: TimelineMode, currentUserId: String, page: Int, pageSize: Int) async throws -> [PostEntity] {
         let published = PostStatus.published.rawValue
         let active = PostStatus.active.rawValue
+        // The trailing `id` tiebreaker is load-bearing: bulk-seeded and
+        // editorial posts share identical createdAt timestamps, and SQLite
+        // returns equal-key rows in arbitrary, per-query order. Without a
+        // total order, offset windows shuffle between fetches and the feed
+        // visibly repeats/skips posts while paging.
         let sortDescriptors: [SortDescriptor<PostEntity>] = mode == .hot
-            ? [SortDescriptor(\.heatScore, order: .reverse), SortDescriptor(\.createdAt, order: .reverse)]
-            : [SortDescriptor(\.createdAt, order: .reverse)]
+            ? [SortDescriptor(\.heatScore, order: .reverse), SortDescriptor(\.createdAt, order: .reverse), SortDescriptor(\.id, order: .reverse)]
+            : [SortDescriptor(\.createdAt, order: .reverse), SortDescriptor(\.id, order: .reverse)]
         let recentCutoff = Date().addingTimeInterval(-10 * 24 * 3600)
 
         var descriptor = FetchDescriptor<PostEntity>(
@@ -55,9 +76,7 @@ final class PostRepository {
                     && $0.country == selectedCountry
                 }
             }
-            descriptor.fetchOffset = page * pageSize
-            descriptor.fetchLimit = pageSize
-            let pagePosts = try context.fetch(descriptor)
+            let pagePosts = try fetchWindow(descriptor, page: page, pageSize: pageSize)
             try refreshRepostState(for: pagePosts, currentUserId: currentUserId)
             return FeedQueryBuilder.rank(pagePosts, using: ranking)
         }
@@ -76,9 +95,7 @@ final class PostRepository {
                 ($0.statusRaw == published || $0.statusRaw == active)
                 && ($0.regionCode == regionCode || ($0.country == country && $0.city == city))
             }
-            descriptor.fetchOffset = page * pageSize
-            descriptor.fetchLimit = limit
-            let pagePosts = try context.fetch(descriptor)
+            let pagePosts = try fetchWindow(descriptor, page: page, pageSize: limit)
             try refreshRepostState(for: pagePosts, currentUserId: currentUserId)
             return FeedQueryBuilder.rank(pagePosts, using: ranking)
         }
@@ -95,9 +112,7 @@ final class PostRepository {
                     && $0.country == selectedCountry
                 }
             }
-            descriptor.fetchOffset = page * pageSize
-            descriptor.fetchLimit = pageSize
-            let pagePosts = try context.fetch(descriptor)
+            let pagePosts = try fetchWindow(descriptor, page: page, pageSize: pageSize)
             try refreshRepostState(for: pagePosts, currentUserId: currentUserId)
             return FeedQueryBuilder.rank(pagePosts, using: ranking)
         }
@@ -109,9 +124,7 @@ final class PostRepository {
                 && $0.country == selectedCountry
             }
         }
-        descriptor.fetchOffset = page * pageSize
-        descriptor.fetchLimit = limit
-        let posts = try context.fetch(descriptor)
+        let posts = try fetchWindow(descriptor, page: page, pageSize: limit)
         try refreshRepostState(for: posts, currentUserId: currentUserId)
         return FeedQueryBuilder.rank(posts, using: ranking)
     }
@@ -130,9 +143,12 @@ final class PostRepository {
         let city = region.cityCode
         let typeRaws = channel.contentTypes?.map(\.rawValue) ?? []
         let cutoff = Date().addingTimeInterval(-24 * 3600)
+        // Same total-order requirement as fetchPage: equal-timestamp rows
+        // shuffle between queries without the id tiebreaker, which makes
+        // offset windows repeat posts while paging.
         let sortDescriptors: [SortDescriptor<PostEntity>] = channel.sortsByHeat
-            ? [SortDescriptor(\.heatScore, order: .reverse), SortDescriptor(\.createdAt, order: .reverse)]
-            : [SortDescriptor(\.createdAt, order: .reverse)]
+            ? [SortDescriptor(\.heatScore, order: .reverse), SortDescriptor(\.createdAt, order: .reverse), SortDescriptor(\.id, order: .reverse)]
+            : [SortDescriptor(\.createdAt, order: .reverse), SortDescriptor(\.id, order: .reverse)]
 
         var descriptor: FetchDescriptor<PostEntity>
         if !typeRaws.isEmpty && channel.limitsToRecentHotWindow {
@@ -172,11 +188,9 @@ final class PostRepository {
                 sortBy: sortDescriptors
             )
         }
-        // Disjoint windows + within-window ranking only — see fetchPage for
-        // why overlapping windows made city channels repeat posts.
-        descriptor.fetchOffset = page * pageSize
-        descriptor.fetchLimit = pageSize
-        let posts = try context.fetch(descriptor)
+        // Disjoint windows + within-window ranking only — see fetchWindow
+        // for why offset-based windows repeated posts on-device.
+        let posts = try fetchWindow(descriptor, page: page, pageSize: pageSize)
         try refreshRepostState(for: posts, currentUserId: currentUserId)
         let appLang = await MainActor.run(body: { AppLanguage.resolved(from: UserDefaults.standard.string(forKey: "appLanguageCode") ?? "") })
         let ranking = await MainActor.run(body: { FeedQueryBuilder.context(for: appLang) })

@@ -57,6 +57,7 @@ struct FeedPaginationTests {
             user_id: "me",
             target_post_id: "server-post-9",
             target_comment_id: nil,
+            target_conversation_id: nil,
             content: "喜欢了你的帖子",
             is_read: false,
             created_at: "2026-06-10T03:00:00+00:00",
@@ -80,9 +81,15 @@ struct FeedPaginationTests {
     // MARK: - helpers
 
     private func seedPosts(count: Int, context: ModelContext) {
-        let base = Date(timeIntervalSince1970: 1_700_000_000)
+        // Hermetic against host-app state: the repository's recommend/hot
+        // paths filter by the persisted browse region (UserDefaults) and by
+        // a rolling 10-day window. Seed posts that match whatever region
+        // the environment has, with recent timestamps, so the invariants
+        // are exercised on real rows instead of passing vacuously on [].
+        let country = RegionStore.shared.current?.countryCode ?? ""
+        let base = Date().addingTimeInterval(-Double(count + 1) * 60)
         for index in 0..<count {
-            context.insert(PostEntity(
+            let post = PostEntity(
                 id: "post-\(index)",
                 authorId: "author-\(index % 5)",
                 content: "Post number \(index)",
@@ -90,13 +97,21 @@ struct FeedPaginationTests {
                 likeCount: index % 7,
                 heatScore: Double(index % 11),
                 status: .published
-            ))
+            )
+            post.country = country
+            context.insert(post)
         }
     }
 
     private func makeContext() throws -> ModelContext {
         let schema = Schema(KaiXDatabaseContainer.models)
-        let configuration = ModelConfiguration("KaiXFeedTests-\(UUID().uuidString)", schema: schema, isStoredInMemoryOnly: true)
+        // SQLite-backed temp store, NOT in-memory: production uses the
+        // SQLite engine, and in-memory stores have shown unstable
+        // fetchOffset windows under custom sort descriptors — the very
+        // behavior these tests exist to pin down.
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("KaiXFeedTests-\(UUID().uuidString).store")
+        let configuration = ModelConfiguration(schema: schema, url: url)
         let container = try ModelContainer(for: schema, configurations: [configuration])
         return ModelContext(container)
     }

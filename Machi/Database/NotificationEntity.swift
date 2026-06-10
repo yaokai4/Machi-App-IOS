@@ -8,6 +8,9 @@ final class NotificationEntity {
     var actorId: String
     var targetPostId: String?
     var targetCommentId: String?
+    // Conversation deep-link for 'message' / 'listing_inquiry' rows.
+    // Optional so SwiftData lightweight-migrates existing local stores.
+    var targetConversationId: String?
     var content: String
     var isRead: Bool
     var createdAt: Date
@@ -23,6 +26,7 @@ final class NotificationEntity {
         actorId: String,
         targetPostId: String? = nil,
         targetCommentId: String? = nil,
+        targetConversationId: String? = nil,
         content: String,
         isRead: Bool = false,
         createdAt: Date = .now,
@@ -37,6 +41,7 @@ final class NotificationEntity {
         self.actorId = actorId
         self.targetPostId = targetPostId
         self.targetCommentId = targetCommentId
+        self.targetConversationId = targetConversationId
         self.content = content
         self.isRead = isRead
         self.createdAt = createdAt

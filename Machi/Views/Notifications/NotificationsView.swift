@@ -175,6 +175,10 @@ struct NotificationsView: View {
     }
 
     private func route(for item: AggregatedNotification) -> KXRoute? {
+        if (item.type == .message || item.type == .listingInquiry),
+           let conversationId = item.targetConversationId {
+            return .conversation(conversationId: conversationId)
+        }
         if let postId = item.targetPostId {
             switch item.type {
             case .comment, .reply:
@@ -263,6 +267,8 @@ private struct NotificationCard: View {
         case .follow: return "\(actorText) \(L("notifFollowed", language))"
         case .mention: return "\(actorText) \(L("notifMentioned", language))"
         case .bookmark: return "\(actorText) \(L("notifBookmarked", language))"
+        case .message: return "\(actorText) \(L("notifMessaged", language))"
+        case .listingInquiry: return "\(actorText) \(L("notifInquired", language))"
         case .system: return L("systemNotification", language)
         }
     }
@@ -288,6 +294,8 @@ private struct NotificationCard: View {
         case .follow: "person.badge.plus"
         case .mention: "at"
         case .bookmark: "bookmark.fill"
+        case .message: "envelope.fill"
+        case .listingInquiry: "tag.fill"
         case .system: "bell.fill"
         }
     }
@@ -301,6 +309,8 @@ private struct NotificationCard: View {
         case .follow: .purple
         case .mention: .indigo
         case .bookmark: .orange
+        case .message: .teal
+        case .listingInquiry: .mint
         case .system: .secondary
         }
     }

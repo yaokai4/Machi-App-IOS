@@ -57,6 +57,10 @@ final class UserEntity {
     var appLanguage: String = ""
     var contentLanguagePreference: String = ""
     var preferredContentLanguagesRaw: String = ""
+    // Server-enforced DM privacy ('everyone' | 'following' | 'none'),
+    // mirrored from /api/auth/me so Settings shows the truth offline.
+    // Default keeps SwiftData lightweight migration safe.
+    var dmPrivacy: String = "everyone"
 
     init(
         id: String = UUID().uuidString,

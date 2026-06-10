@@ -101,6 +101,7 @@ struct KaiXUserDTO: Codable, Equatable {
     let city: String?
     let current_region_code: String?
     let recent_region_codes: [String]?
+    let dm_privacy: String?
     let total_heat: Double?
     let creator_badge: String?
     let is_merchant: Bool?
@@ -676,6 +677,7 @@ struct KaiXNotificationDTO: Codable, Equatable {
     let user_id: String
     let target_post_id: String?
     let target_comment_id: String?
+    let target_conversation_id: String?
     let content: String?
     let is_read: Bool
     let created_at: String

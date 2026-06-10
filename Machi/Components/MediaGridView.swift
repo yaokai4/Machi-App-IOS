@@ -4,6 +4,9 @@ struct MediaGridView: View {
     @EnvironmentObject private var chrome: AppChromeState
     let mediaItems: [MediaEntity]
     @State private var selectedMedia: MediaEntity?
+    // Photos-style zoom: the tapped tile is the literal source of the
+    // full-screen viewer, so opening media reads as expansion, not a modal.
+    @Namespace private var mediaZoomNamespace
 
     var body: some View {
         if !mediaItems.isEmpty {
@@ -55,10 +58,12 @@ struct MediaGridView: View {
                         .clipShape(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                     }
                     .buttonStyle(.plain)
+                    .matchedTransitionSource(id: item.id, in: mediaZoomNamespace)
                 }
             }
             .fullScreenCover(item: $selectedMedia) { media in
                 MediaPreviewView(media: media)
+                    .navigationTransition(.zoom(sourceID: media.id, in: mediaZoomNamespace))
             }
             .onChange(of: selectedMedia) { _, media in
                 chrome.setHidden(media != nil, reason: .mediaPreview)
