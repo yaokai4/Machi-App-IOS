@@ -63,6 +63,16 @@ struct MainTabView: View {
                 loadedTabs.insert(tab)
                 chrome.select(tab)
             }
+            // 直达某个市场频道:`-KXOpenListingChannel secondhand|rental|work|service|discount`
+            if let idx = ProcessInfo.processInfo.arguments.firstIndex(of: "-KXOpenListingChannel"),
+               idx + 1 < ProcessInfo.processInfo.arguments.count {
+                let type = ProcessInfo.processInfo.arguments[idx + 1]
+                let regionCode = RegionStore.shared.current?.regionCode ?? "jp.tokyo.tokyo"
+                loadedTabs.insert(.search)
+                chrome.select(.search)
+                router.setActiveTab(.search)
+                router.open(.cityListings(regionCode: regionCode, type: type), in: .search)
+            }
             #endif
             loadedTabs.insert(chrome.selectedTab)
             router.setActiveTab(chrome.selectedTab)
