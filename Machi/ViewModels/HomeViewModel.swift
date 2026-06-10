@@ -14,12 +14,26 @@ final class HomeViewModel: ObservableObject {
     @Published var canLoadMore = true
 
     private var currentPage = 0
+    // Server-side cursor for the unified-backend feed. Mirrors the Web
+    // client's infinite scroll: each "load more" pulls the NEXT remote page
+    // into SwiftData instead of endlessly re-reading the local cache.
+    private var remoteCursor: String?
+    private var remoteHasMore = false
+    // Every post id currently in `posts` — appended pages are filtered
+    // against this so a shifted local window can never show a duplicate.
+    private var loadedIds = Set<String>()
 
     func loadInitial(context: ModelContext, currentUser: UserEntity, postStore: PostStore, clearExisting: Bool = false) async {
         let previousPage = currentPage
         let previousCanLoadMore = canLoadMore
+        let previousCursor = remoteCursor
+        let previousRemoteHasMore = remoteHasMore
+        let previousLoadedIds = loadedIds
         currentPage = 0
         canLoadMore = true
+        remoteCursor = nil
+        remoteHasMore = false
+        loadedIds = []
         if clearExisting {
             posts = []
             authors = [:]
@@ -29,6 +43,9 @@ final class HomeViewModel: ObservableObject {
         if !didLoad, !clearExisting, !posts.isEmpty {
             currentPage = previousPage
             canLoadMore = previousCanLoadMore
+            remoteCursor = previousCursor
+            remoteHasMore = previousRemoteHasMore
+            loadedIds = previousLoadedIds
         }
     }
 
@@ -69,6 +86,7 @@ final class HomeViewModel: ObservableObject {
             try await postStore.toggleRepost(context: context, postId: post.id, currentUser: currentUser)
             authors[currentUser.id] = currentUser
             posts = postStore.posts(for: postStore.feedIds)
+            loadedIds = Set(posts.map(\.id))
         } catch {
             state = .error(error.kaixUserMessage)
         }
@@ -80,6 +98,7 @@ final class HomeViewModel: ObservableObject {
             _ = try await postStore.quoteRepost(context: context, postId: post.id, currentUser: currentUser, content: content)
             authors[currentUser.id] = currentUser
             posts = postStore.posts(for: postStore.feedIds)
+            loadedIds = Set(posts.map(\.id))
         } catch {
             state = .error(error.kaixUserMessage)
         }
@@ -112,17 +131,28 @@ final class HomeViewModel: ObservableObject {
             // When the unified backend is reachable (token present), pull the
             // freshest feed from the API and upsert into SwiftData so iOS and
             // Web stay in lockstep. The existing local query then reads from
-            // the same SwiftData store transparently.
-            if reset, KaiXBackend.token != nil {
-                await syncFromRemote(context: context, postStore: postStore)
+            // the same SwiftData store transparently. On reset that's page 1;
+            // on "load more" we advance the server cursor so infinite scroll
+            // keeps serving NEW content instead of recycling the local cache.
+            if KaiXBackend.token != nil {
+                if reset {
+                    await syncFromRemote(context: context, cursor: nil)
+                } else if remoteHasMore {
+                    await syncFromRemote(context: context, cursor: remoteCursor)
+                }
             }
 
             let repository = PostRepository(context: context)
             let page = try await repository.fetchPage(mode: mode, currentUserId: currentUser.id, page: currentPage, pageSize: KaiXConfig.pageSize)
-            posts = balanceOfficialRuns(reset ? page : posts + page)
+            // Belt-and-braces: even if the local window shifted (new posts
+            // synced in above us), an id can never appear twice in the list.
+            let appended = page.filter { !loadedIds.contains($0.id) }
+            posts = balanceOfficialRuns(reset ? page : posts + appended)
+            loadedIds = Set(posts.map(\.id))
             postStore.setFeed(posts, append: false)
             currentPage += 1
             canLoadMore = page.count == KaiXConfig.pageSize
+                || (KaiXBackend.token != nil && remoteHasMore)
             try await hydrate(
                 context: context,
                 repository: repository,
@@ -143,10 +173,10 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
-    /// Pull the latest feed from the unified KaiX backend and upsert
-    /// into SwiftData. Best-effort: a failure just falls back to the
-    /// local cache, so the App stays usable offline.
-    private func syncFromRemote(context: ModelContext, postStore: PostStore) async {
+    /// Pull one page of the unified KaiX backend feed and upsert into
+    /// SwiftData, advancing the server cursor. Best-effort: a failure just
+    /// falls back to the local cache, so the App stays usable offline.
+    private func syncFromRemote(context: ModelContext, cursor: String?) async {
         do {
             let apiMode: KaiXAPIClient.FeedMode
             switch mode {
@@ -160,15 +190,20 @@ final class HomeViewModel: ObservableObject {
             // current city.
             let region = RegionStore.shared.current
             let cityScoped = mode == .local
-            _ = try await RemoteSyncService.shared.syncFeed(
+            let page = try await RemoteSyncService.shared.syncFeed(
                 mode: apiMode,
+                cursor: cursor,
                 country: region?.countryCode,
                 province: cityScoped ? (region?.provinceCode.isEmpty == true ? nil : region?.provinceCode) : nil,
                 city: cityScoped ? region?.cityCode : nil,
                 context: context
             )
+            remoteCursor = page.nextCursor
+            remoteHasMore = page.nextCursor != nil && !page.ids.isEmpty
         } catch {
-            // Silent — the local fallback below still produces a usable feed.
+            // Silent — the local fallback below still produces a usable
+            // feed. Keep the previous cursor state so a transient network
+            // error doesn't permanently stop remote pagination.
         }
     }
 

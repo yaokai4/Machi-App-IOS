@@ -111,6 +111,37 @@ struct KXSplashView: View {
     }
 }
 
+/// Compact inline loader for "load more" rows — three breathing dots in
+/// the brand accent, visually quieter than a full LoadingView and
+/// distinct from the system spinner.
+struct KXInlineLoader: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var phase = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .fill(KXColor.accent.opacity(0.75))
+                    .frame(width: 7, height: 7)
+                    .scaleEffect(phase ? 1.0 : 0.55)
+                    .animation(
+                        reduceMotion
+                            ? nil
+                            : .easeInOut(duration: 0.55)
+                                .repeatForever(autoreverses: true)
+                                .delay(Double(index) * 0.14),
+                        value: phase
+                    )
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .onAppear { phase = true }
+        .accessibilityLabel(Text("Loading"))
+    }
+}
+
 struct ErrorStateView: View {
     @Environment(\.appLanguage) private var language
     let message: String

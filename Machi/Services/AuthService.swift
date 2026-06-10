@@ -37,7 +37,7 @@ final class AuthService {
     /// through it so the resulting `UserEntity` is the same row that
     /// the Web client sees. The local SwiftData login path remains as
     /// a strict offline fallback for already-registered local accounts.
-    func login(username: String, password: String, context: ModelContext) async throws -> UserEntity? {
+    func login(username: String, password: String, captchaId: String? = nil, captchaCode: String? = nil, context: ModelContext) async throws -> UserEntity? {
         if usesLocalAuthOnly {
             if let user = try await UserRepository(context: context).login(username: username, password: password) {
                 persistSession(user: user)
@@ -49,9 +49,14 @@ final class AuthService {
         // 1. Remote-first.
         do {
             let entity = try await RemoteSyncService.shared.loginAndSync(
-                handle: username, password: password, context: context,
+                handle: username, password: password, captchaId: captchaId, captchaCode: captchaCode, context: context,
             )
             return entity
+        } catch let apiError as KaiXAPIError {
+            // The backend WAS reachable and said no (bad credentials, bad
+            // captcha, rate limit…). Falling back to the local store here
+            // would silently bypass that verdict — surface it instead.
+            throw apiError
         } catch {
             // 2. Fallback to the local SwiftData credential store. Only kicks
             //    in when the backend is unreachable (so we don't lock users

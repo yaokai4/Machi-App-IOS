@@ -65,6 +65,15 @@ struct AuthView: View {
         }
     }
 
+    private var captchaBinding: Binding<String> {
+        Binding {
+            viewModel.captchaCode
+        } set: { value in
+            viewModel.captchaCode = String(value.uppercased().filter { $0.isLetter || $0.isNumber }.prefix(8))
+            viewModel.clearError(for: .captcha)
+        }
+    }
+
     @ViewBuilder
     private func availabilityHint(_ state: AuthViewModel.FieldAvailability, takenKey: String, okKey: String) -> some View {
         switch state {
@@ -253,6 +262,18 @@ struct AuthView: View {
                     )
                     availabilityHint(viewModel.emailAvailability, takenKey: "authEmailTaken", okKey: "authEmailAvailable")
 
+                    // Solving the captcha is what unlocks "send code" — the
+                    // email-code request is the bot-abuse vector being gated.
+                    if viewModel.captchaEnabled {
+                        AuthCaptchaField(
+                            code: captchaBinding,
+                            image: viewModel.captchaImage,
+                            loading: viewModel.captchaLoading,
+                            error: viewModel.fieldError(.captcha),
+                            onRefresh: { Task { await viewModel.refreshCaptcha() } }
+                        )
+                    }
+
                     AuthCodeField(
                         code: codeBinding,
                         sending: viewModel.sendingCode,
@@ -273,6 +294,16 @@ struct AuthView: View {
                     placeholder: viewModel.mode == .login ? L("enterPassword", language) : L("passwordMin", language),
                     error: viewModel.fieldError(.password)
                 )
+
+                if viewModel.mode == .login, viewModel.captchaEnabled {
+                    AuthCaptchaField(
+                        code: captchaBinding,
+                        image: viewModel.captchaImage,
+                        loading: viewModel.captchaLoading,
+                        error: viewModel.fieldError(.captcha),
+                        onRefresh: { Task { await viewModel.refreshCaptcha() } }
+                    )
+                }
             }
 
             if let error = viewModel.errorMessage {
@@ -356,6 +387,11 @@ struct AuthView: View {
             try? await Task.sleep(nanoseconds: 450_000_000)
             await viewModel.checkEmailAvailability(language: language)
         }
+        // Runs on appear and again on every login↔register switch — the two
+        // scenes can be enforced independently server-side.
+        .task(id: viewModel.mode) {
+            await viewModel.refreshCaptcha()
+        }
     }
 }
 
@@ -405,6 +441,88 @@ private struct AuthCodeField: View {
                 .buttonStyle(.plain)
                 .disabled(!canSend || cooldown > 0 || sending)
                 .accessibilityIdentifier("auth.sendCode")
+            }
+
+            if let error {
+                AuthFieldErrorText(error)
+            }
+        }
+    }
+}
+
+private struct AuthCaptchaField: View {
+    @Environment(\.appLanguage) private var language
+    @Binding var code: String
+    let image: Data?
+    let loading: Bool
+    var error: String?
+    let onRefresh: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Text(L("authCaptcha", language))
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                Text(L("authCaptchaRefreshHint", language))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+
+            HStack(spacing: 10) {
+                HStack(spacing: 13) {
+                    Image(systemName: "checkmark.shield")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24)
+                    TextField(L("authCaptchaPlaceholder", language), text: $code)
+                        .keyboardType(.asciiCapable)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                        .accessibilityIdentifier("auth.captcha")
+                }
+                .padding(.horizontal, 16)
+                .frame(height: 56)
+                .frame(maxWidth: .infinity)
+                .kxGlassSurface(radius: KXRadius.md, stroke: error == nil ? KXColor.glassStroke : Color.red.opacity(0.36))
+
+                Button(action: onRefresh) {
+                    Group {
+                        if loading {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                        } else if let image, let uiImage = UIImage(data: image) {
+                            Image(uiImage: uiImage)
+                                .resizable()
+                                .scaledToFit()
+                                .padding(.horizontal, 4)
+                        } else {
+                            VStack(spacing: 4) {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.subheadline.weight(.bold))
+                                Text(L("authCaptchaLoadFailed", language))
+                                    .font(.caption2.weight(.semibold))
+                                    .multilineTextAlignment(.center)
+                                    .minimumScaleFactor(0.6)
+                                    .lineLimit(2)
+                            }
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 4)
+                        }
+                    }
+                    .frame(width: 128, height: 56)
+                    // Captcha PNGs come on a fixed light background; pin the
+                    // tile to white so they look intentional in dark mode too.
+                    .background(.white, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
+                            .strokeBorder(KXColor.glassStroke)
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(loading)
+                .accessibilityIdentifier("auth.captcha.refresh")
+                .accessibilityLabel(L("authCaptchaRefreshHint", language))
             }
 
             if let error {

@@ -32,12 +32,14 @@ final class PostRepository {
         let appLang = await MainActor.run(body: { AppLanguage.resolved(from: UserDefaults.standard.string(forKey: "appLanguageCode") ?? "") })
         let ranking = await MainActor.run(body: { FeedQueryBuilder.context(for: appLang) })
         let selectedCountry = ranking.region?.countryCode ?? ""
-        // For "recommend" and "local" we over-fetch a touch so the
-        // in-memory ranking has a real choice; "following" and "hot"
-        // stay strict so the user's mental model ("only people I
-        // follow", "freshest hot") isn't violated.
-        let overfetch = (mode == .recommend || mode == .local) ? 2 : 1
-        let limit = pageSize * overfetch
+        // Every mode pages over DISJOINT createdAt-ordered windows
+        // (offset = page * pageSize, limit = pageSize). The in-memory
+        // ranking below only reorders WITHIN the fetched window. The old
+        // "over-fetch 2x then keep the best half" trick made window N
+        // overlap window N+1 by a full page, so posts the ranking had
+        // already surfaced came back on the next page — the visible
+        // symptom was the home feed looping the same posts forever.
+        let limit = pageSize
 
         if mode == .following {
             let followIds = try followingIds(for: currentUserId)
@@ -78,8 +80,7 @@ final class PostRepository {
             descriptor.fetchLimit = limit
             let pagePosts = try context.fetch(descriptor)
             try refreshRepostState(for: pagePosts, currentUserId: currentUserId)
-            let ranked = FeedQueryBuilder.rank(pagePosts, using: ranking)
-            return Array(ranked.prefix(pageSize))
+            return FeedQueryBuilder.rank(pagePosts, using: ranking)
         }
 
         if mode == .hot {
@@ -112,8 +113,7 @@ final class PostRepository {
         descriptor.fetchLimit = limit
         let posts = try context.fetch(descriptor)
         try refreshRepostState(for: posts, currentUserId: currentUserId)
-        let ranked = FeedQueryBuilder.rank(posts, using: ranking)
-        return Array(ranked.prefix(pageSize))
+        return FeedQueryBuilder.rank(posts, using: ranking)
     }
 
     func fetchCityPage(
@@ -172,14 +172,15 @@ final class PostRepository {
                 sortBy: sortDescriptors
             )
         }
+        // Disjoint windows + within-window ranking only — see fetchPage for
+        // why overlapping windows made city channels repeat posts.
         descriptor.fetchOffset = page * pageSize
-        descriptor.fetchLimit = pageSize * 2
+        descriptor.fetchLimit = pageSize
         let posts = try context.fetch(descriptor)
         try refreshRepostState(for: posts, currentUserId: currentUserId)
         let appLang = await MainActor.run(body: { AppLanguage.resolved(from: UserDefaults.standard.string(forKey: "appLanguageCode") ?? "") })
         let ranking = await MainActor.run(body: { FeedQueryBuilder.context(for: appLang) })
-        let ranked = FeedQueryBuilder.rank(posts, using: ranking)
-        return Array(ranked.prefix(pageSize))
+        return FeedQueryBuilder.rank(posts, using: ranking)
     }
 
     func fetchPost(id: String, currentUserId: String? = nil) async throws -> PostEntity? {

@@ -49,8 +49,8 @@ final class RemoteSyncService {
     /// into SwiftData. Persists the token in `KaiXBackend.token` so
     /// subsequent calls carry it automatically.
     @discardableResult
-    func loginAndSync(handle: String, password: String, context: ModelContext) async throws -> UserEntity {
-        let response = try await api.login(handle: handle, password: password)
+    func loginAndSync(handle: String, password: String, captchaId: String? = nil, captchaCode: String? = nil, context: ModelContext) async throws -> UserEntity {
+        let response = try await api.login(handle: handle, password: password, captchaId: captchaId, captchaCode: captchaCode)
         let entity = upsertUser(response.user, context: context)
         AuthService.shared.persistSession(user: entity)
         try? context.save()
@@ -130,19 +130,69 @@ final class RemoteSyncService {
         return entity
     }
 
-    /// Sync notifications from the server.
-    func syncNotifications(context: ModelContext) async {
+    /// Mirror the server's notifications (others liking / commenting on /
+    /// following YOU) into SwiftData so the in-app list and the system
+    /// banners both see them. Returns the entities that are NEW to this
+    /// device and still unread — the caller forwards those to
+    /// `SystemNotificationService` so each one banners exactly once.
+    @discardableResult
+    func syncNotifications(context: ModelContext) async -> [NotificationEntity] {
         do {
             let response = try await api.notifications()
-            for n in response.items {
-                if let actor = n.actor { _ = upsertUser(actor, context: context) }
-                // We don't fully mirror notifications into SwiftData (the
-                // existing NotificationEntity has its own seed source). For
-                // now we just make sure the actor avatars are present so
-                // the UI doesn't show "未知用户".
+            var fresh: [NotificationEntity] = []
+            for dto in response.items {
+                if let actor = dto.actor { _ = upsertUser(actor, context: context) }
+                let (entity, isNew) = upsertNotification(dto, context: context)
+                if isNew, !entity.isRead {
+                    fresh.append(entity)
+                }
             }
             try? context.save()
-        } catch { /* ignore */ }
+            return fresh
+        } catch {
+            return []
+        }
+    }
+
+    @discardableResult
+    func upsertNotification(_ dto: KaiXNotificationDTO, context: ModelContext) -> (NotificationEntity, isNew: Bool) {
+        let serverId = dto.id
+        // Translate server-side target ids to the local entity ids the UI
+        // navigates with (posts composed on this device keep a local UUID
+        // and carry the server id in `remoteId`).
+        let localPostId = dto.target_post_id.flatMap { fetchPost(remoteId: $0, context: context)?.id ?? $0 }
+        let localActorId = dto.actor.map { fetchUser(remoteId: $0.id, context: context)?.id ?? $0.id } ?? dto.actor_id
+
+        if let existing = fetchNotification(remoteId: serverId, context: context) {
+            existing.isRead = dto.is_read
+            existing.content = dto.content ?? existing.content
+            existing.targetPostId = localPostId ?? existing.targetPostId
+            existing.targetCommentId = dto.target_comment_id ?? existing.targetCommentId
+            existing.syncStatus = .synced
+            return (existing, false)
+        }
+        let entity = NotificationEntity(
+            id: serverId,
+            type: NotificationType(rawValue: dto.type) ?? .system,
+            actorId: localActorId,
+            targetPostId: localPostId,
+            targetCommentId: dto.target_comment_id,
+            content: dto.content ?? "",
+            isRead: dto.is_read,
+            createdAt: parsedDate(dto.created_at) ?? .now,
+            remoteId: serverId,
+            syncStatus: .synced
+        )
+        context.insert(entity)
+        return (entity, true)
+    }
+
+    private func fetchNotification(remoteId: String, context: ModelContext) -> NotificationEntity? {
+        var descriptor = FetchDescriptor<NotificationEntity>(
+            predicate: #Predicate { $0.remoteId == remoteId || $0.id == remoteId }
+        )
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
     }
 
     /// Send a DM message through the unified API.
@@ -151,20 +201,31 @@ final class RemoteSyncService {
         try await api.sendMessage(conversationId, content: content, mediaIds: mediaIds, attachmentIds: attachmentIds)
     }
 
-    /// Replace the local feed cache with the latest 30 server posts.
-    /// Returns the post IDs in order so the caller can update its
-    /// store binding directly.
+    /// One synced page of the server feed: the upserted local post ids in
+    /// server order, plus the cursor for the next page (nil when the server
+    /// has no more).
+    struct FeedSyncPage {
+        let ids: [String]
+        let nextCursor: String?
+    }
+
+    /// Upsert one page of the server feed into SwiftData. Pass `cursor`
+    /// from the previous page's `nextCursor` to keep paging — this is the
+    /// same cursor protocol the Web client uses, so infinite scroll stays
+    /// in lockstep across platforms instead of recycling the local cache.
     @discardableResult
     func syncFeed(
         mode: KaiXAPIClient.FeedMode = .recommend,
+        cursor: String? = nil,
         country: String? = nil,
         province: String? = nil,
         city: String? = nil,
         contentTypes: [ContentType]? = nil,
         context: ModelContext
-    ) async throws -> [String] {
+    ) async throws -> FeedSyncPage {
         let response = try await api.feed(
             mode: mode,
+            cursor: cursor,
             country: country,
             province: province,
             city: city,
@@ -178,7 +239,7 @@ final class RemoteSyncService {
         }
         let ids = response.items.map { upsertPost($0, context: context).id }
         try? context.save()
-        return ids
+        return FeedSyncPage(ids: ids, nextCursor: response.next_cursor)
     }
 
     /// Pull a single post + its comments and mirror into SwiftData.

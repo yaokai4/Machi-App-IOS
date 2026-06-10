@@ -39,23 +39,32 @@ struct HomeTimelineView: View {
                                 .padding(.vertical, 7)
                         }
                         .scrollDisabled(true)
+                        .transition(.opacity)
                     case .empty:
-                        if viewModel.mode == .following {
-                            followingEmptyState
-                        } else if viewModel.mode == .local && regionStore.current == nil {
-                            localPickRegionState
-                        } else {
-                            EmptyStateView(title: L("emptyFeed", language), subtitle: L("emptyFeedHelp", language), systemImage: "text.bubble")
+                        Group {
+                            if viewModel.mode == .following {
+                                followingEmptyState
+                            } else if viewModel.mode == .local && regionStore.current == nil {
+                                localPickRegionState
+                            } else {
+                                EmptyStateView(title: L("emptyFeed", language), subtitle: L("emptyFeedHelp", language), systemImage: "text.bubble")
+                            }
                         }
+                        .transition(.opacity)
                     case .error(let message):
                         ErrorStateView(message: message) {
                             Task { await viewModel.refresh(context: modelContext, currentUser: currentUser, postStore: postStore) }
                         }
+                        .transition(.opacity)
                     case .loaded:
+                        // Content settles in with a soft fade + 6pt rise so
+                        // the skeleton→feed swap reads as one motion.
                         feed
+                            .transition(.opacity.combined(with: .offset(y: 6)))
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .animation(.easeOut(duration: 0.24), value: viewModel.state)
             }
 
             KXFloatingComposeButton {
@@ -243,8 +252,8 @@ struct HomeTimelineView: View {
                 }
 
                 if viewModel.isLoadingMore {
-                    ProgressView()
-                        .padding()
+                    KXInlineLoader()
+                        .transition(.opacity)
                 }
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)

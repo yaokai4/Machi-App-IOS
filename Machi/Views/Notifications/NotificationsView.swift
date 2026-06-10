@@ -28,7 +28,19 @@ struct NotificationsView: View {
         .kxPageBackground()
         .toolbar(.hidden, for: .navigationBar)
         .task {
+            // Pull the freshest server notifications first so the list the
+            // user just opened isn't stale, then render from SwiftData.
+            if KaiXBackend.token != nil {
+                await RemoteSyncService.shared.syncNotifications(context: modelContext)
+            }
             await viewModel.load(context: modelContext, notificationStore: notificationStore)
+        }
+        .onAppear {
+            // Don't banner over the list the user is currently reading.
+            SystemNotificationService.shared.suppressBanners = true
+        }
+        .onDisappear {
+            SystemNotificationService.shared.suppressBanners = false
         }
         .alert(L("error", language), isPresented: Binding(
             get: { viewModel.transientError != nil },

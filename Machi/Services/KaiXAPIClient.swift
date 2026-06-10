@@ -94,9 +94,19 @@ final class KaiXAPIClient {
 
     // MARK: - auth
 
+    /// Fetch an image-captcha challenge for `scene` ("login" / "register").
+    func fetchCaptcha(scene: String) async throws -> KaiXCaptchaResponse {
+        let data = try await request("POST", "/api/auth/captcha", body: ["scene": scene])
+        return try decode(data)
+    }
+
     @discardableResult
-    func login(handle: String, password: String) async throws -> KaiXLoginResponse {
-        let body = ["handle": handle, "password": password]
+    func login(handle: String, password: String, captchaId: String? = nil, captchaCode: String? = nil) async throws -> KaiXLoginResponse {
+        var body = ["handle": handle, "password": password]
+        if let captchaId, !captchaId.isEmpty {
+            body["captcha_id"] = captchaId
+            body["captcha_code"] = captchaCode ?? ""
+        }
         let data = try await request("POST", "/api/auth/login", body: body)
         let response: KaiXLoginResponse = try decode(data)
         KaiXBackend.token = response.token
@@ -152,9 +162,13 @@ final class KaiXAPIClient {
         return try decode(data)
     }
 
-    func sendVerificationCode(email: String, purpose: String = "register") async throws -> KaiXEmailCodeResponse {
-        let data = try await request("POST", "/api/auth/send-verification-code",
-                                     body: ["email": email, "purpose": purpose])
+    func sendVerificationCode(email: String, purpose: String = "register", captchaId: String? = nil, captchaCode: String? = nil) async throws -> KaiXEmailCodeResponse {
+        var body = ["email": email, "purpose": purpose]
+        if let captchaId, !captchaId.isEmpty {
+            body["captcha_id"] = captchaId
+            body["captcha_code"] = captchaCode ?? ""
+        }
+        let data = try await request("POST", "/api/auth/send-verification-code", body: body)
         return try decode(data)
     }
 

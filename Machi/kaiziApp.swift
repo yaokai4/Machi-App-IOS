@@ -12,6 +12,12 @@ import SwiftUI
 struct kaiziApp: App {
     private let modelContainer = KaiXDatabaseContainer.shared
 
+    init() {
+        // Must be installed before the first banner is shown or tapped,
+        // so foreground presentation + tap routing work from cold start.
+        SystemNotificationService.shared.activate()
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()

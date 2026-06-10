@@ -36,6 +36,10 @@ struct MainTabView: View {
                     tabContent(tab)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                         .opacity(chrome.selectedTab == tab ? 1 : 0)
+                        // Subtle settle: the incoming tab scales 0.988 → 1 with
+                        // the existing snappy fade, so switching reads as a
+                        // gentle pop instead of a hard cross-dissolve.
+                        .scaleEffect(chrome.selectedTab == tab ? 1 : 0.988)
                         .allowsHitTesting(chrome.selectedTab == tab)
                         .accessibilityHidden(chrome.selectedTab != tab)
                 }

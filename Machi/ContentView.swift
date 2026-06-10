@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage("currentUserID") private var currentUserID = ""
     @AppStorage("appLanguageCode") private var appLanguageCode = AppLanguage.system.rawValue
     @AppStorage("appAppearance") private var appAppearance = AppAppearance.light.rawValue
@@ -85,6 +86,37 @@ struct ContentView: View {
             if KaiXBackend.token != nil {
                 await RemoteSyncService.shared.bootstrap(context: modelContext)
             }
+            // Foreground notification loop: poll the server's notification
+            // list and surface anything new as a REAL system banner +
+            // app-icon badge. Cancelled automatically when the session
+            // changes (task id) or the root view goes away.
+            guard KaiXBackend.token != nil, appState.currentUser?.isGuest != true else { return }
+            await SystemNotificationService.shared.requestAuthorizationIfNeeded()
+            while !Task.isCancelled {
+                await syncSystemNotifications()
+                try? await Task.sleep(nanoseconds: 45_000_000_000)
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Snappy re-sync on returning to the foreground (the sleeping
+            // poll loop also resumes, this just skips the residual wait).
+            if phase == .active, KaiXBackend.token != nil {
+                Task { await syncSystemNotifications() }
+            }
+        }
+        .onChange(of: notificationStore.unreadCount) { _, count in
+            SystemNotificationService.shared.syncBadge(unreadCount: count)
+            if count == 0 {
+                SystemNotificationService.shared.clearDelivered()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .kaiXSystemNotificationTapped)) { note in
+            guard appState.currentUser != nil else { return }
+            appChrome.select(.home)
+            appRouter.setActiveTab(.home)
+            if let postId = note.userInfo?["postId"] as? String, !postId.isEmpty {
+                appRouter.open(.postDetail(postId: postId), in: .home)
+            }
         }
         .onChange(of: appState.databaseRecoveryNotice) { _, notice in
             #if DEBUG
@@ -108,6 +140,26 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .kaiXSessionInvalidated)) { _ in
             logout()
         }
+    }
+
+    /// One notification tick: mirror the server list into SwiftData,
+    /// refresh the in-app store/badge, and banner anything new.
+    private func syncSystemNotifications() async {
+        guard KaiXBackend.token != nil, let user = appState.currentUser, !user.isGuest else { return }
+        let fresh = await RemoteSyncService.shared.syncNotifications(context: modelContext)
+        if let all = try? await NotificationRepository(context: modelContext).fetchNotifications() {
+            notificationStore.setNotifications(all)
+        }
+        // Honor the user's per-type switches from 设置 → 通知设置.
+        let wanted = fresh.filter { NotificationPreferenceService.isEnabled($0.type, recipientUserId: user.id) }
+        guard !wanted.isEmpty else { return }
+        let actorIds = Set(wanted.map(\.actorId))
+        let actorList = (try? await UserRepository(context: modelContext).fetchUsers(ids: actorIds)) ?? []
+        await SystemNotificationService.shared.deliver(
+            wanted,
+            actors: Dictionary(uniqueKeysWithValues: actorList.map { ($0.id, $0) }),
+            language: language
+        )
     }
 
     /// Shared success path for a real (non-guest) login or registration.

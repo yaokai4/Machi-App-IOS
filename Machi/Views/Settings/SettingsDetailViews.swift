@@ -1,5 +1,7 @@
 import SwiftData
 import SwiftUI
+import UIKit
+import UserNotifications
 
 private enum AccountSecurityVerificationMethod: String, CaseIterable, Identifiable {
     case password
@@ -1519,16 +1521,30 @@ struct NotificationPreferencesView: View {
     @State private var notifyFollows = true
     @State private var notifyMessages = true
     @State private var notifySystem = true
+    @State private var systemPermissionDenied = false
     let currentUser: UserEntity
 
     var body: some View {
         SettingsFormPage(title: L("notificationSettings", language)) {
-            Toggle(L("likeNotifications", language), isOn: preferenceBinding(.like, $notifyLikes))
-            Toggle(L("commentNotifications", language), isOn: preferenceBinding(.comment, $notifyComments))
-            Toggle(L("repostNotifications", language), isOn: preferenceBinding(.repost, $notifyReposts))
-            Toggle(L("followNotifications", language), isOn: preferenceBinding(.follow, $notifyFollows))
+            if systemPermissionDenied {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(L("notifPermissionOff", language), systemImage: "bell.slash.fill")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.orange)
+                    if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+                        Link(L("openSystemSettings", language), destination: url)
+                            .font(.footnote.weight(.bold))
+                    }
+                }
+                .padding(KXSpacing.md)
+                .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+            }
+            Toggle(L("likeNotifications", language), isOn: preferenceBinding(.like, $notifyLikes, serverKey: "push_likes"))
+            Toggle(L("commentNotifications", language), isOn: preferenceBinding(.comment, $notifyComments, serverKey: "push_comments"))
+            Toggle(L("repostNotifications", language), isOn: preferenceBinding(.repost, $notifyReposts, serverKey: nil))
+            Toggle(L("followNotifications", language), isOn: preferenceBinding(.follow, $notifyFollows, serverKey: "push_follows"))
             Toggle(L("messageNotifications", language), isOn: messagePreferenceBinding)
-            Toggle(L("systemNotifications", language), isOn: preferenceBinding(.system, $notifySystem))
+            Toggle(L("systemNotifications", language), isOn: preferenceBinding(.system, $notifySystem, serverKey: nil))
         }
         .onAppear {
             notifyLikes = NotificationPreferenceService.isEnabled(.like, recipientUserId: currentUser.id)
@@ -1538,14 +1554,35 @@ struct NotificationPreferencesView: View {
             notifySystem = NotificationPreferenceService.isEnabled(.system, recipientUserId: currentUser.id)
             notifyMessages = UserDefaults.standard.object(forKey: messagePreferenceKey) as? Bool ?? true
         }
+        .task {
+            let settings = await UNUserNotificationCenter.current().notificationSettings()
+            systemPermissionDenied = settings.authorizationStatus == .denied
+            // Server is the source of truth when logged in — the same
+            // toggles the Web settings page edits.
+            guard KaiXBackend.token != nil else { return }
+            guard let remote = try? await KaiXAPIClient.shared.settings() else { return }
+            notifyLikes = remote.push_likes
+            notifyComments = remote.push_comments
+            notifyFollows = remote.push_follows
+            notifyMessages = remote.push_messages
+            NotificationPreferenceService.setEnabled(remote.push_likes, type: .like, recipientUserId: currentUser.id)
+            NotificationPreferenceService.setEnabled(remote.push_comments, type: .comment, recipientUserId: currentUser.id)
+            NotificationPreferenceService.setEnabled(remote.push_follows, type: .follow, recipientUserId: currentUser.id)
+            UserDefaults.standard.set(remote.push_messages, forKey: messagePreferenceKey)
+        }
     }
 
-    private func preferenceBinding(_ type: NotificationType, _ state: Binding<Bool>) -> Binding<Bool> {
+    private func preferenceBinding(_ type: NotificationType, _ state: Binding<Bool>, serverKey: String?) -> Binding<Bool> {
         Binding {
             state.wrappedValue
         } set: { value in
             state.wrappedValue = value
             NotificationPreferenceService.setEnabled(value, type: type, recipientUserId: currentUser.id)
+            // Mirror to the unified backend (best-effort) so Web shows the
+            // same switches. repost/system have no server column yet.
+            if let serverKey, KaiXBackend.token != nil {
+                Task.detached { _ = try? await KaiXAPIClient.shared.updateSettings([serverKey: AnyEncodable(value)]) }
+            }
         }
     }
 
@@ -1559,24 +1596,72 @@ struct NotificationPreferencesView: View {
         } set: { value in
             notifyMessages = value
             UserDefaults.standard.set(value, forKey: messagePreferenceKey)
+            if KaiXBackend.token != nil {
+                Task.detached { _ = try? await KaiXAPIClient.shared.updateSettings(["push_messages": AnyEncodable(value)]) }
+            }
         }
     }
 }
 
 struct PrivacySettingsView: View {
     @Environment(\.appLanguage) private var language
-    @AppStorage("profileVisibility") private var profileVisibility = "public"
-    @AppStorage("allowMessageFromStrangers") private var allowMessageFromStrangers = true
+    // Mirrors the server's `privacy_protect` / `privacy_allow_dm` —
+    // identical semantics to the Web settings page. AppStorage keeps the
+    // last known values for offline display.
+    @AppStorage("privacyProtect") private var privacyProtect = false
+    @AppStorage("privacyAllowDM") private var privacyAllowDM = "everyone"
 
     var body: some View {
         SettingsFormPage(title: L("privacySettings", language)) {
-            Picker(L("profileVisibility", language), selection: $profileVisibility) {
-                Text(L("public", language)).tag("public")
-                Text(L("followersOnly", language)).tag("followers")
-                Text(L("onlyMe", language)).tag("private")
+            Toggle(isOn: protectBinding) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(L("privacyProtectTitle", language))
+                    Text(L("privacyProtectSub", language))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
-            .pickerStyle(.segmented)
-            Toggle(L("allowStrangerMessages", language), isOn: $allowMessageFromStrangers)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(L("dmPermission", language))
+                    .font(.subheadline.weight(.semibold))
+                Picker(L("dmPermission", language), selection: allowDMBinding) {
+                    Text(L("dmEveryone", language)).tag("everyone")
+                    Text(L("dmFollowing", language)).tag("following")
+                    Text(L("dmNobody", language)).tag("nobody")
+                }
+                .pickerStyle(.segmented)
+            }
+            .padding(.top, 4)
+        }
+        .task {
+            guard KaiXBackend.token != nil else { return }
+            guard let remote = try? await KaiXAPIClient.shared.settings() else { return }
+            privacyProtect = remote.privacy_protect
+            if ["everyone", "following", "nobody"].contains(remote.privacy_allow_dm) {
+                privacyAllowDM = remote.privacy_allow_dm
+            }
+        }
+    }
+
+    private var protectBinding: Binding<Bool> {
+        Binding {
+            privacyProtect
+        } set: { value in
+            privacyProtect = value
+            if KaiXBackend.token != nil {
+                Task.detached { _ = try? await KaiXAPIClient.shared.updateSettings(["privacy_protect": AnyEncodable(value)]) }
+            }
+        }
+    }
+
+    private var allowDMBinding: Binding<String> {
+        Binding {
+            privacyAllowDM
+        } set: { value in
+            privacyAllowDM = value
+            if KaiXBackend.token != nil {
+                Task.detached { _ = try? await KaiXAPIClient.shared.updateSettings(["privacy_allow_dm": AnyEncodable(value)]) }
+            }
         }
     }
 }
@@ -1972,7 +2057,7 @@ struct AboutKaiXView: View {
                 .font(.system(size: 38, weight: .black, design: .rounded))
             Text(L("aboutSubtitle", language))
                 .foregroundStyle(.secondary)
-            Text("\(L("version", language)) 1.0.0")
+            Text("\(L("version", language)) \(KaiXBackend.appVersionDisplay)")
                 .font(.footnote.weight(.bold))
 
             Divider().padding(.vertical, 4)

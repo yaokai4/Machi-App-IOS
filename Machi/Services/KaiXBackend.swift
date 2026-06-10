@@ -25,6 +25,18 @@ enum KaiXBackend {
     /// Public support inbox (matches the web client's contact address).
     static let supportEmail = "hi@machicity.com"
 
+    /// Marketing version straight from the bundle so Settings/About never
+    /// drift from what's actually shipped to the App Store.
+    static var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+    }
+
+    /// "1.0 (42)" style display string for About screens.
+    static var appVersionDisplay: String {
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        return build.map { "\(appVersion) (\($0))" } ?? appVersion
+    }
+
     /// Effective base URL. The order of resolution is:
     /// 1. `UserDefaults` `kaix.api.base`
     /// 2. `Info.plist` `KAIX_API_BASE`

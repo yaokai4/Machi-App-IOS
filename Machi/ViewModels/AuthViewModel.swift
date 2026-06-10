@@ -18,6 +18,7 @@ final class AuthViewModel: ObservableObject {
         case code
         case password
         case region
+        case captcha
     }
 
     enum FieldAvailability: Equatable { case idle, checking, available, taken }
@@ -40,11 +41,21 @@ final class AuthViewModel: ObservableObject {
     @Published var usernameAvailability: FieldAvailability = .idle
     @Published var emailAvailability: FieldAvailability = .idle
     private var cooldownTask: Task<Void, Never>?
+    // Image captcha (anonymous-auth bot guard, parity with web).
+    @Published var captchaEnabled = false
+    @Published var captchaImage: Data?
+    @Published var captchaCode = ""
+    @Published var captchaLoading = false
+    private var captchaId = ""
 
     func submit(context: ModelContext, language: AppLanguage) async -> UserEntity? {
         guard !isLoading else { return nil }
         errorMessage = nil
         fieldErrors = validate(language: language)
+        if mode == .login, captchaEnabled, !captchaId.isEmpty,
+           captchaCode.trimmingCharacters(in: .whitespaces).isEmpty {
+            fieldErrors[.captcha] = L("authCaptchaRequired", language)
+        }
         guard fieldErrors.isEmpty else { return nil }
 
         isLoading = true
@@ -53,7 +64,13 @@ final class AuthViewModel: ObservableObject {
         do {
             switch mode {
             case .login:
-                guard let user = try await AuthService.shared.login(username: AuthValidation.normalizedHandle(username), password: password, context: context) else {
+                guard let user = try await AuthService.shared.login(
+                    username: AuthValidation.normalizedHandle(username),
+                    password: password,
+                    captchaId: captchaEnabled && !captchaId.isEmpty ? captchaId : nil,
+                    captchaCode: captchaCode.trimmingCharacters(in: .whitespaces),
+                    context: context
+                ) else {
                     errorMessage = L("wrongCredentials", language)
                     return nil
                 }
@@ -79,6 +96,9 @@ final class AuthViewModel: ObservableObject {
             }
         } catch let apiError as KaiXAPIError {
             apply(apiError: apiError, language: language)
+            // The server burns the captcha challenge on every attempt —
+            // whatever failed, the old image can't be reused.
+            if mode == .login { await refreshCaptcha() }
             return nil
         } catch {
             errorMessage = L("databaseSaveFailed", language)
@@ -109,6 +129,11 @@ final class AuthViewModel: ObservableObject {
             fieldErrors[.email] = L("authInvalidEmail", language)
             return
         }
+        if captchaEnabled, !captchaId.isEmpty,
+           captchaCode.trimmingCharacters(in: .whitespaces).isEmpty {
+            fieldErrors[.captcha] = L("authCaptchaRequired", language)
+            return
+        }
         sendingCode = true
         infoMessage = nil
         defer { sendingCode = false }
@@ -121,15 +146,54 @@ final class AuthViewModel: ObservableObject {
                 return
             }
             emailAvailability = .available
-            _ = try await KaiXAPIClient.shared.sendVerificationCode(email: trimmed, purpose: "register")
+            _ = try await KaiXAPIClient.shared.sendVerificationCode(
+                email: trimmed,
+                purpose: "register",
+                captchaId: captchaEnabled && !captchaId.isEmpty ? captchaId : nil,
+                captchaCode: captchaCode.trimmingCharacters(in: .whitespaces)
+            )
             codeSent = true
             infoMessage = L("authCodeSent", language)
             startCooldown(60)
+            // The challenge is single-use — a resend needs a fresh image.
+            await refreshCaptcha()
         } catch let apiError as KaiXAPIError {
             apply(apiError: apiError, language: language)
+            await refreshCaptcha()
         } catch {
             errorMessage = L("authNetworkError", language)
         }
+    }
+
+    // MARK: - Image captcha
+
+    private var captchaFetchSeq = 0
+
+    /// Fetch a fresh challenge for the current mode's scene. Hides the row
+    /// entirely when the server reports enforcement disabled. Stale fetches
+    /// (e.g. a mode switch mid-flight) are discarded by sequence number so
+    /// the shown image always matches the stored challenge id.
+    func refreshCaptcha() async {
+        captchaFetchSeq += 1
+        let seq = captchaFetchSeq
+        captchaLoading = true
+        captchaCode = ""
+        fieldErrors[.captcha] = nil
+        do {
+            let res = try await KaiXAPIClient.shared.fetchCaptcha(scene: mode == .login ? "login" : "register")
+            guard seq == captchaFetchSeq else { return }
+            captchaEnabled = res.enabled
+            captchaId = res.captcha_id ?? ""
+            captchaImage = res.pngData
+        } catch {
+            guard seq == captchaFetchSeq else { return }
+            // Keep current visibility; show the retry affordance. Submitting
+            // without a challenge id simply omits the captcha fields, and the
+            // server's verdict (if it requires one) lands on the captcha field.
+            captchaId = ""
+            captchaImage = nil
+        }
+        captchaLoading = false
     }
 
     private func startCooldown(_ seconds: Int) {
@@ -217,6 +281,12 @@ final class AuthViewModel: ObservableObject {
             fieldErrors[.email] = code == "email_taken" ? L("authEmailTaken", language) : L("authInvalidEmail", language)
         case "invalid_code", "code_expired", "code_required":
             fieldErrors[.code] = L("authCodeInvalid", language)
+        case "captcha_required":
+            captchaEnabled = true
+            fieldErrors[.captcha] = L("authCaptchaRequired", language)
+        case "invalid_captcha", "captcha_expired":
+            captchaEnabled = true
+            fieldErrors[.captcha] = L("authCaptchaInvalid", language)
         case "rate_limited":
             errorMessage = L("authRateLimited", language)
         case "network_error":

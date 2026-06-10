@@ -46,7 +46,7 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
                     .padding(.top, 4)
 
-                    Text("Machi 1.0.0")
+                    Text("Machi \(KaiXBackend.appVersion)")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
@@ -175,7 +175,7 @@ struct SettingsView: View {
                 FeedbackView()
             }
             SettingsDivider()
-            SettingsRowLink(icon: "info.circle", tint: .gray, title: L("aboutKaiX", language), value: "1.0.0", subtitle: "\(L("version", language)) 1.0.0") {
+            SettingsRowLink(icon: "info.circle", tint: .gray, title: L("aboutKaiX", language), value: KaiXBackend.appVersion, subtitle: "\(L("version", language)) \(KaiXBackend.appVersion)") {
                 AboutKaiXView()
             }
         }

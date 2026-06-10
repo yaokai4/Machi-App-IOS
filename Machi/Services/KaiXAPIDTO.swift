@@ -1330,6 +1330,22 @@ struct KaiXEmailCodeResponse: Codable, Equatable {
     let expires_in: Int
 }
 
+/// Image-captcha challenge gating the anonymous auth endpoints. When the
+/// server has enforcement off for the requested scene, `enabled` is false
+/// and the UI hides the captcha row entirely.
+struct KaiXCaptchaResponse: Codable, Equatable {
+    let enabled: Bool
+    let captcha_id: String?
+    /// `data:image/png;base64,…`
+    let image: String?
+    let expires_in: Int?
+
+    var pngData: Data? {
+        guard let image, let comma = image.firstIndex(of: ",") else { return nil }
+        return Data(base64Encoded: String(image[image.index(after: comma)...]))
+    }
+}
+
 struct KaiXVerifyCodeResponse: Codable, Equatable {
     let ok: Bool?
     let success: Bool?
