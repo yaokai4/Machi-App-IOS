@@ -215,6 +215,7 @@ struct KXSegmentedControl<Item: Hashable, Label: View>: View {
                 .fill(KXColor.softBackground.opacity(0.92))
         }
         .overlay(Capsule().stroke(KXColor.glassStroke.opacity(0.72), lineWidth: 0.8))
+        .sensoryFeedback(.selection, trigger: selection)
     }
 }
 
@@ -242,9 +243,13 @@ struct KXEmptyState: View {
 
 struct KXFloatingComposeButton: View {
     let action: () -> Void
+    @State private var tapCount = 0
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            tapCount += 1
+            action()
+        } label: {
             Image(systemName: "plus")
                 .font(.system(size: KXIconSize.md, weight: .semibold))
                 .foregroundStyle(KXColor.accent)
@@ -257,8 +262,30 @@ struct KXFloatingComposeButton: View {
                 .overlay(Circle().stroke(KXColor.glassStroke, lineWidth: 1))
                 .shadow(color: KXColor.glassShadow, radius: 7, y: 3)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(KXPressableStyle(scale: 0.90))
+        .sensoryFeedback(.impact(weight: .light), trigger: tapCount)
     }
+}
+
+/// Press feedback shared by every tappable product control: a quick
+/// spring-down to `scale` with a slight dim, springing back on release.
+/// SwiftUI's `.plain` style gives zero pressed-state affordance, which
+/// reads as "dead" — this is the single biggest cheap win for perceived
+/// quality on physical devices.
+struct KXPressableStyle: ButtonStyle {
+    var scale: CGFloat = 0.96
+    var dim: CGFloat = 0.86
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? scale : 1)
+            .opacity(configuration.isPressed ? dim : 1)
+            .animation(.spring(response: 0.26, dampingFraction: 0.7), value: configuration.isPressed)
+    }
+}
+
+extension ButtonStyle where Self == KXPressableStyle {
+    static var kxPressable: KXPressableStyle { KXPressableStyle() }
 }
 
 struct KXGlassBackground: View {
@@ -395,6 +422,109 @@ private struct _SurfaceShadow: ViewModifier {
         } else {
             content.shadow(color: KXColor.glassShadow.opacity(0.22), radius: 4, y: 1)
         }
+    }
+}
+
+// MARK: - Skeleton loading
+
+/// A soft light-sweep over placeholder shapes while content loads.
+/// Static (no sweep) under Reduce Motion.
+private struct KXShimmerModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var phase: CGFloat = -1.2
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                if !reduceMotion {
+                    GeometryReader { proxy in
+                        LinearGradient(
+                            colors: [.clear, Color.white.opacity(0.42), .clear],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: proxy.size.width * 0.55)
+                        .offset(x: phase * proxy.size.width)
+                        .blendMode(.plusLighter)
+                    }
+                    .allowsHitTesting(false)
+                    .clipped()
+                    .onAppear {
+                        withAnimation(.linear(duration: 1.3).repeatForever(autoreverses: false)) {
+                            phase = 1.6
+                        }
+                    }
+                }
+            }
+    }
+}
+
+extension View {
+    func kxShimmer() -> some View {
+        modifier(KXShimmerModifier())
+    }
+}
+
+/// Feed-card-shaped placeholder: avatar + name lines, two body lines and
+/// a metric row, mirroring `PostCardView`'s geometry so the swap from
+/// skeleton to content doesn't jump.
+struct KXSkeletonFeedCard: View {
+    private var bone: some ShapeStyle { KXColor.softBackground }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
+            HStack(spacing: KXSpacing.sm) {
+                Circle()
+                    .fill(bone)
+                    .frame(width: KXAvatarSize.md, height: KXAvatarSize.md)
+                VStack(alignment: .leading, spacing: 6) {
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(bone)
+                        .frame(width: 118, height: 11)
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(bone)
+                        .frame(width: 74, height: 9)
+                }
+                Spacer()
+            }
+            VStack(alignment: .leading, spacing: 7) {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(bone)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 11)
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(bone)
+                    .frame(width: 210, height: 11)
+            }
+            HStack(spacing: KXSpacing.xl) {
+                ForEach(0..<4, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(bone)
+                        .frame(width: 34, height: 9)
+                }
+                Spacer()
+            }
+        }
+        .padding(KXSpacing.card)
+        .kxGlassSurface(radius: KXRadius.card)
+        .kxShimmer()
+    }
+}
+
+/// Initial-load placeholder for post feeds — a column of skeleton cards
+/// in place of a lone spinner, so the page keeps its visual structure
+/// while data arrives.
+struct KXFeedSkeleton: View {
+    var count: Int = 4
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ForEach(0..<count, id: \.self) { _ in
+                KXSkeletonFeedCard()
+            }
+        }
+        .accessibilityHidden(true)
+        .transition(.opacity)
     }
 }
 

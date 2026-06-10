@@ -778,6 +778,10 @@ private struct MetricButton: View {
                     // Smoothly cross-fade the heart/bookmark glyph
                     // when the user toggles it instead of snapping.
                     .contentTransition(.symbolEffect(.replace.downUp))
+                    // Celebratory bounce when the state flips (like /
+                    // repost / bookmark) — matches the platform-native
+                    // "it worked" cue users know from system apps.
+                    .symbolEffect(.bounce, options: .speed(1.5), value: isActive)
                     .frame(width: 17, height: 17)
                 Text(NumberFormatterUtils.compact(value))
                     .font(.system(size: 12, weight: .medium))
@@ -792,7 +796,7 @@ private struct MetricButton: View {
             .frame(height: 30, alignment: .center)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(KXPressableStyle(scale: 0.90, dim: 0.8))
         .sensoryFeedback(.selection, trigger: isActive)
         .accessibilityLabel("\(label) \(value)")
     }

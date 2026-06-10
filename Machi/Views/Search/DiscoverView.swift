@@ -95,7 +95,14 @@ struct DiscoverView: View {
         Group {
             switch viewModel.state {
             case .loading, .idle:
-                LoadingView()
+                // Card-shaped skeletons keep Discover's layout rhythm
+                // during the initial load instead of a centered spinner.
+                ScrollView {
+                    KXFeedSkeleton()
+                        .padding(.horizontal, KaiXTheme.horizontalPadding)
+                        .padding(.vertical, 7)
+                }
+                .scrollDisabled(true)
             case .empty:
                 discoverContent
             case .error(let message):

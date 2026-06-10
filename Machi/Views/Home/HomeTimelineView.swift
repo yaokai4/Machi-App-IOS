@@ -30,7 +30,15 @@ struct HomeTimelineView: View {
                 Group {
                     switch viewModel.state {
                     case .loading, .idle:
-                        LoadingView()
+                        // Structured skeleton instead of a lone spinner: the
+                        // page keeps its card rhythm while the feed loads,
+                        // and the swap to real content doesn't jump.
+                        ScrollView {
+                            KXFeedSkeleton()
+                                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                                .padding(.vertical, 7)
+                        }
+                        .scrollDisabled(true)
                     case .empty:
                         if viewModel.mode == .following {
                             followingEmptyState
