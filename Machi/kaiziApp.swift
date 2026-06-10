@@ -8,8 +8,23 @@
 import SwiftData
 import SwiftUI
 
+/// Carries the UIKit callbacks SwiftUI has no home for — the APNs device
+/// token handoff. Registration failures are silent by design (simulators
+/// and dev-signed builds fail routinely; local banners still work).
+final class MachiAppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication,
+                     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        PushTokenService.systemDidIssue(token: deviceToken)
+    }
+
+    func application(_ application: UIApplication,
+                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
+    }
+}
+
 @main
 struct kaiziApp: App {
+    @UIApplicationDelegateAdaptor(MachiAppDelegate.self) private var appDelegate
     private let modelContainer = KaiXDatabaseContainer.shared
 
     init() {

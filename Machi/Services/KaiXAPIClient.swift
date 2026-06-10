@@ -542,6 +542,20 @@ final class KaiXAPIClient {
         ).items
     }
 
+    /// Bind this device's APNs token to the logged-in account so pushes
+    /// reach the user even when the app is killed.
+    func registerPushToken(_ token: String, platform: String = "ios") async throws {
+        struct Body: Encodable { let token: String; let platform: String }
+        _ = try await request("POST", "/api/devices/push-token", body: Body(token: token, platform: platform))
+    }
+
+    /// Unbind a device token (logout). Works without a bearer by design —
+    /// logout clears the token before this call lands.
+    func unregisterPushToken(_ token: String) async throws {
+        struct Body: Encodable { let token: String }
+        _ = try await request("DELETE", "/api/devices/push-token", body: Body(token: token))
+    }
+
     /// Buyer↔seller contacts about my listings (role=received) or ones I
     /// sent (role=sent). Mirrors the Web workbench inquiries screen.
     func myListingInquiries(role: String) async throws -> [KaiXListingInquiryDTO] {

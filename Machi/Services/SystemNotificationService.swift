@@ -37,11 +37,16 @@ final class SystemNotificationService: NSObject {
     }
 
     /// Ask for permission lazily AFTER login (App Review frowns on
-    /// permission prompts at cold launch with no context).
+    /// permission prompts at cold launch with no context). Whenever the
+    /// permission is (or already was) granted, also (re)assert the APNs
+    /// registration so killed-app pushes keep working across token
+    /// rotations and reinstalls.
     func requestAuthorizationIfNeeded() async {
         let settings = await center.notificationSettings()
-        guard settings.authorizationStatus == .notDetermined else { return }
-        _ = try? await center.requestAuthorization(options: [.alert, .badge, .sound])
+        if settings.authorizationStatus == .notDetermined {
+            _ = try? await center.requestAuthorization(options: [.alert, .badge, .sound])
+        }
+        await PushTokenService.refreshRegistration()
     }
 
     /// Surface freshly-synced, unread server notifications as system

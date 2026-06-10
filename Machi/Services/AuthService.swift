@@ -17,6 +17,9 @@ final class AuthService {
     }
 
     func logout() {
+        // Unbind this device's push token first so the next account on
+        // this phone never receives the previous account's notifications.
+        PushTokenService.unregisterForLogout()
         UserDefaults.standard.removeObject(forKey: currentUserKey)
         // Drop the unified-backend token too so the next login starts clean.
         KaiXBackend.token = nil
