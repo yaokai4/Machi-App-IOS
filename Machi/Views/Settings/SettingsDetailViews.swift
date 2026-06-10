@@ -631,16 +631,11 @@ struct RegionLanguageSettingsView: View {
 
     var body: some View {
         SettingsFormPage(title: L("regionAndLanguage", language)) {
-            SettingsRowLink(icon: "globe.asia.australia.fill", tint: .blue, title: "国家", value: countryLabel, subtitle: "国家只能在设置中切换") {
+            // Country is the only region control that lives in Settings —
+            // the browsing CITY switches right on the home/discover headers,
+            // so duplicating city pickers here only confused people.
+            SettingsRowLink(icon: "globe.asia.australia.fill", tint: .blue, title: L("countrySetting", language), value: countryLabel, subtitle: L("countrySettingSubtitle", language)) {
                 CountrySettingsView(currentUser: currentUser)
-            }
-            SettingsDivider()
-            SettingsRowLink(icon: "location.fill", tint: .red, title: L("currentRegion", language), value: browsingRegionLabel, subtitle: L("currentRegionSubtitle", language)) {
-                RegionSettingsView(currentUser: currentUser)
-            }
-            SettingsDivider()
-            SettingsRowLink(icon: "house.fill", tint: .orange, title: L("profileRegion", language), value: profileRegionLabel, subtitle: L("profileRegionSubtitle", language)) {
-                ProfileRegionSettingsView(currentUser: currentUser)
             }
             SettingsDivider()
             SettingsRowLink(icon: "globe", tint: .blue, title: L("language", language), value: AppLanguage.resolved(from: UserDefaults.standard.string(forKey: "appLanguageCode") ?? AppLanguage.system.rawValue).title, subtitle: L("currentLanguage", language)) {
@@ -657,25 +652,12 @@ struct RegionLanguageSettingsView: View {
         }
     }
 
-    private var browsingRegionLabel: String {
-        if let region = regionStore.current { return "\(region.countryEmoji) \(region.cityName)" }
-        return L("pickRegion", language)
-    }
-
     private var countryLabel: String {
-        switch (currentUser.country.isEmpty ? "jp" : currentUser.country).lowercased() {
-        case "cn": return "🇨🇳 China"
-        case "us": return "🇺🇸 United States"
-        case "ca": return "🇨🇦 Canada"
-        default: return "🇯🇵 Japan"
+        let code = (currentUser.country.isEmpty ? "jp" : currentUser.country).lowercased()
+        if let country = KaiXRegionDirectory.country(code: code) {
+            return "\(country.emoji) \(KaiXRegionDirectory.localizedCountryName(code: code, language: language))"
         }
-    }
-
-    private var profileRegionLabel: String {
-        if let region = KaiXRegionDirectory.make(country: currentUser.country, province: currentUser.province.isEmpty ? nil : currentUser.province, city: currentUser.city) {
-            return "\(region.countryEmoji) \(region.cityName)"
-        }
-        return L("notSet", language)
+        return "🇯🇵 \(KaiXRegionDirectory.localizedCountryName(code: "jp", language: language))"
     }
 }
 
@@ -687,6 +669,8 @@ struct CountrySettingsView: View {
 
     let currentUser: UserEntity
 
+    @Environment(\.appLanguage) private var language
+
     private struct CountryOption: Identifiable, Equatable {
         let code: String
         let title: String
@@ -694,12 +678,15 @@ struct CountrySettingsView: View {
         var id: String { code }
     }
 
-    private let options: [CountryOption] = [
-        .init(code: "jp", title: "🇯🇵 Japan", regionCode: "jp.tokyo.tokyo"),
-        .init(code: "cn", title: "🇨🇳 China", regionCode: "cn.shanghai.shanghai"),
-        .init(code: "us", title: "🇺🇸 United States", regionCode: "us.ca.la"),
-        .init(code: "ca", title: "🇨🇦 Canada", regionCode: "ca.montreal"),
-    ]
+    /// Every country the region directory knows, localized, each mapped to
+    /// its default (most popular) city so switching lands somewhere sane.
+    private var options: [CountryOption] {
+        KaiXRegionDirectory.countries.compactMap { country in
+            guard let regionCode = KaiXRegionDirectory.defaultRegionCode(forCountry: country.code) else { return nil }
+            let name = KaiXRegionDirectory.localizedCountryName(code: country.code, language: language)
+            return CountryOption(code: country.code, title: "\(country.emoji) \(name)", regionCode: regionCode)
+        }
+    }
 
     var body: some View {
         SettingsFormPage(title: "国家") {

@@ -20,25 +20,11 @@ struct MyWorkbenchView: View {
         return currentUser.location.isEmpty ? L("pickRegion", language) : currentUser.location
     }
 
-    private var profileCompletion: Int {
-        let checks = [
-            !currentUser.avatarURL.isEmpty || !currentUser.avatarSymbol.isEmpty,
-            !currentUser.coverURL.isEmpty,
-            !currentUser.displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-            !currentUser.bio.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-            !(currentUser.currentRegionCode.isEmpty && currentUser.city.isEmpty),
-            currentUser.isVerified || currentUser.isVerifiedMember || currentUser.merchantVerified,
-        ]
-        let done = checks.filter { $0 }.count
-        return Int((Double(done) / Double(checks.count)) * 100.0)
-    }
-
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 15) {
                 hero
                 publishSection
-                accountSection
                 contentSection
                 membershipSection
                 serviceSection
@@ -94,6 +80,10 @@ struct MyWorkbenchView: View {
                 MyCityListingsView(currentUser: currentUser)
             }
             SettingsDivider()
+            SettingsRowLink(icon: "bubble.left.and.bubble.right.fill", tint: .orange, title: L("inquiriesTitle", language), subtitle: L("inquiriesSubtitle", language)) {
+                MyInquiriesView(currentUser: currentUser)
+            }
+            SettingsDivider()
             SettingsRowLink(icon: "doc.text.image.fill", tint: .blue, title: "我的发布", value: "\(viewModel.postCount)", subtitle: "查看已发布内容和互动数据") {
                 ProfileCollectionView(
                     title: "我的发布",
@@ -105,26 +95,6 @@ struct MyWorkbenchView: View {
             SettingsDivider()
             SettingsRowLink(icon: "tray.full", tint: .purple, title: "我的草稿", value: "\(viewModel.draftCount)", subtitle: L("navigationReady", language)) {
                 DraftsSettingsView(currentUser: currentUser)
-            }
-        }
-    }
-
-    private var accountSection: some View {
-        SettingsSectionCard(title: "资料完整度") {
-            SettingsRowLink(icon: "checklist.checked", tint: .green, title: "资料完整度", value: "\(profileCompletion)%", subtitle: "完善头像、封面、简介、城市和认证状态") {
-                EditProfileView(user: currentUser)
-            }
-            SettingsDivider()
-            SettingsRowLink(icon: "person.crop.circle", tint: .blue, title: L("profile", language), subtitle: L("profileSubtitle", language)) {
-                ProfileView(currentUser: currentUser, profileUserId: currentUser.id, showsBackButton: true)
-            }
-            SettingsDivider()
-            SettingsRowLink(icon: "pencil", tint: .indigo, title: L("editProfile", language), subtitle: L("editProfileSubtitle", language)) {
-                EditProfileView(user: currentUser)
-            }
-            SettingsDivider()
-            SettingsRowLink(icon: "checkmark.seal.fill", tint: .blue, title: L("membershipSettingsTitle", language), value: currentUser.isVerifiedMember ? L("membershipStatusActive", language) : nil, subtitle: L("membershipSettingsSubtitle", language)) {
-                MembershipView(currentUser: currentUser)
             }
         }
     }
@@ -143,8 +113,16 @@ struct MyWorkbenchView: View {
 
     private var membershipSection: some View {
         SettingsSectionCard(title: "会员与权益") {
-            SettingsRowLink(icon: "sparkles", tint: .orange, title: "Guide 资料", subtitle: "会员资料、模板和本地指南") {
+            SettingsRowLink(icon: "checkmark.seal.fill", tint: .blue, title: L("membershipSettingsTitle", language), value: currentUser.isVerifiedMember ? L("membershipStatusActive", language) : nil, subtitle: L("membershipSettingsSubtitle", language)) {
+                MembershipView(currentUser: currentUser)
+            }
+            SettingsDivider()
+            SettingsRowLink(icon: "books.vertical.fill", tint: .orange, title: L("memberLibraryTitle", language), subtitle: L("memberLibrarySubtitle", language)) {
                 GuideMemberResourcesView()
+            }
+            SettingsDivider()
+            SettingsRowLink(icon: "doc.plaintext.fill", tint: .green, title: L("ordersTitle", language), subtitle: L("ordersSubtitle", language)) {
+                MyOrdersView()
             }
         }
     }

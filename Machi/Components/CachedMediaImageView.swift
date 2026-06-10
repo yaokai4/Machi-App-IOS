@@ -100,30 +100,20 @@ enum CachedMediaImageFailureMode {
     case transparent
 }
 
-/// Subtle left-to-right shimmer shown while media decodes. Reads well at any
-/// size — from a tiny grid thumbnail to a full-bleed cover — and replaces the
-/// bare spinner that looked unfinished on small tiles.
+/// Quiet placeholder shown while media decodes — a slow opacity breath
+/// instead of the old light-sweep, which flashed white on every refresh.
+/// Reads well at any size, from a tiny grid thumbnail to a full-bleed cover.
 private struct MediaLoadingSkeleton: View {
-    @State private var x: CGFloat = -0.9
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var dimmed = false
 
     var body: some View {
         KXColor.softBackground
-            .overlay(
-                GeometryReader { geo in
-                    LinearGradient(
-                        colors: [.clear, Color.white.opacity(0.30), .clear],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    .frame(width: geo.size.width * 0.65)
-                    .offset(x: x * geo.size.width)
-                    .blendMode(.plusLighter)
-                }
-            )
-            .clipped()
+            .opacity(reduceMotion ? 1 : (dimmed ? 0.6 : 1))
             .onAppear {
-                withAnimation(.linear(duration: 1.2).repeatForever(autoreverses: false)) {
-                    x = 1.45
+                guard !reduceMotion else { return }
+                withAnimation(.easeInOut(duration: 1.05).repeatForever(autoreverses: true)) {
+                    dimmed = true
                 }
             }
     }

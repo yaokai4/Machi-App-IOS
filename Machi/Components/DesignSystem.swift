@@ -427,33 +427,21 @@ private struct _SurfaceShadow: ViewModifier {
 
 // MARK: - Skeleton loading
 
-/// A soft light-sweep over placeholder shapes while content loads.
-/// Static (no sweep) under Reduce Motion.
+/// Loading placeholder motion. The old white light-sweep (plusLighter)
+/// read as a bright flash on every refresh; placeholders now BREATHE —
+/// the same quiet opacity pulse the system's redacted skeletons use.
+/// Static under Reduce Motion.
 private struct KXShimmerModifier: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var phase: CGFloat = -1.2
+    @State private var dimmed = false
 
     func body(content: Content) -> some View {
         content
-            .overlay {
-                if !reduceMotion {
-                    GeometryReader { proxy in
-                        LinearGradient(
-                            colors: [.clear, Color.white.opacity(0.42), .clear],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                        .frame(width: proxy.size.width * 0.55)
-                        .offset(x: phase * proxy.size.width)
-                        .blendMode(.plusLighter)
-                    }
-                    .allowsHitTesting(false)
-                    .clipped()
-                    .onAppear {
-                        withAnimation(.linear(duration: 1.3).repeatForever(autoreverses: false)) {
-                            phase = 1.6
-                        }
-                    }
+            .opacity(reduceMotion ? 1 : (dimmed ? 0.55 : 1))
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.easeInOut(duration: 1.05).repeatForever(autoreverses: true)) {
+                    dimmed = true
                 }
             }
     }

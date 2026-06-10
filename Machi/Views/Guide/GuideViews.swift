@@ -73,6 +73,9 @@ struct GuideHomeView: View {
                     } else {
                         GuideCategoryGrid(categories: home.categories)
                         GuideResourceEntriesSection(entries: home.resourceEntries ?? [])
+                        // 两个固定大门：会员权益内容 vs 付费商城——所有
+                        // 资料/服务都归到这两处，首页其余区块只做发现。
+                        GuideDualEntrySection()
                         GuideGoalsSection(goals: home.goals?.title ?? "你现在想做什么？", entries: home.goalEntries)
                         GuideArticleSection(title: "精选指南", subtitle: "由 Machi 编辑部整理", articles: home.featuredArticles)
                         GuideZoneSection(country: country, title: "日本就职专区", subtitle: "就活流程、履历书、面试与公司选择", categoryKey: "career_japan")
@@ -81,7 +84,6 @@ struct GuideHomeView: View {
                         GuideZoneSection(country: country, title: "日语考级专区", subtitle: "JLPT 备考、词汇语法与学习计划", categoryKey: "jlpt")
                         GuideSchoolsSection(schools: home.featuredSchools ?? [], disclaimer: home.schoolDisclaimer)
                         GuideProductsSection(products: home.featuredProducts + home.featuredServices)
-                        GuideMemberResourcesPromoSection()
                         GuideCompaniesSection(companies: home.companyHighlights, disclaimer: home.companyDisclaimer ?? home.reviewDisclaimer)
                         GuideArticleSection(title: "最新更新", subtitle: nil, articles: home.latestArticles, compact: true)
                         GuideFAQSection(faq: home.faq)
@@ -2496,35 +2498,59 @@ private struct GuideProductsSection: View {
     }
 }
 
-private struct GuideMemberResourcesPromoSection: View {
+/// The two permanent doors of the Guide tab: everything entitled by the
+/// membership lives behind 会员专区, everything purchasable lives behind
+/// 资料商城. Side-by-side tiles so the split is legible at a glance.
+private struct GuideDualEntrySection: View {
     @EnvironmentObject private var router: AppRouter
 
     var body: some View {
-        KXCard(padding: 16, radius: 22) {
-            HStack(alignment: .top, spacing: 12) {
-                GuideIconBubble(icon: "crown.fill", color: KXColor.accent)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("会员专属资料")
-                        .font(.headline.weight(.bold))
-                    Text("JLPT、升学、就职和生活清单，会员可查看完整内容。")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Button {
-                        router.open(.guideMemberResources)
-                    } label: {
-                        Text("查看会员资料")
-                            .font(.caption.weight(.bold))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(KXColor.accent, in: Capsule())
-                            .foregroundStyle(.white)
-                    }
-                    .buttonStyle(.plain)
-                }
-                Spacer(minLength: 0)
+        HStack(spacing: 10) {
+            entryTile(
+                icon: "crown.fill",
+                tint: KXColor.accent,
+                title: "会员专区",
+                subtitle: "30+ 清单模板资料\n会员免费查看"
+            ) {
+                router.open(.guideMemberResources)
+            }
+            entryTile(
+                icon: "bag.fill",
+                tint: .orange,
+                title: "资料商城",
+                subtitle: "付费资料与人工服务\n按需单独购买"
+            ) {
+                router.open(.guideServices)
             }
         }
+    }
+
+    private func entryTile(icon: String, tint: Color, title: String, subtitle: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    GuideIconBubble(icon: icon, color: tint)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                Text(title)
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(.primary)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .kxGlassSurface(radius: 20)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

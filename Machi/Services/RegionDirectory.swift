@@ -266,6 +266,44 @@ enum KaiXRegionDirectory {
         countries.first { $0.code == code.lowercased() }
     }
 
+    /// Country display names for the three app languages. The directory's
+    /// own `name` field is the zh form; ja/en live here so pickers stop
+    /// falling back to hardcoded English.
+    private static let countryNamesJaEn: [String: (ja: String, en: String)] = [
+        "cn": ("中国", "China"), "jp": ("日本", "Japan"), "us": ("アメリカ", "United States"),
+        "sg": ("シンガポール", "Singapore"), "kr": ("韓国", "South Korea"), "uk": ("イギリス", "United Kingdom"),
+        "fr": ("フランス", "France"), "au": ("オーストラリア", "Australia"), "ca": ("カナダ", "Canada"),
+        "th": ("タイ", "Thailand"), "my": ("マレーシア", "Malaysia"), "de": ("ドイツ", "Germany"),
+        "nl": ("オランダ", "Netherlands"),
+    ]
+
+    static func localizedCountryName(code: String, language: AppLanguage) -> String {
+        let c = code.lowercased()
+        let zh = country(code: c)?.name ?? c.uppercased()
+        guard let names = countryNamesJaEn[c] else { return zh }
+        switch language {
+        case .ja: return names.ja
+        case .en: return names.en
+        case .zh, .system: return zh
+        }
+    }
+
+    /// The country's most popular city (first popular entry, else the first
+    /// directory city) — where a bare country switch should land.
+    static func defaultRegionCode(forCountry code: String) -> String? {
+        let c = code.lowercased()
+        if let popular = popularRegionCodes.first(where: { $0.hasPrefix(c + ".") }) {
+            return popular
+        }
+        if country(code: c)?.hasProvinces == true {
+            guard let province = provinces(for: c).first,
+                  let city = cities(country: c, province: province.code).first else { return nil }
+            return "\(c).\(province.code).\(city.code)"
+        }
+        guard let city = cities(country: c, province: nil).first else { return nil }
+        return "\(c).\(city.code)"
+    }
+
     static func provinces(for country: String) -> [Province] {
         provincesByCountry[country.lowercased()] ?? []
     }

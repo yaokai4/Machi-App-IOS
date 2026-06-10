@@ -253,6 +253,35 @@ struct KaiXCityListingDTO: Codable, Identifiable, Equatable {
     let canManage: Bool?
 }
 
+/// One row of /api/my/listing-inquiries — a buyer↔seller contact about a
+/// city listing (consult / apply / booking…), with the hydrated listing and
+/// counterpart users when the server attaches them.
+struct KaiXListingInquiryDTO: Codable, Identifiable, Equatable {
+    let id: String
+    let listing_id: String?
+    let type: String?
+    let message: String?
+    let status: String?
+    let conversation_id: String?
+    let created_at: String?
+    let listing: KaiXCityListingDTO?
+    let from_user: KaiXUserDTO?
+    let to_user: KaiXUserDTO?
+}
+
+/// One membership payment order (/api/membership/orders).
+struct KaiXPaymentOrderDTO: Codable, Identifiable, Equatable {
+    let id: String
+    let order_no: String
+    let plan_key: String?
+    let amount: Double?
+    let currency: String?
+    let status: String?
+    let provider: String?
+    let created_at: String?
+    let paid_at: String?
+}
+
 struct KaiXListingsResponse: Codable {
     let items: [KaiXCityListingDTO]
     let next_cursor: String?

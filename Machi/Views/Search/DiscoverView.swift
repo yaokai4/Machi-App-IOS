@@ -1993,6 +1993,10 @@ struct CityListingChannelView: View {
                 }
             }
             searchBar
+            // Persistent category rail — marketplace muscle memory
+            // (Mercari/闲鱼): one tap from anywhere, never buried in a
+            // collapsed filter panel.
+            categoryChips
             if filtersOpen {
                 scopeFilterPanel
                     .transition(.opacity.combined(with: .move(edge: .top)))
@@ -2133,12 +2137,6 @@ struct CityListingChannelView: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 7) {
-                Text("分类")
-                    .font(.caption.weight(.black))
-                    .foregroundStyle(.secondary)
-                categoryChips
-            }
         }
         .padding(12)
         .background(KXColor.softBackground.opacity(0.58), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -2160,7 +2158,9 @@ struct CityListingChannelView: View {
             )
             .frame(maxWidth: .infinity, minHeight: 260)
         } else if listingType == "secondhand" {
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12)], spacing: 12) {
+            // Two-column photo grid — the marketplace layout people already
+            // know from Mercari/闲鱼. Square covers, price first.
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
                 ForEach(visibleItems) { item in
                     KXSecondhandListingCard(listing: item) {
                         router.open(.cityListingDetail(listingId: item.id))
@@ -3509,36 +3509,39 @@ private struct KXSecondhandListingCard: View {
                     }
                     .padding(8)
                     Image(systemName: listing.favorited == true ? "heart.fill" : "heart")
-                        .font(.caption.weight(.bold))
+                        .font(.caption2.weight(.bold))
                         .foregroundStyle(listing.favorited == true ? KXColor.heat : .primary)
-                        .frame(width: 30, height: 30)
+                        .frame(width: 26, height: 26)
                         .background(.ultraThinMaterial, in: Circle())
-                        .padding(8)
+                        .padding(6)
                 }
                 .frame(maxWidth: .infinity)
-                .aspectRatio(16.0 / 10.0, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                // Square cover — the half-width marketplace grid standard.
+                .aspectRatio(1, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 Text(KXListingCopy.priceLabel(listing))
-                    .font(.headline.weight(.black))
+                    .font(.subheadline.weight(.black))
                     .foregroundStyle(KXColor.heat)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 Text(KXListingCopy.displayTitle(listing))
-                    .font(.subheadline.weight(.bold))
+                    .font(.footnote.weight(.semibold))
                     .foregroundStyle(.primary)
-                    .lineLimit(2)
+                    .lineLimit(1)
                     .multilineTextAlignment(.leading)
-                HStack(spacing: 5) {
+                HStack(spacing: 4) {
                     Image(systemName: "mappin.and.ellipse")
                         .font(.caption2.weight(.bold))
                     Text(KXListingCopy.compactMeta(listing))
                         .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                 }
-                .font(.caption.weight(.semibold))
+                .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
             }
-            .padding(10)
+            .padding(8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .kxGlassSurface(radius: 20)
+            .kxGlassSurface(radius: 18)
         }
         .buttonStyle(.plain)
     }

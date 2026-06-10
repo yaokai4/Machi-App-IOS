@@ -512,6 +512,23 @@ final class KaiXAPIClient {
         return response.items
     }
 
+    /// Buyer↔seller contacts about my listings (role=received) or ones I
+    /// sent (role=sent). Mirrors the Web workbench inquiries screen.
+    func myListingInquiries(role: String) async throws -> [KaiXListingInquiryDTO] {
+        struct Response: Decodable { let items: [KaiXListingInquiryDTO] }
+        let data = try await request("GET", "/api/my/listing-inquiries", queryItems: [URLQueryItem(name: "role", value: role)])
+        let response: Response = try decode(data)
+        return response.items
+    }
+
+    /// My membership payment orders, newest first.
+    func membershipOrders() async throws -> [KaiXPaymentOrderDTO] {
+        struct Response: Decodable { let items: [KaiXPaymentOrderDTO] }
+        let data = try await request("GET", "/api/membership/orders")
+        let response: Response = try decode(data)
+        return response.items
+    }
+
     /// The caller's OWN listings of one type, regardless of city — includes
     /// non-published states so sellers can manage everything they posted.
     func myListings(type: String) async throws -> [KaiXCityListingDTO] {
