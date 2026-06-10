@@ -1912,10 +1912,10 @@ struct CityListingChannelView: View {
             .buttonStyle(.plain)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(region?.cityName ?? "当前城市") · \(KXListingCopy.title(for: listingType))")
+                Text("\(region?.cityName ?? "当前城市") · \(KXListingCopy.title(for: listingType, language))")
                     .font(.headline.weight(.semibold))
                     .lineLimit(1)
-                Text(KXListingCopy.subtitle(for: listingType))
+                Text(KXListingCopy.subtitle(for: listingType, language))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -2047,7 +2047,7 @@ struct CityListingChannelView: View {
             Image(systemName: "magnifyingglass")
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(KXColor.accent)
-            TextField(KXListingCopy.searchPlaceholder(for: listingType), text: $query)
+            TextField(KXListingCopy.searchPlaceholder(for: listingType, language), text: $query)
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
                 .submitLabel(.search)
@@ -2168,8 +2168,8 @@ struct CityListingChannelView: View {
                 .frame(maxWidth: .infinity, minHeight: 260)
         } else if visibleItems.isEmpty {
             EmptyStateView(
-                title: KXListingCopy.emptyTitle(for: listingType),
-                subtitle: KXListingCopy.emptySubtitle(for: listingType),
+                title: KXListingCopy.emptyTitle(for: listingType, language),
+                subtitle: KXListingCopy.emptySubtitle(for: listingType, language),
                 systemImage: KXListingCopy.icon(for: listingType)
             )
             .frame(maxWidth: .infinity, minHeight: 260)
@@ -2292,6 +2292,7 @@ struct CityListingChannelView: View {
 
 struct CityListingDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var chrome: AppChromeState
     let listingId: String
@@ -2343,9 +2344,9 @@ struct CityListingDetailView: View {
             }
             .buttonStyle(.plain)
             VStack(alignment: .leading, spacing: 2) {
-                Text(KXListingCopy.title(for: listing?.type ?? "secondhand"))
+                Text(KXListingCopy.title(for: listing?.type ?? "secondhand", language))
                     .font(.headline.weight(.semibold))
-                Text("详情与联系")
+                Text(KXListingCopy.pickText(language, "详情与联系", "詳細・連絡", "Details & contact"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
@@ -3732,14 +3733,15 @@ private struct KXStructuredListingRow: View {
 }
 
 private struct KXListingAttributeSection: View {
+    @Environment(\.appLanguage) private var language
     let listing: KaiXCityListingDTO
 
     var body: some View {
-        KXListingSection(title: "核心字段", icon: KXListingCopy.icon(for: listing.type)) {
+        KXListingSection(title: KXListingCopy.pickText(language, "核心字段", "基本情報", "Key details"), icon: KXListingCopy.icon(for: listing.type)) {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 10) {
                 ForEach(KXListingCopy.attributes(for: listing), id: \.0) { item in
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(item.0)
+                        Text(KXListingCopy.attributeLabel(item.0, language))
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.secondary)
                         Text(item.1)
@@ -3793,26 +3795,117 @@ private struct KXListingBadge: View {
 }
 
 private enum KXListingCopy {
-    static func title(for type: String) -> String {
+    /// Header copy in the viewer's app language. zh remains the source of
+    /// truth; ja/en mirror web ListingKit's CHANNEL_TEXT so both clients
+    /// read the same.
+    static func title(for type: String, _ language: AppLanguage = .zh) -> String {
+        let zh: String
+        let ja: String
+        let en: String
         switch type {
-        case "rental": "租房"
-        case "work": "工作"
-        case "job": "找工作"
-        case "hiring": "招聘"
-        case "local_service": "本地服务"
-        case "discount": "优惠"
-        case "event": "活动"
-        default: "二手市场"
+        case "rental":        (zh, ja, en) = ("租房", "賃貸", "Rentals")
+        case "work":          (zh, ja, en) = ("工作", "求人", "Jobs")
+        case "job":           (zh, ja, en) = ("找工作", "仕事を探す", "Find work")
+        case "hiring":        (zh, ja, en) = ("招聘", "採用", "Hiring")
+        case "local_service": (zh, ja, en) = ("本地服务", "ローカルサービス", "Local services")
+        case "discount":      (zh, ja, en) = ("优惠", "クーポン", "Deals")
+        case "event":         (zh, ja, en) = ("活动", "イベント", "Events")
+        default:              (zh, ja, en) = ("二手市场", "フリマ", "Marketplace")
+        }
+        return pickText(language, zh, ja, en)
+    }
+
+    static func subtitle(for type: String, _ language: AppLanguage = .zh) -> String {
+        let zh: String
+        let ja: String
+        let en: String
+        switch type {
+        case "rental":
+            (zh, ja, en) = ("房源库、租金、车站、户型和入住时间", "物件・家賃・駅・間取り・入居日", "Rentals, rent, stations, layouts, move-in dates")
+        case "work", "job", "hiring":
+            (zh, ja, en) = ("职位库、薪资、日语要求和签证支持", "求人・給与・日本語レベル・ビザサポート", "Jobs, salary, Japanese level, visa support")
+        case "local_service":
+            (zh, ja, en) = ("搬家、签证、维修等同城服务", "引越し・ビザ・修理などの地元サービス", "Moving, visa, repairs and more local services")
+        case "discount":
+            (zh, ja, en) = ("本地商家优惠与精选活动", "地元店舗の特典と注目イベント", "Local merchant deals and featured events")
+        default:
+            (zh, ja, en) = ("图片、价格、地点和交易状态", "写真・価格・場所・取引状況", "Photos, price, location and deal status")
+        }
+        return pickText(language, zh, ja, en)
+    }
+
+    /// Inline trilingual pick — file-wide helper for one-off UI strings.
+    static func pickText(_ language: AppLanguage, _ zh: String, _ ja: String, _ en: String) -> String {
+        switch language {
+        case .ja: ja
+        case .en: en
+        default:  zh
         }
     }
 
-    static func subtitle(for type: String) -> String {
-        switch type {
-        case "rental": "房源库、租金、车站、户型和入住时间"
-        case "work", "job", "hiring": "职位库、薪资、日语要求和签证支持"
-        case "local_service": "搬家、签证、维修等同城服务"
-        case "discount": "本地商家优惠与精选活动"
-        default: "图片、价格、地点和交易状态"
+    /// Detail-row titles, keyed by the canonical zh label used when the
+    /// rows are built. Mirrors DETAIL_FIELD_LABELS in web listingFormat.ts
+    /// so both clients read identically. Unknown labels pass through.
+    private static let attributeLabels: [String: (ja: String, en: String)] = [
+        "地区": ("エリア", "Area"),
+        "最近车站": ("最寄り駅", "Nearest station"),
+        "车站距离": ("駅からの距離", "To station"),
+        "户型": ("間取り", "Layout"),
+        "面积": ("面積", "Size"),
+        "押金": ("敷金", "Deposit"),
+        "礼金": ("礼金", "Key money"),
+        "管理费": ("管理費", "Management fee"),
+        "初期费用说明": ("初期費用について", "Initial costs"),
+        "入住时间": ("入居可能日", "Move-in date"),
+        "租期": ("契約期間", "Lease term"),
+        "短租": ("短期", "Short-term"),
+        "合租": ("ルームシェア", "Roomshare"),
+        "家具家电": ("家具家電", "Furnished"),
+        "宠物": ("ペット", "Pets"),
+        "公司/店铺": ("会社・店舗", "Company"),
+        "地点": ("場所", "Location"),
+        "雇佣形式": ("雇用形態", "Employment type"),
+        "薪资": ("給与", "Salary"),
+        "薪资类型": ("給与形態", "Salary type"),
+        "日语要求": ("日本語レベル", "Japanese level"),
+        "签证支持": ("ビザサポート", "Visa support"),
+        "签证支持说明": ("ビザサポート", "Visa support"),
+        "工作时间": ("勤務時間", "Working hours"),
+        "交通费": ("交通費", "Transport fee"),
+        "外国人友好": ("外国人歓迎", "Foreigner friendly"),
+        "无经验可": ("未経験OK", "No experience OK"),
+        "留学生可": ("留学生OK", "Students OK"),
+        "服务类型": ("サービス種別", "Service type"),
+        "可服务城市": ("対応エリア", "Service area"),
+        "价格": ("価格", "Price"),
+        "价格单位": ("料金単位", "Price unit"),
+        "可预约时间": ("予約可能時間", "Availability"),
+        "不包含内容": ("含まれないもの", "Not included"),
+        "服务流程": ("サービスの流れ", "Process"),
+        "用户需准备": ("ご準備いただくもの", "You prepare"),
+        "取消规则": ("キャンセル規定", "Cancellation"),
+        "审核状态": ("審査状況", "Review status"),
+        "商家": ("店舗", "Merchant"),
+        "优惠": ("特典", "Deal"),
+        "优惠内容": ("特典内容", "Deal details"),
+        "有效期": ("有効期限", "Valid until"),
+        "使用规则": ("利用条件", "Usage rules"),
+        "商家认证": ("店舗認証", "Merchant verification"),
+        "状态": ("ステータス", "Status"),
+        "发布类型": ("出品タイプ", "Listing type"),
+        "分类": ("カテゴリ", "Category"),
+        "新旧程度": ("状態", "Condition"),
+        "交易地点": ("受け渡し場所", "Meetup location"),
+        "交易方式": ("受け渡し方法", "Delivery method"),
+        "品牌": ("ブランド", "Brand"),
+    ]
+
+    static func attributeLabel(_ zhLabel: String, _ language: AppLanguage) -> String {
+        guard let entry = attributeLabels[zhLabel.trimmingCharacters(in: .whitespaces)] else { return zhLabel }
+        switch language {
+        case .ja: return entry.ja
+        case .en: return entry.en
+        default:  return zhLabel
         }
     }
 
@@ -3827,14 +3920,23 @@ private enum KXListingCopy {
         }
     }
 
-    static func searchPlaceholder(for type: String) -> String {
+    static func searchPlaceholder(for type: String, _ language: AppLanguage = .zh) -> String {
+        let zh: String
+        let ja: String
+        let en: String
         switch type {
-        case "rental": "搜索地区、车站、学校、房源关键词"
-        case "work", "job", "hiring": "搜索职位、公司、地点、日语要求"
-        case "local_service": "搜索搬家、签证、维修、本地服务"
-        case "discount": "搜索优惠、商家、地区"
-        default: "搜索家具、家电、教材、搬家出清"
+        case "rental":
+            (zh, ja, en) = ("搜索地区、车站、学校、房源关键词", "エリア・駅・学校・物件キーワードを検索", "Search area, station, school, keywords")
+        case "work", "job", "hiring":
+            (zh, ja, en) = ("搜索职位、公司、地点、日语要求", "職種・会社・場所・日本語レベルを検索", "Search roles, companies, locations")
+        case "local_service":
+            (zh, ja, en) = ("搜索搬家、签证、维修、本地服务", "引越し・ビザ・修理・サービスを検索", "Search moving, visa, repairs, services")
+        case "discount":
+            (zh, ja, en) = ("搜索优惠、商家、地区", "特典・店舗・エリアを検索", "Search deals, merchants, areas")
+        default:
+            (zh, ja, en) = ("搜索家具、家电、教材、搬家出清", "家具・家電・教材・引越し処分を検索", "Search furniture, appliances, textbooks")
         }
+        return pickText(language, zh, ja, en)
     }
 
     static func categories(for type: String) -> [String] {
@@ -3909,24 +4011,37 @@ private enum KXListingCopy {
         }
     }
 
-    static func emptyTitle(for type: String) -> String {
+    static func emptyTitle(for type: String, _ language: AppLanguage = .zh) -> String {
+        let zh: String
+        let ja: String
+        let en: String
         switch type {
-        case "rental": "这里还没有房源"
-        case "work", "job", "hiring": "这里还没有工作信息"
-        case "local_service": "这里还没有本地服务"
-        case "discount": "这里还没有优惠"
-        default: "这里还没有二手商品"
+        case "rental":               (zh, ja, en) = ("这里还没有房源", "まだ物件がありません", "No rentals yet")
+        case "work", "job", "hiring": (zh, ja, en) = ("这里还没有工作信息", "まだ求人がありません", "No jobs yet")
+        case "local_service":        (zh, ja, en) = ("这里还没有本地服务", "まだサービスがありません", "No services yet")
+        case "discount":             (zh, ja, en) = ("这里还没有优惠", "まだ特典がありません", "No deals yet")
+        default:                     (zh, ja, en) = ("这里还没有二手商品", "まだ出品がありません", "No items yet")
         }
+        return pickText(language, zh, ja, en)
     }
 
-    static func emptySubtitle(for type: String) -> String {
+    static func emptySubtitle(for type: String, _ language: AppLanguage = .zh) -> String {
+        let zh: String
+        let ja: String
+        let en: String
         switch type {
-        case "rental": "发布房源或稍后查看新的租房信息。"
-        case "work", "job", "hiring": "稍后查看新的同城工作机会。"
-        case "local_service": "认证服务方审核后会展示在这里。"
-        case "discount": "商家优惠审核后会展示在这里。"
-        default: "发布第一个闲置，让同城的人看到它。"
+        case "rental":
+            (zh, ja, en) = ("发布房源或稍后查看新的租房信息。", "物件を掲載するか、また後で見に来てください。", "Post a rental or check back soon.")
+        case "work", "job", "hiring":
+            (zh, ja, en) = ("稍后查看新的同城工作机会。", "新しい求人をまた後でチェックしてください。", "Check back soon for new local jobs.")
+        case "local_service":
+            (zh, ja, en) = ("认证服务方审核后会展示在这里。", "認証済みの提供者が審査後にここに表示されます。", "Verified providers appear here after review.")
+        case "discount":
+            (zh, ja, en) = ("商家优惠审核后会展示在这里。", "店舗特典が審査後にここに表示されます。", "Merchant deals appear here after review.")
+        default:
+            (zh, ja, en) = ("发布第一个闲置，让同城的人看到它。", "最初の出品をして、近くの人に届けよう。", "List the first item for your city to see.")
         }
+        return pickText(language, zh, ja, en)
     }
 
     static func createTitle(for type: String) -> String {
