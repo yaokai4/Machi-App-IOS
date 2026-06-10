@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import SwiftData
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 final class ComposePostViewModel: ObservableObject {
@@ -238,18 +239,44 @@ final class ComposePostViewModel: ObservableObject {
         selectedTopics.removeAll { $0.normalizedTopicName == normalized }
     }
 
-    func addMedia(data: Data, isVideo: Bool, language: AppLanguage) async {
+    func addMedia(data: Data, isVideo: Bool, contentType: UTType? = nil, language: AppLanguage) async {
         state = .loading
         errorMessage = nil
 
-        guard mediaDrafts.count < KaiXConfig.maxMediaItemsPerPost else {
-            state = .loaded
-            return
+        let hasVideo = mediaDrafts.contains { $0.type == .video }
+        let imageCount = mediaDrafts.filter { $0.type == .image }.count
+        if isVideo {
+            guard mediaDrafts.isEmpty else {
+                errorMessage = L(hasVideo ? "mediaVideoLimit" : "mediaMixNotAllowed", language)
+                state = .error(errorMessage ?? L("mediaFailed", language))
+                return
+            }
+            guard data.count <= KaiXConfig.maxPostVideoBytes else {
+                errorMessage = L("mediaTooLarge", language)
+                state = .error(errorMessage ?? L("mediaFailed", language))
+                return
+            }
+        } else {
+            guard !hasVideo else {
+                errorMessage = L("mediaMixNotAllowed", language)
+                state = .error(errorMessage ?? L("mediaFailed", language))
+                return
+            }
+            guard imageCount < KaiXConfig.maxImageItemsPerPost else {
+                errorMessage = L("mediaImageLimit", language)
+                state = .error(errorMessage ?? L("mediaFailed", language))
+                return
+            }
+            guard data.count <= KaiXConfig.maxPostImageBytes else {
+                errorMessage = L("mediaTooLarge", language)
+                state = .error(errorMessage ?? L("mediaFailed", language))
+                return
+            }
         }
 
         do {
             let draft = isVideo
-                ? try await UploadService.shared.prepareVideo(data: data)
+                ? try await UploadService.shared.prepareVideo(data: data, contentType: contentType)
                 : try await UploadService.shared.prepareImage(data: data)
             mediaDrafts.append(draft)
             state = .loaded

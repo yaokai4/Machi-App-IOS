@@ -332,6 +332,128 @@ enum KaiXRegionDirectory {
         return "\(c).\(ci)"
     }
 
+    static func localizedCountryName(_ country: Country, language: AppLanguage) -> String {
+        guard language != .zh else { return country.name }
+        return localizedCountryNames[language]?[country.code] ?? country.name
+    }
+
+    static func localizedProvinceName(countryCode: String, province: Province, language: AppLanguage) -> String {
+        guard language != .zh else { return province.name }
+        return localizedProvinceNames[language]?[countryCode]?[province.code] ?? formattedRegionCode(province.code)
+    }
+
+    static func localizedCityName(countryCode: String, provinceCode: String? = nil, city: City, language: AppLanguage) -> String {
+        guard language != .zh else { return city.name }
+        if let exact = localizedCityNames[language]?[city.code] { return exact }
+        return formattedRegionCode(city.code)
+    }
+
+    static func localizedShortLabel(_ region: Region, language: AppLanguage) -> String {
+        let city = localizedCityName(countryCode: region.countryCode, provinceCode: region.provinceCode, city: City(code: region.cityCode, name: region.cityName), language: language)
+        if !region.provinceCode.isEmpty && region.provinceCode != region.cityCode {
+            let province = localizedProvinceName(countryCode: region.countryCode, province: Province(code: region.provinceCode, name: region.provinceName), language: language)
+            return "\(city) · \(province)"
+        }
+        return city
+    }
+
+    static func localizedHeaderLabel(_ region: Region, language: AppLanguage) -> String {
+        "\(region.countryEmoji) \(localizedCityName(countryCode: region.countryCode, provinceCode: region.provinceCode, city: City(code: region.cityCode, name: region.cityName), language: language))"
+    }
+
+    static func localizedDisplayName(_ region: Region, language: AppLanguage) -> String {
+        let country = localizedCountryNames[language]?[region.countryCode] ?? region.countryName
+        let city = localizedCityName(countryCode: region.countryCode, provinceCode: region.provinceCode, city: City(code: region.cityCode, name: region.cityName), language: language)
+        if region.provinceName.isEmpty || region.provinceName == region.cityName || region.provinceCode == region.cityCode {
+            return "\(country) · \(city)"
+        }
+        let province = localizedProvinceName(countryCode: region.countryCode, province: Province(code: region.provinceCode, name: region.provinceName), language: language)
+        return "\(country) · \(province) · \(city)"
+    }
+
+    private static func formattedRegionCode(_ code: String) -> String {
+        let special = [
+            "sf": "San Francisco", "la": "Los Angeles", "sd": "San Diego", "sj": "San Jose",
+            "nyc": "New York", "kl": "Kuala Lumpur", "ca": "California", "ny": "New York",
+            "wa": "Washington", "tx": "Texas", "fl": "Florida", "il": "Illinois",
+            "ma": "Massachusetts", "nj": "New Jersey",
+        ]
+        if let value = special[code] { return value }
+        return code
+            .split(separator: "_")
+            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+            .joined(separator: " ")
+    }
+
+    private static let localizedCountryNames: [AppLanguage: [String: String]] = [
+        .en: [
+            "cn": "China", "jp": "Japan", "us": "United States", "sg": "Singapore",
+            "kr": "South Korea", "uk": "United Kingdom", "fr": "France", "au": "Australia",
+            "ca": "Canada", "th": "Thailand", "my": "Malaysia", "de": "Germany", "nl": "Netherlands",
+        ],
+        .ja: [
+            "cn": "中国", "jp": "日本", "us": "アメリカ", "sg": "シンガポール",
+            "kr": "韓国", "uk": "イギリス", "fr": "フランス", "au": "オーストラリア",
+            "ca": "カナダ", "th": "タイ", "my": "マレーシア", "de": "ドイツ", "nl": "オランダ",
+        ],
+    ]
+
+    private static let localizedProvinceNames: [AppLanguage: [String: [String: String]]] = [
+        .en: [
+            "jp": [
+                "tokyo": "Tokyo", "osaka": "Osaka", "kyoto": "Kyoto", "fukuoka": "Fukuoka",
+                "aichi": "Aichi", "kanagawa": "Kanagawa", "saitama": "Saitama", "chiba": "Chiba",
+                "hyogo": "Hyogo", "hokkaido": "Hokkaido", "miyagi": "Miyagi", "hiroshima": "Hiroshima",
+                "okinawa": "Okinawa", "shizuoka": "Shizuoka", "ibaraki": "Ibaraki", "nara": "Nara",
+                "mie": "Mie", "kumamoto": "Kumamoto", "kagoshima": "Kagoshima", "nagano": "Nagano",
+                "ishikawa": "Ishikawa", "okayama": "Okayama", "niigata": "Niigata", "tochigi": "Tochigi",
+                "gunma": "Gunma", "shiga": "Shiga", "gifu": "Gifu",
+            ],
+            "cn": [:],
+        ],
+        .ja: [
+            "jp": [
+                "tokyo": "東京都", "osaka": "大阪府", "kyoto": "京都府", "fukuoka": "福岡県",
+                "aichi": "愛知県", "kanagawa": "神奈川県", "saitama": "埼玉県", "chiba": "千葉県",
+                "hyogo": "兵庫県", "hokkaido": "北海道", "miyagi": "宮城県", "hiroshima": "広島県",
+                "okinawa": "沖縄県", "shizuoka": "静岡県", "ibaraki": "茨城県", "nara": "奈良県",
+                "mie": "三重県", "kumamoto": "熊本県", "kagoshima": "鹿児島県", "nagano": "長野県",
+                "ishikawa": "石川県", "okayama": "岡山県", "niigata": "新潟県", "tochigi": "栃木県",
+                "gunma": "群馬県", "shiga": "滋賀県", "gifu": "岐阜県",
+            ],
+        ],
+    ]
+
+    private static let localizedCityNames: [AppLanguage: [String: String]] = [
+        .en: [
+            "tokyo": "Tokyo", "osaka": "Osaka", "kyoto": "Kyoto", "fukuoka": "Fukuoka",
+            "nagoya": "Nagoya", "yokohama": "Yokohama", "kawasaki": "Kawasaki", "saitama": "Saitama",
+            "chiba": "Chiba", "kobe": "Kobe", "sapporo": "Sapporo", "sendai": "Sendai",
+            "hiroshima": "Hiroshima", "naha": "Naha", "shizuoka": "Shizuoka", "tsukuba": "Tsukuba",
+            "nara": "Nara", "yokkaichi": "Yokkaichi", "kumamoto": "Kumamoto", "kagoshima": "Kagoshima",
+            "nagano": "Nagano", "kanazawa": "Kanazawa", "okayama": "Okayama", "niigata": "Niigata",
+            "utsunomiya": "Utsunomiya", "takasaki": "Takasaki", "otsu": "Otsu", "gifu": "Gifu",
+            "shanghai": "Shanghai", "beijing": "Beijing", "guangzhou": "Guangzhou", "shenzhen": "Shenzhen",
+            "hangzhou": "Hangzhou", "nanjing": "Nanjing", "suzhou": "Suzhou", "chengdu": "Chengdu",
+            "hongkong": "Hong Kong", "singapore": "Singapore", "seoul": "Seoul", "busan": "Busan",
+            "london": "London", "manchester": "Manchester", "toronto": "Toronto", "vancouver": "Vancouver",
+            "sydney": "Sydney", "melbourne": "Melbourne", "paris": "Paris", "berlin": "Berlin",
+        ],
+        .ja: [
+            "tokyo": "東京", "osaka": "大阪", "kyoto": "京都", "fukuoka": "福岡",
+            "nagoya": "名古屋", "yokohama": "横浜", "kawasaki": "川崎", "saitama": "さいたま",
+            "chiba": "千葉", "kobe": "神戸", "sapporo": "札幌", "sendai": "仙台",
+            "hiroshima": "広島", "naha": "那覇", "shizuoka": "静岡", "tsukuba": "つくば",
+            "nara": "奈良", "yokkaichi": "四日市", "kumamoto": "熊本", "kagoshima": "鹿児島",
+            "nagano": "長野", "kanazawa": "金沢", "okayama": "岡山", "niigata": "新潟",
+            "utsunomiya": "宇都宮", "takasaki": "高崎", "otsu": "大津", "gifu": "岐阜",
+            "shanghai": "上海", "beijing": "北京", "guangzhou": "広州", "shenzhen": "深圳",
+            "hongkong": "香港", "singapore": "シンガポール", "seoul": "ソウル", "busan": "釜山",
+            "london": "ロンドン", "toronto": "トロント", "vancouver": "バンクーバー",
+            "sydney": "シドニー", "melbourne": "メルボルン", "paris": "パリ", "berlin": "ベルリン",
+        ],
+    ]
+
     static var popular: [Region] {
         popularRegionCodes.compactMap { resolve(regionCode: $0) }
     }

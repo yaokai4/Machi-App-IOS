@@ -138,7 +138,7 @@ struct RegionPickerView: View {
                 ForEach(KaiXRegionDirectory.provinces(for: country.code)) { province in
                     NavigationLink(value: ProvinceRoute(country: country, province: province)) {
                         HStack(spacing: KXSpacing.sm) {
-                            Text(province.name).font(.body)
+                            Text(KaiXRegionDirectory.localizedProvinceName(countryCode: country.code, province: province, language: language)).font(.body)
                             Spacer()
                             Image(systemName: "chevron.right")
                                 .font(.footnote.weight(.medium))
@@ -158,7 +158,7 @@ struct RegionPickerView: View {
                         }
                     } label: {
                         HStack(spacing: KXSpacing.sm) {
-                            Text(city.name).font(.body)
+                            Text(KaiXRegionDirectory.localizedCityName(countryCode: country.code, city: city, language: language)).font(.body)
                             Spacer()
                         }
                         .padding(.vertical, 12)
@@ -179,7 +179,7 @@ struct RegionPickerView: View {
                 NavigationLink(value: country) {
                     HStack(spacing: KXSpacing.sm) {
                         Text(country.emoji).font(.title3)
-                        Text(country.name).font(.body)
+                        Text(KaiXRegionDirectory.localizedCountryName(country, language: language)).font(.body)
                         Spacer()
                         Image(systemName: "chevron.right")
                             .font(.footnote.weight(.medium))
@@ -216,8 +216,8 @@ struct RegionPickerView: View {
                             HStack(spacing: KXSpacing.sm) {
                                 Text(region.countryEmoji).font(.title3)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(region.cityName).font(.body)
-                                    Text("\(region.countryName)\(region.provinceName.isEmpty ? "" : " · \(region.provinceName)")")
+                                    Text(KaiXRegionDirectory.localizedShortLabel(region, language: language)).font(.body)
+                                    Text(regionSubtitle(region))
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
@@ -239,6 +239,7 @@ struct RegionPickerView: View {
     private func searchMatches(query: String) -> [KaiXRegionDirectory.Region] {
         Array(allSelectableRegions().filter { region in
             region.countryName.localizedCaseInsensitiveContains(query)
+            || KaiXRegionDirectory.localizedDisplayName(region, language: language).localizedCaseInsensitiveContains(query)
             || region.countryCode.contains(query)
             || region.provinceName.localizedCaseInsensitiveContains(query)
             || region.provinceCode.contains(query)
@@ -267,6 +268,20 @@ struct RegionPickerView: View {
         onSelect(region)
         dismiss()
     }
+
+    private func regionSubtitle(_ region: KaiXRegionDirectory.Region) -> String {
+        let country = KaiXRegionDirectory.localizedCountryName(
+            .init(code: region.countryCode, name: region.countryName, emoji: region.countryEmoji, tier: 1, hasProvinces: !region.provinceCode.isEmpty),
+            language: language
+        )
+        if region.provinceName.isEmpty { return country }
+        let province = KaiXRegionDirectory.localizedProvinceName(
+            countryCode: region.countryCode,
+            province: .init(code: region.provinceCode, name: region.provinceName),
+            language: language
+        )
+        return "\(country) · \(province)"
+    }
 }
 
 private struct ProvinceRoute: Hashable {
@@ -286,7 +301,7 @@ private struct ProvinceListView: View {
                     ForEach(KaiXRegionDirectory.provinces(for: country.code)) { province in
                         NavigationLink(value: ProvinceRoute(country: country, province: province)) {
                             HStack {
-                                Text(province.name).font(.body)
+                                Text(KaiXRegionDirectory.localizedProvinceName(countryCode: country.code, province: province, language: language)).font(.body)
                                 Spacer()
                                 Image(systemName: "chevron.right")
                                     .font(.footnote.weight(.medium))
@@ -307,7 +322,7 @@ private struct ProvinceListView: View {
                             }
                         } label: {
                             HStack {
-                                Text(city.name).font(.body)
+                                Text(KaiXRegionDirectory.localizedCityName(countryCode: country.code, city: city, language: language)).font(.body)
                                 Spacer()
                             }
                             .padding(.vertical, 12)
@@ -324,7 +339,7 @@ private struct ProvinceListView: View {
             .padding(.top, KXSpacing.md)
         }
         .kxPageBackground()
-        .navigationTitle(country.name)
+        .navigationTitle(KaiXRegionDirectory.localizedCountryName(country, language: language))
         .navigationBarTitleDisplayMode(.inline)
     }
 }
@@ -343,9 +358,9 @@ private struct CityListView: View {
                         if let region = KaiXRegionDirectory.make(country: country.code, province: province.code, city: city.code) {
                             onSelect(region)
                         }
-                    } label: {
-                        HStack {
-                            Text(city.name).font(.body)
+                        } label: {
+                            HStack {
+                            Text(KaiXRegionDirectory.localizedCityName(countryCode: country.code, provinceCode: province.code, city: city, language: language)).font(.body)
                             Spacer()
                         }
                         .padding(.vertical, 12)
@@ -361,7 +376,7 @@ private struct CityListView: View {
             .padding(.top, KXSpacing.md)
         }
         .kxPageBackground()
-        .navigationTitle(province.name)
+        .navigationTitle(KaiXRegionDirectory.localizedProvinceName(countryCode: country.code, province: province, language: language))
         .navigationBarTitleDisplayMode(.inline)
     }
 }

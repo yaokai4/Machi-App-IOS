@@ -161,6 +161,9 @@ struct KXSegmentedControl<Item: Hashable, Label: View>: View {
     var itemMinWidth: CGFloat
     var itemHeight: CGFloat
     let label: (Item) -> Label
+    /// Shared id so the selected capsule slides between segments instead of
+    /// fading out/in on each side.
+    @Namespace private var indicatorNamespace
 
     init(
         _ items: [Item],
@@ -198,6 +201,7 @@ struct KXSegmentedControl<Item: Hashable, Label: View>: View {
                         .background {
                             if selection == item {
                                 KXSelectedSegmentBackground()
+                                    .matchedGeometryEffect(id: "kx-segment-indicator", in: indicatorNamespace)
                             }
                         }
                         .contentShape(Capsule())

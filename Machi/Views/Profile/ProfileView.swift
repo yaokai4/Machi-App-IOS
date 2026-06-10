@@ -316,6 +316,17 @@ struct ProfileView: View {
                         .kxGlassCircle()
                 }
                 .buttonStyle(.plain)
+            } else if isCurrentUser {
+                NavigationLink {
+                    MyWorkbenchView(currentUser: currentUser)
+                } label: {
+                    Image(systemName: "rectangle.grid.2x2.fill")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 42, height: 42)
+                        .kxGlassCircle()
+                }
+                .buttonStyle(.plain)
             } else {
                 Color.clear
                     .frame(width: 42, height: 42)

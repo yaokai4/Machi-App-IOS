@@ -17,14 +17,17 @@ actor VideoThumbnailService {
         generator.appliesPreferredTrackTransform = true
         generator.maximumSize = CGSize(width: 900, height: 900)
 
-        do {
-            let cgImage = try await generateImage(with: generator, at: CMTime(seconds: 0.2, preferredTimescale: 600))
-            let image = UIImage(cgImage: cgImage)
-            cache.setObject(image, forKey: key)
-            return image
-        } catch {
-            return nil
+        for seconds in [0.2, 0.0, 1.0] {
+            do {
+                let cgImage = try await generateImage(with: generator, at: CMTime(seconds: seconds, preferredTimescale: 600))
+                let image = UIImage(cgImage: cgImage)
+                cache.setObject(image, forKey: key)
+                return image
+            } catch {
+                continue
+            }
         }
+        return nil
     }
 
     func clear() {

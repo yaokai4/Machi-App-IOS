@@ -29,8 +29,10 @@ final class SearchViewModel: ObservableObject {
     @Published var query = ""
     @Published private(set) var debouncedQuery = ""
     @Published var topics: [TopicEntity] = []
+    @Published var happeningPosts: [PostEntity] = []
     @Published var hotPosts: [PostEntity] = []
     @Published var authors: [String: UserEntity] = [:]
+    @Published var mediaByPostId: [String: [MediaEntity]] = [:]
     @Published var suggestedUsers: [UserEntity] = []
     @Published var followingIds: Set<String> = []
     @Published var state: ScreenState = .idle
@@ -40,18 +42,64 @@ final class SearchViewModel: ObservableObject {
     @Published private(set) var latestItems: [TrendingItem] = []
 
     func load(context: ModelContext, currentUser: UserEntity, postStore: PostStore? = nil, searchStore: SearchStore? = nil) async {
-        let hasCachedContent = !topics.isEmpty || !hotPosts.isEmpty
+        let hasCachedContent = !topics.isEmpty || !hotPosts.isEmpty || !happeningPosts.isEmpty
         if !hasCachedContent {
             state = .loading
             searchStore?.setLoadingState(.loading)
         }
 
         do {
-            topics = try await TopicRepository(context: context).fetchTrending(limit: 20)
-            hotPosts = try await PostRepository(context: context).fetchPage(mode: .hot, currentUserId: currentUser.id, page: 0, pageSize: 30)
-            postStore?.register(hotPosts)
+            let postRepository = PostRepository(context: context)
+            let topicRepository = TopicRepository(context: context)
             let userRepository = UserRepository(context: context)
-            let postAuthors = try await userRepository.fetchUsers(ids: Set(hotPosts.map(\.authorId)))
+            let region = RegionStore.shared.current ?? KaiXRegionDirectory.resolve(regionCode: currentUser.currentRegionCode)
+
+            var loadedHappening: [PostEntity] = []
+            var loadedHot: [PostEntity] = []
+            var loadedTopics: [TopicEntity] = []
+
+            do {
+                let response = try await KaiXAPIClient.shared.exploreHappening(region: region, limit: 30)
+                loadedHappening = upsertRemotePosts(response.orderedPosts, context: context)
+            } catch {
+                loadedHappening = []
+            }
+
+            do {
+                let response = try await KaiXAPIClient.shared.exploreHot(region: region, limit: 30)
+                loadedHot = upsertRemotePosts(response.orderedPosts, context: context)
+            } catch {
+                loadedHot = []
+            }
+
+            do {
+                let response = try await KaiXAPIClient.shared.exploreTopics(region: region, limit: 20)
+                loadedTopics = try upsertRemoteTopics(response.orderedTopics, context: context)
+            } catch {
+                loadedTopics = []
+            }
+
+            if loadedHot.isEmpty {
+                loadedHot = try await postRepository.fetchPage(mode: .hot, currentUserId: currentUser.id, page: 0, pageSize: 30)
+            }
+            if loadedHappening.isEmpty {
+                loadedHappening = loadedHot
+            }
+            if loadedTopics.isEmpty {
+                loadedTopics = try await topicRepository.fetchTrending(limit: 20)
+            }
+
+            happeningPosts = loadedHappening
+            hotPosts = loadedHot
+            topics = loadedTopics
+
+            let visiblePosts = orderedUniquePosts(loadedHappening + loadedHot)
+            postStore?.register(visiblePosts)
+            mediaByPostId = try await postRepository.fetchMedia(for: visiblePosts)
+            for post in visiblePosts where mediaByPostId[post.id] == nil {
+                mediaByPostId[post.id] = []
+            }
+            let postAuthors = try await userRepository.fetchUsers(ids: Set(visiblePosts.map(\.authorId)))
             authors = Dictionary(uniqueKeysWithValues: postAuthors.map { ($0.id, $0) })
             suggestedUsers = try await userRepository.fetchRecommendedUsers(excluding: currentUser.id, limit: 12)
             followingIds = try await userRepository.followingIds(for: currentUser.id)
@@ -163,6 +211,61 @@ final class SearchViewModel: ObservableObject {
         latestItems = trendingItems.sorted { $0.createdAt > $1.createdAt }
         topicTrendingItems = topics.map(makeTopicTrendingItem)
         userTrendingItems = suggestedUsers.map(makeUserTrendingItem)
+    }
+
+    private func upsertRemotePosts(_ posts: [KaiXPostDTO], context: ModelContext) -> [PostEntity] {
+        guard !posts.isEmpty else { return [] }
+        var result: [PostEntity] = []
+        for dto in posts {
+            if let author = dto.author {
+                _ = RemoteSyncService.shared.upsertUser(author, context: context)
+            }
+            if let originalAuthor = dto.original_post?.author {
+                _ = RemoteSyncService.shared.upsertUser(originalAuthor, context: context)
+            }
+            result.append(RemoteSyncService.shared.upsertPost(dto, context: context))
+        }
+        try? context.save()
+        return orderedUniquePosts(result)
+    }
+
+    private func upsertRemoteTopics(_ remoteTopics: [KaiXTopicDTO], context: ModelContext) throws -> [TopicEntity] {
+        guard !remoteTopics.isEmpty else { return [] }
+        var result: [TopicEntity] = []
+        for dto in remoteTopics {
+            let name = dto.normalizedTag
+            guard !name.isEmpty else { continue }
+            var descriptor = FetchDescriptor<TopicEntity>(
+                predicate: #Predicate { $0.name == name }
+            )
+            descriptor.fetchLimit = 1
+            if let existing = try context.fetch(descriptor).first {
+                existing.postCount = dto.postCountValue
+                existing.heatScore = dto.heatScoreValue
+                existing.updatedAt = .now
+                result.append(existing)
+            } else {
+                let topic = TopicEntity(
+                    id: "topic-\(name)",
+                    name: name,
+                    postCount: dto.postCountValue,
+                    heatScore: dto.heatScoreValue
+                )
+                context.insert(topic)
+                result.append(topic)
+            }
+        }
+        try? context.save()
+        return result
+    }
+
+    private func orderedUniquePosts(_ posts: [PostEntity]) -> [PostEntity] {
+        var seen = Set<String>()
+        var result: [PostEntity] = []
+        for post in posts where seen.insert(post.id).inserted {
+            result.append(post)
+        }
+        return result
     }
 
     private func makePostTrendingItem(_ post: PostEntity) -> TrendingItem {

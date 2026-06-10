@@ -133,19 +133,74 @@ struct KaiXUserDTO: Codable, Equatable {
 struct KaiXListingMediaDTO: Codable, Equatable, Hashable {
     let id: String
     let listing_id: String?
+    let listingId: String?
+    let uploaded_file_id: String?
+    let uploadedFileId: String?
     let media_type: String?
+    let mediaType: String?
+    let type: String?
+    let visibility: String?
+    let objectKey: String?
     let url: String
+    let cdnUrl: String?
+    let publicUrl: String?
+    let thumb_url: String?
+    let thumbUrl: String?
     let thumbnail_url: String?
+    let thumbnailUrl: String?
+    let poster_url: String?
+    let posterUrl: String?
+    let content_type: String?
+    let contentType: String?
+    let mime: String?
+    let width: Int?
+    let height: Int?
+    let duration: Double?
+    let duration_seconds: Double?
+    let durationSeconds: Double?
+    let file_size: Int?
+    let fileSize: Int?
+    let byte_size: Int?
+    let status: String?
+    let processing_status: String?
+    let processingStatus: String?
     let sort_order: Int?
+    let sortOrder: Int?
     let is_cover: Bool?
+    let isCover: Bool?
+}
+
+struct KaiXListingCardDTO: Codable, Equatable {
+    let id: String?
+    let type: String?
+    let title: String?
+    let priceLabel: String?
+    let primaryMeta: String?
+    let secondaryMeta: String?
+    let status: String?
+    let statusLabel: String?
+    let verificationStatus: String?
+    let isVerified: Bool?
+    let isFavorited: Bool?
+    let isPromoted: Bool?
+    let citySlug: String?
+    let cityLabel: String?
+    let coverUrl: String?
+    let coverMedia: KaiXListingMediaDTO?
+    let createdAt: String?
+    let publishedAt: String?
 }
 
 struct KaiXCityListingDTO: Codable, Identifiable, Equatable {
     let id: String
     let country_code: String?
+    let countryCode: String?
     let city_id: String?
+    let cityId: String?
     let city_slug: String?
+    let citySlug: String?
     let region_code: String?
+    let regionCode: String?
     let language: String?
     let type: String
     let category: String?
@@ -154,26 +209,47 @@ struct KaiXCityListingDTO: Codable, Identifiable, Equatable {
     let price: Double?
     let currency: String?
     let price_type: String?
+    let priceType: String?
     let location_text: String?
+    let locationText: String?
     let status: String
     let verification_status: String
+    let verificationStatus: String?
     let seller_user_id: String?
+    let sellerUserId: String?
     let business_id: String?
+    let businessId: String?
     let contact_method: String?
+    let contactMethod: String?
     let view_count: Int?
+    let viewCount: Int?
     let inquiry_count: Int?
+    let inquiryCount: Int?
     let favorite_count: Int?
+    let favoriteCount: Int?
     let report_count: Int?
+    let reportCount: Int?
     let published_at: String?
+    let publishedAt: String?
     let expires_at: String?
+    let expiresAt: String?
     let created_at: String?
+    let createdAt: String?
     let updated_at: String?
+    let updatedAt: String?
     let media: [KaiXListingMediaDTO]?
+    let coverMedia: KaiXListingMediaDTO?
+    let cover_media: KaiXListingMediaDTO?
     let cover_url: String?
+    let coverUrl: String?
+    let card: KaiXListingCardDTO?
+    let listingCard: KaiXListingCardDTO?
     let attributes: [String: KaiXAttributeValue]?
     let seller: KaiXUserDTO?
     let favorited: Bool?
+    let isFavorited: Bool?
     let can_manage: Bool?
+    let canManage: Bool?
 }
 
 struct KaiXListingsResponse: Codable {
@@ -342,16 +418,38 @@ struct KaiXMembershipInsightsResponse: Codable {
 
 struct KaiXMediaDTO: Codable, Equatable {
     let id: String
-    let owner_id: String
-    let type: String
-    let url: String
+    let owner_id: String?
+    let ownerId: String?
+    let remote_id: String?
+    let remoteId: String?
+    let type: String?
+    let visibility: String?
+    let objectKey: String?
+    let url: String?
+    let cdnUrl: String?
+    let publicUrl: String?
     let thumb_url: String?
-    let mime: String
+    let thumbUrl: String?
+    let thumbnail_url: String?
+    let thumbnailUrl: String?
+    let poster_url: String?
+    let posterUrl: String?
+    let mime: String?
+    let content_type: String?
+    let contentType: String?
     let width: Int?
     let height: Int?
     let duration: Double?
+    let duration_seconds: Double?
+    let durationSeconds: Double?
     let byte_size: Int?
-    let created_at: String
+    let file_size: Int?
+    let fileSize: Int?
+    let status: String?
+    let processing_status: String?
+    let processingStatus: String?
+    let created_at: String?
+    let createdAt: String?
 }
 
 struct KaiXUploadedFileDTO: Codable, Equatable {
@@ -361,9 +459,12 @@ struct KaiXUploadedFileDTO: Codable, Equatable {
     let url: String?
     let cdnUrl: String?
     let thumbnailUrl: String?
+    let posterUrl: String?
     let contentType: String?
     let fileSize: Int?
     let fileType: String?
+    let type: String?
+    let visibility: String?
     let purpose: String?
     let entityType: String?
     let entityId: String?
@@ -372,6 +473,67 @@ struct KaiXUploadedFileDTO: Codable, Equatable {
     let width: Int?
     let height: Int?
     let duration: Double?
+    let durationSeconds: Double?
+}
+
+extension KaiXListingMediaDTO {
+    var normalizedType: String {
+        (type ?? mediaType ?? media_type ?? "image").lowercased()
+    }
+
+    var sourceURLString: String {
+        cdnUrl ?? publicUrl ?? url
+    }
+
+    var thumbnailURLString: String {
+        thumbnailUrl ?? thumbnail_url ?? thumbUrl ?? thumb_url ?? ""
+    }
+
+    var posterURLString: String {
+        let poster = posterUrl ?? poster_url ?? thumbnailURLString
+        return normalizedType == "video" && poster == sourceURLString ? "" : poster
+    }
+
+    var previewURL: URL? {
+        let raw = normalizedType == "video" ? posterURLString : (thumbnailURLString.isEmpty ? sourceURLString : thumbnailURLString)
+        return raw.kaixMediaURL
+    }
+
+    var sourceURL: URL? {
+        sourceURLString.kaixMediaURL
+    }
+}
+
+extension KaiXMediaDTO {
+    var normalizedType: String {
+        let declared = (type ?? "").lowercased()
+        let mimeType = (contentType ?? content_type ?? mime ?? "").lowercased()
+        if declared == "video" || mimeType.hasPrefix("video/") { return "video" }
+        if declared == "image" || mimeType.hasPrefix("image/") { return "image" }
+        return declared.isEmpty ? "image" : declared
+    }
+
+    var sourceURLString: String {
+        cdnUrl ?? publicUrl ?? url ?? ""
+    }
+
+    var thumbnailURLString: String {
+        thumbnailUrl ?? thumbnail_url ?? thumbUrl ?? thumb_url ?? ""
+    }
+
+    var posterURLString: String {
+        let poster = posterUrl ?? poster_url ?? thumbnailURLString
+        return normalizedType == "video" && poster == sourceURLString ? "" : poster
+    }
+
+    var previewURL: URL? {
+        let raw = normalizedType == "video" ? posterURLString : (thumbnailURLString.isEmpty ? sourceURLString : thumbnailURLString)
+        return raw.kaixMediaURL
+    }
+
+    var sourceURL: URL? {
+        sourceURLString.kaixMediaURL
+    }
 }
 
 struct KaiXUploadPresignDTO: Codable {
@@ -537,24 +699,36 @@ struct KaiXMessageAttachmentDTO: Codable, Equatable, Identifiable {
     let thread_id: String?
     let uploaded_file_id: String
     let type: String
+    let visibility: String?
+    let objectKey: String?
     let attachment_type: String?
     let url: String?
+    let cdnUrl: String?
+    let publicUrl: String?
     let thumb_url: String?
+    let thumbUrl: String?
+    let thumbnail_url: String?
+    let thumbnailUrl: String?
+    let poster_url: String?
+    let posterUrl: String?
     let needsSignedUrl: Bool?
     let viewUrlEndpoint: String?
     let thumbnail_file_id: String?
     let duration: Double?
     let duration_seconds: Double?
+    let durationSeconds: Double?
     let width: Int?
     let height: Int?
     let file_name: String?
     let file_size: Int?
+    let fileSize: Int?
     let byte_size: Int?
     let content_type: String?
+    let contentType: String?
     let mime: String?
-    let visibility: String?
     let status: String?
     let created_at: String?
+    let createdAt: String?
 }
 
 struct KaiXConversationDTO: Codable, Equatable {
@@ -585,7 +759,17 @@ struct KaiXSettingsDTO: Codable, Equatable {
 
 struct KaiXTopicDTO: Codable, Equatable {
     let tag: String
-    let post_count: Int
+    let post_count: Int?
+    let postCount: Int?
+    let heat: Double?
+    let topic_heat: Double?
+    let topicHeat: Double?
+}
+
+extension KaiXTopicDTO {
+    var normalizedTag: String { tag.normalizedTopicName }
+    var postCountValue: Int { post_count ?? postCount ?? 0 }
+    var heatScoreValue: Double { topic_heat ?? topicHeat ?? heat ?? Double(postCountValue) }
 }
 
 // MARK: - Login devices / sessions (parity with web /settings/devices)
@@ -1162,6 +1346,24 @@ struct KaiXTrendingResponse: Codable {
     let posts: [KaiXPostDTO]
     let topics: [KaiXTopicDTO]
     let users: [KaiXUserDTO]
+}
+
+struct KaiXExplorePostsResponse: Codable {
+    let items: [KaiXPostDTO]?
+    let posts: [KaiXPostDTO]?
+    let days: Int?
+    let fallbackUsed: Bool?
+
+    var orderedPosts: [KaiXPostDTO] { items ?? posts ?? [] }
+}
+
+struct KaiXExploreTopicsResponse: Codable {
+    let topics: [KaiXTopicDTO]?
+    let items: [KaiXTopicDTO]?
+    let days: Int?
+    let fallbackUsed: Bool?
+
+    var orderedTopics: [KaiXTopicDTO] { topics ?? items ?? [] }
 }
 
 struct KaiXSearchResponse: Codable {

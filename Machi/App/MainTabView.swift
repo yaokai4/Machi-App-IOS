@@ -51,6 +51,15 @@ struct MainTabView: View {
         }
         .animation(.snappy(duration: 0.22), value: chrome.isTabBarHidden)
         .onAppear {
+            #if DEBUG
+            // UI 验证/截图脚本用:`simctl launch <udid> <bundle> -KXOpenTab discover`
+            if let idx = ProcessInfo.processInfo.arguments.firstIndex(of: "-KXOpenTab"),
+               idx + 1 < ProcessInfo.processInfo.arguments.count,
+               let tab = AppTab(rawValue: ProcessInfo.processInfo.arguments[idx + 1]) {
+                loadedTabs.insert(tab)
+                chrome.select(tab)
+            }
+            #endif
             loadedTabs.insert(chrome.selectedTab)
             router.setActiveTab(chrome.selectedTab)
             syncChromeForActiveRoute()

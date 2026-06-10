@@ -135,7 +135,7 @@ struct SearchView: View {
                         HStack(spacing: 4) {
                             Image(systemName: "location.fill")
                                 .font(.caption2.weight(.bold))
-                            Text(regionStore.current?.headerLabel ?? L("pickRegion", language))
+                            Text(regionStore.current.map { KaiXRegionDirectory.localizedHeaderLabel($0, language: language) } ?? L("pickRegion", language))
                                 .font(.caption.weight(.bold))
                                 .lineLimit(1)
                         }
@@ -287,7 +287,10 @@ struct SearchView: View {
                     onOpen: { if let item = cityHotItems.first { open(item) } }
                 )
                 DiscoverOverviewCard(
-                    title: regionStore.current.map { "\($0.countryName) \(L("hot", language))" } ?? L("trending", language),
+                    title: regionStore.current.map {
+                        let country = KaiXRegionDirectory.localizedCountryName(.init(code: $0.countryCode, name: $0.countryName, emoji: $0.countryEmoji, tier: 1, hasProvinces: !$0.provinceCode.isEmpty), language: language)
+                        return "\(country) \(L("hot", language))"
+                    } ?? L("trending", language),
                     icon: "globe.asia.australia.fill",
                     tint: KXColor.rankTeal,
                     item: countryHotItems.first,
@@ -345,7 +348,7 @@ struct SearchView: View {
         VStack(alignment: .leading, spacing: KXSpacing.sm) {
             if let region = regionStore.current {
                 compactRankingSection(title: "\(region.cityName) \(L("hot", language))", items: viewModel.trendingItems(region: region, limit: 5))
-                compactRankingSection(title: "\(region.countryName) \(L("hot", language))", items: viewModel.countryTrendingItems(region: region, limit: 5))
+                compactRankingSection(title: "\(KaiXRegionDirectory.localizedCountryName(.init(code: region.countryCode, name: region.countryName, emoji: region.countryEmoji, tier: 1, hasProvinces: !region.provinceCode.isEmpty), language: language)) \(L("hot", language))", items: viewModel.countryTrendingItems(region: region, limit: 5))
             }
             popularRegionsSection
             contentTypeHotGrid
@@ -389,7 +392,7 @@ struct SearchView: View {
                         Button {
                             router.open(.city(regionCode: region.regionCode))
                         } label: {
-                            Text(region.headerLabel)
+                            Text(KaiXRegionDirectory.localizedHeaderLabel(region, language: language))
                                 .font(.caption.weight(.bold))
                                 .lineLimit(1)
                                 .padding(.horizontal, 11)
@@ -1533,7 +1536,7 @@ struct TopicDetailView: View {
                         Button {
                             router.open(.city(regionCode: region.regionCode))
                         } label: {
-                            Text(region.headerLabel)
+                            Text(KaiXRegionDirectory.localizedHeaderLabel(region, language: language))
                                 .font(.subheadline.weight(.semibold))
                                 .padding(.horizontal, 12)
                                 .frame(height: 34)

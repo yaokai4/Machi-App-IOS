@@ -89,9 +89,23 @@ extension MediaEntity {
     }
 
     var displayURL: URL? {
+        if type == .video {
+            return previewURL
+        }
+        if let url = previewURL { return url }
+        return sourceURL
+    }
+
+    var previewURL: URL? {
         if !thumbnailURL.isEmpty { return thumbnailURL.asMediaURL }
+        if type != .video, !localURL.isEmpty { return localURL.asMediaURL }
+        if type != .video, !remoteURL.isEmpty { return remoteURL.asMediaURL }
+        return nil
+    }
+
+    var sourceURL: URL? {
         if !localURL.isEmpty { return localURL.asMediaURL }
-        if !remoteURL.isEmpty { return URL(string: remoteURL) }
+        if !remoteURL.isEmpty { return remoteURL.asMediaURL }
         return nil
     }
 }

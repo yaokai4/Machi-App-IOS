@@ -17,9 +17,9 @@ struct MediaGridView: View {
                         selectedMedia = item
                     } label: {
                         let height = mediaHeight(for: item)
-                        ZStack(alignment: .bottomTrailing) {
+                        ZStack {
                             if let url = item.displayURL {
-                                CachedMediaImageView(url: url, targetPixelSize: mediaItems.count == 1 ? 900 : 560)
+                                MediaImageView(url: url, targetPixelSize: mediaItems.count == 1 ? 900 : 560)
                                     .frame(height: height)
                                     .clipped()
                             } else {
@@ -27,17 +27,28 @@ struct MediaGridView: View {
                             }
 
                             if item.type == .video {
-                                Label(durationText(item.duration), systemImage: "play.fill")
+                                // Centered play affordance over the poster/placeholder
+                                // — parity with Web so a video always reads as tappable,
+                                // not a still image.
+                                Image(systemName: "play.fill")
+                                    .font(.system(size: 17, weight: .black))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 46, height: 46)
+                                    .background(.black.opacity(0.5), in: Circle())
+                                    .overlay(Circle().strokeBorder(.white.opacity(0.22), lineWidth: 1))
+                                    .shadow(color: .black.opacity(0.28), radius: 8, y: 3)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: height)
+                        .overlay(alignment: .bottomTrailing) {
+                            if item.type == .video, item.duration > 0 {
+                                Text(durationText(item.duration))
                                     .font(.caption2.weight(.bold))
                                     .foregroundStyle(.white)
                                     .padding(.horizontal, KXSpacing.sm)
                                     .padding(.vertical, KXSpacing.xs)
-                                    .background {
-                                        Capsule()
-                                            .fill(.black.opacity(0.24))
-                                            .glassEffect(KXGlass.control, in: Capsule())
-                                    }
-                                    .clipShape(Capsule())
+                                    .background(Capsule().fill(.black.opacity(0.55)))
                                     .padding(KXSpacing.sm)
                             }
                         }
@@ -69,8 +80,11 @@ struct MediaGridView: View {
             return item.type == .video ? 176 : 188
         }
 
+        // Honor the real orientation: landscape stays compact, portrait is
+        // allowed to grow tall enough that it doesn't read as a squashed
+        // letterbox (full view lives in the media preview).
         let ratio = CGFloat(item.height / max(item.width, 1))
-        return min(max(156, 220 * ratio), item.type == .video ? 206 : 232)
+        return min(max(156, 220 * ratio), item.type == .video ? 300 : 340)
     }
 }
 
@@ -78,19 +92,33 @@ private struct MediaPlaceholderTile: View {
     let item: MediaEntity
     let height: CGFloat
 
+    private var gradientColors: [Color] {
+        if item.type == .video {
+            // Premium brand-dark backdrop for videos without a first-frame poster
+            // yet (legacy uploads / extraction failure) — never the flat green box
+            // that read as "broken". Mirrors the Web fallbackVideoPoster gradient.
+            return [
+                Color(red: 0.059, green: 0.090, blue: 0.165),
+                Color(red: 0.118, green: 0.227, blue: 0.541),
+                Color(red: 0.059, green: 0.463, blue: 0.431)
+            ]
+        }
+        let base = item.placeholderColorName.isEmpty ? "blue" : item.placeholderColorName
+        return [Color.kaixNamed(base).opacity(0.86), Color.black.opacity(0.42)]
+    }
+
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             LinearGradient(
-                colors: [
-                    Color.kaixNamed(item.placeholderColorName.isEmpty ? "green" : item.placeholderColorName).opacity(0.86),
-                    Color.black.opacity(0.42)
-                ],
+                colors: gradientColors,
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            Image(systemName: item.placeholderSymbol.isEmpty ? "photo.fill" : item.placeholderSymbol)
-                .font(.system(size: KXIconSize.lg + 6, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.86))
+            if item.type != .video {
+                Image(systemName: item.placeholderSymbol.isEmpty ? "photo.fill" : item.placeholderSymbol)
+                    .font(.system(size: KXIconSize.lg + 6, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.86))
+            }
             if !item.placeholderTitle.isEmpty {
                 Text(item.placeholderTitle)
                     .font(.caption.weight(.semibold))

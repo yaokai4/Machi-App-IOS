@@ -309,6 +309,8 @@ struct kaiziTests {
             type: .video,
             localURL: URL(fileURLWithPath: "/tmp/video.mov"),
             thumbnailURL: URL(fileURLWithPath: "/tmp/video.jpg"),
+            contentType: "video/quicktime",
+            fileName: "video.mov",
             width: 100,
             height: 100,
             duration: 4

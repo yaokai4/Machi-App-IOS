@@ -78,8 +78,8 @@ struct ComposePostView: View {
                         viewModel.reportMediaFailure(language: language)
                         continue
                     }
-                    let isVideo = item.supportedContentTypes.contains { $0.conforms(to: .movie) }
-                    await viewModel.addMedia(data: data, isVideo: isVideo, language: language)
+                    let videoContentType = item.supportedContentTypes.first { $0.conforms(to: .movie) }
+                    await viewModel.addMedia(data: data, isVideo: videoContentType != nil, contentType: videoContentType, language: language)
                 }
                 pickerItems = []
             }
@@ -553,19 +553,23 @@ struct ComposePostView: View {
         }
     }
 
+    @ViewBuilder
     private var bottomToolbar: some View {
+        let hasVideo = viewModel.mediaDrafts.contains { $0.type == .video }
+        let imageCount = viewModel.mediaDrafts.filter { $0.type == .image }.count
+        let remainingImageSlots = Swift.max(1, KaiXConfig.maxImageItemsPerPost - imageCount)
         HStack(spacing: 18) {
-            PhotosPicker(selection: $pickerItems, maxSelectionCount: KaiXConfig.maxMediaItemsPerPost, matching: .images) {
+            PhotosPicker(selection: $pickerItems, maxSelectionCount: remainingImageSlots, matching: .images) {
                 Image(systemName: "photo")
                     .font(.title3.weight(.semibold))
             }
-            .disabled(viewModel.mediaDrafts.count >= KaiXConfig.maxMediaItemsPerPost)
+            .disabled(hasVideo || imageCount >= KaiXConfig.maxImageItemsPerPost)
 
-            PhotosPicker(selection: $pickerItems, maxSelectionCount: KaiXConfig.maxMediaItemsPerPost, matching: .videos) {
+            PhotosPicker(selection: $pickerItems, maxSelectionCount: KaiXConfig.maxVideoItemsPerPost, matching: .videos) {
                 Image(systemName: "video")
                     .font(.title3.weight(.semibold))
             }
-            .disabled(viewModel.mediaDrafts.count >= KaiXConfig.maxMediaItemsPerPost)
+            .disabled(!viewModel.mediaDrafts.isEmpty)
 
             Spacer()
 

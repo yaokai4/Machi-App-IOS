@@ -230,6 +230,7 @@ struct PostCardView: View, Equatable {
                 .padding(.vertical, 13)
                 .kxGlassSurface(radius: KXRadius.lg)
                 .contentShape(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
+                .gesture(TapGesture().onEnded { onOpen() }, including: .gesture)
             }
         }
         .confirmationDialog(L("repost", language), isPresented: $isShowingRepostOptions, titleVisibility: .visible) {

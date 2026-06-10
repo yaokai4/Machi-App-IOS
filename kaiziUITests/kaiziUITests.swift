@@ -129,4 +129,73 @@ final class kaiziUITests: XCTestCase {
             XCUIApplication().launch()
         }
     }
+
+    /// Drives the app through every primary surface and captures a screenshot of
+    /// each, so the full UI can be visually reviewed from the test bundle.
+    /// Run: xcodebuild test -only-testing:kaiziUITests/kaiziUITests/testVisualSweep
+    @MainActor
+    func testVisualSweep() throws {
+        continueAfterFailure = true
+        let app = XCUIApplication()
+        // Authenticated test session (tab navigation is reliable here, matching
+        // the passing nav test). Data is an ephemeral store, so this verifies
+        // every page's LAYOUT / empty-state / premium polish; real-content
+        // rendering is verified separately on the production build.
+        app.launchArguments += ["-appLanguageCode", "zh", "-kaixUITestLocalAuth", "-kaixUITestAutoLogin", "-kaixUITestEphemeralStore"]
+        app.launchEnvironment["KAIX_UI_TEST_LOCAL_AUTH"] = "1"
+        app.launchEnvironment["KAIX_UI_TEST_AUTO_LOGIN"] = "1"
+        app.launchEnvironment["KAIX_UI_TEST_EPHEMERAL_STORE"] = "1"
+        app.launch()
+
+        func snap(_ name: String) {
+            let a = XCTAttachment(screenshot: app.screenshot())
+            a.name = name
+            a.lifetime = .keepAlways
+            add(a)
+        }
+        func settle(_ ms: UInt32 = 2_000) { usleep(ms * 1000) }
+        @discardableResult
+        func switchTab(_ id: String) -> Bool {
+            let b = app.buttons["tabbar.\(id)"]
+            guard b.waitForExistence(timeout: 8) else { return false }
+            b.tap(); settle(); return true
+        }
+        func goBack() {
+            let back = app.navigationBars.buttons.firstMatch
+            if back.exists { back.tap(); settle(1_100) }
+        }
+
+        let guest = app.buttons["auth.browseAsGuest"]
+        if guest.waitForExistence(timeout: 6) { guest.tap(); settle(2_500) }
+        _ = app.buttons["tabbar.search"].waitForExistence(timeout: 25)
+        settle(2_500)
+        snap("00-home")
+
+        // Tabs FIRST (before any segment/sheet interaction, which is what broke
+        // subsequent tab taps in earlier runs).
+        switchTab("search"); settle(2_200); snap("02-discover")
+        for ch in ["二手市场", "租房", "找工作", "本地服务"] {
+            let card = app.staticTexts[ch].firstMatch
+            guard card.waitForExistence(timeout: 3) else { continue }
+            card.tap(); settle(2_600); snap("03-channel-\(ch)")
+            let cell = app.scrollViews.firstMatch.buttons.element(boundBy: 0)
+            if cell.waitForExistence(timeout: 3) { cell.tap(); settle(2_600); snap("04-detail-\(ch)"); goBack() }
+            goBack(); switchTab("search")
+        }
+        switchTab("guide"); settle(2_200); snap("05-guide")
+        switchTab("messages"); settle(2_000); snap("06-messages")
+        switchTab("profile"); settle(2_200); snap("07-profile-workbench")
+        // Settings entry from profile/workbench
+        let settingsEntry = app.staticTexts["设置"].firstMatch
+        if settingsEntry.waitForExistence(timeout: 3) { settingsEntry.tap(); settle(2_000); snap("08-settings"); goBack() }
+
+        // Home segments + compose LAST
+        switchTab("home"); settle(1_500)
+        for seg in ["同城", "热榜"] {
+            let s = app.buttons[seg].firstMatch
+            if s.waitForExistence(timeout: 2) { s.tap(); settle(2_000); snap("01-home-\(seg)") }
+        }
+        let fab = app.buttons.matching(NSPredicate(format: "label CONTAINS '投稿' OR label CONTAINS '发布' OR label CONTAINS '+'")).firstMatch
+        if fab.waitForExistence(timeout: 2) { fab.tap(); settle(2_200); snap("09-compose") }
+    }
 }

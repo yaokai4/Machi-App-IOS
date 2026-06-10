@@ -93,21 +93,19 @@ final class MessageRepository {
             let peerId = participants.first(where: { $0 != senderId })
             let messageText = trimmed
             if let peerId {
-                let mediaPaths: [(MediaType, URL, Double, Double, Double)] = mediaDrafts.map {
-                    ($0.type, $0.localURL, $0.width, $0.height, $0.duration)
+                let mediaPaths: [(MediaType, URL, String, String, Double, Double, Double)] = mediaDrafts.map {
+                    ($0.type, $0.localURL, $0.contentType, $0.fileName, $0.width, $0.height, $0.duration)
                 }
                 Task.detached {
                     do {
                         let conv = try await KaiXAPIClient.shared.openConversation(with: peerId)
                         var remoteAttachmentIds: [String] = []
-                        for (type, url, width, height, duration) in mediaPaths {
+                        for (type, url, contentType, fileName, width, height, duration) in mediaPaths {
                             guard let data = try? Data(contentsOf: url) else { continue }
-                            let mime = type == .video ? "video/mp4" : "image/jpeg"
                             let purpose = type == .video ? "message_video" : "message_image"
-                            let fileName = type == .video ? "message.mp4" : "message.jpg"
                             if let uploaded = try? await KaiXAPIClient.shared.uploadFile(
                                 data: data,
-                                mime: mime,
+                                mime: contentType,
                                 fileName: fileName,
                                 purpose: purpose,
                                 entityType: "message",

@@ -67,6 +67,8 @@ struct SettingsView: View {
                 dismiss()
             }
             Button(L("cancel", language), role: .cancel) {}
+        } message: {
+            Text(L("logoutConfirmMessage", language))
         }
     }
 
@@ -97,6 +99,10 @@ struct SettingsView: View {
 
     private var accountSection: some View {
         SettingsSectionCard(title: L("accountGroup", language)) {
+            SettingsRowLink(icon: "rectangle.grid.2x2.fill", tint: KXColor.accent, title: "我的工作台", subtitle: "发布、收藏、会员和资料入口") {
+                MyWorkbenchView(currentUser: currentUser)
+            }
+            SettingsDivider()
             SettingsRowLink(icon: "lock.shield", tint: .purple, title: L("accountSecurity", language), value: securityEmailValue, subtitle: L("accountSecuritySubtitle", language)) {
                 AccountSecuritySettingsView(currentUser: currentUser) {
                     onLogout?()

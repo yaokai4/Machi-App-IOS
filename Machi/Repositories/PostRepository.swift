@@ -17,7 +17,7 @@ final class PostRepository {
         let sortDescriptors: [SortDescriptor<PostEntity>] = mode == .hot
             ? [SortDescriptor(\.heatScore, order: .reverse), SortDescriptor(\.createdAt, order: .reverse)]
             : [SortDescriptor(\.createdAt, order: .reverse)]
-        let recentCutoff = Date().addingTimeInterval(-24 * 3600)
+        let recentCutoff = Date().addingTimeInterval(-10 * 24 * 3600)
 
         var descriptor = FetchDescriptor<PostEntity>(
             predicate: #Predicate { $0.statusRaw == published || $0.statusRaw == active },
@@ -363,11 +363,15 @@ final class PostRepository {
         if KaiXBackend.token != nil {
             var mediaIds: [String] = []
             for draft in mediaDrafts {
-                guard let data = try? Data(contentsOf: draft.localURL) else { continue }
-                let mime = draft.type == .video ? "video/mp4" : "image/jpeg"
-                if let dto = try? await KaiXAPIClient.shared.uploadMedia(data: data, mime: mime) {
-                    mediaIds.append(dto.id)
-                }
+                let data = try Data(contentsOf: draft.localURL)
+                let dto = try await KaiXAPIClient.shared.uploadMedia(
+                    data: data,
+                    mime: draft.contentType,
+                    width: Int(draft.width),
+                    height: Int(draft.height),
+                    duration: draft.duration
+                )
+                mediaIds.append(dto.id)
             }
             do {
                 let remote = try await KaiXAPIClient.shared.createPost(

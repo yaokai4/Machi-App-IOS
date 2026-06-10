@@ -23,7 +23,13 @@ enum KaiXConfig {
     static let schemaVersion = 6
     static let seedVersion = 7
     static let pageSize = 15
-    static let maxMediaItemsPerPost = 4
+    static let maxImageItemsPerPost = 9
+    static let maxVideoItemsPerPost = 1
+    static let maxMediaItemsPerPost = maxImageItemsPerPost
+    static let maxPostImageBytes = 10 * 1024 * 1024
+    static let maxPostVideoBytes = 200 * 1024 * 1024
+    static let maxMessageImageBytes = 10 * 1024 * 1024
+    static let maxMessageVideoBytes = 100 * 1024 * 1024
     /// Hard cap on a single post's character count. Mirrors the
     /// server-side cap in `web/server.py:api_create_post` so the two
     /// clients reject the same payloads. Bumping this value here

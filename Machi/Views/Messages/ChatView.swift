@@ -134,6 +134,7 @@ struct ChatView: View {
                 ChatInputBar(
                     pickerItems: $pickerItems,
                     text: $viewModel.inputText,
+                    mediaDrafts: viewModel.mediaDrafts,
                     isSending: viewModel.isSending,
                     canSend: viewModel.canSend,
                     send: { Task { await viewModel.send(context: modelContext, thread: thread, currentUser: currentUser, messageStore: messageStore) } }
@@ -149,8 +150,8 @@ struct ChatView: View {
             Task {
                 for item in newValue {
                     guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
-                    let isVideo = item.supportedContentTypes.contains { $0.conforms(to: .movie) }
-                    await viewModel.addMedia(data: data, isVideo: isVideo, language: language, messageStore: messageStore)
+                    let videoContentType = item.supportedContentTypes.first { $0.conforms(to: .movie) }
+                    await viewModel.addMedia(data: data, isVideo: videoContentType != nil, contentType: videoContentType, language: language, messageStore: messageStore)
                 }
                 pickerItems = []
             }
@@ -414,23 +415,29 @@ private struct ChatInputBar: View {
     @Environment(\.appLanguage) private var language
     @Binding var pickerItems: [PhotosPickerItem]
     @Binding var text: String
+    let mediaDrafts: [MediaDraft]
     let isSending: Bool
     let canSend: Bool
     let send: () -> Void
 
     var body: some View {
+        let hasVideo = mediaDrafts.contains { $0.type == .video }
+        let imageCount = mediaDrafts.filter { $0.type == .image }.count
+        let remainingImageSlots = Swift.max(1, KaiXConfig.maxImageItemsPerPost - imageCount)
         HStack(spacing: 8) {
-            PhotosPicker(selection: $pickerItems, maxSelectionCount: KaiXConfig.maxMediaItemsPerPost, matching: .images) {
+            PhotosPicker(selection: $pickerItems, maxSelectionCount: remainingImageSlots, matching: .images) {
                 Image(systemName: "photo")
                     .font(.headline.weight(.semibold))
                     .frame(width: 34, height: 34)
             }
+            .disabled(hasVideo || imageCount >= KaiXConfig.maxImageItemsPerPost)
 
-            PhotosPicker(selection: $pickerItems, maxSelectionCount: KaiXConfig.maxMediaItemsPerPost, matching: .videos) {
+            PhotosPicker(selection: $pickerItems, maxSelectionCount: KaiXConfig.maxVideoItemsPerPost, matching: .videos) {
                 Image(systemName: "video")
                     .font(.headline.weight(.semibold))
                     .frame(width: 34, height: 34)
             }
+            .disabled(!mediaDrafts.isEmpty)
 
             TextField(L("messagePlaceholder", language), text: $text, axis: .vertical)
                 .lineLimit(1...4)

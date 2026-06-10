@@ -2,6 +2,7 @@ import PhotosUI
 import SwiftData
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 struct DiscoverView: View {
     @Environment(\.modelContext) private var modelContext
@@ -29,8 +30,9 @@ struct DiscoverView: View {
     }
 
     private var sortedPosts: [PostEntity] {
-        let regionPosts = viewModel.hotPosts.filter { $0.matches(region: currentRegion) }
-        let base = regionPosts.isEmpty ? viewModel.hotPosts : regionPosts
+        let source = viewModel.happeningPosts.isEmpty ? viewModel.hotPosts : viewModel.happeningPosts
+        let regionPosts = source.filter { $0.matches(region: currentRegion) }
+        let base = regionPosts.isEmpty ? source : regionPosts
         return base.sorted { lhs, rhs in
             if lhs.discoverBoostScore == rhs.discoverBoostScore {
                 return lhs.heatScore > rhs.heatScore
@@ -65,9 +67,15 @@ struct DiscoverView: View {
     private var scopedHotTitle: String {
         switch selectedHotScope {
         case .city:
-            return currentRegion.map { "\($0.cityName)热榜" } ?? "当前城市热榜"
+            return currentRegion.map { "\(KaiXRegionDirectory.localizedShortLabel($0, language: language))\(L("hot", language))" } ?? "\(L("currentRegion", language))\(L("hot", language))"
         case .country:
-            return currentRegion.map { "\($0.countryName)热榜" } ?? "国家热榜"
+            return currentRegion.map {
+                let country = KaiXRegionDirectory.localizedCountryName(
+                    .init(code: $0.countryCode, name: $0.countryName, emoji: $0.countryEmoji, tier: 1, hasProvinces: !$0.provinceCode.isEmpty),
+                    language: language
+                )
+                return "\(country)\(L("hot", language))"
+            } ?? "\(L("hotScopeCountry", language))\(L("hot", language))"
         }
     }
 
@@ -233,13 +241,38 @@ struct DiscoverView: View {
             topics: viewModel.topics,
             users: recommendedUsers,
             authors: viewModel.authors,
+            mediaByPostId: viewModel.mediaByPostId,
             followingIds: viewModel.followingIds,
             currentUser: currentUser,
             language: language,
             onOpenPost: openPost,
             onOpenTopic: { router.open(.topic(tag: $0)) },
             onOpenUser: { router.open(.profile(userId: $0.id)) },
-            onFollow: follow
+            onFollow: follow,
+            onLike: { post in
+                Task {
+                    postStore.register(post)
+                    try? await postStore.toggleLike(context: modelContext, postId: post.id, currentUser: currentUser)
+                }
+            },
+            onBookmark: { post in
+                Task {
+                    postStore.register(post)
+                    try? await postStore.toggleBookmark(context: modelContext, postId: post.id, currentUser: currentUser)
+                }
+            },
+            onRepost: { post in
+                Task {
+                    postStore.register(post)
+                    _ = try? await postStore.toggleRepost(context: modelContext, postId: post.id, currentUser: currentUser)
+                }
+            },
+            onQuoteRepost: { post, content in
+                Task {
+                    postStore.register(post)
+                    _ = try? await postStore.quoteRepost(context: modelContext, postId: post.id, currentUser: currentUser, content: content)
+                }
+            }
         )
     }
 
@@ -260,7 +293,8 @@ struct DiscoverView: View {
 
                 Spacer(minLength: KXSpacing.sm)
 
-                RegionPickerButton(region: currentRegion, compact: true) {
+                // 与首页完全同款的城市按钮(同组件、同尺寸、同样式)。
+                RegionPickerButton(region: currentRegion) {
                     isShowingRegionSelector = true
                 }
 
@@ -436,12 +470,16 @@ private enum DiscoverHotScope: String, CaseIterable, Identifiable, Hashable {
 
     var id: String { rawValue }
 
-    func title(region: KaiXRegionDirectory.Region?) -> String {
+    func title(region: KaiXRegionDirectory.Region?, language: AppLanguage) -> String {
         switch self {
         case .city:
-            return region?.cityName ?? "本地"
+            return region.map { KaiXRegionDirectory.localizedShortLabel($0, language: language) } ?? L("hotScopeCity", language)
         case .country:
-            return region?.countryName ?? "国家"
+            guard let region else { return L("hotScopeCountry", language) }
+            return KaiXRegionDirectory.localizedCountryName(
+                .init(code: region.countryCode, name: region.countryName, emoji: region.countryEmoji, tier: 1, hasProvinces: !region.provinceCode.isEmpty),
+                language: language
+            )
         }
     }
 }
@@ -487,12 +525,13 @@ private struct DiscoverCategory: Identifiable, Hashable {
 }
 
 private struct CurrentRegionCard: View {
+    @Environment(\.appLanguage) private var language
     let region: KaiXRegionDirectory.Region?
     let onChange: () -> Void
 
     private var title: String {
-        guard let region else { return "选择当前城市" }
-        return "\(region.countryName) · \(region.cityName)"
+        guard let region else { return L("selectCity", language) }
+        return KaiXRegionDirectory.localizedDisplayName(region, language: language)
     }
 
     var body: some View {
@@ -937,6 +976,7 @@ private struct DiscoverSegmentedTabs: View {
 }
 
 private struct DiscoverHotScopePicker: View {
+    @Environment(\.appLanguage) private var language
     @Binding var selection: DiscoverHotScope
     let region: KaiXRegionDirectory.Region?
 
@@ -945,10 +985,10 @@ private struct DiscoverHotScopePicker: View {
             HStack(spacing: 8) {
                 Image(systemName: "flame.fill")
                     .foregroundStyle(KXColor.heat)
-                Text("热榜范围")
+                Text(L("hot", language))
                     .font(.subheadline.weight(.bold))
                 Spacer()
-                Text("最近 7 天")
+                Text(language == .ja ? "直近7日" : language == .en ? "Last 7 days" : "最近 7 天")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 8)
@@ -962,7 +1002,7 @@ private struct DiscoverHotScopePicker: View {
                             selection = scope
                         }
                     } label: {
-                        Text(scope.title(region: region))
+                        Text(scope.title(region: region, language: language))
                             .font(.caption.weight(.bold))
                             .foregroundStyle(selection == scope ? Color.white : .primary)
                             .frame(maxWidth: .infinity)
@@ -979,6 +1019,7 @@ private struct DiscoverHotScopePicker: View {
 }
 
 private struct DiscoverContentList: View {
+    @EnvironmentObject private var postStore: PostStore
     let segment: DiscoverSegment
     let region: KaiXRegionDirectory.Region?
     let posts: [PostEntity]
@@ -987,6 +1028,7 @@ private struct DiscoverContentList: View {
     let topics: [TopicEntity]
     let users: [UserEntity]
     let authors: [String: UserEntity]
+    let mediaByPostId: [String: [MediaEntity]]
     let followingIds: Set<String>
     let currentUser: UserEntity
     let language: AppLanguage
@@ -994,6 +1036,10 @@ private struct DiscoverContentList: View {
     let onOpenTopic: (String) -> Void
     let onOpenUser: (UserEntity) -> Void
     let onFollow: (UserEntity) -> Void
+    var onLike: (PostEntity) -> Void = { _ in }
+    var onBookmark: (PostEntity) -> Void = { _ in }
+    var onRepost: (PostEntity) -> Void = { _ in }
+    var onQuoteRepost: (PostEntity, String) -> Void = { _, _ in }
 
     var body: some View {
         VStack(alignment: .leading, spacing: KXSpacing.sm) {
@@ -1026,23 +1072,40 @@ private struct DiscoverContentList: View {
     }
 
     private func postList(_ items: [PostEntity]) -> some View {
+        // Same PostCardView as the home feed — Discover must not grow its own
+        // card spec (media rules, action bar, fonts all stay identical).
         VStack(spacing: 10) {
             if items.isEmpty {
                 DiscoverSoftEmptyRow(text: "这里还在等待新的本地内容")
             } else {
                 ForEach(items.prefix(12)) { post in
-                    DiscoverContentCard(
-                        post: post,
-                        author: authors[post.authorId],
-                        language: language,
-                        onOpen: { onOpenPost(post) },
-                        onOpenTopic: onOpenTopic,
-                        onOpenAuthor: {
-                            if let author = authors[post.authorId] {
+                    let displayedPost = postStore.post(id: post.id) ?? post
+                    let originalPost = displayedPost.repostOfPostId.flatMap { postStore.post(id: $0) }
+                    let isQuoteRepost = originalPost != nil && !displayedPost.previewText.isEmpty
+                    let targetPost = isQuoteRepost ? displayedPost : (originalPost ?? displayedPost)
+                    PostCardView(
+                        post: displayedPost,
+                        author: authors[displayedPost.authorId],
+                        mediaItems: mediaByPostId[displayedPost.id] ?? [],
+                        currentUser: currentUser,
+                        originalPost: originalPost,
+                        originalAuthor: originalPost.flatMap { authors[$0.authorId] },
+                        originalMediaItems: originalPost == nil ? [] : (mediaByPostId[originalPost?.id ?? ""] ?? []),
+                        onOpen: { onOpenPost(targetPost) },
+                        onOpenOriginal: { if let originalPost { onOpenPost(originalPost) } },
+                        onAuthor: {
+                            if let author = authors[targetPost.authorId] {
                                 onOpenUser(author)
                             }
-                        }
+                        },
+                        onTag: onOpenTopic,
+                        onComment: { onOpenPost(targetPost) },
+                        onLike: { onLike(targetPost) },
+                        onBookmark: { onBookmark(targetPost) },
+                        onRepost: { onRepost(targetPost) },
+                        onQuoteRepost: { onQuoteRepost(targetPost, $0) }
                     )
+                    .equatable()
                 }
             }
         }
@@ -1097,6 +1160,7 @@ private struct DiscoverContentList: View {
 private struct DiscoverContentCard: View {
     let post: PostEntity
     let author: UserEntity?
+    let mediaItems: [MediaEntity]
     let language: AppLanguage
     let onOpen: () -> Void
     let onOpenTopic: (String) -> Void
@@ -1106,6 +1170,11 @@ private struct DiscoverContentCard: View {
         VStack(alignment: .leading, spacing: KXSpacing.md) {
             header
             bodyText
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onOpen)
+            if !mediaItems.isEmpty {
+                MediaGridView(mediaItems: mediaItems)
+            }
             highlightChips
             topicChips
             footer
@@ -1114,7 +1183,7 @@ private struct DiscoverContentCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .kxGlassSurface(radius: 20)
         .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .onTapGesture(perform: onOpen)
+        .gesture(TapGesture().onEnded { onOpen() }, including: .gesture)
     }
 
     private var header: some View {
@@ -1525,11 +1594,7 @@ private extension PostEntity {
                 ("有效期", attr(PostAttributeKeys.validUntil)),
             ])
         default:
-            return highlights([
-                ("热度", NumberFormatterUtils.compact(Int(heatScore.rounded()))),
-                ("浏览", NumberFormatterUtils.compact(viewCount)),
-                ("城市", discoverRegion?.cityName ?? city),
-            ])
+            return []
         }
     }
 
@@ -1685,6 +1750,49 @@ private enum ListingSortMode: String, CaseIterable, Identifiable {
     }
 }
 
+private enum ListingScopeMode: String, Identifiable {
+    case city
+    case country
+    case area
+    case selectedCity
+
+    var id: String { rawValue }
+}
+
+private struct ListingScopeArea: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let subtitle: String
+    let regionCodes: [String]
+}
+
+private let listingScopeAreas: [ListingScopeArea] = [
+    .init(
+        id: "kanto",
+        title: "关东圈",
+        subtitle: "东京、横滨、川崎、埼玉、千叶",
+        regionCodes: ["jp.tokyo.tokyo", "jp.kanagawa.yokohama", "jp.kanagawa.kawasaki", "jp.saitama.saitama", "jp.chiba.chiba"]
+    ),
+    .init(
+        id: "kansai",
+        title: "关西圈",
+        subtitle: "大阪、京都、神户、奈良、大津",
+        regionCodes: ["jp.osaka.osaka", "jp.kyoto.kyoto", "jp.hyogo.kobe", "jp.nara.nara", "jp.shiga.otsu"]
+    ),
+    .init(
+        id: "popular",
+        title: "其他热门",
+        subtitle: "名古屋、福冈、仙台",
+        regionCodes: ["jp.aichi.nagoya", "jp.fukuoka.fukuoka", "jp.miyagi.sendai"]
+    ),
+]
+
+private let listingScopeHotCityCodes = [
+    "jp.tokyo.tokyo", "jp.kanagawa.yokohama", "jp.kanagawa.kawasaki", "jp.saitama.saitama", "jp.chiba.chiba",
+    "jp.osaka.osaka", "jp.kyoto.kyoto", "jp.hyogo.kobe", "jp.nara.nara", "jp.shiga.otsu",
+    "jp.aichi.nagoya", "jp.fukuoka.fukuoka", "jp.miyagi.sendai",
+]
+
 struct CityListingChannelView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var router: AppRouter
@@ -1698,6 +1806,10 @@ struct CityListingChannelView: View {
     @State private var query = ""
     @State private var selectedCategory = "全部"
     @State private var sortMode: ListingSortMode = .newest
+    @State private var filtersOpen = false
+    @State private var scopeMode: ListingScopeMode = .city
+    @State private var selectedScopeArea = ""
+    @State private var selectedScopeRegionCode = ""
     @State private var isLoading = true
     @State private var errorMessage: String?
 
@@ -1715,6 +1827,35 @@ struct CityListingChannelView: View {
             return categoryOK && queryOK
         }
         return filtered.sorted(by: sortMode.sortsBefore)
+    }
+
+    private var selectedArea: ListingScopeArea? {
+        listingScopeAreas.first { $0.id == selectedScopeArea }
+    }
+
+    private var selectedScopeRegion: KaiXRegionDirectory.Region? {
+        KaiXRegionDirectory.resolve(regionCode: selectedScopeRegionCode)
+    }
+
+    private var activeScopeLabel: String {
+        switch scopeMode {
+        case .city:
+            return region?.cityName ?? "当前城市"
+        case .country:
+            return region?.countryName ?? "当前国家"
+        case .area:
+            return selectedArea?.title ?? "城市圈"
+        case .selectedCity:
+            return selectedScopeRegion?.cityName ?? "热门城市"
+        }
+    }
+
+    private var activeFilterCount: Int {
+        var count = 0
+        if selectedCategory != "全部" { count += 1 }
+        if scopeMode != .city { count += 1 }
+        if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { count += 1 }
+        return count
     }
 
     var body: some View {
@@ -1777,51 +1918,101 @@ struct CityListingChannelView: View {
 
     private var listingControls: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
+            HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("筛选")
+                    Text(activeScopeLabel)
                         .font(.headline.weight(.bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.86)
                     Text("\(visibleItems.count) 条结果 · \(selectedCategory)")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-                Spacer()
-                Menu {
-                    ForEach(ListingSortMode.allCases) { mode in
-                        Button {
-                            sortMode = mode
-                        } label: {
-                            if sortMode == mode {
-                                Label(mode.title, systemImage: "checkmark")
-                            } else {
-                                Text(mode.title)
-                            }
-                        }
-                    }
-                } label: {
-                    Label(sortMode.title, systemImage: "arrow.up.arrow.down")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.primary)
-                        .padding(.horizontal, 10)
-                        .frame(height: 30)
-                        .background(KXColor.softBackground.opacity(0.88), in: Capsule())
-                        .overlay(Capsule().stroke(KXColor.separator.opacity(0.65), lineWidth: 0.7))
-                }
-                if selectedCategory != "全部" || !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Spacer(minLength: 8)
+                if activeFilterCount > 0 {
                     Button("清空") {
                         query = ""
                         selectedCategory = "全部"
+                        scopeMode = .city
+                        selectedScopeArea = ""
+                        selectedScopeRegionCode = ""
+                        Task { await load() }
                     }
                     .font(.caption.weight(.bold))
                     .foregroundStyle(KXColor.accent)
                     .buttonStyle(.plain)
                 }
             }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    scopeButton(title: region?.cityName ?? "城市", mode: .city)
+                    scopeButton(title: region?.countryName ?? "国家", mode: .country)
+                    Button {
+                        withAnimation(.snappy(duration: 0.22)) {
+                            filtersOpen.toggle()
+                        }
+                    } label: {
+                        Label(activeFilterCount > 0 ? "筛选 \(activeFilterCount)" : "筛选", systemImage: "slider.horizontal.3")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(filtersOpen ? KXColor.accent : .primary)
+                            .padding(.horizontal, 10)
+                            .frame(height: 30)
+                            .background(filtersOpen ? KXColor.accent.opacity(0.10) : KXColor.softBackground.opacity(0.88), in: Capsule())
+                            .overlay(Capsule().stroke(filtersOpen ? KXColor.accent.opacity(0.35) : KXColor.separator.opacity(0.65), lineWidth: 0.7))
+                    }
+                    .buttonStyle(.plain)
+                    Menu {
+                        ForEach(ListingSortMode.allCases) { mode in
+                            Button {
+                                sortMode = mode
+                            } label: {
+                                if sortMode == mode {
+                                    Label(mode.title, systemImage: "checkmark")
+                                } else {
+                                    Text(mode.title)
+                                }
+                            }
+                        }
+                    } label: {
+                        Label(sortMode.title, systemImage: "arrow.up.arrow.down")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.primary)
+                            .padding(.horizontal, 10)
+                            .frame(height: 30)
+                            .background(KXColor.softBackground.opacity(0.88), in: Capsule())
+                            .overlay(Capsule().stroke(KXColor.separator.opacity(0.65), lineWidth: 0.7))
+                    }
+                }
+            }
             searchBar
-            categoryChips
+            if filtersOpen {
+                scopeFilterPanel
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
         .padding(KXSpacing.md)
         .kxGlassSurface(radius: KXRadius.lg, elevated: true)
+    }
+
+    private func scopeButton(title: String, mode: ListingScopeMode) -> some View {
+        Button {
+            scopeMode = mode
+            if mode != .area { selectedScopeArea = "" }
+            if mode != .selectedCity { selectedScopeRegionCode = "" }
+            Task { await load() }
+        } label: {
+            Text(title)
+                .font(.caption.weight(.black))
+                .foregroundStyle(scopeMode == mode ? Color.white : .primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+                .padding(.horizontal, 10)
+                .frame(height: 30)
+                .background(scopeMode == mode ? KXColor.accent : KXColor.softBackground.opacity(0.88), in: Capsule())
+                .overlay(Capsule().stroke(scopeMode == mode ? Color.clear : KXColor.separator.opacity(0.65), lineWidth: 0.7))
+        }
+        .buttonStyle(.plain)
     }
 
     private var searchBar: some View {
@@ -1872,6 +2063,80 @@ struct CityListingChannelView: View {
         }
     }
 
+    private var scopeFilterPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 7) {
+                Text("城市范围")
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(.secondary)
+                ForEach(listingScopeAreas) { area in
+                    Button {
+                        scopeMode = .area
+                        selectedScopeArea = area.id
+                        selectedScopeRegionCode = ""
+                        Task { await load() }
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: selectedScopeArea == area.id && scopeMode == .area ? "checkmark.circle.fill" : "circle")
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(selectedScopeArea == area.id && scopeMode == .area ? KXColor.accent : .secondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(area.title)
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundStyle(.primary)
+                                Text(area.subtitle)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 12)
+                        .frame(height: 54)
+                        .background(KXColor.softBackground.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text("热门城市")
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(.secondary)
+                FlowLayout(spacing: 8) {
+                    ForEach(listingScopeHotCityCodes, id: \.self) { code in
+                        if let city = KaiXRegionDirectory.resolve(regionCode: code) {
+                            Button {
+                                scopeMode = .selectedCity
+                                selectedScopeRegionCode = city.regionCode
+                                selectedScopeArea = ""
+                                Task { await load() }
+                            } label: {
+                                Text(city.cityName)
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(scopeMode == .selectedCity && selectedScopeRegionCode == city.regionCode ? Color.white : .primary)
+                                    .padding(.horizontal, 12)
+                                    .frame(height: 32)
+                                    .background(scopeMode == .selectedCity && selectedScopeRegionCode == city.regionCode ? KXColor.accent : KXColor.softBackground.opacity(0.88), in: Capsule())
+                                    .overlay(Capsule().stroke(KXColor.separator.opacity(0.55), lineWidth: 0.7))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text("分类")
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(.secondary)
+                categoryChips
+            }
+        }
+        .padding(12)
+        .background(KXColor.softBackground.opacity(0.58), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
     @ViewBuilder
     private var stateContent: some View {
         if isLoading {
@@ -1888,11 +2153,12 @@ struct CityListingChannelView: View {
             )
             .frame(maxWidth: .infinity, minHeight: 260)
         } else if listingType == "secondhand" {
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12)], spacing: 12) {
                 ForEach(visibleItems) { item in
                     KXSecondhandListingCard(listing: item) {
                         router.open(.cityListingDetail(listingId: item.id))
                     }
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
             }
         } else {
@@ -1915,17 +2181,20 @@ struct CityListingChannelView: View {
         isLoading = true
         errorMessage = nil
         do {
+            let scope = listingScopeQuery(for: region)
             if listingType == "work" {
-                async let jobs = KaiXAPIClient.shared.listings(type: "job", citySlug: region.cityCode, regionCode: region.regionCode, query: query)
-                async let hiring = KaiXAPIClient.shared.listings(type: "hiring", citySlug: region.cityCode, regionCode: region.regionCode, query: query)
+                async let jobs = KaiXAPIClient.shared.listings(type: "job", citySlug: scope.citySlug, regionCode: scope.regionCode, regionCodes: scope.regionCodes, countryCode: scope.countryCode, query: query)
+                async let hiring = KaiXAPIClient.shared.listings(type: "hiring", citySlug: scope.citySlug, regionCode: scope.regionCode, regionCodes: scope.regionCodes, countryCode: scope.countryCode, query: query)
                 let jobItems = try await jobs
                 let hiringItems = try await hiring
                 items = (jobItems + hiringItems).sorted(by: KXListingCopy.sortForDisplay)
             } else {
                 items = try await KaiXAPIClient.shared.listings(
                     type: listingType,
-                    citySlug: region.cityCode,
-                    regionCode: region.regionCode,
+                    citySlug: scope.citySlug,
+                    regionCode: scope.regionCode,
+                    regionCodes: scope.regionCodes,
+                    countryCode: scope.countryCode,
                     query: query
                 )
             }
@@ -1935,11 +2204,26 @@ struct CityListingChannelView: View {
             isLoading = false
         }
     }
+
+    private func listingScopeQuery(for region: KaiXRegionDirectory.Region) -> (citySlug: String?, regionCode: String?, regionCodes: [String], countryCode: String?) {
+        switch scopeMode {
+        case .city:
+            return (region.cityCode, region.regionCode, [], nil)
+        case .country:
+            return (nil, nil, [], region.countryCode)
+        case .area:
+            return (nil, nil, selectedArea?.regionCodes ?? [], nil)
+        case .selectedCity:
+            let selected = selectedScopeRegion ?? region
+            return (selected.cityCode, selected.regionCode, [], nil)
+        }
+    }
 }
 
 struct CityListingDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var chrome: AppChromeState
     let listingId: String
     let currentUser: UserEntity
 
@@ -2102,21 +2386,34 @@ struct CityListingDetailView: View {
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
             .padding(.top, 14)
-            .padding(.bottom, 28)
+            .padding(.bottom, chrome.bottomContentPadding + 28)
         }
     }
 
     private func imageStrip(_ listing: KaiXCityListingDTO) -> some View {
-        let urls = listing.media?.compactMap { URL(string: $0.url) } ?? []
-        return ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
-                ForEach(Array(urls.enumerated()), id: \.offset) { _, url in
-                    CachedMediaImageView(url: url)
-                        .frame(width: 300, height: 230)
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        let mediaItems: [KaiXListingMediaDTO]
+        if let media = listing.media, !media.isEmpty {
+            mediaItems = media
+        } else if let cover = listing.primaryCoverMedia {
+            mediaItems = [cover]
+        } else {
+            mediaItems = []
+        }
+        return Group {
+            if mediaItems.isEmpty {
+                ListingMediaPlaceholder(type: listing.type)
+            } else {
+                TabView {
+                    ForEach(Array(mediaItems.enumerated()), id: \.offset) { index, media in
+                        ListingMediaPage(media: media, index: index, total: mediaItems.count)
+                    }
                 }
+                .tabViewStyle(.page(indexDisplayMode: mediaItems.count > 1 ? .automatic : .never))
             }
         }
+        .aspectRatio(16.0 / 10.0, contentMode: .fit)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
     private func load() async {
@@ -2383,8 +2680,36 @@ private struct ListingIntakeSheet: View {
     }
 }
 
+private enum ListingMediaUploadPhase: Equatable {
+    case idle
+    case preparing
+    case uploading(Double)
+    case completing
+    case ready
+    case failed(String)
+
+    var label: String {
+        switch self {
+        case .idle: return "待上传"
+        case .preparing: return "准备中"
+        case .uploading(let progress): return "上传中 \(Int(progress * 100))%"
+        case .completing: return "确认中"
+        case .ready: return "已上传"
+        case .failed(let message): return message
+        }
+    }
+
+    var isFailure: Bool {
+        if case .failed = self { return true }
+        return false
+    }
+}
+
 struct CreateCityListingView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appLanguage) private var language
+    @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var chrome: AppChromeState
     let listingType: String
     let citySlug: String?
     let currentUser: UserEntity
@@ -2422,7 +2747,9 @@ struct CreateCityListingView: View {
     @State private var usageRules = ""
     @State private var merchantVerified = false
     @State private var pickerItems: [PhotosPickerItem] = []
-    @State private var imageData: [Data] = []
+    @State private var mediaDrafts: [MediaDraft] = []
+    @State private var mediaUploadPhases: [String: ListingMediaUploadPhase] = [:]
+    @State private var uploadedMedia: [String: KaiXMediaDTO] = [:]
     @State private var isSubmitting = false
     @State private var message: String?
 
@@ -2439,7 +2766,21 @@ struct CreateCityListingView: View {
             && !location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && region != nil
             && typeRequiredFieldsReady
+            && !hasBlockingMediaUpload
             && !isSubmitting
+    }
+
+    private var hasBlockingMediaUpload: Bool {
+        mediaUploadPhases.values.contains { phase in
+            if case .failed = phase { return true }
+            return false
+        }
+    }
+
+    private var imageLimit: Int {
+        if listingType == "rental" { return 20 }
+        if listingType == "work" || listingType == "job" || listingType == "hiring" || listingType == "discount" { return 5 }
+        return 10
     }
 
     private var typeRequiredFieldsReady: Bool {
@@ -2522,7 +2863,7 @@ struct CreateCityListingView: View {
                 }
                 .padding(.horizontal, KaiXTheme.horizontalPadding)
                 .padding(.top, 14)
-                .padding(.bottom, 118)
+                .padding(.bottom, chrome.bottomContentPadding + 128)
             }
         }
         .kxPageBackground()
@@ -2595,9 +2936,9 @@ struct CreateCityListingView: View {
     }
 
     private var photoSection: some View {
-        KXListingSection(title: "照片", icon: "photo.on.rectangle") {
+        KXListingSection(title: "图片与视频", icon: "photo.on.rectangle") {
             VStack(alignment: .leading, spacing: 12) {
-                PhotosPicker(selection: $pickerItems, maxSelectionCount: 10, matching: .images) {
+                PhotosPicker(selection: $pickerItems, maxSelectionCount: imageLimit, matching: .any(of: [.images, .videos])) {
                     HStack(spacing: KXSpacing.md) {
                         Image(systemName: "plus")
                             .font(.headline.weight(.bold))
@@ -2605,10 +2946,10 @@ struct CreateCityListingView: View {
                             .frame(width: 42, height: 42)
                             .background(typeAccent.opacity(0.12), in: Circle())
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(imageData.isEmpty ? "添加清晰照片" : "继续添加照片")
+                            Text(mediaDrafts.isEmpty ? "添加图片或视频" : "继续添加媒体")
                                 .font(.subheadline.weight(.bold))
                                 .foregroundStyle(.primary)
-                            Text("最多 10 张，第一张会作为封面。避免包含身份证、护照等敏感信息。")
+                            Text("最多 \(imageLimit) 个媒体，其中最多 1 个视频，第一项作为封面。避免包含身份证、护照等敏感信息。")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -2625,24 +2966,64 @@ struct CreateCityListingView: View {
                 }
                 .buttonStyle(.plain)
 
-                if !imageData.isEmpty {
+                if !mediaDrafts.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 10) {
-                            ForEach(Array(imageData.enumerated()), id: \.offset) { index, data in
-                                if let image = UIImage(data: data) {
-                                    ZStack(alignment: .topLeading) {
+                            ForEach(Array(mediaDrafts.enumerated()), id: \.element.id) { index, draft in
+                                ZStack {
+                                    if let image = UIImage(contentsOfFile: draft.thumbnailURL.path) {
                                         Image(uiImage: image)
                                             .resizable()
                                             .scaledToFill()
-                                            .frame(width: 92, height: 92)
-                                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                                        Text(index == 0 ? "封面" : "\(index + 1)")
-                                            .font(.caption2.weight(.black))
+                                    } else {
+                                        Color.secondary.opacity(0.12)
+                                    }
+                                    if draft.type == .video {
+                                        Image(systemName: "play.fill")
+                                            .font(.headline.weight(.bold))
                                             .foregroundStyle(.white)
+                                            .frame(width: 38, height: 38)
+                                            .background(.black.opacity(0.58), in: Circle())
+                                    }
+                                }
+                                .frame(width: 112, height: 112)
+                                .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+                                .overlay(alignment: .topLeading) {
+                                    Text(index == 0 ? "封面" : "\(index + 1)")
+                                        .font(.caption2.weight(.black))
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 7)
+                                        .frame(height: 20)
+                                        .background(.black.opacity(0.52), in: Capsule())
+                                        .padding(7)
+                                }
+                                .overlay(alignment: .topTrailing) {
+                                    Button {
+                                        withAnimation(.easeOut(duration: 0.18)) {
+                                            mediaDrafts.removeAll { $0.id == draft.id }
+                                            mediaUploadPhases.removeValue(forKey: draft.id)
+                                            uploadedMedia.removeValue(forKey: draft.id)
+                                        }
+                                    } label: {
+                                        Image(systemName: "xmark")
+                                            .font(.caption.weight(.black))
+                                            .foregroundStyle(.primary)
+                                            .frame(width: 28, height: 28)
+                                            .background(.ultraThinMaterial, in: Circle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .padding(6)
+                                }
+                                .overlay(alignment: .bottom) {
+                                    if let phase = mediaUploadPhases[draft.id], phase != .idle {
+                                        Text(phase.label)
+                                            .font(.caption2.weight(.bold))
+                                            .foregroundStyle(phase.isFailure ? KXColor.heat : .white)
+                                            .lineLimit(1)
                                             .padding(.horizontal, 7)
-                                            .frame(height: 20)
-                                            .background(.black.opacity(0.48), in: Capsule())
-                                            .padding(7)
+                                            .frame(height: 22)
+                                            .frame(maxWidth: .infinity)
+                                            .background(.black.opacity(0.58))
                                     }
                                 }
                             }
@@ -2683,7 +3064,7 @@ struct CreateCityListingView: View {
     private var submitBar: some View {
         VStack(spacing: 8) {
             if !canSubmit {
-                Text(missingRequiredCopy)
+                Text(hasBlockingMediaUpload ? "有媒体上传失败，请删除后重新选择。" : missingRequiredCopy)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -2704,7 +3085,7 @@ struct CreateCityListingView: View {
         }
         .padding(.horizontal, KaiXTheme.horizontalPadding)
         .padding(.top, 10)
-        .padding(.bottom, 8)
+        .padding(.bottom, 10)
         .background(.ultraThinMaterial)
         .overlay(alignment: .top) { Divider().opacity(0.16) }
     }
@@ -2778,13 +3159,58 @@ struct CreateCityListingView: View {
     }
 
     private func loadImages(_ items: [PhotosPickerItem]) async {
-        var next: [Data] = []
-        for item in items.prefix(10) {
-            if let data = try? await item.loadTransferable(type: Data.self) {
-                next.append(data)
+        guard !items.isEmpty else { return }
+        var next = mediaDrafts
+        var videoCount = mediaDrafts.filter { $0.type == .video }.count
+        var imageCount = mediaDrafts.filter { $0.type == .image }.count
+        var mediaCount = mediaDrafts.count
+        var warning: String?
+        for item in items.prefix(imageLimit) {
+            guard let data = try? await item.loadTransferable(type: Data.self) else {
+                warning = "无法读取所选媒体，请重新选择。"
+                continue
+            }
+            let isVideo = item.supportedContentTypes.contains { $0.conforms(to: .movie) }
+            do {
+                guard mediaCount < imageLimit else {
+                    warning = "媒体最多上传 \(imageLimit) 个，其中最多 1 个视频。"
+                    continue
+                }
+                if isVideo {
+                    guard videoCount < 1 else {
+                        warning = "每条信息最多上传 1 个视频。"
+                        continue
+                    }
+                    guard data.count <= (listingType == "rental" ? 300 * 1024 * 1024 : KaiXConfig.maxPostVideoBytes) else {
+                        warning = "视频文件过大，请压缩后重试。"
+                        continue
+                    }
+                    let draft = try await UploadService.shared.prepareVideo(data: data, contentType: item.supportedContentTypes.first { $0.conforms(to: .movie) })
+                    guard draft.duration <= (listingType == "rental" ? 600 : 300) else {
+                        warning = listingType == "rental" ? "房源视频最长 10 分钟。" : "视频最长 5 分钟。"
+                        continue
+                    }
+                    next.append(draft)
+                    videoCount += 1
+                    mediaCount += 1
+                } else {
+                    guard imageCount < imageLimit else {
+                        warning = "图片最多上传 \(imageLimit) 张。"
+                        continue
+                    }
+                    let draft = try await UploadService.shared.prepareImage(data: data)
+                    next.append(draft)
+                    imageCount += 1
+                    mediaCount += 1
+                }
+            } catch {
+                warning = "媒体处理失败，请重新选择。"
             }
         }
-        imageData = next
+        mediaDrafts = next
+        mediaUploadPhases = Dictionary(uniqueKeysWithValues: next.map { ($0.id, uploadedMedia[$0.id] == nil ? .idle : .ready) })
+        pickerItems = []
+        if let warning { message = warning }
     }
 
     private func submit() async {
@@ -2793,14 +3219,34 @@ struct CreateCityListingView: View {
         message = nil
         do {
             var mediaIds: [String] = []
-            for data in imageData.prefix(10) {
-                let media = try await KaiXAPIClient.shared.uploadMedia(data: data, mime: "image/jpeg")
+            for draft in mediaDrafts {
+                if let cached = uploadedMedia[draft.id] {
+                    mediaIds.append(cached.id)
+                    continue
+                }
+                mediaUploadPhases[draft.id] = .preparing
+                let isVideo = draft.type == .video
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    mediaUploadPhases[draft.id] = .uploading(0.45)
+                }
+                let media = try await UploadManager.shared.upload(
+                    draft: draft,
+                    purpose: listingUploadPurpose(isVideo: isVideo),
+                    entityType: "listing"
+                )
+                mediaUploadPhases[draft.id] = .completing
+                uploadedMedia[draft.id] = media
+                withAnimation(.easeOut(duration: 0.2)) {
+                    mediaUploadPhases[draft.id] = .ready
+                }
                 mediaIds.append(media.id)
             }
-            _ = try await KaiXAPIClient.shared.createListing(
+            let created = try await KaiXAPIClient.shared.createListing(
                 type: KXListingCopy.createType(for: listingType),
+                countryCode: region.countryCode,
                 citySlug: region.cityCode,
                 regionCode: region.regionCode,
+                language: language == .zh ? "zh-CN" : language.rawValue,
                 title: title,
                 description: description,
                 category: category.isEmpty ? KXListingCopy.defaultCategory(for: listingType) : category,
@@ -2809,11 +3255,33 @@ struct CreateCityListingView: View {
                 mediaIds: mediaIds,
                 attributes: attributes
             )
-            message = listingType == "secondhand" ? "发布成功，已同步到三端。" : "已提交审核，审核通过后会在三端展示。"
+            let published = created.status == "published" || created.status == "active"
+            message = published ? "发布成功，已同步到三端。" : "已提交审核，可在详情页查看审核状态。"
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
             isSubmitting = false
+            try? await Task.sleep(for: .milliseconds(550))
+            router.open(.cityListingDetail(listingId: created.id))
         } catch {
-            message = error.localizedDescription
+            if let failed = mediaDrafts.first(where: {
+                if case .uploading = mediaUploadPhases[$0.id] { return true }
+                if case .completing = mediaUploadPhases[$0.id] { return true }
+                if case .preparing = mediaUploadPhases[$0.id] { return true }
+                return false
+            }) {
+                mediaUploadPhases[failed.id] = .failed(error.kaixUserMessage)
+            }
+            message = error.kaixUserMessage
             isSubmitting = false
+        }
+    }
+
+    private func listingUploadPurpose(isVideo: Bool) -> String {
+        switch KXListingCopy.createType(for: listingType) {
+        case "rental": return isVideo ? "rental_video" : "rental_image"
+        case "job", "hiring": return isVideo ? "job_video" : "job_image"
+        case "local_service": return isVideo ? "service_video" : "service_image"
+        case "discount", "event": return isVideo ? "discount_video" : "discount_image"
+        default: return isVideo ? "secondhand_video" : "secondhand_image"
         }
     }
 
@@ -3004,9 +3472,27 @@ private struct KXSecondhandListingCard: View {
         Button(action: onOpen) {
             VStack(alignment: .leading, spacing: 9) {
                 ZStack(alignment: .topTrailing) {
-                    CachedMediaImageView(url: listing.coverURL)
-                        .aspectRatio(1, contentMode: .fill)
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    if let url = listing.coverURL {
+                        MediaImageView(url: url)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .clipped()
+                    } else {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(KXColor.softBackground)
+                            .overlay {
+                                Image(systemName: KXListingCopy.icon(for: listing.type))
+                                    .font(.title2.weight(.semibold))
+                                    .foregroundStyle(.secondary.opacity(0.56))
+                            }
+                    }
+                    if listing.coverIsVideo {
+                        Image(systemName: "play.fill")
+                            .font(.caption.weight(.black))
+                            .foregroundStyle(.white)
+                            .frame(width: 34, height: 34)
+                            .background(.black.opacity(0.55), in: Circle())
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                    }
                     VStack {
                         HStack {
                             KXListingBadge(title: KXListingCopy.formatListingStatus(listing.status, type: listing.type), tint: KXListingCopy.statusColor(listing.status))
@@ -3022,6 +3508,9 @@ private struct KXSecondhandListingCard: View {
                         .background(.ultraThinMaterial, in: Circle())
                         .padding(8)
                 }
+                .frame(maxWidth: .infinity)
+                .aspectRatio(16.0 / 10.0, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 Text(KXListingCopy.priceLabel(listing))
                     .font(.headline.weight(.black))
                     .foregroundStyle(KXColor.heat)
@@ -3041,9 +3530,67 @@ private struct KXSecondhandListingCard: View {
                 .foregroundStyle(.secondary)
             }
             .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .kxGlassSurface(radius: 20)
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct ListingMediaPage: View {
+    let media: KaiXListingMediaDTO
+    let index: Int
+    let total: Int
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            if media.normalizedType == "video" {
+                MediaVideoView(sourceURL: media.sourceURL, posterURL: media.previewURL)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let url = media.previewURL {
+                MediaImageView(url: url, targetPixelSize: 1400)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+            } else {
+                ListingMediaPlaceholder(type: media.normalizedType)
+            }
+            if total > 1 {
+                Text("\(index + 1)/\(total)")
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .frame(height: 24)
+                    .background(.black.opacity(0.55), in: Capsule())
+                    .padding(10)
+            }
+        }
+    }
+}
+
+private struct ListingMediaPlaceholder: View {
+    let type: String
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    KXColor.accent.opacity(0.13),
+                    KXColor.softBackground,
+                    KXColor.rankTeal.opacity(0.10)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            VStack(spacing: 10) {
+                Image(systemName: type == "video" ? "play.rectangle.fill" : KXListingCopy.icon(for: type))
+                    .font(.system(size: 34, weight: .bold))
+                    .foregroundStyle(KXColor.accent.opacity(0.72))
+                Text(type == "video" ? "视频封面生成中" : "暂无图片")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -3055,9 +3602,27 @@ private struct KXStructuredListingRow: View {
         Button(action: onOpen) {
             HStack(alignment: .top, spacing: 12) {
                 ZStack(alignment: .bottomLeading) {
-                    CachedMediaImageView(url: listing.coverURL)
-                        .frame(width: 112, height: 104)
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    if let url = listing.coverURL {
+                        MediaImageView(url: url)
+                            .frame(width: 112, height: 104)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    } else {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(KXColor.softBackground)
+                            .frame(width: 112, height: 104)
+                            .overlay {
+                                Image(systemName: KXListingCopy.icon(for: listing.type))
+                                    .foregroundStyle(.secondary.opacity(0.56))
+                            }
+                    }
+                    if listing.coverIsVideo {
+                        Image(systemName: "play.fill")
+                            .font(.caption.weight(.black))
+                            .foregroundStyle(.white)
+                            .frame(width: 32, height: 32)
+                            .background(.black.opacity(0.55), in: Circle())
+                            .frame(width: 112, height: 104)
+                    }
                     KXListingBadge(title: KXListingCopy.formatListingType(listing.type), tint: KXColor.accent)
                         .padding(7)
                 }
@@ -3763,10 +4328,28 @@ private enum KXListingCopy {
 }
 
 private extension KaiXCityListingDTO {
+    var primaryCoverMedia: KaiXListingMediaDTO? {
+        coverMedia
+            ?? cover_media
+            ?? card?.coverMedia
+            ?? listingCard?.coverMedia
+            ?? media?.first(where: { $0.is_cover == true || $0.isCover == true })
+            ?? media?.first
+    }
+
     var coverURL: URL? {
-        if let cover_url, let url = URL(string: cover_url) { return url }
-        if let first = media?.first?.url, let url = URL(string: first) { return url }
+        if let cover = primaryCoverMedia, let url = cover.previewURL {
+            return url
+        }
+        if let raw = card?.coverUrl ?? listingCard?.coverUrl ?? coverUrl ?? cover_url,
+           let url = raw.kaixMediaURL {
+            return url
+        }
         return nil
+    }
+
+    var coverIsVideo: Bool {
+        primaryCoverMedia?.normalizedType == "video"
     }
 }
 

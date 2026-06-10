@@ -41,7 +41,13 @@ final class KaiXAPIClient {
 
     // MARK: - low-level
 
-    private func request(_ method: String, _ path: String, body: Encodable? = nil, queryItems: [URLQueryItem] = []) async throws -> Data {
+    private func request(
+        _ method: String,
+        _ path: String,
+        body: Encodable? = nil,
+        queryItems: [URLQueryItem] = [],
+        idempotencyKey: String? = nil
+    ) async throws -> Data {
         var components = URLComponents(url: KaiXBackend.baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
         if !queryItems.isEmpty { components.queryItems = queryItems }
         var req = URLRequest(url: components.url!)
@@ -49,6 +55,9 @@ final class KaiXAPIClient {
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         if let token = KaiXBackend.token {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        if let idempotencyKey, !idempotencyKey.isEmpty {
+            req.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key")
         }
         if let body {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -468,12 +477,21 @@ final class KaiXAPIClient {
 
     // MARK: - structured city listings
 
-    func listings(type: String, citySlug: String, regionCode: String? = nil, query: String? = nil) async throws -> [KaiXCityListingDTO] {
+    func listings(
+        type: String,
+        citySlug: String? = nil,
+        regionCode: String? = nil,
+        regionCodes: [String] = [],
+        countryCode: String? = nil,
+        query: String? = nil
+    ) async throws -> [KaiXCityListingDTO] {
         var q: [URLQueryItem] = [
             URLQueryItem(name: "type", value: type),
-            URLQueryItem(name: "city_slug", value: citySlug),
         ]
+        if let citySlug, !citySlug.isEmpty { q.append(URLQueryItem(name: "city_slug", value: citySlug)) }
         if let regionCode, !regionCode.isEmpty { q.append(URLQueryItem(name: "region_code", value: regionCode)) }
+        if !regionCodes.isEmpty { q.append(URLQueryItem(name: "region_codes", value: regionCodes.joined(separator: ","))) }
+        if let countryCode, !countryCode.isEmpty { q.append(URLQueryItem(name: "country_code", value: countryCode)) }
         if let query, !query.isEmpty { q.append(URLQueryItem(name: "q", value: query)) }
         let data = try await request("GET", "/api/listings", queryItems: q)
         let response: KaiXListingsResponse = try decode(data)
@@ -488,8 +506,10 @@ final class KaiXAPIClient {
 
     func createListing(
         type: String,
+        countryCode: String = "jp",
         citySlug: String,
         regionCode: String,
+        language: String = "zh-CN",
         title: String,
         description: String,
         category: String,
@@ -525,10 +545,10 @@ final class KaiXAPIClient {
         }()
         let data = try await request("POST", "/api/listings", body: Body(
             type: type,
-            country_code: "jp",
+            country_code: countryCode,
             city_slug: citySlug,
             region_code: regionCode,
-            language: "zh-CN",
+            language: language,
             title: title,
             description: description,
             category: category,
@@ -539,7 +559,7 @@ final class KaiXAPIClient {
             contact_method: "app_message",
             media_ids: mediaIds,
             attributes: attributes
-        ))
+        ), idempotencyKey: "listing-create-\(UUID().uuidString)")
         return try decode(data) as Wrapper |> \.listing
     }
 
@@ -557,7 +577,12 @@ final class KaiXAPIClient {
     @discardableResult
     func contactListing(_ id: String, message: String, details: [[String: String]] = []) async throws -> String {
         struct InquiryBody: Encodable { let message: String; let details: [[String: String]] }
-        let data = try await request("POST", "/api/listings/\(id.encodedPathSegment)/inquiry", body: InquiryBody(message: message, details: details))
+        let data = try await request(
+            "POST",
+            "/api/listings/\(id.encodedPathSegment)/inquiry",
+            body: InquiryBody(message: message, details: details),
+            idempotencyKey: "listing-inquiry-\(UUID().uuidString)"
+        )
         struct InquiryResponse: Decodable { let conversation_id: String? }
         let resp: InquiryResponse? = try? decode(data)
         return resp?.conversation_id ?? ""
@@ -1023,6 +1048,34 @@ final class KaiXAPIClient {
         return try decode(data)
     }
 
+    private func exploreQueryItems(region: KaiXRegionDirectory.Region?, limit: Int) -> [URLQueryItem] {
+        var q: [URLQueryItem] = [URLQueryItem(name: "limit", value: String(limit))]
+        if let region {
+            q.append(URLQueryItem(name: "region_code", value: region.regionCode))
+            q.append(URLQueryItem(name: "country", value: region.countryCode))
+            if !region.provinceCode.isEmpty {
+                q.append(URLQueryItem(name: "province", value: region.provinceCode))
+            }
+            q.append(URLQueryItem(name: "city", value: region.cityCode))
+        }
+        return q
+    }
+
+    func exploreHappening(region: KaiXRegionDirectory.Region?, limit: Int = 30) async throws -> KaiXExplorePostsResponse {
+        let data = try await request("GET", "/api/explore/happening", queryItems: exploreQueryItems(region: region, limit: limit))
+        return try decode(data)
+    }
+
+    func exploreHot(region: KaiXRegionDirectory.Region?, limit: Int = 30) async throws -> KaiXExplorePostsResponse {
+        let data = try await request("GET", "/api/explore/hot", queryItems: exploreQueryItems(region: region, limit: limit))
+        return try decode(data)
+    }
+
+    func exploreTopics(region: KaiXRegionDirectory.Region?, limit: Int = 20) async throws -> KaiXExploreTopicsResponse {
+        let data = try await request("GET", "/api/explore/topics", queryItems: exploreQueryItems(region: region, limit: limit))
+        return try decode(data)
+    }
+
     func topic(_ tag: String) async throws -> [KaiXPostDTO] {
         struct Wrapper: Codable { let tag: String; let items: [KaiXPostDTO] }
         let trimmed = tag.hasPrefix("#") ? String(tag.dropFirst()) : tag
@@ -1055,6 +1108,16 @@ final class KaiXAPIClient {
         return try decode(data) as Wrapper |> \.items
     }
 
+    func mutualMessageFriends(query: String = "", limit: Int = 50) async throws -> [KaiXUserDTO] {
+        struct Wrapper: Codable { let items: [KaiXUserDTO] }
+        var q: [URLQueryItem] = [URLQueryItem(name: "limit", value: String(limit))]
+        if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            q.append(URLQueryItem(name: "q", value: query))
+        }
+        let data = try await request("GET", "/api/messages/mutual-friends", queryItems: q)
+        return try decode(data) as Wrapper |> \.items
+    }
+
     func openConversation(with peerId: String) async throws -> KaiXConversationDTO {
         struct Wrapper: Codable { let conversation: KaiXConversationDTO }
         let data = try await request("POST", "/api/conversations", body: ["peer_id": peerId])
@@ -1075,7 +1138,8 @@ final class KaiXAPIClient {
         struct Body: Encodable { let content: String; let media_ids: [String]; let attachment_ids: [String] }
         struct Wrapper: Codable { let message: KaiXMessageDTO }
         let data = try await request("POST", "/api/conversations/\(conversationId.encodedPathSegment)/messages",
-                                     body: Body(content: content, media_ids: mediaIds, attachment_ids: attachmentIds))
+                                     body: Body(content: content, media_ids: mediaIds, attachment_ids: attachmentIds),
+                                     idempotencyKey: "message-send-\(UUID().uuidString)")
         return try decode(data) as Wrapper |> \.message
     }
 
@@ -1123,6 +1187,7 @@ final class KaiXAPIClient {
         height: Int = 0,
         duration: Double = 0
     ) async throws -> (file: KaiXUploadedFileDTO, media: KaiXMediaDTO) {
+        let actionKey = "upload-\(UUID().uuidString)"
         struct PresignBody: Encodable {
             let fileName: String
             let contentType: String
@@ -1133,6 +1198,7 @@ final class KaiXAPIClient {
             let threadId: String
             let groupId: String
             let duration: Double
+            let durationSeconds: Double
         }
         let presignData = try await request("POST", "/api/uploads/presign", body: PresignBody(
             fileName: fileName,
@@ -1143,8 +1209,9 @@ final class KaiXAPIClient {
             entityId: entityId,
             threadId: threadId,
             groupId: groupId,
-            duration: duration
-        ))
+            duration: duration,
+            durationSeconds: duration
+        ), idempotencyKey: "\(actionKey)-presign")
         let presign: KaiXUploadPresignDTO = try decode(presignData)
         guard let uploadURL = URL(string: presign.data.uploadUrl) else {
             throw URLError(.badURL)
@@ -1166,6 +1233,7 @@ final class KaiXAPIClient {
             let width: Int
             let height: Int
             let duration: Double
+            let durationSeconds: Double
         }
         let completedData = try await request("POST", "/api/uploads/complete", body: CompleteBody(
             uploadId: presign.data.uploadId,
@@ -1173,8 +1241,9 @@ final class KaiXAPIClient {
             etag: etag,
             width: width,
             height: height,
-            duration: duration
-        ))
+            duration: duration,
+            durationSeconds: duration
+        ), idempotencyKey: "\(actionKey)-complete")
         let completed: KaiXUploadCompleteDTO = try decode(completedData)
         return (completed.data.file, completed.data.media)
     }
@@ -1185,14 +1254,26 @@ final class KaiXAPIClient {
         case "image/png": ext = "png"
         case "image/webp": ext = "webp"
         case "image/heic": ext = "heic"
+        case "video/mp4": ext = "mp4"
+        case "video/quicktime": ext = "mov"
+        case "video/webm": ext = "webm"
         case "application/pdf": ext = "pdf"
         default: ext = "jpg"
+        }
+        let purpose: String
+        if mime == "application/pdf" {
+            purpose = "guide_product_file"
+        } else if mime.hasPrefix("video/") {
+            purpose = "post_video"
+        } else {
+            purpose = "post_image"
         }
         let uploaded = try await uploadFile(
             data: data,
             mime: mime,
             fileName: "upload.\(ext)",
-            purpose: mime == "application/pdf" ? "guide_product_file" : "post_image",
+            purpose: purpose,
+            entityType: mime.hasPrefix("video/") || mime.hasPrefix("image/") ? "post" : "",
             width: width,
             height: height,
             duration: duration

@@ -1,3 +1,4 @@
+import AVKit
 import SwiftUI
 
 struct CachedMediaImageView: View {
@@ -14,22 +15,23 @@ struct CachedMediaImageView: View {
 
     var body: some View {
         ZStack {
+            if image == nil && !failed {
+                MediaLoadingSkeleton()
+            }
             if let image {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
-            } else if failed {
+                    .transition(.opacity)
+            }
+            if failed {
                 failureView
-            } else {
-                RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
-                    .fill(KXColor.softBackground)
-                    .overlay {
-                        ProgressView()
-                            .scaleEffect(0.82)
-                    }
-                    .redacted(reason: .placeholder)
             }
         }
+        // Cross-fade the shimmer skeleton → decoded image so media reveals
+        // smoothly instead of popping in (App Store-grade feel, every tile).
+        .animation(.easeOut(duration: 0.28), value: image == nil)
+        .animation(.easeOut(duration: 0.2), value: failed)
         .task(id: loadKey) {
             await load()
         }
@@ -41,12 +43,22 @@ struct CachedMediaImageView: View {
         case .transparent:
             Color.clear
         case .quietPlaceholder:
-            ZStack {
-                KXColor.softBackground
-                Image(systemName: "photo")
-                    .font(.title3.weight(.semibold))
+            Button {
+                failed = false
+                reloadToken = UUID()
+            } label: {
+                ZStack {
+                    KXColor.softBackground
+                    VStack(spacing: 8) {
+                        Image(systemName: "photo")
+                            .font(.title3.weight(.semibold))
+                        Image(systemName: "arrow.clockwise")
+                            .font(.caption.weight(.bold))
+                    }
                     .foregroundStyle(.secondary.opacity(0.56))
+                }
             }
+            .buttonStyle(.plain)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
@@ -86,4 +98,130 @@ struct CachedMediaImageView: View {
 enum CachedMediaImageFailureMode {
     case quietPlaceholder
     case transparent
+}
+
+/// Subtle left-to-right shimmer shown while media decodes. Reads well at any
+/// size — from a tiny grid thumbnail to a full-bleed cover — and replaces the
+/// bare spinner that looked unfinished on small tiles.
+private struct MediaLoadingSkeleton: View {
+    @State private var x: CGFloat = -0.9
+
+    var body: some View {
+        KXColor.softBackground
+            .overlay(
+                GeometryReader { geo in
+                    LinearGradient(
+                        colors: [.clear, Color.white.opacity(0.30), .clear],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: geo.size.width * 0.65)
+                    .offset(x: x * geo.size.width)
+                    .blendMode(.plusLighter)
+                }
+            )
+            .clipped()
+            .onAppear {
+                withAnimation(.linear(duration: 1.2).repeatForever(autoreverses: false)) {
+                    x = 1.45
+                }
+            }
+    }
+}
+
+struct MediaImageView: View {
+    let url: URL?
+    var targetPixelSize: CGFloat = 900
+    var failureMode: CachedMediaImageFailureMode = .quietPlaceholder
+
+    var body: some View {
+        CachedMediaImageView(url: url, targetPixelSize: targetPixelSize, failureMode: failureMode)
+    }
+}
+
+struct MediaVideoView: View {
+    let sourceURL: URL?
+    let posterURL: URL?
+    var autoPlay = false
+
+    @State private var player: AVPlayer?
+    @State private var isPlaying = false
+    @State private var playbackFailed = false
+
+    var body: some View {
+        ZStack {
+            if isPlaying, sourceURL != nil {
+                VideoPlayer(player: player)
+                    .background(Color.black)
+            } else {
+                if let posterURL {
+                    MediaImageView(url: posterURL, targetPixelSize: 1400)
+                        .transition(.opacity)
+                } else {
+                    ZStack {
+                        Color(red: 0.055, green: 0.071, blue: 0.102)
+                        VStack(spacing: 10) {
+                            Image(systemName: playbackFailed ? "exclamationmark.arrow.triangle.2.circlepath" : "video.fill")
+                                .font(.system(size: 36, weight: .bold))
+                            Text(playbackFailed ? "视频加载失败，点按重试" : "视频")
+                                .font(.caption.weight(.bold))
+                        }
+                        .foregroundStyle(.white.opacity(0.82))
+                    }
+                }
+                if sourceURL != nil {
+                    Button {
+                        playbackFailed = false
+                        configurePlayer(shouldPlay: true)
+                    } label: {
+                        Image(systemName: playbackFailed ? "arrow.clockwise" : "play.fill")
+                            .font(.title3.weight(.black))
+                            .foregroundStyle(.white)
+                            .frame(width: 52, height: 52)
+                            .background(.black.opacity(0.62), in: Circle())
+                            .overlay(Circle().stroke(.white.opacity(0.24), lineWidth: 1))
+                            .shadow(color: .black.opacity(0.22), radius: 12, y: 5)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(playbackFailed ? "重试视频" : "播放视频")
+                }
+            }
+        }
+        .clipped()
+        .task(id: sourceURL?.absoluteString ?? "nil") {
+            isPlaying = autoPlay
+            configurePlayer(shouldPlay: autoPlay)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .AVPlayerItemFailedToPlayToEndTime)) { note in
+            guard let currentItem = player?.currentItem,
+                  let failedItem = note.object as? AVPlayerItem,
+                  failedItem === currentItem
+            else { return }
+            player?.pause()
+            isPlaying = false
+            playbackFailed = true
+        }
+        .onDisappear {
+            player?.pause()
+            player = nil
+            isPlaying = false
+        }
+    }
+
+    @MainActor
+    private func configurePlayer(shouldPlay: Bool) {
+        player?.pause()
+        guard let sourceURL else {
+            player = nil
+            isPlaying = false
+            return
+        }
+        let nextPlayer = AVPlayer(url: sourceURL)
+        player = nextPlayer
+        isPlaying = shouldPlay
+        playbackFailed = false
+        if shouldPlay {
+            nextPlayer.play()
+        }
+    }
 }

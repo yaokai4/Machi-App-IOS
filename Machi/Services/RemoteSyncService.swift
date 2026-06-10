@@ -335,6 +335,10 @@ final class RemoteSyncService {
             if let v = dto.language { existing.language = v }
             if let v = dto.is_seed_content { existing.isSeedContent = v }
             if let v = dto.seed_author_type { existing.seedAuthorType = v }
+            syncMedia(dto.media, postId: serverId, context: context)
+            if let original = dto.original_post {
+                syncMedia(original.media, postId: original.id, context: context)
+            }
             return existing
         }
         let entity = PostEntity(
@@ -372,7 +376,62 @@ final class RemoteSyncService {
             seedAuthorType: dto.seed_author_type ?? ""
         )
         context.insert(entity)
+        syncMedia(dto.media, postId: serverId, context: context)
+        if let original = dto.original_post {
+            syncMedia(original.media, postId: original.id, context: context)
+        }
         return entity
+    }
+
+    private func syncMedia(_ items: [KaiXMediaDTO], postId: String, context: ModelContext) {
+        let descriptor = FetchDescriptor<MediaEntity>(
+            predicate: #Predicate { $0.postId == postId }
+        )
+        let existing = (try? context.fetch(descriptor)) ?? []
+        let incomingIds = Set(items.map(\.id))
+
+        for stale in existing where stale.remoteId != nil && !incomingIds.contains(stale.remoteId ?? stale.id) {
+            context.delete(stale)
+        }
+
+        for dto in items {
+            let remoteId = dto.remote_id ?? dto.remoteId ?? dto.id
+            let entity = existing.first { $0.remoteId == remoteId || $0.id == dto.id }
+            let mediaType: MediaType = dto.normalizedType == "video" ? .video : .image
+            let preview = mediaType == .video ? dto.posterURLString : dto.thumbnailURLString
+            if let entity {
+                entity.postId = postId
+                entity.type = mediaType
+                entity.remoteURL = dto.sourceURLString
+                entity.thumbnailURL = preview
+                entity.width = Double(dto.width ?? 0)
+                entity.height = Double(dto.height ?? 0)
+                entity.duration = dto.durationSeconds ?? dto.duration_seconds ?? dto.duration ?? 0
+                entity.uploadState = .uploaded
+                entity.uploadProgress = 1
+                entity.updatedAt = .now
+                entity.remoteId = remoteId
+                entity.syncStatus = .synced
+                entity.deletedAt = nil
+            } else {
+                context.insert(MediaEntity(
+                    id: dto.id,
+                    postId: postId,
+                    type: mediaType,
+                    remoteURL: dto.sourceURLString,
+                    thumbnailURL: preview,
+                    width: Double(dto.width ?? 0),
+                    height: Double(dto.height ?? 0),
+                    duration: dto.durationSeconds ?? dto.duration_seconds ?? dto.duration ?? 0,
+                    uploadState: .uploaded,
+                    uploadProgress: 1,
+                    createdAt: parsedDate(dto.created_at) ?? .now,
+                    updatedAt: .now,
+                    remoteId: remoteId,
+                    syncStatus: .synced
+                ))
+            }
+        }
     }
 
     /// Re-encode the typed DTO attributes back to a JSON string so

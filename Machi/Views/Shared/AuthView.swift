@@ -434,13 +434,19 @@ private struct AuthRegionField: View {
                         .frame(width: 24)
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(region?.displayName ?? L("selectRegisterRegion", language))
+                        Text(region.map { KaiXRegionDirectory.localizedDisplayName($0, language: language) } ?? L("selectRegisterRegion", language))
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(region == nil ? .secondary : .primary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.78)
                         if let region {
-                            Text(L("registerRegionHelp", language).replacingOccurrences(of: "{country}", with: region.countryName))
+                            Text(L("registerRegionHelp", language).replacingOccurrences(
+                                of: "{country}",
+                                with: KaiXRegionDirectory.localizedCountryName(
+                                    .init(code: region.countryCode, name: region.countryName, emoji: region.countryEmoji, tier: 1, hasProvinces: !region.provinceCode.isEmpty),
+                                    language: language
+                                )
+                            ))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)

@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import SwiftData
+import UniformTypeIdentifiers
 
 @MainActor
 final class MessagesViewModel: ObservableObject {
@@ -113,12 +114,41 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    func addMedia(data: Data, isVideo: Bool, language: AppLanguage, messageStore: MessageStore? = nil) async {
-        guard mediaDrafts.count < KaiXConfig.maxMediaItemsPerPost else { return }
+    func addMedia(data: Data, isVideo: Bool, contentType: UTType? = nil, language: AppLanguage, messageStore: MessageStore? = nil) async {
         errorMessage = nil
+        let hasVideo = mediaDrafts.contains { $0.type == .video }
+        let imageCount = mediaDrafts.filter { $0.type == .image }.count
+        if isVideo {
+            guard mediaDrafts.isEmpty else {
+                errorMessage = L(hasVideo ? "mediaVideoLimit" : "mediaMixNotAllowed", language)
+                state = messages.isEmpty ? .empty : .loaded
+                return
+            }
+            guard data.count <= KaiXConfig.maxMessageVideoBytes else {
+                errorMessage = L("mediaTooLarge", language)
+                state = messages.isEmpty ? .empty : .loaded
+                return
+            }
+        } else {
+            guard !hasVideo else {
+                errorMessage = L("mediaMixNotAllowed", language)
+                state = messages.isEmpty ? .empty : .loaded
+                return
+            }
+            guard imageCount < KaiXConfig.maxImageItemsPerPost else {
+                errorMessage = L("mediaImageLimit", language)
+                state = messages.isEmpty ? .empty : .loaded
+                return
+            }
+            guard data.count <= KaiXConfig.maxMessageImageBytes else {
+                errorMessage = L("mediaTooLarge", language)
+                state = messages.isEmpty ? .empty : .loaded
+                return
+            }
+        }
         do {
             let draft = isVideo
-                ? try await UploadService.shared.prepareVideo(data: data)
+                ? try await UploadService.shared.prepareVideo(data: data, contentType: contentType)
                 : try await UploadService.shared.prepareImage(data: data)
             mediaDrafts.append(draft)
             messageStore?.enqueueUpload(draft)

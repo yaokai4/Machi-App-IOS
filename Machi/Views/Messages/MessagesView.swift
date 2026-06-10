@@ -202,7 +202,7 @@ private struct NewConversationView: View {
                 case .loading, .idle:
                     LoadingView()
                 case .empty:
-                    EmptyStateView(title: L("users", language), subtitle: L("noContent", language), systemImage: "person.2")
+                    EmptyStateView(title: "还没有互关好友", subtitle: L("mutualFriendsOnly", language), systemImage: "person.2")
                 case .error(let message):
                     ErrorStateView(message: message) {
                         Task { await load() }
@@ -222,7 +222,7 @@ private struct NewConversationView: View {
                             .kxGlassCapsule()
 
                             if filteredUsers.isEmpty {
-                                EmptyStateView(title: L("users", language), subtitle: L("noContent", language), systemImage: "person.2")
+                                EmptyStateView(title: "还没有互关好友", subtitle: L("mutualFriendsOnly", language), systemImage: "person.2")
                             }
 
                             ForEach(filteredUsers) { user in
@@ -247,6 +247,12 @@ private struct NewConversationView: View {
                                                 .lineLimit(1)
                                         }
                                         Spacer()
+                                        Text(L("mutualFriendBadge", language))
+                                            .font(.caption2.weight(.black))
+                                            .foregroundStyle(KXColor.accent)
+                                            .padding(.horizontal, 8)
+                                            .frame(height: 24)
+                                            .background(KXColor.accent.opacity(0.10), in: Capsule())
                                         Image(systemName: "chevron.right")
                                             .font(.caption.weight(.semibold))
                                             .foregroundStyle(.secondary.opacity(0.6))
@@ -278,11 +284,32 @@ private struct NewConversationView: View {
     private func load() async {
         state = .loading
         do {
-            users = try await UserRepository(context: modelContext).fetchRecommendedUsers(excluding: currentUser.id, limit: 50)
+            let remoteUsers = try await KaiXAPIClient.shared.mutualMessageFriends(limit: 50)
+            users = remoteUsers
+                .map { RemoteSyncService.shared.upsertUser($0, context: modelContext) }
+                .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
+            try? modelContext.save()
             state = users.isEmpty ? .empty : .loaded
         } catch {
-            state = .error(error.kaixUserMessage)
+            do {
+                users = try await localMutualFriends()
+                state = users.isEmpty ? .empty : .loaded
+            } catch {
+                state = .error(error.kaixUserMessage)
+            }
         }
+    }
+
+    private func localMutualFriends() async throws -> [UserEntity] {
+        let repository = UserRepository(context: modelContext)
+        let currentUserId = currentUser.id
+        let following = try await repository.followingIds(for: currentUserId)
+        let followers = try modelContext.fetch(FetchDescriptor<FollowEntity>(
+            predicate: #Predicate { $0.followingId == currentUserId }
+        ))
+        let mutualIds = following.intersection(Set(followers.map(\.followerId)))
+        return try await repository.fetchUsers(ids: mutualIds)
+            .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
     }
 }
 

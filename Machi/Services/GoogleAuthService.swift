@@ -80,6 +80,12 @@ final class GoogleAuthService: NSObject, ASWebAuthenticationPresentationContextP
         if let keyWindow = scenes.flatMap(\.windows).first(where: { $0.isKeyWindow }) {
             return keyWindow
         }
-        return scenes.first?.windows.first ?? ASPresentationAnchor(frame: .zero)
+        if let existingWindow = scenes.first?.windows.first {
+            return existingWindow
+        }
+        guard let windowScene = scenes.first else {
+            preconditionFailure("Google authentication requires an active window scene.")
+        }
+        return ASPresentationAnchor(windowScene: windowScene)
     }
 }

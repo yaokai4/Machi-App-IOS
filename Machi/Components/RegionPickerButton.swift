@@ -9,9 +9,9 @@ import SwiftUI
 /// - prefers `city`; falls back to `province · city` only when the
 ///   country has provinces (CN/JP/US) and the city/province codes
 ///   actually differ (so we don't print "上海 · 上海").
-/// - `lineLimit(1)` + `minimumScaleFactor(0.85)` so short labels stay
+/// - `lineLimit(1)` + `minimumScaleFactor(0.78)` so short labels stay
 ///   bold while long ones quietly shrink one notch instead of ellipsing.
-/// - `maxWidth` capped to 180 so it can sit alongside other header
+/// - `maxWidth` capped to 180 (118 in compact headers) so it can sit alongside other header
 ///   chips without pushing them off-screen.
 /// - When too narrow to show province+city, falls back to city only —
 ///   never to a "蒙..." half-truncated string.
@@ -24,12 +24,14 @@ struct RegionPickerButton: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: compact ? 6 : 7) {
-                regionIcon
+                Text(region?.countryEmoji ?? "🌐")
+                    .font(.system(size: compact ? 17 : 18))
+                    .accessibilityHidden(true)
                 Text(label)
-                    .font(.system(size: compact ? 14 : 14, weight: .bold))
+                    .font(.system(size: compact ? 13 : 14, weight: .bold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+                    .minimumScaleFactor(compact ? 0.72 : 0.78)
                     .allowsTightening(true)
                     .truncationMode(.tail)
                     .layoutPriority(1)
@@ -37,17 +39,18 @@ struct RegionPickerButton: View {
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(KXColor.accent.opacity(compact ? 0.85 : 0.7))
             }
-            .padding(.leading, compact ? 6 : 10)
+            .padding(.leading, compact ? 10 : 12)
             .padding(.trailing, compact ? 10 : 12)
-            .frame(minHeight: compact ? 38 : 36)
-            .frame(maxWidth: compact ? 150 : 180, alignment: .leading)
+            .frame(minHeight: compact ? 40 : 38)
+            .frame(maxWidth: compact ? 118 : 180, alignment: .leading)
             .fixedSize(horizontal: !compact, vertical: false)
-            .background(Color(.systemBackground).opacity(0.92), in: Capsule())
+            .background(.ultraThinMaterial, in: Capsule())
+            .background(Color(.systemBackground).opacity(0.72), in: Capsule())
             .overlay {
                 Capsule()
-                    .stroke(KXColor.accent.opacity(compact ? 0.22 : 0.16), lineWidth: 1)
+                    .stroke(KXColor.separator.opacity(0.55), lineWidth: 0.8)
             }
-            .shadow(color: KXColor.accent.opacity(0.10), radius: 14, y: 5)
+            .shadow(color: KXColor.glassShadow.opacity(0.14), radius: 10, y: 4)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
@@ -72,30 +75,6 @@ struct RegionPickerButton: View {
             return combined.count > 8 ? region.cityName : combined
         }
         return region.cityName
-    }
-
-    @ViewBuilder
-    private var regionIcon: some View {
-        if let region {
-            ZStack(alignment: .bottomTrailing) {
-                Image(systemName: "location.fill")
-                    .font(.system(size: compact ? 13 : 15, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: compact ? 28 : 28, height: compact ? 28 : 28)
-                    .background(KXColor.accent, in: Circle())
-                Text(region.countryEmoji)
-                    .font(.system(size: compact ? 9 : 10))
-                    .padding(1)
-                    .background(Color(.systemBackground), in: Circle())
-                    .offset(x: 4, y: 4)
-            }
-        } else {
-            Image(systemName: "location.fill")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: compact ? 28 : 28, height: compact ? 28 : 28)
-                .background(KXColor.accent, in: Circle())
-        }
     }
 
     private var accessibilityLabel: String {
