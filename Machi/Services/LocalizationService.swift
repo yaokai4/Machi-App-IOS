@@ -475,6 +475,8 @@ struct LocalizationService {
         "dmNobody": [.zh: "不接收", .ja: "受け取らない", .en: "Nobody"],
         "dmPrivacyFootnote": [.zh: "由服务器强制执行。商品、租房等业务咨询会话不受影响。", .ja: "サーバー側で適用されます。出品・賃貸などの問い合わせには影響しません。", .en: "Enforced by the server. Listing-inquiry conversations are not affected."],
         "notifMessaged": [.zh: "给你发来私信", .ja: "がメッセージを送りました", .en: "sent you a message"],
+        "memberLibraryTitle": [.zh: "会员资料库", .ja: "メンバー資料ライブラリ", .en: "Member library"],
+        "memberLibrarySubtitle": [.zh: "30+ 份清单、模板与备考资料，会员免费查看", .ja: "30以上のチェックリスト・テンプレート・教材を会員は無料で閲覧", .en: "30+ checklists, templates and study packs included with membership"],
         "notifInquired": [.zh: "咨询了你的发布", .ja: "があなたの投稿に問い合わせました", .en: "inquired about your listing"],
         "settingsSyncFailed": [.zh: "设置已保存到本机，稍后会自动同步。", .ja: "設定は端末に保存されました。後で自動同期します。", .en: "Saved on this device; will sync later."],
         "privacySettings": [.zh: "隐私设置", .ja: "プライバシー設定", .en: "Privacy settings"],

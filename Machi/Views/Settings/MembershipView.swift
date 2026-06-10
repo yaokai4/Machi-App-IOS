@@ -37,6 +37,7 @@ struct MembershipView: View {
                 if isActive, let ins = insights { insightsCard(ins) }
                 if !store.plans.isEmpty { planCards }
                 benefits
+                memberLibraryEntry
                 if !isActive { purchaseControls }
                 subscriptionDisclosure
                 safetyNotice
@@ -230,6 +231,39 @@ struct MembershipView: View {
         .padding(16)
         .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.cardBackground))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(KXColor.separator, lineWidth: 0.7))
+    }
+
+    /// Direct door to the member library — the concrete thing the
+    /// membership buys, one tap from where it is sold.
+    private var memberLibraryEntry: some View {
+        NavigationLink {
+            GuideMemberResourcesView()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "books.vertical.fill")
+                    .font(.title3)
+                    .foregroundStyle(KXColor.accent)
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(KXColor.accentSoft))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L("memberLibraryTitle", language))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text(L("memberLibrarySubtitle", language))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(16)
+            .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.cardBackground))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(KXColor.separator, lineWidth: 0.7))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder

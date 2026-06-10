@@ -512,6 +512,18 @@ final class KaiXAPIClient {
         return response.items
     }
 
+    /// The caller's OWN listings of one type, regardless of city — includes
+    /// non-published states so sellers can manage everything they posted.
+    func myListings(type: String) async throws -> [KaiXCityListingDTO] {
+        let q: [URLQueryItem] = [
+            URLQueryItem(name: "type", value: type),
+            URLQueryItem(name: "mine", value: "1"),
+        ]
+        let data = try await request("GET", "/api/listings", queryItems: q)
+        let response: KaiXListingsResponse = try decode(data)
+        return response.items
+    }
+
     func cityListing(_ id: String) async throws -> KaiXCityListingDTO {
         let data = try await request("GET", "/api/listings/\(id.encodedPathSegment)")
         let response: KaiXListingDetailResponse = try decode(data)

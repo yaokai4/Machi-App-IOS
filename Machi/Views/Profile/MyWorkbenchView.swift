@@ -90,6 +90,10 @@ struct MyWorkbenchView: View {
                 CreateCityListingView(listingType: "secondhand", citySlug: currentRegionCode, currentUser: currentUser)
             }
             SettingsDivider()
+            SettingsRowLink(icon: "shippingbox.fill", tint: .teal, title: "我的城市发布", subtitle: "管理二手、租房、招聘和服务信息") {
+                MyCityListingsView(currentUser: currentUser)
+            }
+            SettingsDivider()
             SettingsRowLink(icon: "doc.text.image.fill", tint: .blue, title: "我的发布", value: "\(viewModel.postCount)", subtitle: "查看已发布内容和互动数据") {
                 ProfileCollectionView(
                     title: "我的发布",
