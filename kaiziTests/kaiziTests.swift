@@ -169,7 +169,7 @@ struct kaiziTests {
         let viewModel = SearchViewModel()
         let searchStore = SearchStore()
 
-        await viewModel.load(context: context, currentUser: currentUser, searchStore: searchStore)
+        await viewModel.load(context: context, currentUser: currentUser, searchStore: searchStore, allowRemote: false)
 
         #expect(viewModel.state == .loaded)
         #expect(searchStore.loadingState == .loaded)
@@ -727,7 +727,7 @@ struct kaiziTests {
         try context.save()
 
         let viewModel = SearchViewModel()
-        await viewModel.load(context: context, currentUser: currentUser, postStore: PostStore())
+        await viewModel.load(context: context, currentUser: currentUser, postStore: PostStore(), allowRemote: false)
 
         let topItem = try #require(viewModel.trendingItems.first)
         #expect(topItem.title == "AI 应用正在从聊天窗口转向任务型工作流")

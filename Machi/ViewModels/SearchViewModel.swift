@@ -41,7 +41,10 @@ final class SearchViewModel: ObservableObject {
     @Published private(set) var userTrendingItems: [TrendingItem] = []
     @Published private(set) var latestItems: [TrendingItem] = []
 
-    func load(context: ModelContext, currentUser: UserEntity, postStore: PostStore? = nil, searchStore: SearchStore? = nil) async {
+    /// `allowRemote: false` keeps the load purely on the local SwiftData
+    /// store — unit tests exercise the ranking logic hermetically without
+    /// live explore data bleeding into their fixtures.
+    func load(context: ModelContext, currentUser: UserEntity, postStore: PostStore? = nil, searchStore: SearchStore? = nil, allowRemote: Bool = true) async {
         let hasCachedContent = !topics.isEmpty || !hotPosts.isEmpty || !happeningPosts.isEmpty
         if !hasCachedContent {
             state = .loading
@@ -58,25 +61,27 @@ final class SearchViewModel: ObservableObject {
             var loadedHot: [PostEntity] = []
             var loadedTopics: [TopicEntity] = []
 
-            do {
-                let response = try await KaiXAPIClient.shared.exploreHappening(region: region, limit: 30)
-                loadedHappening = upsertRemotePosts(response.orderedPosts, context: context)
-            } catch {
-                loadedHappening = []
-            }
+            if allowRemote {
+                do {
+                    let response = try await KaiXAPIClient.shared.exploreHappening(region: region, limit: 30)
+                    loadedHappening = upsertRemotePosts(response.orderedPosts, context: context)
+                } catch {
+                    loadedHappening = []
+                }
 
-            do {
-                let response = try await KaiXAPIClient.shared.exploreHot(region: region, limit: 30)
-                loadedHot = upsertRemotePosts(response.orderedPosts, context: context)
-            } catch {
-                loadedHot = []
-            }
+                do {
+                    let response = try await KaiXAPIClient.shared.exploreHot(region: region, limit: 30)
+                    loadedHot = upsertRemotePosts(response.orderedPosts, context: context)
+                } catch {
+                    loadedHot = []
+                }
 
-            do {
-                let response = try await KaiXAPIClient.shared.exploreTopics(region: region, limit: 20)
-                loadedTopics = try upsertRemoteTopics(response.orderedTopics, context: context)
-            } catch {
-                loadedTopics = []
+                do {
+                    let response = try await KaiXAPIClient.shared.exploreTopics(region: region, limit: 20)
+                    loadedTopics = try upsertRemoteTopics(response.orderedTopics, context: context)
+                } catch {
+                    loadedTopics = []
+                }
             }
 
             if loadedHot.isEmpty {

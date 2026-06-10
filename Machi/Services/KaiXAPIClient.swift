@@ -491,14 +491,24 @@ final class KaiXAPIClient {
 
     // MARK: - structured city listings
 
-    func listings(
+    /// One server page of listings plus the cursor for the next one — the
+    /// same keyset protocol the Web client uses, so marketplace channels
+    /// scroll through the full inventory instead of the first 24 rows.
+    struct ListingsPage {
+        let items: [KaiXCityListingDTO]
+        let nextCursor: String?
+    }
+
+    func listingsPage(
         type: String,
         citySlug: String? = nil,
         regionCode: String? = nil,
         regionCodes: [String] = [],
         countryCode: String? = nil,
-        query: String? = nil
-    ) async throws -> [KaiXCityListingDTO] {
+        query: String? = nil,
+        cursor: String? = nil,
+        limit: Int? = nil
+    ) async throws -> ListingsPage {
         var q: [URLQueryItem] = [
             URLQueryItem(name: "type", value: type),
         ]
@@ -507,9 +517,29 @@ final class KaiXAPIClient {
         if !regionCodes.isEmpty { q.append(URLQueryItem(name: "region_codes", value: regionCodes.joined(separator: ","))) }
         if let countryCode, !countryCode.isEmpty { q.append(URLQueryItem(name: "country_code", value: countryCode)) }
         if let query, !query.isEmpty { q.append(URLQueryItem(name: "q", value: query)) }
+        if let cursor, !cursor.isEmpty { q.append(URLQueryItem(name: "cursor", value: cursor)) }
+        if let limit { q.append(URLQueryItem(name: "limit", value: String(limit))) }
         let data = try await request("GET", "/api/listings", queryItems: q)
         let response: KaiXListingsResponse = try decode(data)
-        return response.items
+        return ListingsPage(items: response.items, nextCursor: response.next_cursor)
+    }
+
+    func listings(
+        type: String,
+        citySlug: String? = nil,
+        regionCode: String? = nil,
+        regionCodes: [String] = [],
+        countryCode: String? = nil,
+        query: String? = nil
+    ) async throws -> [KaiXCityListingDTO] {
+        try await listingsPage(
+            type: type,
+            citySlug: citySlug,
+            regionCode: regionCode,
+            regionCodes: regionCodes,
+            countryCode: countryCode,
+            query: query
+        ).items
     }
 
     /// Buyer↔seller contacts about my listings (role=received) or ones I

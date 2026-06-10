@@ -14,7 +14,7 @@ final class KaiXAPIClientTests: XCTestCase {
         }
         let client = KaiXAPIClient.shared
 
-        let login = try await client.login(handle: "kaizi", password: "123456")
+        let login = try await loginOrSkip(client)
         XCTAssertEqual(login.user.handle, "kaizi")
         XCTAssertNotNil(KaiXBackend.token)
 
@@ -34,7 +34,7 @@ final class KaiXAPIClientTests: XCTestCase {
             throw XCTSkip("Unified backend not reachable at \(KaiXBackend.baseURL.absoluteString)")
         }
         let client = KaiXAPIClient.shared
-        _ = try await client.login(handle: "kaizi", password: "123456")
+        _ = try await loginOrSkip(client)
 
         let created = try await client.createPost(content: "iOS smoke test #UnitTest")
         XCTAssertEqual(created.author.unsafelyUnwrapped.handle, "kaizi")
@@ -55,6 +55,19 @@ final class KaiXAPIClientTests: XCTestCase {
             XCTFail("Expected the deleted post to 404")
         } catch is KaiXAPIError {
             // expected
+        }
+    }
+
+    /// Password login for the smoke account. When the backend enforces an
+    /// image captcha on login (production default), a headless test cannot
+    /// solve it — treat that exactly like "backend not test-friendly" and
+    /// soft-skip. Run the local server with KAIX_CAPTCHA_ENABLED=0 (or
+    /// KAIX_CAPTCHA_LOGIN_ENABLED=0) to exercise these tests for real.
+    private func loginOrSkip(_ client: KaiXAPIClient) async throws -> KaiXLoginResponse {
+        do {
+            return try await client.login(handle: "kaizi", password: "123456")
+        } catch let apiError as KaiXAPIError where apiError.error.code == "captcha_required" {
+            throw XCTSkip("Backend enforces login captcha — start it with KAIX_CAPTCHA_LOGIN_ENABLED=0 for smoke tests")
         }
     }
 

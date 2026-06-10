@@ -1802,6 +1802,7 @@ private let listingScopeHotCityCodes = [
 
 struct CityListingChannelView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var chrome: AppChromeState
 
@@ -1819,6 +1820,15 @@ struct CityListingChannelView: View {
     @State private var selectedScopeRegionCode = ""
     @State private var isLoading = true
     @State private var errorMessage: String?
+    // Server-side keyset pagination ("work" merges two listing types, so it
+    // carries one cursor per stream). nil = that stream is exhausted.
+    @State private var nextCursor: String?
+    @State private var nextHiringCursor: String?
+    @State private var isLoadingMore = false
+
+    private var hasMoreListings: Bool {
+        nextCursor != nil || nextHiringCursor != nil
+    }
 
     private var region: KaiXRegionDirectory.Region? {
         KaiXRegionDirectory.resolve(regionCode: regionCode)
@@ -1872,6 +1882,12 @@ struct CityListingChannelView: View {
                 LazyVStack(alignment: .leading, spacing: 16) {
                     listingControls
                     stateContent
+                    if !isLoading, errorMessage == nil, hasMoreListings {
+                        // Sentinel row: scrolling it into view pulls the next
+                        // server page. Re-armed by id whenever items grow.
+                        KXInlineLoader()
+                            .task(id: items.count) { await loadMore() }
+                    }
                 }
                 .padding(.horizontal, KaiXTheme.horizontalPadding)
                 .padding(.top, 14)
@@ -2060,7 +2076,7 @@ struct CityListingChannelView: View {
             HStack(spacing: 8) {
                 ForEach(KXListingCopy.categories(for: listingType), id: \.self) { category in
                     Button { selectedCategory = category } label: {
-                        Text(category)
+                        Text(KXListingCopy.categoryLabel(category, language))
                             .font(.caption.weight(.bold))
                             .foregroundStyle(selectedCategory == category ? Color.white : .primary)
                             .padding(.horizontal, 13)
@@ -2190,13 +2206,15 @@ struct CityListingChannelView: View {
         do {
             let scope = listingScopeQuery(for: region)
             if listingType == "work" {
-                async let jobs = KaiXAPIClient.shared.listings(type: "job", citySlug: scope.citySlug, regionCode: scope.regionCode, regionCodes: scope.regionCodes, countryCode: scope.countryCode, query: query)
-                async let hiring = KaiXAPIClient.shared.listings(type: "hiring", citySlug: scope.citySlug, regionCode: scope.regionCode, regionCodes: scope.regionCodes, countryCode: scope.countryCode, query: query)
-                let jobItems = try await jobs
-                let hiringItems = try await hiring
-                items = (jobItems + hiringItems).sorted(by: KXListingCopy.sortForDisplay)
+                async let jobs = KaiXAPIClient.shared.listingsPage(type: "job", citySlug: scope.citySlug, regionCode: scope.regionCode, regionCodes: scope.regionCodes, countryCode: scope.countryCode, query: query)
+                async let hiring = KaiXAPIClient.shared.listingsPage(type: "hiring", citySlug: scope.citySlug, regionCode: scope.regionCode, regionCodes: scope.regionCodes, countryCode: scope.countryCode, query: query)
+                let jobPage = try await jobs
+                let hiringPage = try await hiring
+                items = (jobPage.items + hiringPage.items).sorted(by: KXListingCopy.sortForDisplay)
+                nextCursor = jobPage.nextCursor
+                nextHiringCursor = hiringPage.nextCursor
             } else {
-                items = try await KaiXAPIClient.shared.listings(
+                let page = try await KaiXAPIClient.shared.listingsPage(
                     type: listingType,
                     citySlug: scope.citySlug,
                     regionCode: scope.regionCode,
@@ -2204,11 +2222,56 @@ struct CityListingChannelView: View {
                     countryCode: scope.countryCode,
                     query: query
                 )
+                items = page.items
+                nextCursor = page.nextCursor
+                nextHiringCursor = nil
             }
             isLoading = false
         } catch {
             errorMessage = error.localizedDescription
             isLoading = false
+        }
+    }
+
+    /// Pull the next server page(s) and append, deduplicating by id so a
+    /// row that moved between keyset windows can never show twice.
+    private func loadMore() async {
+        guard !isLoadingMore, !isLoading, hasMoreListings, let region else { return }
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+        let scope = listingScopeQuery(for: region)
+        do {
+            var fetched: [KaiXCityListingDTO] = []
+            if listingType == "work" {
+                if let cursor = nextCursor {
+                    let page = try await KaiXAPIClient.shared.listingsPage(type: "job", citySlug: scope.citySlug, regionCode: scope.regionCode, regionCodes: scope.regionCodes, countryCode: scope.countryCode, query: query, cursor: cursor)
+                    fetched += page.items
+                    nextCursor = page.nextCursor
+                }
+                if let cursor = nextHiringCursor {
+                    let page = try await KaiXAPIClient.shared.listingsPage(type: "hiring", citySlug: scope.citySlug, regionCode: scope.regionCode, regionCodes: scope.regionCodes, countryCode: scope.countryCode, query: query, cursor: cursor)
+                    fetched += page.items
+                    nextHiringCursor = page.nextCursor
+                }
+            } else if let cursor = nextCursor {
+                let page = try await KaiXAPIClient.shared.listingsPage(
+                    type: listingType,
+                    citySlug: scope.citySlug,
+                    regionCode: scope.regionCode,
+                    regionCodes: scope.regionCodes,
+                    countryCode: scope.countryCode,
+                    query: query,
+                    cursor: cursor
+                )
+                fetched = page.items
+                nextCursor = page.nextCursor
+            }
+            let existing = Set(items.map(\.id))
+            items += fetched.filter { !existing.contains($0.id) }
+        } catch {
+            // Quietly stop paging on error; pull-to-refresh recovers.
+            nextCursor = nil
+            nextHiringCursor = nil
         }
     }
 
@@ -3781,6 +3844,68 @@ private enum KXListingCopy {
         case "local_service": ["全部", "搬家", "签证", "维修", "翻译", "接送", "清洁"]
         case "discount": ["全部", "餐饮", "学校", "服务", "购物", "限时"]
         default: ["全部", "家具", "家电", "电子产品", "教材", "生活用品", "搬家出清", "免费送", "求购"]
+        }
+    }
+
+    /// Display-only ja/en labels for category values. The zh string is the
+    /// CANONICAL wire/storage format (listings store and filter by it —
+    /// mirrors `CATEGORY_LABELS` in web ListingKit.tsx), so only the label
+    /// localizes; the value sent to the API never changes. Unknown
+    /// (user-typed) categories fall back to the raw value.
+    private static let categoryLabels: [String: (ja: String, en: String)] = [
+        "全部": ("すべて", "All"),
+        "家具": ("家具", "Furniture"),
+        "家电": ("家電", "Appliances"),
+        "电子产品": ("電子機器", "Electronics"),
+        "教材": ("教材", "Textbooks"),
+        "衣物": ("衣類", "Clothing"),
+        "生活用品": ("生活用品", "Daily goods"),
+        "搬家出清": ("引越し処分", "Moving sale"),
+        "免费送": ("無料譲渡", "Free giveaway"),
+        "求购": ("買います", "Wanted"),
+        "单人": ("一人暮らし", "Single"),
+        "合租": ("ルームシェア", "Roomshare"),
+        "短租": ("短期", "Short-term"),
+        "整租": ("まるごと賃貸", "Entire place"),
+        "家具家电": ("家具家電付き", "Furnished"),
+        "近车站": ("駅近", "Near station"),
+        "兼职": ("アルバイト", "Part-time"),
+        "全职": ("正社員", "Full-time"),
+        "派遣": ("派遣", "Temp agency"),
+        "实习": ("インターン", "Internship"),
+        "时给": ("時給", "Hourly pay"),
+        "月给": ("月給", "Monthly pay"),
+        "N3 可": ("N3可", "N3 OK"),
+        "无经验可": ("未経験OK", "No experience"),
+        "留学生可": ("留学生OK", "Students OK"),
+        "签证支持": ("ビザサポート", "Visa support"),
+        "周末": ("週末", "Weekend"),
+        "搬家": ("引越し", "Moving"),
+        "签证": ("ビザ", "Visa"),
+        "维修": ("修理", "Repair"),
+        "翻译": ("翻訳", "Translation"),
+        "接送": ("送迎", "Pickup"),
+        "清洁": ("清掃", "Cleaning"),
+        "认证服务": ("認定サービス", "Verified services"),
+        "餐饮": ("飲食", "Dining"),
+        "学校": ("学校", "Schools"),
+        "服务": ("サービス", "Services"),
+        "购物": ("ショッピング", "Shopping"),
+        "限时": ("期間限定", "Limited-time"),
+        "生活": ("生活", "Living"),
+        "学习": ("学習", "Study"),
+        "今天": ("今日", "Today"),
+        "本周": ("今週", "This week"),
+        "免费": ("無料", "Free"),
+    ]
+
+    static func categoryLabel(_ value: String, _ language: AppLanguage) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let entry = categoryLabels[trimmed] else { return value }
+        switch language {
+        case .ja: return entry.ja
+        case .en: return entry.en
+        default:  return value
         }
     }
 
