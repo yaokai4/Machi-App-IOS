@@ -72,11 +72,11 @@ struct MyWorkbenchView: View {
 
     private var publishSection: some View {
         SettingsSectionCard(title: "发布与交易") {
-            SettingsRowLink(icon: "plus.circle.fill", tint: KXColor.accent, title: "发布城市信息", subtitle: "二手、租房、招聘和本地服务") {
+            SettingsRowLink(icon: "plus.circle.fill", tint: KXColor.accent, title: "发布城市信息", subtitle: "二手、租房、工作、商家与本地服务") {
                 CreateCityListingView(listingType: "secondhand", citySlug: currentRegionCode, currentUser: currentUser)
             }
             SettingsDivider()
-            SettingsRowLink(icon: "shippingbox.fill", tint: .teal, title: "我的城市发布", subtitle: "管理二手、租房、招聘和服务信息") {
+            SettingsRowLink(icon: "shippingbox.fill", tint: .teal, title: "我的城市发布", subtitle: "管理二手、租房、工作、商家服务和优惠") {
                 MyCityListingsView(currentUser: currentUser)
             }
             SettingsDivider()
@@ -128,8 +128,8 @@ struct MyWorkbenchView: View {
     }
 
     private var serviceSection: some View {
-        SettingsSectionCard(title: "商家/发布者") {
-            SettingsRowLink(icon: "storefront", tint: .teal, title: L("becomeMerchant", language), value: currentUser.merchantVerified ? L("merchantVerified", language) : (currentUser.isMerchant ? L("merchantPending", language) : ""), subtitle: L("merchantStatusNone", language)) {
+        SettingsSectionCard(title: "商家服务后台") {
+            SettingsRowLink(icon: "storefront", tint: .teal, title: "认证商家服务", value: currentUser.merchantVerified ? L("merchantVerified", language) : (currentUser.isMerchant ? L("merchantPending", language) : ""), subtitle: "申请认证、上传资质、查看经营数据和审核状态") {
                 MerchantSettingsView(currentUser: currentUser)
             }
             SettingsDivider()
@@ -141,7 +141,7 @@ struct MyWorkbenchView: View {
                 CreateCityListingView(listingType: "rental", citySlug: currentRegionCode, currentUser: currentUser)
             }
             SettingsDivider()
-            SettingsRowLink(icon: "wrench.and.screwdriver.fill", tint: .brown, title: "服务发布", subtitle: "发布翻译、手续、接机和本地服务") {
+            SettingsRowLink(icon: "wrench.and.screwdriver.fill", tint: .brown, title: "商家与本地服务发布", subtitle: "点评、预约、酒店民宿、景点票务、接送机和生活服务") {
                 CreateCityListingView(listingType: "local_service", citySlug: currentRegionCode, currentUser: currentUser)
             }
             SettingsDivider()

@@ -82,6 +82,7 @@ struct GuideHomeView: View {
                         GuideZoneSection(country: country, title: "日本升学专区", subtitle: "大学院、研究计划书、教授联系与出愿", categoryKey: "study_japan")
                         GuideZoneSection(country: country, title: "语言学校与留学专区", subtitle: "语言学校、签证、入境与费用", categoryKey: "study_abroad_japan")
                         GuideZoneSection(country: country, title: "日语考级专区", subtitle: "JLPT 备考、词汇语法与学习计划", categoryKey: "jlpt")
+                        GuideZoneSection(country: country, title: "在日生活专区", subtitle: "役所手续、租房、手机银行卡、医疗与防灾", categoryKey: "life_japan")
                         GuideSchoolsSection(schools: home.featuredSchools ?? [], disclaimer: home.schoolDisclaimer)
                         GuideProductsSection(products: home.featuredProducts + home.featuredServices)
                         GuideCompaniesSection(companies: home.companyHighlights, disclaimer: home.companyDisclaimer ?? home.reviewDisclaimer)
@@ -107,6 +108,8 @@ struct GuideCategoryView: View {
     @State private var products: [KaiXGuideProductDTO] = []
     @State private var selectedSubCategory = ""
     @State private var isLoading = true
+    @State private var isRefreshing = false
+    @State private var hasLoadedContent = false
     @State private var errorMessage: String?
 
     let categoryKey: String
@@ -119,9 +122,9 @@ struct GuideCategoryView: View {
             GuideBackground()
             if country != "jp" {
                 GuideComingSoonView()
-            } else if isLoading {
+            } else if isLoading && !hasLoadedContent {
                 LoadingView()
-            } else if let errorMessage {
+            } else if let errorMessage, !hasLoadedContent {
                 ErrorStateView(message: errorMessage) {
                     Task { await load() }
                 }
@@ -130,6 +133,12 @@ struct GuideCategoryView: View {
                     LazyVStack(alignment: .leading, spacing: 16) {
                         categoryHeader
                         subCategoryTabs
+                        if isRefreshing {
+                            GuideRefreshIndicator()
+                        }
+                        if let errorMessage, hasLoadedContent {
+                            GuideInlineStatus(message: "更新失败：\(errorMessage)")
+                        }
                         if !products.isEmpty {
                             GuideProductsSection(
                                 products: products,
@@ -156,7 +165,7 @@ struct GuideCategoryView: View {
         }
         .navigationTitle(category?.title ?? "日本指南")
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: categoryKey + selectedSubCategory) {
+        .task(id: "\(categoryKey):\(selectedSubCategory)") {
             await load()
         }
     }
@@ -206,9 +215,17 @@ struct GuideCategoryView: View {
 
     private func load() async {
         guard country == "jp" else { return }
-        isLoading = true
+        let firstLoad = !hasLoadedContent
+        if firstLoad {
+            isLoading = true
+        } else {
+            isRefreshing = true
+        }
         errorMessage = nil
-        defer { isLoading = false }
+        defer {
+            isLoading = false
+            isRefreshing = false
+        }
         do {
             let categoryData = try await KaiXAPIClient.shared.guideCategories(country: country)
             let articleData = try await KaiXAPIClient.shared.guideArticles(
@@ -225,9 +242,40 @@ struct GuideCategoryView: View {
             categories = categoryData.categories
             articles = articleData.items
             products = productData.items
+            hasLoadedContent = true
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+}
+
+private struct GuideRefreshIndicator: View {
+    var body: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .scaleEffect(0.72)
+            Text("正在更新内容")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 34)
+        .background(KXColor.softBackground.opacity(0.72), in: Capsule())
+    }
+}
+
+private struct GuideInlineStatus: View {
+    let message: String
+
+    var body: some View {
+        Text(message)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(KXColor.heat)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(KXColor.heat.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 
@@ -2309,7 +2357,7 @@ private struct GuideCategoryGrid: View {
 
     var body: some View {
         if !categories.isEmpty {
-            GuideSectionHeader(title: "核心分类", subtitle: "升学、就职、留学、日语、生活、资料与服务")
+            GuideSectionHeader(title: "核心分类", subtitle: "升学、就职、留学、日语、生活与核心资料库")
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                 ForEach(categories) { category in
                     GuideCategoryCard(category: category)
@@ -2499,28 +2547,31 @@ private struct GuideProductsSection: View {
 }
 
 /// The two permanent doors of the Guide tab: everything entitled by the
-/// membership lives behind 会员专区, everything purchasable lives behind
-/// 资料商城. Side-by-side tiles so the split is legible at a glance.
+/// membership lives behind 会员专区, while templates and human help live behind
+/// 资料与服务. Side-by-side tiles so the split is legible at a glance.
 private struct GuideDualEntrySection: View {
     @EnvironmentObject private var router: AppRouter
 
     var body: some View {
-        HStack(spacing: 10) {
-            entryTile(
-                icon: "crown.fill",
-                tint: KXColor.accent,
-                title: "会员专区",
-                subtitle: "30+ 清单模板资料\n会员免费查看"
-            ) {
-                router.open(.guideMemberResources)
-            }
-            entryTile(
-                icon: "bag.fill",
-                tint: .orange,
-                title: "资料商城",
-                subtitle: "付费资料与人工服务\n按需单独购买"
-            ) {
-                router.open(.guideServices)
+        VStack(alignment: .leading, spacing: 10) {
+            GuideSectionHeader(title: "会员与商城", subtitle: "会员专属资料、原创资料包、模板与人工服务统一入口")
+            HStack(spacing: 10) {
+                entryTile(
+                    icon: "crown.fill",
+                    tint: KXColor.accent,
+                    title: "会员专区",
+                    subtitle: "清单模板资料\n会员权益内容"
+                ) {
+                    router.open(.guideMemberResources)
+                }
+                entryTile(
+                    icon: "bag.fill",
+                    tint: .orange,
+                    title: "资料商城",
+                    subtitle: "资料包与人工服务\n按需购买预约"
+                ) {
+                    router.open(.guideServices)
+                }
             }
         }
     }

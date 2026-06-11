@@ -162,11 +162,12 @@ extension SystemNotificationService: UNUserNotificationCenterDelegate {
         var payload: [String: Any] = [:]
         if let postId = userInfo["postId"] as? String { payload["postId"] = postId }
         if let conversationId = userInfo["conversationId"] as? String { payload["conversationId"] = conversationId }
+        let finalPayload = payload
         await MainActor.run {
             NotificationCenter.default.post(
                 name: .kaiXSystemNotificationTapped,
                 object: nil,
-                userInfo: payload.isEmpty ? nil : payload
+                userInfo: finalPayload.isEmpty ? nil : finalPayload
             )
         }
     }

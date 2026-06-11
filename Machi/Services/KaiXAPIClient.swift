@@ -565,6 +565,26 @@ final class KaiXAPIClient {
         return response.items
     }
 
+    func businessProfile() async throws -> KaiXBusinessProfileResponse {
+        let data = try await request("GET", "/api/business/profile")
+        return try decode(data)
+    }
+
+    func saveBusinessApplication(_ application: KaiXBusinessApplicationPayload) async throws -> KaiXBusinessSaveResponse {
+        let data = try await request(
+            "POST",
+            "/api/business/application",
+            body: application,
+            idempotencyKey: "business-application-\(UUID().uuidString)"
+        )
+        return try decode(data)
+    }
+
+    func businessDashboard() async throws -> KaiXBusinessDashboardDTO {
+        let data = try await request("GET", "/api/business/dashboard")
+        return try decode(data)
+    }
+
     /// My membership payment orders, newest first.
     func membershipOrders() async throws -> [KaiXPaymentOrderDTO] {
         struct Response: Decodable { let items: [KaiXPaymentOrderDTO] }
@@ -670,9 +690,24 @@ final class KaiXAPIClient {
             body: InquiryBody(message: message, details: details),
             idempotencyKey: "listing-inquiry-\(UUID().uuidString)"
         )
-        struct InquiryResponse: Decodable { let conversation_id: String? }
+        struct InquiryResponse: Decodable {
+            let conversation_id: String?
+            let conversationId: String?
+            let conversation: KaiXConversationDTO?
+            let data: Nested?
+
+            struct Nested: Decodable {
+                let conversation_id: String?
+                let conversationId: String?
+            }
+        }
         let resp: InquiryResponse? = try? decode(data)
-        return resp?.conversation_id ?? ""
+        return resp?.conversation_id
+            ?? resp?.conversationId
+            ?? resp?.conversation?.id
+            ?? resp?.data?.conversation_id
+            ?? resp?.data?.conversationId
+            ?? ""
     }
 
     // MARK: - Machi Guide / 日本指南
@@ -1399,6 +1434,28 @@ final class KaiXAPIClient {
 }
 
 // MARK: - tiny encoder helpers
+
+struct KaiXBusinessApplicationPayload: Encodable {
+    let business_name: String
+    let business_type: String
+    let legal_name: String
+    let representative_name: String
+    let registration_number: String
+    let country_code: String
+    let city_slug: String
+    let phone: String
+    let email: String
+    let website: String
+    let address: String
+    let postal_code: String
+    let contact_method: String
+    let description: String
+    let application_note: String
+    let service_categories: [String]
+    let service_cities: [String]
+    let uploadedFileIds: [String]
+    let submit: Bool
+}
 
 /// `AnyEncodable` lets us forward heterogeneous dictionaries (`[String: Any]`)
 /// to JSONEncoder without forcing the caller to declare a full struct.

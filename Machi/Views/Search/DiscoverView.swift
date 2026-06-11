@@ -379,10 +379,10 @@ struct DiscoverView: View {
     }
 
     private static let primarySpecs: [DiscoverCategorySpec] = [
-        .init(id: "secondhand", title: "二手市场", subtitle: "闲置、求购、搬家出清", icon: "bag", types: [.secondhand], channel: .secondhand, tint: Color.green),
-        .init(id: "housing", title: "租房", subtitle: "合租、短租、房源信息", icon: "house", types: [.housing, .roommate], channel: .housing, tint: Color.blue),
-        .init(id: "work", title: "工作", subtitle: "兼职、全职、招聘", icon: "briefcase", types: [.job_seek, .job_post, .referral], channel: .jobPost, tint: KXColor.rankViolet),
-        .init(id: "service", title: "本地服务", subtitle: "翻译、手续、接机、生活支持", icon: "wrench.and.screwdriver", types: [.service, .merchant], channel: .service, tint: Color.brown),
+        .init(id: "secondhand", title: "二手市场", subtitle: "闲鱼 / Mercari 式闲置交易", icon: "bag", types: [.secondhand], channel: .secondhand, tint: Color.green),
+        .init(id: "housing", title: "租房", subtitle: "安居客 / SUUMO 式找房", icon: "house", types: [.housing, .roommate], channel: .housing, tint: Color.blue),
+        .init(id: "work", title: "工作", subtitle: "BOSS / Indeed 式机会", icon: "briefcase", types: [.job_seek, .job_post, .referral], channel: .jobPost, tint: KXColor.rankViolet),
+        .init(id: "service", title: "商家与本地服务", subtitle: "点评、预约、酒店景点和生活支持", icon: "storefront", types: [.service, .merchant], channel: .service, tint: Color.brown),
     ]
 
     private static let extendedSpecs: [DiscoverCategorySpec] = [
@@ -399,6 +399,8 @@ struct DiscoverView: View {
         .init(id: "food", title: "Food meetup", subtitle: "餐厅、咖啡和小型饭局", icon: "fork.knife", types: [.dining], channel: .dining, tint: KXColor.rankCoral),
         .init(id: "localgroup", title: "本地小组", subtitle: "运动、周末活动、城市散步", icon: "calendar", types: [.event, .meetup], channel: .event, tint: Color.purple),
         .init(id: "merchant", title: "商家", subtitle: "本地店铺和服务商资料", icon: "storefront", types: [.merchant], channel: .service, tint: Color.teal),
+        .init(id: "travel_stays", title: "旅行住宿", subtitle: "酒店、民宿、接送机和行程", icon: "bed.double", types: [.service, .merchant], channel: .service, tint: Color.cyan),
+        .init(id: "attractions", title: "景点票务", subtitle: "门票、一日游和本地向导", icon: "ticket", types: [.service, .merchant], channel: .service, tint: Color.mint),
         .init(id: "verified_merchant", title: "认证商家", subtitle: "已提交认证资料的商家", icon: "checkmark.seal", types: [.merchant], channel: .service, tint: Color.teal),
         .init(id: "poll", title: "投票", subtitle: "选项投票", icon: "chart.bar", types: [.poll], channel: .dynamic, tint: Color.blue),
         .init(id: "longpost", title: "长文", subtitle: "作为内容形式使用", icon: "doc.text", types: [.long_post], channel: .guide, tint: Color.gray),
@@ -521,12 +523,24 @@ private struct DiscoverCategory: Identifiable, Hashable {
             "rental"
         case "work", "jobseek", "jobpost", "referral":
             "work"
-        case "service", "merchant", "verified_merchant":
+        case "service", "merchant", "travel_stays", "attractions", "verified_merchant":
             "local_service"
         case "coupon":
             "discount"
         default:
             nil
+        }
+    }
+
+    var heroTags: [String] {
+        switch id {
+        case "secondhand": return ["估价", "求购", "面交安全"]
+        case "housing": return ["通勤", "看房预约", "房源核验"]
+        case "work": return ["薪资", "签证", "雇主认证"]
+        case "service": return ["点评", "预约", "酒店景点"]
+        case "travel_stays": return ["酒店", "民宿", "接送机"]
+        case "attractions": return ["门票", "一日游", "向导"]
+        default: return []
         }
     }
 }
@@ -607,7 +621,7 @@ private struct DiscoverCategoryGrid: View {
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 4) {
                         DiscoverSectionTitle(title: "城市功能入口", trailing: nil)
-                        Text("二手、租房、工作和本地服务各自独立，入口清晰，发布和筛选都围绕真实场景。")
+                        Text("二手、租房、工作、商家与本地服务各自独立：交易、看房、求职、预约点评都按真实场景展开。")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 2)
@@ -659,7 +673,7 @@ private struct DiscoverCategoryCell: View {
                 .frame(width: prominence == .high ? 42 : 36, height: prominence == .high ? 42 : 36)
                 .background(category.tint.opacity(0.10), in: RoundedRectangle(cornerRadius: prominence == .high ? 14 : 11, style: .continuous))
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: prominence == .high ? 7 : 3) {
                 Text(category.title)
                     .font((prominence == .high ? Font.headline : Font.subheadline).weight(.bold))
                     .foregroundStyle(.primary)
@@ -670,6 +684,18 @@ private struct DiscoverCategoryCell: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
+                if prominence == .high, !category.heroTags.isEmpty {
+                    HStack(spacing: 5) {
+                        ForEach(category.heroTags.prefix(3), id: \.self) { tag in
+                            Text(tag)
+                                .font(.caption2.weight(.black))
+                                .foregroundStyle(category.tint)
+                                .padding(.horizontal, 6)
+                                .frame(height: 20)
+                                .background(category.tint.opacity(0.10), in: Capsule())
+                        }
+                    }
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -680,7 +706,19 @@ private struct DiscoverCategoryCell: View {
             }
         }
         .padding(.horizontal, KXSpacing.md)
-        .frame(maxWidth: .infinity, minHeight: prominence == .high ? 104 : 78, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: prominence == .high ? 122 : 78, alignment: .leading)
+        .background {
+            if prominence == .high {
+                RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [category.tint.opacity(0.12), Color(.systemBackground).opacity(0.92)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+        }
         .kxGlassSurface(radius: KXRadius.lg, elevated: prominence == .high)
     }
 }
@@ -743,7 +781,7 @@ private struct MoreChannelSheet: View {
             ("交易生活", ["secondhand", "housing", "coupon"]),
             ("机会工作", ["jobseek", "jobpost", "referral"]),
             ("本地连接", ["groups", "language", "food", "localgroup"]),
-            ("服务商家", ["service", "merchant", "verified_merchant"]),
+            ("服务商家", ["service", "merchant", "travel_stays", "attractions", "verified_merchant"]),
             ("内容工具", ["poll", "longpost", "anonymous"]),
         ]
     }
@@ -2325,11 +2363,15 @@ struct CityListingDetailView: View {
         .toolbar(.hidden, for: .navigationBar)
         .task(id: listingId) { await load() }
         .sheet(isPresented: $intakeOpen) {
-            if let listing {
-                ListingIntakeSheet(listingTitle: KXListingCopy.displayTitle(listing), listingType: listing.type, submitting: isBusy) { message, details in
-                    Task { await submitInquiry(message: message, details: details) }
+            Group {
+                if let listing {
+                    ListingIntakeSheet(listingTitle: KXListingCopy.displayTitle(listing), listingType: listing.type, submitting: isBusy) { message, details in
+                        Task { await submitInquiry(message: message, details: details) }
+                    }
                 }
             }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
     }
 
@@ -2438,22 +2480,7 @@ struct CityListingDetailView: View {
                         .padding(.horizontal, 2)
                 }
 
-                HStack(spacing: 10) {
-                    Button { intakeOpen = true } label: {
-                        Label(isBusy ? "处理中" : ListingIntakeSpec.forType(listing.type).title, systemImage: "message")
-                            .font(.subheadline.weight(.bold))
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(isBusy)
-                    Button { Task { await report() } } label: {
-                        Label("举报", systemImage: "flag")
-                            .font(.subheadline.weight(.bold))
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(isBusy)
-                }
+                contactPanel(listing)
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
             .padding(.top, 14)
@@ -2487,6 +2514,112 @@ struct CityListingDetailView: View {
         .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
+    private func contactPanel(_ listing: KaiXCityListingDTO) -> some View {
+        let spec = ListingIntakeSpec.forType(listing.type)
+        let ownListing = isOwnListing(listing)
+        return KXListingSection(title: "联系与交易", icon: "message.badge") {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: ownListing ? "person.crop.circle.badge.checkmark" : "bubble.left.and.bubble.right.fill")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(ownListing ? .secondary : KXColor.accent)
+                        .frame(width: 38, height: 38)
+                        .background((ownListing ? Color.secondary : KXColor.accent).opacity(0.12), in: Circle())
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(ownListing ? "这是你的发布" : "通过 Machi 私信联系发布者")
+                            .font(.subheadline.weight(.bold))
+                        Text(ownListing ? "自己的发布不能发起咨询，可以在我的发布中管理状态。" : "提交后会开启真实对话，发布者会收到商品和表单信息。")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
+                }
+
+                Button { intakeOpen = true } label: {
+                    Label(isBusy ? "处理中" : spec.title, systemImage: "message.fill")
+                        .font(.subheadline.weight(.black))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 13)
+                        .background(ownListing ? Color.secondary.opacity(0.16) : KXColor.accent, in: Capsule())
+                        .foregroundStyle(ownListing ? Color.secondary : Color.white)
+                }
+                .buttonStyle(.plain)
+                .disabled(isBusy || ownListing)
+
+                if listing.type == "secondhand", !ownListing {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                        ForEach(quickInquiries(for: listing)) { item in
+                            Button {
+                                Task { await submitInquiry(message: item.message, details: item.details) }
+                            } label: {
+                                Text(item.title)
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(KXColor.accent)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 36)
+                                    .background(KXColor.accent.opacity(0.10), in: Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(isBusy)
+                        }
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    Button { Task { await report() } } label: {
+                        Label("举报异常", systemImage: "flag")
+                            .font(.caption.weight(.bold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 36)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(isBusy)
+                    Text("不要提前转账，建议公共场所交易。")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+    }
+
+    private func isOwnListing(_ listing: KaiXCityListingDTO) -> Bool {
+        let sellerId = listing.seller_user_id ?? listing.sellerUserId ?? ""
+        return listing.can_manage == true || listing.canManage == true || sellerId == currentUser.id
+    }
+
+    private func quickInquiries(for listing: KaiXCityListingDTO) -> [ListingQuickInquiry] {
+        let title = KXListingCopy.displayTitle(listing)
+        let location = listing.location_text ?? listing.locationText ?? ""
+        return [
+            ListingQuickInquiry(
+                id: "available",
+                title: "还在吗？",
+                message: "你好，我想确认「\(title)」还可以交易吗？",
+                details: [["label": "咨询内容", "value": "确认是否仍可交易"]]
+            ),
+            ListingQuickInquiry(
+                id: "meetup",
+                title: "约自取",
+                message: "你好，我想预约自取「\(title)」，方便的话请告诉我可交易时间。",
+                details: [["label": "希望交易方式", "value": "自取 / 面交"], ["label": "希望地点", "value": location]]
+            ),
+            ListingQuickInquiry(
+                id: "condition",
+                title: "问瑕疵",
+                message: "你好，我想了解「\(title)」的使用痕迹、配件和是否有瑕疵。",
+                details: [["label": "咨询内容", "value": "确认状态、配件和瑕疵"]]
+            ),
+            ListingQuickInquiry(
+                id: "price",
+                title: "可议价吗？",
+                message: "你好，我对「\(title)」感兴趣，想问一下价格是否可以商量。",
+                details: [["label": "咨询内容", "value": "价格是否可商量"]]
+            ),
+        ]
+    }
+
     private func load() async {
         isLoading = true
         errorMessage = nil
@@ -2513,6 +2646,10 @@ struct CityListingDetailView: View {
 
     private func submitInquiry(message: String, details: [[String: String]]) async {
         guard let listing else { return }
+        guard !isOwnListing(listing) else {
+            actionMessage = "不能咨询自己发布的信息。"
+            return
+        }
         isBusy = true
         defer { isBusy = false }
         do {
@@ -2545,6 +2682,13 @@ struct CityListingDetailView: View {
             actionMessage = error.localizedDescription
         }
     }
+}
+
+private struct ListingQuickInquiry: Identifiable {
+    let id: String
+    let title: String
+    let message: String
+    let details: [[String: String]]
 }
 
 private struct ListingIntakeField: Identifiable, Equatable {
@@ -2603,8 +2747,10 @@ private struct ListingIntakeSpec {
                 noteLabel: "具体需求",
                 fields: [
                     ListingIntakeField("city", label: "服务城市", required: true),
+                    ListingIntakeField("service_scene", label: "服务场景", options: ["到店预约", "酒店民宿", "景点门票", "一日游", "接送机", "翻译手续", "维修安装"]),
                     ListingIntakeField("date", label: "希望日期", placeholder: "例如 6 月 12 日"),
                     ListingIntakeField("time", label: "希望时段", options: ["上午", "下午", "晚上", "周末"]),
+                    ListingIntakeField("people", label: "人数/件数", placeholder: "例如 2 人 / 3 件行李 / 1 套资料"),
                     ListingIntakeField("contact", label: "联系方式", placeholder: "微信 / LINE / 电话", required: true),
                 ]
             )
@@ -2617,9 +2763,18 @@ private struct ListingIntakeSpec {
                 ListingIntakeField("contact", label: "联系方式", placeholder: "微信 / LINE / 电话", required: true),
             ])
         default:
-            return ListingIntakeSpec(title: "联系卖家", actionWord: "咨询", noteLabel: "留言", fields: [
-                ListingIntakeField("contact", label: "联系方式", placeholder: "微信 / LINE / 电话"),
-            ])
+            return ListingIntakeSpec(
+                title: "联系卖家",
+                actionWord: "咨询",
+                noteLabel: "补充留言",
+                fields: [
+                    ListingIntakeField("intent", label: "咨询意向", options: ["想购买", "想议价", "想看实物", "想预约自取", "询问是否还在"], required: true),
+                    ListingIntakeField("meetup", label: "希望交易地点", placeholder: "例如 新宿站 / 池袋 / 可线上确认"),
+                    ListingIntakeField("available_time", label: "可交易时间", placeholder: "例如 今天晚上 / 周末下午 / 平日 19:00 后", required: true),
+                    ListingIntakeField("delivery", label: "交易方式", options: ["自取 / 面交", "希望邮寄", "都可以"]),
+                    ListingIntakeField("contact", label: "联系方式", placeholder: "微信 / LINE / 电话", required: true),
+                ]
+            )
         }
     }
 }
@@ -2652,6 +2807,8 @@ private struct ListingIntakeSheet: View {
                             .lineLimit(2)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+                    .kxGlassSurface(radius: 20)
 
                     ForEach(spec.fields) { field in
                         intakeField(field)
@@ -2663,8 +2820,12 @@ private struct ListingIntakeSheet: View {
                             .foregroundStyle(.secondary)
                         TextField("补充说明（选填）", text: $note, axis: .vertical)
                             .lineLimit(3...6)
-                            .textFieldStyle(.roundedBorder)
+                            .font(.subheadline.weight(.semibold))
+                            .padding(12)
+                            .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     }
+                    .padding(12)
+                    .background(KXColor.softBackground.opacity(0.62), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
 
                     if let errorMessage {
                         Text(errorMessage)
@@ -2676,6 +2837,8 @@ private struct ListingIntakeSheet: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(KXColor.heat)
                         .fixedSize(horizontal: false, vertical: true)
+                        .padding(12)
+                        .background(KXColor.heat.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
 
                     Button(action: submit) {
                         HStack {
@@ -2710,7 +2873,10 @@ private struct ListingIntakeSheet: View {
                 .foregroundStyle(.secondary)
             if field.options.isEmpty {
                 TextField(field.placeholder.isEmpty ? field.label : field.placeholder, text: binding(for: field))
-                    .textFieldStyle(.roundedBorder)
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 42)
+                    .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             } else {
                 Picker(field.label, selection: binding(for: field)) {
                     Text("请选择").tag("")
@@ -2721,10 +2887,12 @@ private struct ListingIntakeSheet: View {
                 .pickerStyle(.menu)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
+                .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
         }
+        .padding(12)
+        .background(KXColor.softBackground.opacity(0.62), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     private func binding(for field: ListingIntakeField) -> Binding<String> {
@@ -2791,6 +2959,11 @@ struct CreateCityListingView: View {
     @State private var location = ""
     @State private var description = ""
     @State private var condition = "良好"
+    @State private var brandModel = ""
+    @State private var secondhandAvailableTime = ""
+    @State private var secondhandPickupNotes = ""
+    @State private var pickupAvailable = true
+    @State private var secondhandShippingAvailable = false
     @State private var layout = "1K"
     @State private var area = ""
     @State private var station = ""
@@ -2799,13 +2972,12 @@ struct CreateCityListingView: View {
     @State private var japaneseLevel = "N3"
     @State private var workingHours = ""
     @State private var companyName = ""
-    @State private var foreignersAllowed = true
     @State private var shareAllowed = false
     @State private var shortTermAllowed = false
     @State private var furnished = false
     @State private var visaSupport = false
     @State private var serviceBusinessName = ""
-    @State private var serviceType = "翻译"
+    @State private var serviceType = "翻译手续"
     @State private var serviceArea = ""
     @State private var priceUnit = "预约咨询"
     @State private var availability = ""
@@ -3196,13 +3368,13 @@ struct CreateCityListingView: View {
             KXListingSection(title: "服务预约字段", icon: "calendar.badge.clock") {
                 VStack(spacing: 12) {
                     KXListingFormField(title: "服务方名称", placeholder: "个人 / 店铺 / 公司名称", icon: "person.crop.square", text: $serviceBusinessName)
-                    KXListingChoiceRow(title: "服务类型", icon: "wrench.and.screwdriver", options: ["翻译", "役所手续", "接机", "搬家", "维修", "清洁", "履历书修改", "租房申请协助"], selection: $serviceType, tint: typeAccent)
-                    KXListingFormField(title: "服务范围", placeholder: "东京 23 区 / 线上 / 仙台市内", icon: "map", text: $serviceArea)
+                    KXListingChoiceRow(title: "服务类型", icon: "wrench.and.screwdriver", options: ["餐饮点评", "优惠预约", "酒店民宿", "景点门票", "一日游", "接送机", "翻译手续", "搬家清洁", "维修安装", "租房申请协助", "本地向导"], selection: $serviceType, tint: typeAccent)
+                    KXListingFormField(title: "服务范围", placeholder: "东京 23 区 / 成田机场 / 富士山一日游 / 线上", icon: "map", text: $serviceArea)
                     KXListingFormField(title: "价格单位", placeholder: "每小时 / 每次 / 预约咨询", icon: "yensign.circle", text: $priceUnit)
                     KXListingFormField(title: "可预约时间", placeholder: "平日晚上 / 周末 / 需提前 2 天", icon: "calendar.badge.clock", text: $availability)
                     KXListingToggleChip(title: "认证服务方", icon: "checkmark.seal", isOn: $certifiedProvider, tint: typeAccent)
-                    KXListingFormField(title: "服务流程", placeholder: "写清沟通、准备材料、到场或线上服务步骤", icon: "list.bullet.clipboard", text: $serviceProcess, lineLimit: 3...6)
-                    KXListingFormField(title: "取消规则", placeholder: "例如 前一天可取消，临时取消需协商", icon: "arrow.uturn.left.circle", text: $cancellationRule, lineLimit: 2...5)
+                    KXListingFormField(title: "服务流程", placeholder: "写清预约、准备材料、到场、旅行/景点集合或线上服务步骤", icon: "list.bullet.clipboard", text: $serviceProcess, lineLimit: 3...6)
+                    KXListingFormField(title: "取消/退款规则", placeholder: "例如 前一天可取消，票务/酒店/一日游请写清不可退规则", icon: "arrow.uturn.left.circle", text: $cancellationRule, lineLimit: 2...5)
                 }
             }
         } else if listingType == "discount" {
@@ -3218,10 +3390,13 @@ struct CreateCityListingView: View {
         } else {
             KXListingSection(title: "交易字段", icon: "shippingbox") {
                 VStack(spacing: 12) {
+                    KXListingFormField(title: "品牌 / 型号", placeholder: "例如 Apple Magic Keyboard / IKEA 桌子", icon: "tag", text: $brandModel)
                     KXListingChoiceRow(title: "新旧程度", icon: "sparkles", options: ["全新", "几乎全新", "良好", "有使用痕迹"], selection: $condition, tint: typeAccent)
+                    KXListingFormField(title: "可交易时间", placeholder: "例如 平日 19:00 后 / 周末下午", icon: "calendar.badge.clock", text: $secondhandAvailableTime)
+                    KXListingFormField(title: "取货 / 邮寄说明", placeholder: "例如 新宿站面交，邮寄需买家承担运费", icon: "shippingbox", text: $secondhandPickupNotes, lineLimit: 2...4)
                     HStack(spacing: 10) {
-                        KXListingToggleChip(title: "自取 / 面交", icon: "person.2", isOn: $foreignersAllowed, tint: typeAccent)
-                        KXListingToggleChip(title: "可邮寄", icon: "shippingbox", isOn: $furnished, tint: typeAccent)
+                        KXListingToggleChip(title: "自取 / 面交", icon: "person.2", isOn: $pickupAvailable, tint: typeAccent)
+                        KXListingToggleChip(title: "可邮寄", icon: "shippingbox", isOn: $secondhandShippingAvailable, tint: typeAccent)
                     }
                     KXListingHintRow(text: "建议写清购买时间、瑕疵、是否含包装和交易地点，减少来回确认。", icon: "lightbulb", tint: typeAccent)
                 }
@@ -3402,10 +3577,13 @@ struct CreateCityListingView: View {
             ]
         }
         return [
+            "brand": .init(string: brandModel),
             "condition": .init(string: KXListingCopy.conditionKey(condition)),
-            "delivery_method": .init(string: foreignersAllowed ? "pickup" : "negotiable"),
-            "pickup_available": .init(bool: foreignersAllowed),
-            "shipping_available": .init(bool: furnished),
+            "available_time": .init(string: secondhandAvailableTime),
+            "pickup_note": .init(string: secondhandPickupNotes),
+            "delivery_method": .init(string: pickupAvailable ? (secondhandShippingAvailable ? "pickup_or_shipping" : "pickup") : (secondhandShippingAvailable ? "shipping" : "negotiable")),
+            "pickup_available": .init(bool: pickupAvailable),
+            "shipping_available": .init(bool: secondhandShippingAvailable),
         ]
     }
 }
@@ -3807,7 +3985,7 @@ private enum KXListingCopy {
         case "work":          (zh, ja, en) = ("工作", "求人", "Jobs")
         case "job":           (zh, ja, en) = ("找工作", "仕事を探す", "Find work")
         case "hiring":        (zh, ja, en) = ("招聘", "採用", "Hiring")
-        case "local_service": (zh, ja, en) = ("本地服务", "ローカルサービス", "Local services")
+        case "local_service": (zh, ja, en) = ("商家与本地服务", "店舗・地域サービス", "Businesses & local services")
         case "discount":      (zh, ja, en) = ("优惠", "クーポン", "Deals")
         case "event":         (zh, ja, en) = ("活动", "イベント", "Events")
         default:              (zh, ja, en) = ("二手市场", "フリマ", "Marketplace")
@@ -3825,7 +4003,7 @@ private enum KXListingCopy {
         case "work", "job", "hiring":
             (zh, ja, en) = ("职位库、薪资、日语要求和签证支持", "求人・給与・日本語レベル・ビザサポート", "Jobs, salary, Japanese level, visa support")
         case "local_service":
-            (zh, ja, en) = ("搬家、签证、维修等同城服务", "引越し・ビザ・修理などの地元サービス", "Moving, visa, repairs and more local services")
+            (zh, ja, en) = ("点评、预约、优惠、旅行住宿、景点和生活支持", "口コミ、予約、特典、宿泊、観光、生活サポート", "Reviews, bookings, deals, stays, attractions and local support")
         case "discount":
             (zh, ja, en) = ("本地商家优惠与精选活动", "地元店舗の特典と注目イベント", "Local merchant deals and featured events")
         default:
@@ -3876,8 +4054,11 @@ private enum KXListingCopy {
         "无经验可": ("未経験OK", "No experience OK"),
         "留学生可": ("留学生OK", "Students OK"),
         "服务类型": ("サービス種別", "Service type"),
+        "服务方": ("提供者", "Provider"),
+        "服务范围": ("対応範囲", "Service scope"),
         "可服务城市": ("対応エリア", "Service area"),
         "价格": ("価格", "Price"),
+        "起步价格": ("開始価格", "Starting price"),
         "价格单位": ("料金単位", "Price unit"),
         "可预约时间": ("予約可能時間", "Availability"),
         "不包含内容": ("含まれないもの", "Not included"),
@@ -3898,6 +4079,8 @@ private enum KXListingCopy {
         "交易地点": ("受け渡し場所", "Meetup location"),
         "交易方式": ("受け渡し方法", "Delivery method"),
         "品牌": ("ブランド", "Brand"),
+        "可交易时间": ("受け渡し可能時間", "Available time"),
+        "取货说明": ("受け渡しメモ", "Pickup note"),
     ]
 
     static func attributeLabel(_ zhLabel: String, _ language: AppLanguage) -> String {
@@ -3930,7 +4113,7 @@ private enum KXListingCopy {
         case "work", "job", "hiring":
             (zh, ja, en) = ("搜索职位、公司、地点、日语要求", "職種・会社・場所・日本語レベルを検索", "Search roles, companies, locations")
         case "local_service":
-            (zh, ja, en) = ("搜索搬家、签证、维修、本地服务", "引越し・ビザ・修理・サービスを検索", "Search moving, visa, repairs, services")
+            (zh, ja, en) = ("搜索餐饮点评、酒店民宿、景点门票、一日游、接送机、翻译手续", "飲食、宿泊、観光チケット、送迎、翻訳、手続きを検索", "Search dining, stays, attraction tickets, transfers, paperwork")
         case "discount":
             (zh, ja, en) = ("搜索优惠、商家、地区", "特典・店舗・エリアを検索", "Search deals, merchants, areas")
         default:
@@ -3943,7 +4126,7 @@ private enum KXListingCopy {
         switch type {
         case "rental": ["全部", "单人", "合租", "短租", "整租", "家具家电", "近车站"]
         case "work", "job", "hiring": ["全部", "兼职", "全职", "时给", "月给", "N3 可", "签证支持", "无经验可"]
-        case "local_service": ["全部", "搬家", "签证", "维修", "翻译", "接送", "清洁"]
+        case "local_service": ["全部", "餐饮点评", "优惠预约", "酒店民宿", "景点门票", "一日游", "接送机", "翻译手续", "搬家清洁", "维修安装", "认证服务"]
         case "discount": ["全部", "餐饮", "学校", "服务", "购物", "限时"]
         default: ["全部", "家具", "家电", "电子产品", "教材", "生活用品", "搬家出清", "免费送", "求购"]
         }
@@ -3988,6 +4171,15 @@ private enum KXListingCopy {
         "翻译": ("翻訳", "Translation"),
         "接送": ("送迎", "Pickup"),
         "清洁": ("清掃", "Cleaning"),
+        "餐饮点评": ("飲食口コミ", "Dining reviews"),
+        "优惠预约": ("予約特典", "Deals & booking"),
+        "酒店民宿": ("ホテル・民泊", "Hotels & stays"),
+        "景点门票": ("観光チケット", "Attraction tickets"),
+        "一日游": ("日帰りツアー", "Day trips"),
+        "接送机": ("空港送迎", "Airport transfer"),
+        "翻译手续": ("翻訳・手続き", "Translation & paperwork"),
+        "搬家清洁": ("引越し・清掃", "Moving & cleaning"),
+        "维修安装": ("修理・設置", "Repair & installation"),
         "认证服务": ("認定サービス", "Verified services"),
         "餐饮": ("飲食", "Dining"),
         "学校": ("学校", "Schools"),
@@ -4018,7 +4210,7 @@ private enum KXListingCopy {
         switch type {
         case "rental":               (zh, ja, en) = ("这里还没有房源", "まだ物件がありません", "No rentals yet")
         case "work", "job", "hiring": (zh, ja, en) = ("这里还没有工作信息", "まだ求人がありません", "No jobs yet")
-        case "local_service":        (zh, ja, en) = ("这里还没有本地服务", "まだサービスがありません", "No services yet")
+        case "local_service":        (zh, ja, en) = ("这里还没有商家与本地服务", "まだ店舗・地域サービスがありません", "No business or local services yet")
         case "discount":             (zh, ja, en) = ("这里还没有优惠", "まだ特典がありません", "No deals yet")
         default:                     (zh, ja, en) = ("这里还没有二手商品", "まだ出品がありません", "No items yet")
         }
@@ -4035,7 +4227,7 @@ private enum KXListingCopy {
         case "work", "job", "hiring":
             (zh, ja, en) = ("稍后查看新的同城工作机会。", "新しい求人をまた後でチェックしてください。", "Check back soon for new local jobs.")
         case "local_service":
-            (zh, ja, en) = ("认证服务方审核后会展示在这里。", "認証済みの提供者が審査後にここに表示されます。", "Verified providers appear here after review.")
+            (zh, ja, en) = ("认证商家、酒店民宿、景点票务、一日游、接送机和生活服务审核后会展示在这里。", "認証店舗、宿泊、観光チケット、日帰りツアー、送迎、生活サポートが審査後に表示されます。", "Verified merchants, stays, tickets, day trips, transfers and local support appear here after review.")
         case "discount":
             (zh, ja, en) = ("商家优惠审核后会展示在这里。", "店舗特典が審査後にここに表示されます。", "Merchant deals appear here after review.")
         default:
@@ -4049,7 +4241,7 @@ private enum KXListingCopy {
         case "rental": "发布房源"
         case "job": "发布求职信息"
         case "work", "hiring": "发布招聘"
-        case "local_service": "发布本地服务"
+        case "local_service": "发布商家与本地服务"
         case "discount": "发布优惠"
         default: "发布二手"
         }
@@ -4062,7 +4254,7 @@ private enum KXListingCopy {
         case "work", "job", "hiring":
             return "岗位、工作时间、日语要求和签证说明越清楚，越能减少无效沟通。"
         case "local_service":
-            return "服务范围、预约时间、价格单位和取消规则会影响审核与用户信任。"
+            return "服务范围、预约时间、价格单位、资质许可和取消规则会影响审核与用户信任。酒店、票务、旅行与景点服务请写清包含/不包含内容。"
         case "discount":
             return "优惠内容、有效期和使用规则需要明确，避免用户到店后产生误解。"
         default:
@@ -4082,7 +4274,7 @@ private enum KXListingCopy {
         switch type {
         case "rental": "类型，例如 单人 / 合租 / 短租"
         case "work", "job", "hiring": "行业或岗位分类"
-        case "local_service": "服务分类"
+        case "local_service": "服务分类，例如 酒店民宿 / 景点门票 / 接送机"
         case "discount": "优惠分类"
         default: "分类，例如 家具 / 家电 / 教材"
         }
@@ -4092,7 +4284,7 @@ private enum KXListingCopy {
         switch type {
         case "rental": "例如 池袋 1K 公寓，可预约看房"
         case "work", "job", "hiring": "例如 新宿咖啡店周末兼职"
-        case "local_service": "例如 东京役所手续陪同翻译"
+        case "local_service": "例如 东京周末一日游 / 机场接送 / 认证翻译服务"
         case "discount": "例如 留学生套餐 9 折"
         default: "例如 Apple Magic Keyboard 日文配列"
         }
@@ -4113,7 +4305,7 @@ private enum KXListingCopy {
         case "work", "job", "hiring":
             return "写清工作内容、薪资、排班、试用期、交通费和需要准备的材料。"
         case "local_service":
-            return "写清适合谁、服务包含什么、不包含什么，以及预约前需要准备的信息。"
+            return "写清适合谁、服务包含/不包含什么、预约规则、旅行/景点说明、取消退款规则，以及预约前需要准备的信息。"
         case "discount":
             return "写清适用门店、适用人群、不可叠加条件和使用方式。"
         default:
@@ -4125,7 +4317,7 @@ private enum KXListingCopy {
         switch type {
         case "rental": "房源"
         case "work", "job", "hiring": "职位"
-        case "local_service": "本地服务"
+        case "local_service": "商家与本地服务"
         case "discount": "优惠"
         default: "二手"
         }
@@ -4331,7 +4523,7 @@ private enum KXListingCopy {
     }
 
     static func compactMeta(_ listing: KaiXCityListingDTO) -> String {
-        [cleanText(listing.location_text), attr(listing, "condition"), statusLabel(listing.status, type: listing.type)]
+        [cleanText(listing.location_text), attr(listing, "condition"), attr(listing, "available_time"), statusLabel(listing.status, type: listing.type)]
             .compactMap { $0?.isEmpty == false ? $0 : nil }
             .joined(separator: " · ")
     }
@@ -4382,7 +4574,9 @@ private enum KXListingCopy {
             if boolAttr(listing, "merchant_verified") || listing.verification_status == "verified" { result.append("认证商家") }
         default:
             if let condition = attr(listing, "condition") { result.append(condition) }
+            if boolAttr(listing, "pickup_available") { result.append("可自取") }
             if boolAttr(listing, "shipping_available") { result.append("可邮寄") }
+            if let time = attr(listing, "available_time") { result.append(time) }
         }
         return result
     }
@@ -4440,8 +4634,11 @@ private enum KXListingCopy {
                 ("价格", priceLabel(listing)),
                 ("地点", cleanText(listing.location_text)),
                 ("分类", cleanText(listing.category)),
+                ("品牌", attr(listing, "brand")),
                 ("新旧程度", attr(listing, "condition")),
+                ("可交易时间", attr(listing, "available_time")),
                 ("交易方式", attr(listing, "delivery_method")),
+                ("取货说明", attr(listing, "pickup_note")),
                 ("状态", statusLabel(listing.status, type: listing.type)),
             ]
         }
@@ -4459,7 +4656,7 @@ private enum KXListingCopy {
             return ["招聘不允许押金、保证金或培训费骗局", "核实招聘方身份、工作地点和签证支持说明", "警惕虚假高薪、违法兼职和灰产招聘", "遇到可疑内容立即举报"]
         }
         if type == "local_service" {
-            return ["本地服务默认进入审核，服务方认证状态会展示", "禁止成人服务、高风险线下服务和违法服务", "不要提前转账给未核验服务方", "预约前确认服务范围、取消规则和所需材料"]
+            return ["商家与本地服务默认进入审核，服务方认证状态会展示", "酒店、票务、旅行、接送机等服务需写清资质、包含/不包含内容和取消规则", "暂不开放外卖配送；禁止成人服务、高风险线下服务和违法服务", "不要提前转账给未核验服务方，预约前确认服务范围、取消规则和所需材料"]
         }
         if type == "discount" {
             return ["确认优惠有效期、适用门店和使用规则", "不要把个人敏感信息发给未核验商家", "遇到虚假折扣、诱导转账或强制消费立即举报"]
@@ -4544,6 +4741,7 @@ private enum KXListingCopy {
             case "pickup": return "自取"
             case "meetup": return "面交"
             case "shipping": return "邮寄"
+            case "pickup_or_shipping": return "自取或邮寄"
             case "negotiable": return "可商量"
             default: return value
             }

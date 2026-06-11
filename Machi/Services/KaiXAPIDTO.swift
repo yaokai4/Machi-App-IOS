@@ -269,6 +269,85 @@ struct KaiXListingInquiryDTO: Codable, Identifiable, Equatable {
     let to_user: KaiXUserDTO?
 }
 
+struct KaiXBusinessDocumentDTO: Codable, Identifiable, Equatable {
+    let id: String
+    let documentId: String?
+    let documentType: String?
+    let label: String?
+    let documentStatus: String?
+    let fileType: String?
+    let contentType: String?
+    let fileSize: Int?
+    let purpose: String?
+    let entityId: String?
+    let status: String?
+    let isPrivate: Bool?
+    let createdAt: String?
+}
+
+struct KaiXBusinessProfileDTO: Codable, Identifiable, Equatable {
+    let id: String
+    let owner_user_id: String?
+    let owner: KaiXUserDTO?
+    let business_name: String
+    let business_type: String
+    let legal_name: String?
+    let representative_name: String?
+    let registration_number: String?
+    let country_code: String?
+    let city_slug: String?
+    let verification_status: String
+    let application_status: String?
+    let contact_method: String?
+    let phone: String?
+    let email: String?
+    let website: String?
+    let address: String?
+    let postal_code: String?
+    let description: String?
+    let service_categories: [String]?
+    let service_cities: [String]?
+    let logo_url: String?
+    let cover_url: String?
+    let application_note: String?
+    let review_note: String?
+    let submitted_at: String?
+    let reviewed_at: String?
+    let created_at: String?
+    let updated_at: String?
+    let documents: [KaiXBusinessDocumentDTO]?
+    let document_count: Int?
+    let listing_count: Int?
+    let published_listing_count: Int?
+    let inquiry_count: Int?
+}
+
+struct KaiXBusinessProfileResponse: Codable {
+    let business: KaiXBusinessProfileDTO?
+    let status: String?
+}
+
+struct KaiXBusinessSaveResponse: Codable {
+    let ok: Bool?
+    let business: KaiXBusinessProfileDTO
+    let user: KaiXUserDTO?
+}
+
+struct KaiXBusinessDashboardDTO: Codable {
+    struct Metrics: Codable, Equatable {
+        let listings: Int
+        let published: Int
+        let inquiries: Int
+        let new_inquiries: Int
+        let favorites: Int
+        let views: Int
+    }
+    let business: KaiXBusinessProfileDTO?
+    let metrics: Metrics
+    let recent_listings: [KaiXCityListingDTO]
+    let recent_inquiries: [KaiXListingInquiryDTO]
+}
+
 /// One membership payment order (/api/membership/orders).
 struct KaiXPaymentOrderDTO: Codable, Identifiable, Equatable {
     let id: String
