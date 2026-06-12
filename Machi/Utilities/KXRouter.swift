@@ -12,6 +12,8 @@ enum KXRoute: Hashable {
     case cityListings(regionCode: String, type: String)
     case cityListingDetail(listingId: String)
     case createCityListing(type: String, citySlug: String?)
+    case businessDirectory(citySlug: String)
+    case businessProfile(businessId: String)
     case guideCategory(categoryKey: String)
     case guideServices
     case guideMemberResources
@@ -137,16 +139,16 @@ extension KXRoute {
             return .none
         case .postDetailComment(_, let commentId):
             return commentId.map { .comment($0) } ?? .comments
-        case .profile, .topic, .city, .cityChannel, .cityListings, .cityListingDetail, .createCityListing, .guideCategory, .guideServices, .guideMemberResources, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .conversation, .search:
+        case .profile, .topic, .city, .cityChannel, .cityListings, .cityListingDetail, .createCityListing, .businessDirectory, .businessProfile, .guideCategory, .guideServices, .guideMemberResources, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .conversation, .search:
             return .none
         }
     }
 
     var requiresHiddenTabBar: Bool {
         switch self {
-        case .postDetail, .postDetailComment, .cityListingDetail, .createCityListing, .guideArticle, .guideProduct, .guideSchool, .guideCompany, .guideCompanyReviews, .conversation:
+        case .postDetail, .postDetailComment, .cityListingDetail, .createCityListing, .businessProfile, .guideArticle, .guideProduct, .guideSchool, .guideCompany, .guideCompanyReviews, .conversation:
             true
-        case .profile, .topic, .city, .cityChannel, .cityListings, .guideCategory, .guideServices, .guideMemberResources, .guideSchools, .guideCompanies, .guideInterviewReviews, .search:
+        case .profile, .topic, .city, .cityChannel, .cityListings, .businessDirectory, .guideCategory, .guideServices, .guideMemberResources, .guideSchools, .guideCompanies, .guideInterviewReviews, .search:
             false
         }
     }
@@ -159,7 +161,7 @@ extension KXRoute {
             L("unknownUser", language)
         case .topic:
             L("noTopicPosts", language)
-        case .city, .cityChannel, .cityListings, .cityListingDetail, .createCityListing:
+        case .city, .cityChannel, .cityListings, .cityListingDetail, .createCityListing, .businessDirectory, .businessProfile:
             L("emptyFeed", language)
         case .guideCategory, .guideServices, .guideMemberResources, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews:
             L("guideOpenFailed", language)
@@ -203,6 +205,10 @@ private struct KXRouteDestinations: ViewModifier {
                     CityListingDetailView(listingId: listingId, currentUser: currentUser)
                 case .createCityListing(let type, let citySlug):
                     CreateCityListingView(listingType: type, citySlug: citySlug, currentUser: currentUser)
+                case .businessDirectory(let citySlug):
+                    MerchantDirectoryView(citySlug: citySlug, currentUser: currentUser)
+                case .businessProfile(let businessId):
+                    BusinessPublicProfileView(businessId: businessId, currentUser: currentUser)
                 case .guideCategory(let categoryKey):
                     GuideCategoryView(categoryKey: categoryKey)
                 case .guideServices:
@@ -338,6 +344,12 @@ private extension KXRoute {
             return normalizedId.isEmpty ? nil : .guideCompanyReviews(id: normalizedId)
         case .guideInterviewReviews:
             return .guideInterviewReviews
+        case .businessDirectory(let citySlug):
+            let slug = citySlug.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return .businessDirectory(citySlug: slug)
+        case .businessProfile(let businessId):
+            let id = businessId.trimmingCharacters(in: .whitespacesAndNewlines)
+            return id.isEmpty ? nil : .businessProfile(businessId: id)
         case .conversation(let conversationId):
             let id = conversationId.trimmingCharacters(in: .whitespacesAndNewlines)
             return id.isEmpty ? nil : .conversation(conversationId: id)

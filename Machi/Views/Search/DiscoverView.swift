@@ -1851,6 +1851,7 @@ struct CityListingChannelView: View {
     @State private var items: [KaiXCityListingDTO] = []
     @State private var query = ""
     @State private var selectedCategory = "全部"
+    @State private var serviceSection = "all"
     @State private var sortMode: ListingSortMode = .newest
     @State private var filtersOpen = false
     @State private var scopeMode: ListingScopeMode = .city
@@ -1872,14 +1873,29 @@ struct CityListingChannelView: View {
         KaiXRegionDirectory.resolve(regionCode: regionCode)
     }
 
+    /// 服务频道分区（大众点评/携程式信息架构）：到店 / 旅行住宿 / 景点玩乐 / 生活服务。
+    static let serviceSections: [(key: String, title: String, categories: [String])] = [
+        ("all", "全部", []),
+        ("dining", "到店餐饮", ["餐饮点评", "优惠预约"]),
+        ("travel", "旅行住宿", ["酒店民宿", "接送机"]),
+        ("attractions", "景点玩乐", ["景点门票", "一日游"]),
+        ("life", "生活服务", ["翻译手续", "搬家清洁", "维修安装", "认证服务"]),
+    ]
+
     private var visibleItems: [KaiXCityListingDTO] {
+        let sectionCategories = Self.serviceSections.first { $0.key == serviceSection }?.categories ?? []
         let filtered = items.filter { item in
             let categoryOK = selectedCategory == "全部" || (item.category ?? "").localizedCaseInsensitiveContains(selectedCategory)
+            // 分区只在「全部」类目下生效，选中具体类目时以类目为准
+            let sectionOK = listingType != "local_service"
+                || selectedCategory != "全部"
+                || sectionCategories.isEmpty
+                || sectionCategories.contains(item.category ?? "")
             let queryOK = query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 || item.title.localizedCaseInsensitiveContains(query)
                 || (item.description ?? "").localizedCaseInsensitiveContains(query)
                 || (item.location_text ?? "").localizedCaseInsensitiveContains(query)
-            return categoryOK && queryOK
+            return categoryOK && sectionOK && queryOK
         }
         return filtered.sorted(by: sortMode.sortsBefore)
     }
@@ -1919,6 +1935,9 @@ struct CityListingChannelView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
                     listingControls
+                    if listingType == "local_service" {
+                        MerchantDirectoryStripView(citySlug: regionCode)
+                    }
                     stateContent
                     if !isLoading, errorMessage == nil, hasMoreListings {
                         // Sentinel row: scrolling it into view pulls the next
@@ -2047,6 +2066,10 @@ struct CityListingChannelView: View {
                 }
             }
             searchBar
+            // 大众点评/携程式分区：到店 / 旅行住宿 / 景点玩乐 / 生活服务。
+            if listingType == "local_service" {
+                serviceSectionChips
+            }
             // Persistent category rail — marketplace muscle memory
             // (Mercari/闲鱼): one tap from anywhere, never buried in a
             // collapsed filter panel.
@@ -2058,6 +2081,31 @@ struct CityListingChannelView: View {
         }
         .padding(KXSpacing.md)
         .kxGlassSurface(radius: KXRadius.lg, elevated: true)
+    }
+
+    private var serviceSectionChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(Self.serviceSections, id: \.key) { section in
+                    Button {
+                        serviceSection = section.key
+                        selectedCategory = "全部"
+                    } label: {
+                        Text(section.title)
+                            .font(.caption.weight(.black))
+                            .foregroundStyle(serviceSection == section.key && selectedCategory == "全部" ? Color.white : .primary)
+                            .padding(.horizontal, 13)
+                            .padding(.vertical, 8)
+                            .background(
+                                serviceSection == section.key && selectedCategory == "全部" ? Color.orange : KXColor.softBackground.opacity(0.88),
+                                in: Capsule()
+                            )
+                            .overlay(Capsule().stroke(serviceSection == section.key && selectedCategory == "全部" ? Color.clear : KXColor.separator.opacity(0.7), lineWidth: 0.7))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
     }
 
     private func scopeButton(title: String, mode: ListingScopeMode) -> some View {
@@ -2222,6 +2270,15 @@ struct CityListingChannelView: View {
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
             }
+        } else if listingType == "local_service" {
+            // 大众点评/携程式卡片：评分、类目、价位、预约 CTA。
+            LazyVStack(spacing: 12) {
+                ForEach(visibleItems) { item in
+                    KXServiceListingCard(listing: item) {
+                        router.open(.cityListingDetail(listingId: item.id))
+                    }
+                }
+            }
         } else {
             LazyVStack(spacing: 12) {
                 ForEach(visibleItems) { item in
@@ -2365,7 +2422,7 @@ struct CityListingDetailView: View {
         .sheet(isPresented: $intakeOpen) {
             Group {
                 if let listing {
-                    ListingIntakeSheet(listingTitle: KXListingCopy.displayTitle(listing), listingType: listing.type, submitting: isBusy) { message, details in
+                    ListingIntakeSheet(listingTitle: KXListingCopy.displayTitle(listing), listingType: listing.type, listingCategory: listing.category, submitting: isBusy) { message, details in
                         Task { await submitInquiry(message: message, details: details) }
                     }
                 }
@@ -2463,6 +2520,8 @@ struct CityListingDetailView: View {
                     }
                 }
 
+                ListingReviewsSectionView(listing: listing, currentUser: currentUser)
+
                 KXListingSection(title: "安全提醒", icon: "shield.checkered") {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(KXListingCopy.safetyTips(for: listing.type), id: \.self) { tip in
@@ -2515,7 +2574,7 @@ struct CityListingDetailView: View {
     }
 
     private func contactPanel(_ listing: KaiXCityListingDTO) -> some View {
-        let spec = ListingIntakeSpec.forType(listing.type)
+        let spec = ListingIntakeSpec.forType(listing.type, category: listing.category)
         let ownListing = isOwnListing(listing)
         return KXListingSection(title: "联系与交易", icon: "message.badge") {
             VStack(alignment: .leading, spacing: 12) {
@@ -2653,7 +2712,7 @@ struct CityListingDetailView: View {
         isBusy = true
         defer { isBusy = false }
         do {
-            let fallback = "我想\(ListingIntakeSpec.forType(listing.type).actionWord)：\(KXListingCopy.displayTitle(listing))"
+            let fallback = "我想\(ListingIntakeSpec.forType(listing.type, category: listing.category).actionWord)：\(KXListingCopy.displayTitle(listing))"
             let conversationId = try await KaiXAPIClient.shared.contactListing(
                 listing.id,
                 message: message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? fallback : message,
@@ -2713,7 +2772,52 @@ private struct ListingIntakeSpec {
     let noteLabel: String
     let fields: [ListingIntakeField]
 
-    static func forType(_ type: String) -> ListingIntakeSpec {
+    static func forType(_ type: String, category: String? = nil) -> ListingIntakeSpec {
+        // 携程 / 美团式结构化预订：服务类目给出真正可用的字段。
+        if type == "local_service" {
+            switch category ?? "" {
+            case "酒店民宿":
+                return ListingIntakeSpec(
+                    title: "预订住宿",
+                    actionWord: "预订住宿",
+                    noteLabel: "特殊需求",
+                    fields: [
+                        ListingIntakeField("check_in", label: "入住日期", placeholder: "例如 7 月 1 日", required: true),
+                        ListingIntakeField("check_out", label: "退房日期", placeholder: "例如 7 月 3 日", required: true),
+                        ListingIntakeField("guests", label: "入住人数", options: ["1 人", "2 人", "3 人", "4 人", "5 人及以上"], required: true),
+                        ListingIntakeField("rooms", label: "房间数", options: ["1 间", "2 间", "3 间及以上"]),
+                        ListingIntakeField("contact", label: "联系方式", placeholder: "微信 / LINE / 电话", required: true),
+                    ]
+                )
+            case "景点门票", "一日游":
+                return ListingIntakeSpec(
+                    title: category == "一日游" ? "预订行程" : "预订门票",
+                    actionWord: "预订",
+                    noteLabel: "补充说明",
+                    fields: [
+                        ListingIntakeField("date", label: "出行日期", placeholder: "例如 7 月 1 日", required: true),
+                        ListingIntakeField("tickets", label: "人数 / 票数", options: ["1", "2", "3", "4", "5 及以上"], required: true),
+                        ListingIntakeField("language", label: "希望语言", options: ["中文", "日本語", "English", "无要求"]),
+                        ListingIntakeField("contact", label: "联系方式", placeholder: "微信 / LINE / 电话", required: true),
+                    ]
+                )
+            case "接送机":
+                return ListingIntakeSpec(
+                    title: "预约接送机",
+                    actionWord: "预约接送机",
+                    noteLabel: "补充说明",
+                    fields: [
+                        ListingIntakeField("date", label: "用车日期", placeholder: "例如 7 月 1 日", required: true),
+                        ListingIntakeField("flight", label: "航班号", placeholder: "例如 NH878 / CA181"),
+                        ListingIntakeField("passengers", label: "人数", options: ["1", "2", "3", "4", "5 及以上"], required: true),
+                        ListingIntakeField("luggage", label: "行李数", options: ["1-2 件", "3-4 件", "5 件及以上"]),
+                        ListingIntakeField("contact", label: "联系方式", placeholder: "微信 / LINE / 电话", required: true),
+                    ]
+                )
+            default:
+                break
+            }
+        }
         switch type {
         case "rental":
             return ListingIntakeSpec(
@@ -2783,6 +2887,7 @@ private struct ListingIntakeSheet: View {
     @Environment(\.dismiss) private var dismiss
     let listingTitle: String
     let listingType: String
+    var listingCategory: String? = nil
     let submitting: Bool
     let onSubmit: (_ message: String, _ details: [[String: String]]) -> Void
 
@@ -2791,7 +2896,7 @@ private struct ListingIntakeSheet: View {
     @State private var errorMessage: String?
 
     private var spec: ListingIntakeSpec {
-        ListingIntakeSpec.forType(listingType)
+        ListingIntakeSpec.forType(listingType, category: listingCategory)
     }
 
     var body: some View {
@@ -3936,7 +4041,7 @@ private struct KXListingAttributeSection: View {
     }
 }
 
-private struct KXListingSection<Content: View>: View {
+struct KXListingSection<Content: View>: View {
     let title: String
     let icon: String
     @ViewBuilder var content: Content
@@ -3972,7 +4077,7 @@ private struct KXListingBadge: View {
     }
 }
 
-private enum KXListingCopy {
+enum KXListingCopy {
     /// Header copy in the viewer's app language. zh remains the source of
     /// truth; ja/en mirror web ListingKit's CHANNEL_TEXT so both clients
     /// read the same.

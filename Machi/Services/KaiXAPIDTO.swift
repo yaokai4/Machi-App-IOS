@@ -251,6 +251,98 @@ struct KaiXCityListingDTO: Codable, Identifiable, Equatable {
     let isFavorited: Bool?
     let can_manage: Bool?
     let canManage: Bool?
+    let rating_avg: Double?
+    let ratingAvg: Double?
+    let rating_count: Int?
+    let ratingCount: Int?
+}
+
+// ── listing reviews（大众点评式星级点评）─────────────────────────────────────
+
+struct KaiXListingReviewDTO: Codable, Identifiable, Equatable {
+    let id: String
+    let listing_id: String?
+    let business_id: String?
+    let user_id: String?
+    let rating: Int
+    let content: String?
+    let visit_date: String?
+    let status: String?
+    let owner_reply: String?
+    let owner_reply_at: String?
+    let helpful_count: Int?
+    let created_at: String?
+    let updated_at: String?
+    let author: KaiXUserDTO?
+    let listing_title: String?
+    let listing_type: String?
+}
+
+struct KaiXListingReviewSummaryDTO: Codable, Equatable {
+    let rating_avg: Double?
+    let rating_count: Int?
+    let histogram: [String: Int]?
+    let reviewable: Bool?
+}
+
+struct KaiXListingReviewsResponse: Codable {
+    let items: [KaiXListingReviewDTO]
+    let summary: KaiXListingReviewSummaryDTO?
+    let my_review: KaiXListingReviewDTO?
+}
+
+struct KaiXSubmitReviewResponse: Codable {
+    let review: KaiXListingReviewDTO?
+    let rating_avg: Double?
+    let rating_count: Int?
+}
+
+struct KaiXMyBusinessReviewsSummaryDTO: Codable, Equatable {
+    let count: Int?
+    let rating_avg: Double?
+    let unreplied: Int?
+}
+
+struct KaiXMyBusinessReviewsResponse: Codable {
+    let items: [KaiXListingReviewDTO]
+    let summary: KaiXMyBusinessReviewsSummaryDTO?
+}
+
+// ── public merchant directory（认证商家目录与公开主页）──────────────────────
+
+struct KaiXBusinessPublicDTO: Codable, Identifiable, Equatable {
+    let id: String
+    let business_name: String?
+    let business_type: String?
+    let country_code: String?
+    let city_slug: String?
+    let address: String?
+    let website: String?
+    let contact_method: String?
+    let description: String?
+    let service_categories: [String]?
+    let service_cities: [String]?
+    let opening_hours: [String: String]?
+    let logo_url: String?
+    let cover_url: String?
+    let verification_status: String?
+    let is_verified: Bool?
+    let owner: KaiXUserDTO?
+    let published_listing_count: Int?
+    let rating_avg: Double?
+    let rating_count: Int?
+    let created_at: String?
+}
+
+struct KaiXBusinessDirectoryResponse: Codable {
+    let items: [KaiXBusinessPublicDTO]
+    let total: Int?
+}
+
+struct KaiXBusinessPublicResponse: Codable {
+    let business: KaiXBusinessPublicDTO
+    let listings: [KaiXCityListingDTO]?
+    let reviews: [KaiXListingReviewDTO]?
 }
 
 /// One row of /api/my/listing-inquiries — a buyer↔seller contact about a

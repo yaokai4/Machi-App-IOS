@@ -710,6 +710,60 @@ final class KaiXAPIClient {
             ?? ""
     }
 
+    // MARK: - Listing reviews（星级点评）+ 认证商家目录
+
+    func listingReviews(_ listingId: String) async throws -> KaiXListingReviewsResponse {
+        let data = try await request("GET", "/api/listings/\(listingId.encodedPathSegment)/reviews")
+        return try decode(data)
+    }
+
+    @discardableResult
+    func submitListingReview(_ listingId: String, rating: Int, content: String, visitDate: String = "") async throws -> KaiXSubmitReviewResponse {
+        struct Body: Encodable { let rating: Int; let content: String; let visit_date: String }
+        let data = try await request(
+            "POST",
+            "/api/listings/\(listingId.encodedPathSegment)/reviews",
+            body: Body(rating: rating, content: content, visit_date: visitDate),
+            idempotencyKey: "listing-review-\(listingId)-\(UUID().uuidString)"
+        )
+        return try decode(data)
+    }
+
+    func deleteListingReview(_ listingId: String, reviewId: String) async throws {
+        _ = try await request("DELETE", "/api/listings/\(listingId.encodedPathSegment)/reviews/\(reviewId.encodedPathSegment)")
+    }
+
+    @discardableResult
+    func replyListingReview(_ listingId: String, reviewId: String, content: String) async throws -> KaiXListingReviewDTO? {
+        struct Body: Encodable { let content: String }
+        let data = try await request(
+            "POST",
+            "/api/listings/\(listingId.encodedPathSegment)/reviews/\(reviewId.encodedPathSegment)/reply",
+            body: Body(content: content)
+        )
+        struct Wrapper: Decodable { let review: KaiXListingReviewDTO? }
+        return (try? decode(data) as Wrapper)?.review
+    }
+
+    func myBusinessReviews() async throws -> KaiXMyBusinessReviewsResponse {
+        let data = try await request("GET", "/api/my/business/reviews")
+        return try decode(data)
+    }
+
+    func businessesDirectory(city: String? = nil, category: String? = nil, query: String? = nil) async throws -> KaiXBusinessDirectoryResponse {
+        var items: [URLQueryItem] = []
+        if let city, !city.isEmpty { items.append(URLQueryItem(name: "city", value: city)) }
+        if let category, !category.isEmpty, category != "全部" { items.append(URLQueryItem(name: "category", value: category)) }
+        if let query, !query.isEmpty { items.append(URLQueryItem(name: "q", value: query)) }
+        let data = try await request("GET", "/api/businesses/directory", queryItems: items)
+        return try decode(data)
+    }
+
+    func businessPublic(_ businessId: String) async throws -> KaiXBusinessPublicResponse {
+        let data = try await request("GET", "/api/businesses/\(businessId.encodedPathSegment)/public")
+        return try decode(data)
+    }
+
     // MARK: - Machi Guide / 日本指南
 
     func guideHome(country: String = "jp", language: String = "zh-CN") async throws -> KaiXGuideHomeResponse {

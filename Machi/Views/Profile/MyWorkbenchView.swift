@@ -133,6 +133,10 @@ struct MyWorkbenchView: View {
                 MerchantSettingsView(currentUser: currentUser)
             }
             SettingsDivider()
+            SettingsRowLink(icon: "star.bubble.fill", tint: .orange, title: "点评管理", subtitle: "查看并回复用户对你服务的点评") {
+                MerchantReviewsManageView(currentUser: currentUser)
+            }
+            SettingsDivider()
             SettingsRowLink(icon: "briefcase.fill", tint: .indigo, title: "招聘发布", subtitle: "发布招聘或求职相关信息") {
                 CreateCityListingView(listingType: "job", citySlug: currentRegionCode, currentUser: currentUser)
             }
