@@ -13,6 +13,7 @@ struct MerchantSettingsView: View {
     @State private var isImporterPresented = false
     @State private var message: String?
     @State private var pendingUploadedFileIds: [String] = []
+    @State private var deletingDocumentId: String?
 
     @State private var businessName = ""
     @State private var businessType = "生活服务"
@@ -203,6 +204,21 @@ struct MerchantSettingsView: View {
                                     .padding(.horizontal, 8)
                                     .frame(height: 22)
                                     .background(Color.green.opacity(0.12), in: Capsule())
+                                if let documentId = doc.documentId {
+                                    Button(role: .destructive) {
+                                        Task { await deleteDocument(documentId) }
+                                    } label: {
+                                        if deletingDocumentId == documentId {
+                                            ProgressView()
+                                                .controlSize(.mini)
+                                        } else {
+                                            Image(systemName: "trash")
+                                        }
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .disabled(deletingDocumentId != nil || isSaving || isUploading)
+                                    .accessibilityLabel("撤回认证材料")
+                                }
                             }
                             .padding(10)
                             .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -399,6 +415,20 @@ struct MerchantSettingsView: View {
             pendingUploadedFileIds.append(contentsOf: uploadedIds)
             _ = await save(submit: false, showMessage: false)
             message = "已上传 \(uploadedIds.count) 份认证材料。"
+        } catch {
+            message = error.kaixUserMessage
+        }
+    }
+
+    private func deleteDocument(_ documentId: String) async {
+        deletingDocumentId = documentId
+        defer { deletingDocumentId = nil }
+        do {
+            let response = try await KaiXAPIClient.shared.deleteBusinessDocument(documentId)
+            pendingUploadedFileIds.removeAll()
+            applyBusiness(response.business)
+            dashboard = try? await KaiXAPIClient.shared.businessDashboard()
+            message = "认证材料已撤回。"
         } catch {
             message = error.kaixUserMessage
         }

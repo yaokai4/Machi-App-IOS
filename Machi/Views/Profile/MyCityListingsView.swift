@@ -12,8 +12,11 @@ struct MyCityListingsView: View {
 
     @State private var listings: [KaiXCityListingDTO] = []
     @State private var state: ScreenState = .idle
+    @State private var pendingDelete: KaiXCityListingDTO?
+    @State private var actionMessage: String?
+    @State private var isActing = false
 
-    private static let managedTypes = ["secondhand", "rental", "job", "local_service", "discount"]
+    private static let managedTypes = ["secondhand", "rental", "job", "hiring", "local_service", "discount"]
 
     var body: some View {
         Group {
@@ -39,6 +42,49 @@ struct MyCityListingsView: View {
                                 row(listing)
                             }
                             .buttonStyle(.plain)
+                            .contextMenu {
+                                Button {
+                                    router.open(.editCityListing(listingId: listing.id))
+                                } label: {
+                                    Label("编辑", systemImage: "pencil")
+                                }
+                                if listing.status == "hidden" || listing.status == "draft" {
+                                    Button {
+                                        Task { await updateStatus(listing, status: "published") }
+                                    } label: {
+                                        Label("重新发布", systemImage: "arrow.up.circle")
+                                    }
+                                } else if listing.status == "published" || listing.status == "reserved" {
+                                    Button {
+                                        Task { await updateStatus(listing, status: "hidden") }
+                                    } label: {
+                                        Label("暂时下架", systemImage: "eye.slash")
+                                    }
+                                    Button {
+                                        Task { await updateStatus(listing, status: completionStatus(for: listing)) }
+                                    } label: {
+                                        Label(completionLabel(for: listing), systemImage: "checkmark.circle")
+                                    }
+                                }
+                                Button(role: .destructive) {
+                                    pendingDelete = listing
+                                } label: {
+                                    Label("删除", systemImage: "trash")
+                                }
+                            }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) {
+                                    pendingDelete = listing
+                                } label: {
+                                    Label("删除", systemImage: "trash")
+                                }
+                                Button {
+                                    router.open(.editCityListing(listingId: listing.id))
+                                } label: {
+                                    Label("编辑", systemImage: "pencil")
+                                }
+                                .tint(KXColor.accent)
+                            }
                         }
                     }
                     .padding(.horizontal, KaiXTheme.horizontalPadding)
@@ -51,6 +97,32 @@ struct MyCityListingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .kxPageBackground()
         .task { await load() }
+        .overlay(alignment: .bottom) {
+            if let actionMessage {
+                Text(actionMessage)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .frame(height: 38)
+                    .background(.black.opacity(0.78), in: Capsule())
+                    .padding(.bottom, 16)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .alert("删除这条发布？", isPresented: Binding(
+            get: { pendingDelete != nil },
+            set: { if !$0 { pendingDelete = nil } }
+        )) {
+            Button("取消", role: .cancel) { pendingDelete = nil }
+            Button("删除", role: .destructive) {
+                guard let listing = pendingDelete else { return }
+                pendingDelete = nil
+                Task { await delete(listing) }
+            }
+        } message: {
+            Text("删除后将从 Web 与 iOS 同步移除，且无法恢复。")
+        }
+        .disabled(isActing)
     }
 
     private func row(_ listing: KaiXCityListingDTO) -> some View {
@@ -86,6 +158,8 @@ struct MyCityListingsView: View {
         let (label, color): (String, Color) = switch status {
         case "published": ("已发布", .green)
         case "reserved": ("已预订", .orange)
+        case "hidden": ("已下架", .secondary)
+        case "rented": ("已出租", .secondary)
         case "sold", "closed": ("已结束", .secondary)
         case "pending_review", "reviewing": ("审核中", .blue)
         case "rejected": ("未通过", .red)
@@ -105,6 +179,7 @@ struct MyCityListingsView: View {
         case "secondhand": "二手"
         case "rental": "租房"
         case "job": "招聘"
+        case "hiring": "招聘"
         case "local_service": "本地服务"
         case "discount": "优惠"
         default: type
@@ -133,6 +208,57 @@ struct MyCityListingsView: View {
             state = listings.isEmpty ? .empty : .loaded
         } catch {
             state = listings.isEmpty ? .error(error.kaixUserMessage) : .loaded
+        }
+    }
+
+    private func completionStatus(for listing: KaiXCityListingDTO) -> String {
+        listing.type == "rental" ? "rented" : listing.type == "secondhand" ? "sold" : "closed"
+    }
+
+    private func completionLabel(for listing: KaiXCityListingDTO) -> String {
+        listing.type == "rental" ? "标记已出租" : listing.type == "secondhand" ? "标记已售" : "标记已结束"
+    }
+
+    private func updateStatus(_ listing: KaiXCityListingDTO, status: String) async {
+        guard !isActing else { return }
+        isActing = true
+        defer { isActing = false }
+        do {
+            let updated = try await KaiXAPIClient.shared.updateListingStatus(listing.id, status: status)
+            if let index = listings.firstIndex(where: { $0.id == listing.id }) {
+                listings[index] = updated
+            }
+            showActionMessage(status == "hidden" ? "已下架" : status == "published" ? "已重新提交发布" : "状态已更新")
+        } catch {
+            showActionMessage(error.kaixUserMessage)
+        }
+    }
+
+    private func delete(_ listing: KaiXCityListingDTO) async {
+        guard !isActing else { return }
+        isActing = true
+        defer { isActing = false }
+        do {
+            try await KaiXAPIClient.shared.deleteListing(listing.id)
+            withAnimation(.easeOut(duration: 0.2)) {
+                listings.removeAll { $0.id == listing.id }
+                if listings.isEmpty { state = .empty }
+            }
+            showActionMessage("已删除")
+        } catch {
+            showActionMessage(error.kaixUserMessage)
+        }
+    }
+
+    private func showActionMessage(_ text: String) {
+        withAnimation(.easeOut(duration: 0.18)) {
+            actionMessage = text
+        }
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            withAnimation(.easeOut(duration: 0.18)) {
+                if actionMessage == text { actionMessage = nil }
+            }
         }
     }
 }

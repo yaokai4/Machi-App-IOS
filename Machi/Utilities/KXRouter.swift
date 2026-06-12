@@ -12,6 +12,7 @@ enum KXRoute: Hashable {
     case cityListings(regionCode: String, type: String)
     case cityListingDetail(listingId: String)
     case createCityListing(type: String, citySlug: String?)
+    case editCityListing(listingId: String)
     case businessDirectory(citySlug: String)
     case businessProfile(businessId: String)
     case guideCategory(categoryKey: String)
@@ -139,14 +140,14 @@ extension KXRoute {
             return .none
         case .postDetailComment(_, let commentId):
             return commentId.map { .comment($0) } ?? .comments
-        case .profile, .topic, .city, .cityChannel, .cityListings, .cityListingDetail, .createCityListing, .businessDirectory, .businessProfile, .guideCategory, .guideServices, .guideMemberResources, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .conversation, .search:
+        case .profile, .topic, .city, .cityChannel, .cityListings, .cityListingDetail, .createCityListing, .editCityListing, .businessDirectory, .businessProfile, .guideCategory, .guideServices, .guideMemberResources, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .conversation, .search:
             return .none
         }
     }
 
     var requiresHiddenTabBar: Bool {
         switch self {
-        case .postDetail, .postDetailComment, .cityListings, .cityListingDetail, .createCityListing, .businessProfile, .guideArticle, .guideProduct, .guideSchool, .guideCompany, .guideCompanyReviews, .conversation:
+        case .postDetail, .postDetailComment, .cityListings, .cityListingDetail, .createCityListing, .editCityListing, .businessProfile, .guideArticle, .guideProduct, .guideSchool, .guideCompany, .guideCompanyReviews, .conversation:
             true
         case .profile, .topic, .city, .cityChannel, .businessDirectory, .guideCategory, .guideServices, .guideMemberResources, .guideSchools, .guideCompanies, .guideInterviewReviews, .search:
             false
@@ -161,7 +162,7 @@ extension KXRoute {
             L("unknownUser", language)
         case .topic:
             L("noTopicPosts", language)
-        case .city, .cityChannel, .cityListings, .cityListingDetail, .createCityListing, .businessDirectory, .businessProfile:
+        case .city, .cityChannel, .cityListings, .cityListingDetail, .createCityListing, .editCityListing, .businessDirectory, .businessProfile:
             L("emptyFeed", language)
         case .guideCategory, .guideServices, .guideMemberResources, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews:
             L("guideOpenFailed", language)
@@ -205,6 +206,8 @@ private struct KXRouteDestinations: ViewModifier {
                     CityListingDetailView(listingId: listingId, currentUser: currentUser)
                 case .createCityListing(let type, let citySlug):
                     CreateCityListingView(listingType: type, citySlug: citySlug, currentUser: currentUser)
+                case .editCityListing(let listingId):
+                    EditCityListingRouteView(listingId: listingId, currentUser: currentUser)
                 case .businessDirectory(let citySlug):
                     MerchantDirectoryView(citySlug: citySlug, currentUser: currentUser)
                 case .businessProfile(let businessId):
@@ -316,6 +319,9 @@ private extension KXRoute {
             return normalizedType.isEmpty
                 ? nil
                 : .createCityListing(type: normalizedType, citySlug: normalizedCity?.isEmpty == true ? nil : normalizedCity)
+        case .editCityListing(let listingId):
+            let id = listingId.trimmingCharacters(in: .whitespacesAndNewlines)
+            return id.isEmpty ? nil : .editCityListing(listingId: id)
         case .guideCategory(let categoryKey):
             let key = categoryKey.trimmingCharacters(in: .whitespacesAndNewlines)
             return key.isEmpty ? nil : .guideCategory(categoryKey: key)

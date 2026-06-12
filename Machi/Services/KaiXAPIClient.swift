@@ -506,6 +506,14 @@ final class KaiXAPIClient {
         regionCodes: [String] = [],
         countryCode: String? = nil,
         query: String? = nil,
+        category: String? = nil,
+        categories: [String] = [],
+        minPrice: Double? = nil,
+        maxPrice: Double? = nil,
+        sort: String? = nil,
+        attributes: [String: String] = [:],
+        sellerId: String? = nil,
+        excludeListingId: String? = nil,
         cursor: String? = nil,
         limit: Int? = nil
     ) async throws -> ListingsPage {
@@ -517,11 +525,35 @@ final class KaiXAPIClient {
         if !regionCodes.isEmpty { q.append(URLQueryItem(name: "region_codes", value: regionCodes.joined(separator: ","))) }
         if let countryCode, !countryCode.isEmpty { q.append(URLQueryItem(name: "country_code", value: countryCode)) }
         if let query, !query.isEmpty { q.append(URLQueryItem(name: "q", value: query)) }
+        if let category, !category.isEmpty { q.append(URLQueryItem(name: "category", value: category)) }
+        if !categories.isEmpty { q.append(URLQueryItem(name: "categories", value: categories.joined(separator: ","))) }
+        if let minPrice { q.append(URLQueryItem(name: "min_price", value: String(minPrice))) }
+        if let maxPrice { q.append(URLQueryItem(name: "max_price", value: String(maxPrice))) }
+        if let sort, !sort.isEmpty { q.append(URLQueryItem(name: "sort", value: sort)) }
+        // 属性级服务端筛选（attr_condition=like_new / attr_gte_max_guests=4）,
+        // 与 Web 同一套参数,翻页不漏结果。
+        for (key, value) in attributes.sorted(by: { $0.key < $1.key }) where !key.isEmpty && !value.isEmpty {
+            q.append(URLQueryItem(name: "attr_\(key)", value: value))
+        }
+        if let sellerId, !sellerId.isEmpty { q.append(URLQueryItem(name: "seller_id", value: sellerId)) }
+        if let excludeListingId, !excludeListingId.isEmpty { q.append(URLQueryItem(name: "exclude", value: excludeListingId)) }
         if let cursor, !cursor.isEmpty { q.append(URLQueryItem(name: "cursor", value: cursor)) }
         if let limit { q.append(URLQueryItem(name: "limit", value: String(limit))) }
         let data = try await request("GET", "/api/listings", queryItems: q)
         let response: KaiXListingsResponse = try decode(data)
         return ListingsPage(items: response.items, nextCursor: response.next_cursor)
+    }
+
+    /// 详情页相似推荐：服务端按同类目同城→同国→同城逐层补足,不含同卖家。
+    func similarListings(_ id: String, limit: Int = 8) async throws -> [KaiXCityListingDTO] {
+        struct Wrapper: Decodable { let items: [KaiXCityListingDTO] }
+        let data = try await request(
+            "GET",
+            "/api/listings/\(id.encodedPathSegment)/similar",
+            queryItems: [URLQueryItem(name: "limit", value: String(limit))]
+        )
+        let response: Wrapper = try decode(data)
+        return response.items
     }
 
     func listings(
@@ -577,6 +609,11 @@ final class KaiXAPIClient {
             body: application,
             idempotencyKey: "business-application-\(UUID().uuidString)"
         )
+        return try decode(data)
+    }
+
+    func deleteBusinessDocument(_ documentId: String) async throws -> KaiXBusinessSaveResponse {
+        let data = try await request("DELETE", "/api/business/documents/\(documentId.encodedPathSegment)")
         return try decode(data)
     }
 
@@ -668,6 +705,59 @@ final class KaiXAPIClient {
             attributes: attributes
         ), idempotencyKey: "listing-create-\(UUID().uuidString)")
         return try decode(data) as Wrapper |> \.listing
+    }
+
+    func updateListing(
+        _ id: String,
+        title: String,
+        description: String,
+        category: String,
+        price: Double?,
+        locationText: String,
+        mediaIds: [String],
+        attributes: [String: KaiXAttributeValue]
+    ) async throws -> KaiXCityListingDTO {
+        struct Body: Encodable {
+            let title: String
+            let description: String
+            let category: String
+            let price: Double?
+            let location_text: String
+            let media_ids: [String]
+            let attributes: [String: KaiXAttributeValue]
+        }
+        struct Wrapper: Decodable { let listing: KaiXCityListingDTO }
+        let data = try await request(
+            "PATCH",
+            "/api/listings/\(id.encodedPathSegment)",
+            body: Body(
+                title: title,
+                description: description,
+                category: category,
+                price: price,
+                location_text: locationText,
+                media_ids: mediaIds,
+                attributes: attributes
+            )
+        )
+        let response: Wrapper = try decode(data)
+        return response.listing
+    }
+
+    func updateListingStatus(_ id: String, status: String) async throws -> KaiXCityListingDTO {
+        struct Body: Encodable { let status: String }
+        struct Wrapper: Decodable { let listing: KaiXCityListingDTO }
+        let data = try await request(
+            "PATCH",
+            "/api/listings/\(id.encodedPathSegment)",
+            body: Body(status: status)
+        )
+        let response: Wrapper = try decode(data)
+        return response.listing
+    }
+
+    func deleteListing(_ id: String) async throws {
+        _ = try await request("DELETE", "/api/listings/\(id.encodedPathSegment)")
     }
 
     func favoriteListing(_ id: String, on: Bool) async throws {
