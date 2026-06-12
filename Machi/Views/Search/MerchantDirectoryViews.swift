@@ -46,10 +46,11 @@ struct KXServiceListingCard: View {
     private var category: String { listing.category ?? "" }
 
     private var ctaTitle: String {
+        if KXListingCopy.isStayCategory(category) { return "查房价" }
+        if KXListingCopy.isFoodCategory(category) { return "在线订座" }
         switch category {
-        case "酒店民宿": "查房价"
-        case "景点门票", "一日游": "订门票"
-        default: "预约"
+        case "景点门票", "一日游": return "订门票"
+        default: return "预约"
         }
     }
 
@@ -297,7 +298,7 @@ struct MerchantDirectoryView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
 
-    private let categories = ["全部", "餐饮点评", "优惠预约", "酒店民宿", "景点门票", "一日游", "接送机", "翻译手续", "搬家清洁", "维修安装", "本地向导"]
+    private let categories = ["全部", "餐厅美食", "在线订座", "优惠团购", "民宿", "酒店", "景点门票", "一日游", "接送机", "翻译手续", "搬家清洁", "维修安装", "本地向导"]
 
     private var cityName: String {
         KaiXRegionDirectory.resolve(regionCode: citySlug)?.cityName ?? citySlug

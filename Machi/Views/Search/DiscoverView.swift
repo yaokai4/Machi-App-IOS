@@ -380,9 +380,9 @@ struct DiscoverView: View {
 
     private static let primarySpecs: [DiscoverCategorySpec] = [
         .init(id: "secondhand", title: "二手市场", subtitle: "闲鱼 / Mercari 式闲置交易", icon: "bag", types: [.secondhand], channel: .secondhand, tint: Color.green),
-        .init(id: "housing", title: "租房", subtitle: "安居客 / SUUMO 式找房", icon: "house", types: [.housing, .roommate], channel: .housing, tint: Color.blue),
+        .init(id: "housing", title: "租房 · 住宿", subtitle: "爱彼迎式长租与民宿短住", icon: "house", types: [.housing, .roommate], channel: .housing, tint: Color.blue),
         .init(id: "work", title: "工作", subtitle: "BOSS / Indeed 式机会", icon: "briefcase", types: [.job_seek, .job_post, .referral], channel: .jobPost, tint: KXColor.rankViolet),
-        .init(id: "service", title: "商家与本地服务", subtitle: "点评、预约、酒店景点和生活支持", icon: "storefront", types: [.service, .merchant], channel: .service, tint: Color.brown),
+        .init(id: "service", title: "商家与本地服务", subtitle: "餐厅美食、订座点评、景点玩乐", icon: "storefront", types: [.service, .merchant], channel: .service, tint: Color.brown),
     ]
 
     private static let extendedSpecs: [DiscoverCategorySpec] = [
@@ -399,7 +399,7 @@ struct DiscoverView: View {
         .init(id: "food", title: "Food meetup", subtitle: "餐厅、咖啡和小型饭局", icon: "fork.knife", types: [.dining], channel: .dining, tint: KXColor.rankCoral),
         .init(id: "localgroup", title: "本地小组", subtitle: "运动、周末活动、城市散步", icon: "calendar", types: [.event, .meetup], channel: .event, tint: Color.purple),
         .init(id: "merchant", title: "商家", subtitle: "本地店铺和服务商资料", icon: "storefront", types: [.merchant], channel: .service, tint: Color.teal),
-        .init(id: "travel_stays", title: "旅行住宿", subtitle: "酒店、民宿、接送机和行程", icon: "bed.double", types: [.service, .merchant], channel: .service, tint: Color.cyan),
+        .init(id: "travel_stays", title: "民宿 · 短住", subtitle: "民宿、酒店、温泉旅馆（租房 · 住宿内）", icon: "bed.double", types: [.service, .merchant], channel: .housing, tint: Color.cyan),
         .init(id: "attractions", title: "景点票务", subtitle: "门票、一日游和本地向导", icon: "ticket", types: [.service, .merchant], channel: .service, tint: Color.mint),
         .init(id: "verified_merchant", title: "认证商家", subtitle: "已提交认证资料的商家", icon: "checkmark.seal", types: [.merchant], channel: .service, tint: Color.teal),
         .init(id: "poll", title: "投票", subtitle: "选项投票", icon: "chart.bar", types: [.poll], channel: .dynamic, tint: Color.blue),
@@ -521,9 +521,12 @@ private struct DiscoverCategory: Identifiable, Hashable {
             "secondhand"
         case "housing", "roommate":
             "rental"
+        // 「民宿·短住」伪类型：租房频道直接落在 stays 标签。
+        case "travel_stays":
+            "stays"
         case "work", "jobseek", "jobpost", "referral":
             "work"
-        case "service", "merchant", "travel_stays", "attractions", "verified_merchant":
+        case "service", "merchant", "attractions", "verified_merchant":
             "local_service"
         case "coupon":
             "discount"
@@ -535,10 +538,10 @@ private struct DiscoverCategory: Identifiable, Hashable {
     var heroTags: [String] {
         switch id {
         case "secondhand": return ["估价", "求购", "面交安全"]
-        case "housing": return ["通勤", "看房预约", "房源核验"]
+        case "housing": return ["长租", "民宿短住", "看房预约"]
         case "work": return ["薪资", "签证", "雇主认证"]
-        case "service": return ["点评", "预约", "酒店景点"]
-        case "travel_stays": return ["酒店", "民宿", "接送机"]
+        case "service": return ["餐厅美食", "订座", "景点玩乐"]
+        case "travel_stays": return ["民宿", "酒店", "温泉旅馆"]
         case "attractions": return ["门票", "一日游", "向导"]
         default: return []
         }
@@ -1873,21 +1876,42 @@ struct CityListingChannelView: View {
         KaiXRegionDirectory.resolve(regionCode: regionCode)
     }
 
-    /// 服务频道分区（大众点评/携程式信息架构）：到店 / 旅行住宿 / 景点玩乐 / 生活服务。
+    /// 服务频道分区（大众点评/美团式信息架构）：餐厅美食 / 景点玩乐 / 生活服务。
+    /// 住宿类目已整体搬去租房页「民宿·短住」，这里不再展示。
     static let serviceSections: [(key: String, title: String, categories: [String])] = [
         ("all", "全部", []),
-        ("dining", "到店餐饮", ["餐饮点评", "优惠预约"]),
-        ("travel", "旅行住宿", ["酒店民宿", "接送机"]),
-        ("attractions", "景点玩乐", ["景点门票", "一日游"]),
+        ("food", "餐厅美食", KXListingCopy.foodSectionCategories),
+        ("fun", "景点玩乐", ["景点门票", "一日游", "接送机"]),
         ("life", "生活服务", ["翻译手续", "搬家清洁", "维修安装", "认证服务"]),
     ]
+
+    /// 「stays」是租房频道里的民宿短住伪类型：列表数据其实是住宿类 local_service。
+    private var baseType: String { listingType == "stays" ? "rental" : listingType }
+
+    private var staysActive: Bool { baseType == "rental" && activeRentalTab == .stays }
+
+    /// 真正发给 API 的 listing type。
+    private var queryType: String { staysActive ? "local_service" : baseType }
+
+    enum RentalTab: String { case homes, stays }
+    @State private var rentalTab: RentalTab?
+
+    private var activeRentalTab: RentalTab {
+        rentalTab ?? (listingType == "stays" ? .stays : .homes)
+    }
 
     private var visibleItems: [KaiXCityListingDTO] {
         let sectionCategories = Self.serviceSections.first { $0.key == serviceSection }?.categories ?? []
         let filtered = items.filter { item in
+            // 民宿短住：只看住宿类目；服务频道：住宿类目已搬走，不再展示。
+            if staysActive {
+                guard KXListingCopy.isStayCategory(item.category) else { return false }
+            } else if baseType == "local_service", KXListingCopy.isStayCategory(item.category) {
+                return false
+            }
             let categoryOK = selectedCategory == "全部" || (item.category ?? "").localizedCaseInsensitiveContains(selectedCategory)
             // 分区只在「全部」类目下生效，选中具体类目时以类目为准
-            let sectionOK = listingType != "local_service"
+            let sectionOK = baseType != "local_service"
                 || selectedCategory != "全部"
                 || sectionCategories.isEmpty
                 || sectionCategories.contains(item.category ?? "")
@@ -1935,7 +1959,7 @@ struct CityListingChannelView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
                     listingControls
-                    if listingType == "local_service" {
+                    if baseType == "local_service" {
                         MerchantDirectoryStripView(citySlug: regionCode)
                     }
                     stateContent
@@ -1954,7 +1978,7 @@ struct CityListingChannelView: View {
         }
         .kxPageBackground()
         .toolbar(.hidden, for: .navigationBar)
-        .task(id: "\(regionCode)-\(listingType)") { await load() }
+        .task(id: "\(regionCode)-\(listingType)-\(activeRentalTab.rawValue)") { await load() }
     }
 
     private var header: some View {
@@ -1969,17 +1993,17 @@ struct CityListingChannelView: View {
             .buttonStyle(.plain)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(region?.cityName ?? "当前城市") · \(KXListingCopy.title(for: listingType, language))")
+                Text("\(region?.cityName ?? "当前城市") · \(KXListingCopy.title(for: baseType, language))")
                     .font(.headline.weight(.semibold))
                     .lineLimit(1)
-                Text(KXListingCopy.subtitle(for: listingType, language))
+                Text(KXListingCopy.subtitle(for: baseType, language))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
             Spacer()
             Button {
-                router.open(.createCityListing(type: KXListingCopy.createType(for: listingType), citySlug: regionCode))
+                router.open(.createCityListing(type: KXListingCopy.createType(for: staysActive ? "local_service" : baseType), citySlug: regionCode))
             } label: {
                 Image(systemName: "plus")
                     .font(.headline.weight(.semibold))
@@ -1996,8 +2020,40 @@ struct CityListingChannelView: View {
         .overlay(alignment: .bottom) { Divider().opacity(0.18) }
     }
 
+    /// 爱彼迎式双标签：长租房源 / 民宿·短住。
+    private var rentalTabSwitcher: some View {
+        HStack(spacing: 4) {
+            rentalTabButton(.homes, title: "长租房源", icon: "house")
+            rentalTabButton(.stays, title: "民宿·短住", icon: "bed.double")
+        }
+        .padding(4)
+        .background(KXColor.softBackground.opacity(0.82), in: Capsule())
+        .overlay(Capsule().stroke(KXColor.separator.opacity(0.6), lineWidth: 0.7))
+        .frame(maxWidth: .infinity)
+    }
+
+    private func rentalTabButton(_ tab: RentalTab, title: String, icon: String) -> some View {
+        Button {
+            guard activeRentalTab != tab else { return }
+            rentalTab = tab
+            selectedCategory = "全部"
+        } label: {
+            Label(title, systemImage: icon)
+                .font(.subheadline.weight(.black))
+                .foregroundStyle(activeRentalTab == tab ? Color.white : .primary)
+                .padding(.horizontal, 16)
+                .frame(height: 38)
+                .frame(maxWidth: .infinity)
+                .background(activeRentalTab == tab ? KXColor.accent : Color.clear, in: Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
     private var listingControls: some View {
         VStack(alignment: .leading, spacing: 12) {
+            if baseType == "rental" {
+                rentalTabSwitcher
+            }
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(activeScopeLabel)
@@ -2066,8 +2122,8 @@ struct CityListingChannelView: View {
                 }
             }
             searchBar
-            // 大众点评/携程式分区：到店 / 旅行住宿 / 景点玩乐 / 生活服务。
-            if listingType == "local_service" {
+            // 大众点评/美团式分区：餐厅美食 / 景点玩乐 / 生活服务。
+            if baseType == "local_service" {
                 serviceSectionChips
             }
             // Persistent category rail — marketplace muscle memory
@@ -2133,7 +2189,7 @@ struct CityListingChannelView: View {
             Image(systemName: "magnifyingglass")
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(KXColor.accent)
-            TextField(KXListingCopy.searchPlaceholder(for: listingType, language), text: $query)
+            TextField(KXListingCopy.searchPlaceholder(for: staysActive ? "stays" : baseType, language), text: $query)
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
                 .submitLabel(.search)
@@ -2160,7 +2216,7 @@ struct CityListingChannelView: View {
     private var categoryChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(KXListingCopy.categories(for: listingType), id: \.self) { category in
+                ForEach(KXListingCopy.categories(for: staysActive ? "stays" : baseType), id: \.self) { category in
                     Button { selectedCategory = category } label: {
                         Text(KXListingCopy.categoryLabel(category, language))
                             .font(.caption.weight(.bold))
@@ -2254,12 +2310,12 @@ struct CityListingChannelView: View {
                 .frame(maxWidth: .infinity, minHeight: 260)
         } else if visibleItems.isEmpty {
             EmptyStateView(
-                title: KXListingCopy.emptyTitle(for: listingType, language),
-                subtitle: KXListingCopy.emptySubtitle(for: listingType, language),
-                systemImage: KXListingCopy.icon(for: listingType)
+                title: KXListingCopy.emptyTitle(for: staysActive ? "stays" : baseType, language),
+                subtitle: KXListingCopy.emptySubtitle(for: staysActive ? "stays" : baseType, language),
+                systemImage: KXListingCopy.icon(for: baseType)
             )
             .frame(maxWidth: .infinity, minHeight: 260)
-        } else if listingType == "secondhand" {
+        } else if baseType == "secondhand" {
             // Two-column photo grid — the marketplace layout people already
             // know from Mercari/闲鱼. Square covers, price first.
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
@@ -2270,8 +2326,17 @@ struct CityListingChannelView: View {
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
             }
-        } else if listingType == "local_service" {
-            // 大众点评/携程式卡片：评分、类目、价位、预约 CTA。
+        } else if baseType == "rental" {
+            // 爱彼迎式照片主导卡：长租与民宿短住共用同一套视觉语言。
+            LazyVStack(spacing: 18) {
+                ForEach(visibleItems) { item in
+                    KXAirbnbListingCard(listing: item, variant: staysActive ? .stay : .home) {
+                        router.open(.cityListingDetail(listingId: item.id))
+                    }
+                }
+            }
+        } else if baseType == "local_service" {
+            // 大众点评/美团式卡片：评分、类目、价位、预约 CTA。
             LazyVStack(spacing: 12) {
                 ForEach(visibleItems) { item in
                     KXServiceListingCard(listing: item) {
@@ -2300,7 +2365,7 @@ struct CityListingChannelView: View {
         errorMessage = nil
         do {
             let scope = listingScopeQuery(for: region)
-            if listingType == "work" {
+            if baseType == "work" {
                 async let jobs = KaiXAPIClient.shared.listingsPage(type: "job", citySlug: scope.citySlug, regionCode: scope.regionCode, regionCodes: scope.regionCodes, countryCode: scope.countryCode, query: query)
                 async let hiring = KaiXAPIClient.shared.listingsPage(type: "hiring", citySlug: scope.citySlug, regionCode: scope.regionCode, regionCodes: scope.regionCodes, countryCode: scope.countryCode, query: query)
                 let jobPage = try await jobs
@@ -2310,7 +2375,7 @@ struct CityListingChannelView: View {
                 nextHiringCursor = hiringPage.nextCursor
             } else {
                 let page = try await KaiXAPIClient.shared.listingsPage(
-                    type: listingType,
+                    type: queryType,
                     citySlug: scope.citySlug,
                     regionCode: scope.regionCode,
                     regionCodes: scope.regionCodes,
@@ -2337,7 +2402,7 @@ struct CityListingChannelView: View {
         let scope = listingScopeQuery(for: region)
         do {
             var fetched: [KaiXCityListingDTO] = []
-            if listingType == "work" {
+            if baseType == "work" {
                 if let cursor = nextCursor {
                     let page = try await KaiXAPIClient.shared.listingsPage(type: "job", citySlug: scope.citySlug, regionCode: scope.regionCode, regionCodes: scope.regionCodes, countryCode: scope.countryCode, query: query, cursor: cursor)
                     fetched += page.items
@@ -2350,7 +2415,7 @@ struct CityListingChannelView: View {
                 }
             } else if let cursor = nextCursor {
                 let page = try await KaiXAPIClient.shared.listingsPage(
-                    type: listingType,
+                    type: queryType,
                     citySlug: scope.citySlug,
                     regionCode: scope.regionCode,
                     regionCodes: scope.regionCodes,
@@ -2775,8 +2840,7 @@ private struct ListingIntakeSpec {
     static func forType(_ type: String, category: String? = nil) -> ListingIntakeSpec {
         // 携程 / 美团式结构化预订：服务类目给出真正可用的字段。
         if type == "local_service" {
-            switch category ?? "" {
-            case "酒店民宿":
+            if KXListingCopy.isStayCategory(category) {
                 return ListingIntakeSpec(
                     title: "预订住宿",
                     actionWord: "预订住宿",
@@ -2789,6 +2853,23 @@ private struct ListingIntakeSpec {
                         ListingIntakeField("contact", label: "联系方式", placeholder: "微信 / LINE / 电话", required: true),
                     ]
                 )
+            }
+            if KXListingCopy.isFoodCategory(category) {
+                // 大众点评式在线订座
+                return ListingIntakeSpec(
+                    title: "在线订座",
+                    actionWord: "订座",
+                    noteLabel: "备注（忌口 / 包间 / 儿童座椅等）",
+                    fields: [
+                        ListingIntakeField("date", label: "用餐日期", placeholder: "例如 6 月 15 日", required: true),
+                        ListingIntakeField("time", label: "到店时间", options: ["午市 11:00-14:00", "下午 14:00-17:00", "晚市 17:00-20:00", "晚市 20:00 之后"], required: true),
+                        ListingIntakeField("party", label: "用餐人数", options: ["1-2 人", "3-4 人", "5-8 人", "8 人以上"], required: true),
+                        ListingIntakeField("name", label: "预订姓名", placeholder: "到店报姓名即可", required: true),
+                        ListingIntakeField("contact", label: "联系方式", placeholder: "微信 / LINE / 电话", required: true),
+                    ]
+                )
+            }
+            switch category ?? "" {
             case "景点门票", "一日游":
                 return ListingIntakeSpec(
                     title: category == "一日游" ? "预订行程" : "预订门票",
@@ -2851,7 +2932,7 @@ private struct ListingIntakeSpec {
                 noteLabel: "具体需求",
                 fields: [
                     ListingIntakeField("city", label: "服务城市", required: true),
-                    ListingIntakeField("service_scene", label: "服务场景", options: ["到店预约", "酒店民宿", "景点门票", "一日游", "接送机", "翻译手续", "维修安装"]),
+                    ListingIntakeField("service_scene", label: "服务场景", options: ["到店预约", "景点门票", "一日游", "接送机", "翻译手续", "维修安装"]),
                     ListingIntakeField("date", label: "希望日期", placeholder: "例如 6 月 12 日"),
                     ListingIntakeField("time", label: "希望时段", options: ["上午", "下午", "晚上", "周末"]),
                     ListingIntakeField("people", label: "人数/件数", placeholder: "例如 2 人 / 3 件行李 / 1 套资料"),
@@ -3387,6 +3468,25 @@ struct CreateCityListingView: View {
             VStack(spacing: 12) {
                 KXListingFormField(title: "标题", placeholder: KXListingCopy.titlePlaceholder(for: listingType), icon: "text.cursor", text: $title)
                 KXListingFormField(title: "分类", placeholder: KXListingCopy.categoryPlaceholder(for: listingType), icon: "square.grid.2x2", text: $category)
+                // 规范类目快捷选择 —— 分区/筛选按精确类目匹配，鼓励选标准值
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(KXListingCopy.categories(for: listingType).filter { $0 != "全部" }, id: \.self) { chip in
+                            Button {
+                                category = chip
+                            } label: {
+                                Text(chip)
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(category == chip ? Color.white : .primary)
+                                    .padding(.horizontal, 11)
+                                    .frame(height: 28)
+                                    .background(category == chip ? KXColor.accent : KXColor.softBackground.opacity(0.88), in: Capsule())
+                                    .overlay(Capsule().stroke(category == chip ? Color.clear : KXColor.separator.opacity(0.6), lineWidth: 0.7))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
                 KXListingFormField(title: listingType == "rental" ? "租金" : "价格", placeholder: KXListingCopy.pricePlaceholder(for: listingType), icon: "yensign.circle", text: $price, keyboard: .decimalPad)
                 KXListingFormField(title: "地区 / 车站 / 交易地点", placeholder: "例如 新宿站附近、池袋、线上咨询", icon: "location", text: $location)
                 KXListingFormField(title: "描述", placeholder: KXListingCopy.descriptionPlaceholder(for: listingType), icon: "text.alignleft", text: $description, lineLimit: 4...8)
@@ -3473,7 +3573,7 @@ struct CreateCityListingView: View {
             KXListingSection(title: "服务预约字段", icon: "calendar.badge.clock") {
                 VStack(spacing: 12) {
                     KXListingFormField(title: "服务方名称", placeholder: "个人 / 店铺 / 公司名称", icon: "person.crop.square", text: $serviceBusinessName)
-                    KXListingChoiceRow(title: "服务类型", icon: "wrench.and.screwdriver", options: ["餐饮点评", "优惠预约", "酒店民宿", "景点门票", "一日游", "接送机", "翻译手续", "搬家清洁", "维修安装", "租房申请协助", "本地向导"], selection: $serviceType, tint: typeAccent)
+                    KXListingChoiceRow(title: "服务类型", icon: "wrench.and.screwdriver", options: ["餐厅美食", "餐饮点评", "优惠预约", "民宿", "酒店", "温泉旅馆", "公寓式酒店", "景点门票", "一日游", "接送机", "翻译手续", "搬家清洁", "维修安装", "租房申请协助", "本地向导"], selection: $serviceType, tint: typeAccent)
                     KXListingFormField(title: "服务范围", placeholder: "东京 23 区 / 成田机场 / 富士山一日游 / 线上", icon: "map", text: $serviceArea)
                     KXListingFormField(title: "价格单位", placeholder: "每小时 / 每次 / 预约咨询", icon: "yensign.circle", text: $priceUnit)
                     KXListingFormField(title: "可预约时间", placeholder: "平日晚上 / 周末 / 需提前 2 天", icon: "calendar.badge.clock", text: $availability)
@@ -4078,6 +4178,23 @@ private struct KXListingBadge: View {
 }
 
 enum KXListingCopy {
+    /// 餐厅美食：大众点评式菜系类目（与 web ListingKit FOOD_CATEGORIES 同步）。
+    static let foodCategories = ["中华料理", "日本料理", "居酒屋", "烧肉火锅", "拉面", "寿司海鲜", "咖啡甜品", "西餐", "韩国料理"]
+    /// 餐厅美食分区还包含两个老类目（已有数据继续生效）。
+    static let foodSectionCategories = foodCategories + ["餐饮点评", "优惠预约"]
+    /// 住宿（爱彼迎式）：归属租房页「民宿·短住」标签；"酒店民宿" 为老类目伞值。
+    static let stayCategories = ["民宿", "酒店", "温泉旅馆", "公寓式酒店", "酒店民宿"]
+    /// 租房页「民宿·短住」标签下的筛选 chips。
+    static let stayChips = ["全部", "民宿", "酒店", "温泉旅馆", "公寓式酒店"]
+
+    static func isStayCategory(_ category: String?) -> Bool {
+        stayCategories.contains(category ?? "")
+    }
+
+    static func isFoodCategory(_ category: String?) -> Bool {
+        foodSectionCategories.contains(category ?? "")
+    }
+
     /// Header copy in the viewer's app language. zh remains the source of
     /// truth; ja/en mirror web ListingKit's CHANNEL_TEXT so both clients
     /// read the same.
@@ -4086,7 +4203,7 @@ enum KXListingCopy {
         let ja: String
         let en: String
         switch type {
-        case "rental":        (zh, ja, en) = ("租房", "賃貸", "Rentals")
+        case "rental", "stays": (zh, ja, en) = ("租房 · 住宿", "賃貸・宿泊", "Homes & Stays")
         case "work":          (zh, ja, en) = ("工作", "求人", "Jobs")
         case "job":           (zh, ja, en) = ("找工作", "仕事を探す", "Find work")
         case "hiring":        (zh, ja, en) = ("招聘", "採用", "Hiring")
@@ -4103,12 +4220,12 @@ enum KXListingCopy {
         let ja: String
         let en: String
         switch type {
-        case "rental":
-            (zh, ja, en) = ("房源库、租金、车站、户型和入住时间", "物件・家賃・駅・間取り・入居日", "Rentals, rent, stations, layouts, move-in dates")
+        case "rental", "stays":
+            (zh, ja, en) = ("长租房源与民宿短住，像爱彼迎一样找住处", "賃貸も民泊・短期滞在もまとめて探せる", "Long-term rentals and short stays in one place")
         case "work", "job", "hiring":
             (zh, ja, en) = ("职位库、薪资、日语要求和签证支持", "求人・給与・日本語レベル・ビザサポート", "Jobs, salary, Japanese level, visa support")
         case "local_service":
-            (zh, ja, en) = ("点评、预约、优惠、旅行住宿、景点和生活支持", "口コミ、予約、特典、宿泊、観光、生活サポート", "Reviews, bookings, deals, stays, attractions and local support")
+            (zh, ja, en) = ("餐厅美食、点评订座、景点玩乐和生活支持", "グルメ・口コミ予約・観光体験・生活サポート", "Food & dining, reviews & booking, attractions and local support")
         case "discount":
             (zh, ja, en) = ("本地商家优惠与精选活动", "地元店舗の特典と注目イベント", "Local merchant deals and featured events")
         default:
@@ -4215,10 +4332,12 @@ enum KXListingCopy {
         switch type {
         case "rental":
             (zh, ja, en) = ("搜索地区、车站、学校、房源关键词", "エリア・駅・学校・物件キーワードを検索", "Search area, station, school, keywords")
+        case "stays":
+            (zh, ja, en) = ("搜索民宿、酒店、温泉旅馆、地区关键词", "民泊・ホテル・旅館・エリアを検索", "Search guesthouses, hotels, ryokan, areas")
         case "work", "job", "hiring":
             (zh, ja, en) = ("搜索职位、公司、地点、日语要求", "職種・会社・場所・日本語レベルを検索", "Search roles, companies, locations")
         case "local_service":
-            (zh, ja, en) = ("搜索餐饮点评、酒店民宿、景点门票、一日游、接送机、翻译手续", "飲食、宿泊、観光チケット、送迎、翻訳、手続きを検索", "Search dining, stays, attraction tickets, transfers, paperwork")
+            (zh, ja, en) = ("搜索餐厅美食、景点门票、一日游、接送机、翻译手续", "グルメ、観光チケット、ツアー、送迎、翻訳・手続きを検索", "Search restaurants, attraction tickets, tours, transfers, paperwork")
         case "discount":
             (zh, ja, en) = ("搜索优惠、商家、地区", "特典・店舗・エリアを検索", "Search deals, merchants, areas")
         default:
@@ -4230,8 +4349,9 @@ enum KXListingCopy {
     static func categories(for type: String) -> [String] {
         switch type {
         case "rental": ["全部", "单人", "合租", "短租", "整租", "家具家电", "近车站"]
+        case "stays": stayChips
         case "work", "job", "hiring": ["全部", "兼职", "全职", "时给", "月给", "N3 可", "签证支持", "无经验可"]
-        case "local_service": ["全部", "餐饮点评", "优惠预约", "酒店民宿", "景点门票", "一日游", "接送机", "翻译手续", "搬家清洁", "维修安装", "认证服务"]
+        case "local_service": ["全部"] + foodCategories + ["餐饮点评", "优惠预约", "民宿", "酒店", "温泉旅馆", "公寓式酒店", "酒店民宿", "景点门票", "一日游", "接送机", "翻译手续", "搬家清洁", "维修安装", "认证服务"]
         case "discount": ["全部", "餐饮", "学校", "服务", "购物", "限时"]
         default: ["全部", "家具", "家电", "电子产品", "教材", "生活用品", "搬家出清", "免费送", "求购"]
         }
@@ -4278,7 +4398,20 @@ enum KXListingCopy {
         "清洁": ("清掃", "Cleaning"),
         "餐饮点评": ("飲食口コミ", "Dining reviews"),
         "优惠预约": ("予約特典", "Deals & booking"),
+        "中华料理": ("中華料理", "Chinese"),
+        "日本料理": ("日本料理", "Japanese"),
+        "居酒屋": ("居酒屋", "Izakaya"),
+        "烧肉火锅": ("焼肉・鍋", "BBQ & hot pot"),
+        "拉面": ("ラーメン", "Ramen"),
+        "寿司海鲜": ("寿司・海鮮", "Sushi & seafood"),
+        "咖啡甜品": ("カフェ・スイーツ", "Café & desserts"),
+        "西餐": ("洋食", "Western"),
+        "韩国料理": ("韓国料理", "Korean"),
         "酒店民宿": ("ホテル・民泊", "Hotels & stays"),
+        "民宿": ("民泊", "Guesthouse"),
+        "酒店": ("ホテル", "Hotel"),
+        "温泉旅馆": ("温泉旅館", "Onsen ryokan"),
+        "公寓式酒店": ("アパートホテル", "Aparthotel"),
         "景点门票": ("観光チケット", "Attraction tickets"),
         "一日游": ("日帰りツアー", "Day trips"),
         "接送机": ("空港送迎", "Airport transfer"),
@@ -4314,6 +4447,7 @@ enum KXListingCopy {
         let en: String
         switch type {
         case "rental":               (zh, ja, en) = ("这里还没有房源", "まだ物件がありません", "No rentals yet")
+        case "stays":                (zh, ja, en) = ("这里还没有民宿和酒店", "まだ宿泊施設がありません", "No stays yet")
         case "work", "job", "hiring": (zh, ja, en) = ("这里还没有工作信息", "まだ求人がありません", "No jobs yet")
         case "local_service":        (zh, ja, en) = ("这里还没有商家与本地服务", "まだ店舗・地域サービスがありません", "No business or local services yet")
         case "discount":             (zh, ja, en) = ("这里还没有优惠", "まだ特典がありません", "No deals yet")
@@ -4329,10 +4463,12 @@ enum KXListingCopy {
         switch type {
         case "rental":
             (zh, ja, en) = ("发布房源或稍后查看新的租房信息。", "物件を掲載するか、また後で見に来てください。", "Post a rental or check back soon.")
+        case "stays":
+            (zh, ja, en) = ("认证商家可以发布民宿、酒店、温泉旅馆，像爱彼迎一样展示给同城旅客。", "認証店舗が民泊・ホテル・旅館を掲載すると、ここに表示されます。", "Verified hosts can list guesthouses, hotels and ryokan here.")
         case "work", "job", "hiring":
             (zh, ja, en) = ("稍后查看新的同城工作机会。", "新しい求人をまた後でチェックしてください。", "Check back soon for new local jobs.")
         case "local_service":
-            (zh, ja, en) = ("认证商家、酒店民宿、景点票务、一日游、接送机和生活服务审核后会展示在这里。", "認証店舗、宿泊、観光チケット、日帰りツアー、送迎、生活サポートが審査後に表示されます。", "Verified merchants, stays, tickets, day trips, transfers and local support appear here after review.")
+            (zh, ja, en) = ("认证商家的餐厅美食、景点票务、一日游、接送机和生活服务审核后会展示在这里。", "認証店舗のグルメ、観光チケット、日帰りツアー、送迎、生活サポートが審査後に表示されます。", "Verified restaurants, tickets, day trips, transfers and local support appear here after review.")
         case "discount":
             (zh, ja, en) = ("商家优惠审核后会展示在这里。", "店舗特典が審査後にここに表示されます。", "Merchant deals appear here after review.")
         default:
@@ -4379,7 +4515,7 @@ enum KXListingCopy {
         switch type {
         case "rental": "类型，例如 单人 / 合租 / 短租"
         case "work", "job", "hiring": "行业或岗位分类"
-        case "local_service": "服务分类，例如 酒店民宿 / 景点门票 / 接送机"
+        case "local_service": "服务分类，例如 日本料理 / 民宿 / 景点门票 / 接送机"
         case "discount": "优惠分类"
         default: "分类，例如 家具 / 家电 / 教材"
         }
@@ -4555,6 +4691,7 @@ enum KXListingCopy {
         switch priceType {
         case "monthly", "month": return "\(rendered)/月"
         case "hourly", "hour": return "\(rendered)/小时"
+        case "per_night", "nightly": return "\(rendered)/晚"
         case "daily": return "\(rendered)/日"
         case "weekly": return "\(rendered)/周"
         case "yearly", "annual": return "\(rendered)/年"
