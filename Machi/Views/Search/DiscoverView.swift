@@ -3041,16 +3041,32 @@ struct CityListingDetailView: View {
                     Spacer(minLength: 0)
                 }
 
-                Button { intakeOpen = true } label: {
-                    Label(isBusy ? "处理中" : spec.title, systemImage: "message.fill")
-                        .font(.subheadline.weight(.black))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 13)
-                        .background(ownListing ? Color.secondary.opacity(0.16) : KXColor.accent, in: Capsule())
-                        .foregroundStyle(ownListing ? Color.secondary : Color.white)
+                if ownListing {
+                    // 自己的发布：联系按钮换成直达编辑，管理动作不再是死路。
+                    Button {
+                        router.open(.editCityListing(listingId: listing.id))
+                    } label: {
+                        Label("编辑这条发布", systemImage: "square.and.pencil")
+                            .font(.subheadline.weight(.black))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                            .background(KXColor.accent, in: Capsule())
+                            .foregroundStyle(Color.white)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isBusy)
+                } else {
+                    Button { intakeOpen = true } label: {
+                        Label(isBusy ? "处理中" : spec.title, systemImage: "message.fill")
+                            .font(.subheadline.weight(.black))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                            .background(KXColor.accent, in: Capsule())
+                            .foregroundStyle(Color.white)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isBusy)
                 }
-                .buttonStyle(.plain)
-                .disabled(isBusy || ownListing)
 
                 if listing.type == "secondhand", !ownListing {
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
