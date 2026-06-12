@@ -379,9 +379,9 @@ struct DiscoverView: View {
     }
 
     private static let primarySpecs: [DiscoverCategorySpec] = [
-        .init(id: "secondhand", title: "二手市场", subtitle: "闲鱼 / Mercari 式闲置交易", icon: "bag", types: [.secondhand], channel: .secondhand, tint: Color.green),
-        .init(id: "housing", title: "租房 · 住宿", subtitle: "爱彼迎式长租与民宿短住", icon: "house", types: [.housing, .roommate], channel: .housing, tint: Color.blue),
-        .init(id: "work", title: "工作", subtitle: "BOSS / Indeed 式机会", icon: "briefcase", types: [.job_seek, .job_post, .referral], channel: .jobPost, tint: KXColor.rankViolet),
+        .init(id: "secondhand", title: "二手市场", subtitle: "闲置交易、求购和搬家出清", icon: "bag", types: [.secondhand], channel: .secondhand, tint: Color.green),
+        .init(id: "housing", title: "租房 · 住宿", subtitle: "长租房源、看房预约与民宿短住", icon: "house", types: [.housing, .roommate], channel: .housing, tint: Color.blue),
+        .init(id: "work", title: "工作", subtitle: "职位、招聘、内推和申请进度", icon: "briefcase", types: [.job_seek, .job_post, .referral], channel: .jobPost, tint: KXColor.rankViolet),
         .init(id: "service", title: "商家与本地服务", subtitle: "餐厅美食、订座点评、景点玩乐", icon: "storefront", types: [.service, .merchant], channel: .service, tint: Color.brown),
     ]
 
@@ -613,8 +613,8 @@ private struct DiscoverCategoryGrid: View {
     let onMore: () -> Void
 
     private let columns = [
-        GridItem(.flexible(), spacing: 10),
-        GridItem(.flexible(), spacing: 10),
+        GridItem(.flexible(minimum: 0), spacing: 12),
+        GridItem(.flexible(minimum: 0), spacing: 12),
     ]
 
     var body: some View {
@@ -643,7 +643,7 @@ private struct DiscoverCategoryGrid: View {
                     }
                     .buttonStyle(.plain)
                 }
-                LazyVGrid(columns: columns, spacing: 10) {
+                LazyVGrid(columns: columns, spacing: 12) {
                     ForEach(core) { category in
                         Button {
                             onOpen(category)
@@ -669,16 +669,85 @@ private struct DiscoverCategoryCell: View {
     var prominence: Prominence = .normal
 
     var body: some View {
+        if prominence == .high {
+            highCard
+        } else {
+            normalCard
+        }
+    }
+
+    private var heroLine: String {
+        category.heroTags.prefix(3).joined(separator: " · ")
+    }
+
+    private var highCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 8) {
+                Image(systemName: category.icon)
+                    .font(.system(size: 21, weight: .black))
+                    .foregroundStyle(category.tint.opacity(0.94))
+                    .frame(width: 42, height: 42)
+                    .background(category.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 28, height: 28)
+                    .background(Color(.systemBackground).opacity(0.72), in: Circle())
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(category.title)
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(category.subtitle)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if !heroLine.isEmpty {
+                Text(heroLine)
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(category.tint)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                    .padding(.horizontal, 8)
+                    .frame(height: 23, alignment: .leading)
+                    .background(category.tint.opacity(0.10), in: Capsule())
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 152, alignment: .topLeading)
+        .background {
+            RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [category.tint.opacity(0.13), Color(.systemBackground).opacity(0.94)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        }
+        .kxGlassSurface(radius: KXRadius.lg, elevated: true)
+    }
+
+    private var normalCard: some View {
         HStack(spacing: KXSpacing.sm) {
             Image(systemName: category.icon)
-                .font(.system(size: prominence == .high ? 20 : 18, weight: .bold))
+                .font(.system(size: 18, weight: .bold))
                 .foregroundStyle(category.tint.opacity(0.9))
-                .frame(width: prominence == .high ? 42 : 36, height: prominence == .high ? 42 : 36)
-                .background(category.tint.opacity(0.10), in: RoundedRectangle(cornerRadius: prominence == .high ? 14 : 11, style: .continuous))
+                .frame(width: 36, height: 36)
+                .background(category.tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
 
-            VStack(alignment: .leading, spacing: prominence == .high ? 7 : 3) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(category.title)
-                    .font((prominence == .high ? Font.headline : Font.subheadline).weight(.bold))
+                    .font(.subheadline.weight(.bold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
@@ -687,42 +756,12 @@ private struct DiscoverCategoryCell: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
-                if prominence == .high, !category.heroTags.isEmpty {
-                    HStack(spacing: 5) {
-                        ForEach(category.heroTags.prefix(3), id: \.self) { tag in
-                            Text(tag)
-                                .font(.caption2.weight(.black))
-                                .foregroundStyle(category.tint)
-                                .padding(.horizontal, 6)
-                                .frame(height: 20)
-                                .background(category.tint.opacity(0.10), in: Capsule())
-                        }
-                    }
-                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            if prominence == .high {
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.tertiary)
-            }
         }
         .padding(.horizontal, KXSpacing.md)
-        .frame(maxWidth: .infinity, minHeight: prominence == .high ? 122 : 78, alignment: .leading)
-        .background {
-            if prominence == .high {
-                RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [category.tint.opacity(0.12), Color(.systemBackground).opacity(0.92)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            }
-        }
-        .kxGlassSurface(radius: KXRadius.lg, elevated: prominence == .high)
+        .frame(maxWidth: .infinity, minHeight: 78, alignment: .leading)
+        .kxGlassSurface(radius: KXRadius.lg, elevated: false)
     }
 }
 
@@ -1872,11 +1911,31 @@ struct CityListingChannelView: View {
         nextCursor != nil || nextHiringCursor != nil
     }
 
+    private var marketplaceGridSpacing: CGFloat { 12 }
+
+    private var marketplaceCardWidth: CGFloat {
+        let contentWidth = activeScreenWidth - (KaiXTheme.horizontalPadding * 2)
+        return max(142, floor((contentWidth - marketplaceGridSpacing) / 2))
+    }
+
+    private var activeScreenWidth: CGFloat {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState != .unattached }?
+            .screen.bounds.width ?? 393
+    }
+
+    private var secondhandRows: [[KaiXCityListingDTO]] {
+        stride(from: 0, to: visibleItems.count, by: 2).map { start in
+            Array(visibleItems[start..<min(start + 2, visibleItems.count)])
+        }
+    }
+
     private var region: KaiXRegionDirectory.Region? {
         KaiXRegionDirectory.resolve(regionCode: regionCode)
     }
 
-    /// 服务频道分区（大众点评/美团式信息架构）：餐厅美食 / 景点玩乐 / 生活服务。
+    /// 服务频道分区：餐厅美食 / 景点玩乐 / 生活服务。
     /// 住宿类目已整体搬去租房页「民宿·短住」，这里不再展示。
     static let serviceSections: [(key: String, title: String, categories: [String])] = [
         ("all", "全部", []),
@@ -2020,7 +2079,7 @@ struct CityListingChannelView: View {
         .overlay(alignment: .bottom) { Divider().opacity(0.18) }
     }
 
-    /// 爱彼迎式双标签：长租房源 / 民宿·短住。
+    /// 租房频道双标签：长租房源 / 民宿·短住。
     private var rentalTabSwitcher: some View {
         HStack(spacing: 4) {
             rentalTabButton(.homes, title: "长租房源", icon: "house")
@@ -2122,13 +2181,12 @@ struct CityListingChannelView: View {
                 }
             }
             searchBar
-            // 大众点评/美团式分区：餐厅美食 / 景点玩乐 / 生活服务。
+            // 服务分区：餐厅美食 / 景点玩乐 / 生活服务。
             if baseType == "local_service" {
                 serviceSectionChips
             }
-            // Persistent category rail — marketplace muscle memory
-            // (Mercari/闲鱼): one tap from anywhere, never buried in a
-            // collapsed filter panel.
+            // Persistent category rail: one tap from anywhere, never buried
+            // in a collapsed filter panel.
             categoryChips
             if filtersOpen {
                 scopeFilterPanel
@@ -2316,27 +2374,36 @@ struct CityListingChannelView: View {
             )
             .frame(maxWidth: .infinity, minHeight: 260)
         } else if baseType == "secondhand" {
-            // Two-column photo grid — the marketplace layout people already
-            // know from Mercari/闲鱼. Square covers, price first.
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                ForEach(visibleItems) { item in
-                    KXSecondhandListingCard(listing: item) {
-                        router.open(.cityListingDetail(listingId: item.id))
+            // Two-column photo grid: square covers, price first, quick scan.
+            LazyVStack(spacing: 14) {
+                ForEach(secondhandRows.indices, id: \.self) { rowIndex in
+                    HStack(alignment: .top, spacing: marketplaceGridSpacing) {
+                        ForEach(secondhandRows[rowIndex]) { item in
+                            KXSecondhandListingCard(listing: item, width: marketplaceCardWidth) {
+                                router.open(.cityListingDetail(listingId: item.id))
+                            }
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        }
+                        if secondhandRows[rowIndex].count == 1 {
+                            Spacer(minLength: 0)
+                                .frame(width: marketplaceCardWidth)
+                        }
                     }
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+            .frame(maxWidth: .infinity)
         } else if baseType == "rental" {
-            // 爱彼迎式照片主导卡：长租与民宿短住共用同一套视觉语言。
+            // 照片主导卡：长租与民宿短住共用同一套视觉语言。
             LazyVStack(spacing: 18) {
                 ForEach(visibleItems) { item in
-                    KXAirbnbListingCard(listing: item, variant: staysActive ? .stay : .home) {
+                    KXStayListingCard(listing: item, variant: staysActive ? .stay : .home) {
                         router.open(.cityListingDetail(listingId: item.id))
                     }
                 }
             }
         } else if baseType == "local_service" {
-            // 大众点评/美团式卡片：评分、类目、价位、预约 CTA。
+            // 服务卡片：评分、类目、价位、预约 CTA。
             LazyVStack(spacing: 12) {
                 ForEach(visibleItems) { item in
                     KXServiceListingCard(listing: item) {
@@ -2838,7 +2905,7 @@ private struct ListingIntakeSpec {
     let fields: [ListingIntakeField]
 
     static func forType(_ type: String, category: String? = nil) -> ListingIntakeSpec {
-        // 携程 / 美团式结构化预订：服务类目给出真正可用的字段。
+        // 结构化预订：服务类目给出真正可用的字段。
         if type == "local_service" {
             if KXListingCopy.isStayCategory(category) {
                 return ListingIntakeSpec(
@@ -2855,7 +2922,7 @@ private struct ListingIntakeSpec {
                 )
             }
             if KXListingCopy.isFoodCategory(category) {
-                // 大众点评式在线订座
+                // 餐饮在线订座
                 return ListingIntakeSpec(
                     title: "在线订座",
                     actionWord: "订座",
@@ -3144,12 +3211,18 @@ struct CreateCityListingView: View {
     @State private var price = ""
     @State private var location = ""
     @State private var description = ""
+    @State private var listingMode = "出售"
     @State private var condition = "良好"
     @State private var brandModel = ""
+    @State private var originalPrice = ""
+    @State private var purchaseTime = ""
+    @State private var accessories = ""
+    @State private var defectNote = ""
     @State private var secondhandAvailableTime = ""
     @State private var secondhandPickupNotes = ""
     @State private var pickupAvailable = true
     @State private var secondhandShippingAvailable = false
+    @State private var priceNegotiable = false
     @State private var layout = "1K"
     @State private var area = ""
     @State private var station = ""
@@ -3226,6 +3299,9 @@ struct CreateCityListingView: View {
         if listingType == "discount" {
             return filled(merchantName) && filled(discountInfo) && filled(validUntil)
         }
+        if listingType == "secondhand" {
+            return filled(category) && filled(price) && filled(condition)
+        }
         return true
     }
 
@@ -3255,6 +3331,8 @@ struct CreateCityListingView: View {
             values += [filled(serviceBusinessName), filled(serviceArea), filled(availability)]
         } else if listingType == "discount" {
             values += [filled(merchantName), filled(discountInfo), filled(validUntil)]
+        } else if listingType == "secondhand" {
+            values += [filled(category), filled(price), filled(condition)]
         }
         return (values.filter { $0 }.count, values.count)
     }
@@ -3268,6 +3346,7 @@ struct CreateCityListingView: View {
         if (listingType == "work" || listingType == "job" || listingType == "hiring") && !typeRequiredFieldsReady { return "请补充公司/店铺名和工作时间" }
         if listingType == "local_service" && !typeRequiredFieldsReady { return "请补充服务方、服务范围和可预约时间" }
         if listingType == "discount" && !typeRequiredFieldsReady { return "请补充商家、优惠内容和有效期" }
+        if listingType == "secondhand" && !typeRequiredFieldsReady { return "请补充分类、价格和新旧程度，免费送可填 0" }
         return "信息完整后即可提交"
     }
 
@@ -3595,15 +3674,23 @@ struct CreateCityListingView: View {
         } else {
             KXListingSection(title: "交易字段", icon: "shippingbox") {
                 VStack(spacing: 12) {
-                    KXListingFormField(title: "品牌 / 型号", placeholder: "例如 Apple Magic Keyboard / IKEA 桌子", icon: "tag", text: $brandModel)
-                    KXListingChoiceRow(title: "新旧程度", icon: "sparkles", options: ["全新", "几乎全新", "良好", "有使用痕迹"], selection: $condition, tint: typeAccent)
+                    KXListingChoiceRow(title: "发布类型", icon: "arrow.left.arrow.right.circle", options: ["出售", "免费送", "求购"], selection: $listingMode, tint: typeAccent)
+                    KXListingFormField(title: "品牌 / 型号", placeholder: "可选，例如 日文配列键盘 / 白色书桌 / 13 寸笔记本", icon: "tag", text: $brandModel)
+                    KXListingChoiceRow(title: "新旧程度", icon: "sparkles", options: ["全新", "几乎全新", "良好", "有使用痕迹", "可用"], selection: $condition, tint: typeAccent)
+                    HStack(spacing: 10) {
+                        KXListingFormField(title: "原价 / 参考价", placeholder: "可选，例如 28000", icon: "chart.line.uptrend.xyaxis", text: $originalPrice, keyboard: .decimalPad)
+                        KXListingFormField(title: "购买时间", placeholder: "可选，例如 2025 年春", icon: "calendar", text: $purchaseTime)
+                    }
+                    KXListingFormField(title: "配件 / 包装", placeholder: "例如 原盒、充电器、说明书、保修卡", icon: "shippingbox.and.arrow.backward", text: $accessories)
+                    KXListingFormField(title: "瑕疵 / 使用痕迹", placeholder: "如有划痕、缺件、维修史请提前说明；没有可写“无明显瑕疵”", icon: "exclamationmark.circle", text: $defectNote, lineLimit: 2...4)
                     KXListingFormField(title: "可交易时间", placeholder: "例如 平日 19:00 后 / 周末下午", icon: "calendar.badge.clock", text: $secondhandAvailableTime)
                     KXListingFormField(title: "取货 / 邮寄说明", placeholder: "例如 新宿站面交，邮寄需买家承担运费", icon: "shippingbox", text: $secondhandPickupNotes, lineLimit: 2...4)
                     HStack(spacing: 10) {
                         KXListingToggleChip(title: "自取 / 面交", icon: "person.2", isOn: $pickupAvailable, tint: typeAccent)
                         KXListingToggleChip(title: "可邮寄", icon: "shippingbox", isOn: $secondhandShippingAvailable, tint: typeAccent)
                     }
-                    KXListingHintRow(text: "建议写清购买时间、瑕疵、是否含包装和交易地点，减少来回确认。", icon: "lightbulb", tint: typeAccent)
+                    KXListingToggleChip(title: "价格可商量", icon: "arrow.left.arrow.right", isOn: $priceNegotiable, tint: typeAccent)
+                    KXListingHintRow(text: "建议写清购买时间、瑕疵、配件、是否含包装和交易地点，减少来回确认。", icon: "lightbulb", tint: typeAccent)
                 }
             }
         }
@@ -3782,8 +3869,14 @@ struct CreateCityListingView: View {
             ]
         }
         return [
+            "listing_mode": .init(string: KXListingCopy.listingModeKey(listingMode)),
             "brand": .init(string: brandModel),
             "condition": .init(string: KXListingCopy.conditionKey(condition)),
+            "original_price": .init(string: originalPrice),
+            "price_negotiable": .init(bool: priceNegotiable),
+            "purchase_time": .init(string: purchaseTime),
+            "accessories": .init(string: accessories),
+            "defect_note": .init(string: defectNote),
             "available_time": .init(string: secondhandAvailableTime),
             "pickup_note": .init(string: secondhandPickupNotes),
             "delivery_method": .init(string: pickupAvailable ? (secondhandShippingAvailable ? "pickup_or_shipping" : "pickup") : (secondhandShippingAvailable ? "shipping" : "negotiable")),
@@ -3920,62 +4013,51 @@ private struct KXListingHintRow: View {
 
 private struct KXSecondhandListingCard: View {
     let listing: KaiXCityListingDTO
+    var width: CGFloat? = nil
     let onOpen: () -> Void
+
+    private var innerWidth: CGFloat? {
+        width.map { max(0, $0 - 14) }
+    }
+
+    private var statusBadgeMaxWidth: CGFloat? {
+        innerWidth.map { max(70, $0 - 48) }
+    }
 
     var body: some View {
         Button(action: onOpen) {
             VStack(alignment: .leading, spacing: 9) {
-                ZStack(alignment: .topTrailing) {
-                    if let url = listing.coverURL {
-                        MediaImageView(url: url)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .clipped()
-                    } else {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(KXColor.softBackground)
-                            .overlay {
-                                Image(systemName: KXListingCopy.icon(for: listing.type))
-                                    .font(.title2.weight(.semibold))
-                                    .foregroundStyle(.secondary.opacity(0.56))
-                            }
-                    }
-                    if listing.coverIsVideo {
-                        Image(systemName: "play.fill")
-                            .font(.caption.weight(.black))
-                            .foregroundStyle(.white)
-                            .frame(width: 34, height: 34)
-                            .background(.black.opacity(0.55), in: Circle())
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                    }
-                    VStack {
-                        HStack {
-                            KXListingBadge(title: KXListingCopy.formatListingStatus(listing.status, type: listing.type), tint: KXListingCopy.statusColor(listing.status))
-                            Spacer()
-                        }
-                        Spacer()
-                    }
-                    .padding(8)
-                    Image(systemName: listing.favorited == true ? "heart.fill" : "heart")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(listing.favorited == true ? KXColor.heat : .primary)
-                        .frame(width: 26, height: 26)
-                        .background(.ultraThinMaterial, in: Circle())
-                        .padding(6)
-                }
-                .frame(maxWidth: .infinity)
-                // Square cover — the half-width marketplace grid standard.
-                .aspectRatio(1, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                cover
+                    .frame(width: innerWidth)
                 Text(KXListingCopy.priceLabel(listing))
-                    .font(.subheadline.weight(.black))
+                    .font(.headline.weight(.black))
                     .foregroundStyle(KXColor.heat)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .minimumScaleFactor(0.78)
+                    .frame(width: innerWidth, alignment: .leading)
                 Text(KXListingCopy.displayTitle(listing))
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.primary)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.leading)
+                    .frame(width: innerWidth, alignment: .leading)
+                let badges = KXListingCopy.secondhandCardBadges(for: listing)
+                if !badges.isEmpty {
+                    HStack(spacing: 4) {
+                        ForEach(badges.prefix(2), id: \.self) { badge in
+                            Text(badge)
+                                .font(.caption2.weight(.black))
+                                .foregroundStyle(KXColor.rankTeal)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.78)
+                                .padding(.horizontal, 6)
+                                .frame(height: 20)
+                                .background(KXColor.rankTeal.opacity(0.09), in: Capsule())
+                        }
+                    }
+                    .frame(width: innerWidth, alignment: .leading)
+                }
                 HStack(spacing: 4) {
                     Image(systemName: "mappin.and.ellipse")
                         .font(.caption2.weight(.bold))
@@ -3985,12 +4067,65 @@ private struct KXSecondhandListingCard: View {
                 }
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
+                .frame(width: innerWidth, alignment: .leading)
             }
-            .padding(8)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(7)
+            .padding(.bottom, 2)
+            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .frame(width: width, alignment: .leading)
             .kxGlassSurface(radius: 18)
         }
+        .frame(width: width, alignment: .leading)
         .buttonStyle(.plain)
+    }
+
+    private var cover: some View {
+        ZStack {
+            if let url = listing.coverURL {
+                MediaImageView(url: url, targetPixelSize: 720)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+            } else {
+                LinearGradient(
+                    colors: [KXColor.accent.opacity(0.10), KXColor.softBackground, KXColor.rankTeal.opacity(0.08)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                Image(systemName: KXListingCopy.icon(for: listing.type))
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(.secondary.opacity(0.56))
+            }
+            if listing.coverIsVideo {
+                Image(systemName: "play.fill")
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+                    .background(.black.opacity(0.55), in: Circle())
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            }
+        }
+        .frame(width: innerWidth, height: innerWidth)
+        .overlay(alignment: .topLeading) {
+            KXListingBadge(
+                title: KXListingCopy.formatListingStatus(listing.status, type: listing.type),
+                tint: KXListingCopy.statusColor(listing.status)
+            )
+            .frame(maxWidth: statusBadgeMaxWidth, alignment: .leading)
+            .padding(7)
+        }
+        .overlay(alignment: .topTrailing) {
+            Image(systemName: listing.favorited == true ? "heart.fill" : "heart")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(listing.favorited == true ? KXColor.heat : .primary)
+                .frame(width: 28, height: 28)
+                .background(.ultraThinMaterial, in: Circle())
+                .padding(7)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.white.opacity(0.35), lineWidth: 0.6)
+        }
     }
 }
 
@@ -4178,11 +4313,11 @@ private struct KXListingBadge: View {
 }
 
 enum KXListingCopy {
-    /// 餐厅美食：大众点评式菜系类目（与 web ListingKit FOOD_CATEGORIES 同步）。
+    /// 餐厅美食：菜系类目（与 web ListingKit FOOD_CATEGORIES 同步）。
     static let foodCategories = ["中华料理", "日本料理", "居酒屋", "烧肉火锅", "拉面", "寿司海鲜", "咖啡甜品", "西餐", "韩国料理"]
     /// 餐厅美食分区还包含两个老类目（已有数据继续生效）。
     static let foodSectionCategories = foodCategories + ["餐饮点评", "优惠预约"]
-    /// 住宿（爱彼迎式）：归属租房页「民宿·短住」标签；"酒店民宿" 为老类目伞值。
+    /// 住宿：归属租房页「民宿·短住」标签；"酒店民宿" 为老类目伞值。
     static let stayCategories = ["民宿", "酒店", "温泉旅馆", "公寓式酒店", "酒店民宿"]
     /// 租房页「民宿·短住」标签下的筛选 chips。
     static let stayChips = ["全部", "民宿", "酒店", "温泉旅馆", "公寓式酒店"]
@@ -4221,7 +4356,7 @@ enum KXListingCopy {
         let en: String
         switch type {
         case "rental", "stays":
-            (zh, ja, en) = ("长租房源与民宿短住，像爱彼迎一样找住处", "賃貸も民泊・短期滞在もまとめて探せる", "Long-term rentals and short stays in one place")
+            (zh, ja, en) = ("长租房源、看房预约与民宿短住", "賃貸も民泊・短期滞在もまとめて探せる", "Long-term rentals and short stays in one place")
         case "work", "job", "hiring":
             (zh, ja, en) = ("职位库、薪资、日语要求和签证支持", "求人・給与・日本語レベル・ビザサポート", "Jobs, salary, Japanese level, visa support")
         case "local_service":
@@ -4298,6 +4433,11 @@ enum KXListingCopy {
         "发布类型": ("出品タイプ", "Listing type"),
         "分类": ("カテゴリ", "Category"),
         "新旧程度": ("状態", "Condition"),
+        "原价/参考价": ("元値・参考価格", "Original/reference price"),
+        "价格可议": ("価格相談", "Negotiable"),
+        "购买时间": ("購入時期", "Purchase time"),
+        "配件/包装": ("付属品・箱", "Accessories/box"),
+        "瑕疵说明": ("傷・不具合", "Defects note"),
         "交易地点": ("受け渡し場所", "Meetup location"),
         "交易方式": ("受け渡し方法", "Delivery method"),
         "品牌": ("ブランド", "Brand"),
@@ -4353,7 +4493,7 @@ enum KXListingCopy {
         case "work", "job", "hiring": ["全部", "兼职", "全职", "时给", "月给", "N3 可", "签证支持", "无经验可"]
         case "local_service": ["全部"] + foodCategories + ["餐饮点评", "优惠预约", "民宿", "酒店", "温泉旅馆", "公寓式酒店", "酒店民宿", "景点门票", "一日游", "接送机", "翻译手续", "搬家清洁", "维修安装", "认证服务"]
         case "discount": ["全部", "餐饮", "学校", "服务", "购物", "限时"]
-        default: ["全部", "家具", "家电", "电子产品", "教材", "生活用品", "搬家出清", "免费送", "求购"]
+        default: ["全部", "家具", "家电", "手机数码", "电脑办公", "电子产品", "教材", "书籍教材", "衣物", "生活用品", "母婴儿童", "运动户外", "票券卡券", "搬家出清", "免费送", "求购"]
         }
     }
 
@@ -4366,10 +4506,16 @@ enum KXListingCopy {
         "全部": ("すべて", "All"),
         "家具": ("家具", "Furniture"),
         "家电": ("家電", "Appliances"),
+        "手机数码": ("スマホ・デジタル", "Phones & gadgets"),
+        "电脑办公": ("PC・オフィス", "Computers & office"),
         "电子产品": ("電子機器", "Electronics"),
         "教材": ("教材", "Textbooks"),
+        "书籍教材": ("本・教材", "Books & textbooks"),
         "衣物": ("衣類", "Clothing"),
         "生活用品": ("生活用品", "Daily goods"),
+        "母婴儿童": ("ベビー・キッズ", "Baby & kids"),
+        "运动户外": ("スポーツ・アウトドア", "Sports & outdoors"),
+        "票券卡券": ("チケット・ギフト券", "Tickets & gift cards"),
         "搬家出清": ("引越し処分", "Moving sale"),
         "免费送": ("無料譲渡", "Free giveaway"),
         "求购": ("買います", "Wanted"),
@@ -4464,7 +4610,7 @@ enum KXListingCopy {
         case "rental":
             (zh, ja, en) = ("发布房源或稍后查看新的租房信息。", "物件を掲載するか、また後で見に来てください。", "Post a rental or check back soon.")
         case "stays":
-            (zh, ja, en) = ("认证商家可以发布民宿、酒店、温泉旅馆，像爱彼迎一样展示给同城旅客。", "認証店舗が民泊・ホテル・旅館を掲載すると、ここに表示されます。", "Verified hosts can list guesthouses, hotels and ryokan here.")
+            (zh, ja, en) = ("认证商家可以发布民宿、酒店和温泉旅馆，审核通过后展示给同城旅客。", "認証店舗が民泊・ホテル・旅館を掲載すると、ここに表示されます。", "Verified hosts can list guesthouses, hotels and ryokan here.")
         case "work", "job", "hiring":
             (zh, ja, en) = ("稍后查看新的同城工作机会。", "新しい求人をまた後でチェックしてください。", "Check back soon for new local jobs.")
         case "local_service":
@@ -4527,7 +4673,7 @@ enum KXListingCopy {
         case "work", "job", "hiring": "例如 新宿咖啡店周末兼职"
         case "local_service": "例如 东京周末一日游 / 机场接送 / 认证翻译服务"
         case "discount": "例如 留学生套餐 9 折"
-        default: "例如 Apple Magic Keyboard 日文配列"
+        default: "例如 日文配列键盘 / 搬家出清书桌"
         }
     }
 
@@ -4636,6 +4782,14 @@ enum KXListingCopy {
         case "有使用痕迹", "used": "used"
         case "可用", "fair": "fair"
         default: "good"
+        }
+    }
+
+    static func listingModeKey(_ value: String) -> String {
+        switch normalized(value) {
+        case "免费送", "free", "giveaway": "free"
+        case "求购", "wanted", "buy": "wanted"
+        default: "sale"
         }
     }
 
@@ -4823,6 +4977,17 @@ enum KXListingCopy {
         return result
     }
 
+    static func secondhandCardBadges(for listing: KaiXCityListingDTO) -> [String] {
+        guard listing.type == "secondhand" else { return [] }
+        var result: [String] = []
+        if let mode = attr(listing, "listing_mode") { result.append(mode) }
+        if boolAttr(listing, "price_negotiable") { result.append("可议价") }
+        if boolAttr(listing, "pickup_available") { result.append("可自取") }
+        if boolAttr(listing, "shipping_available") { result.append("可邮寄") }
+        if let condition = attr(listing, "condition") { result.append(condition) }
+        return result
+    }
+
     static func attributes(for listing: KaiXCityListingDTO) -> [(String, String)] {
         let base: [(String, String?)]
         switch listing.type {
@@ -4876,8 +5041,14 @@ enum KXListingCopy {
                 ("价格", priceLabel(listing)),
                 ("地点", cleanText(listing.location_text)),
                 ("分类", cleanText(listing.category)),
+                ("发布类型", attr(listing, "listing_mode")),
                 ("品牌", attr(listing, "brand")),
                 ("新旧程度", attr(listing, "condition")),
+                ("原价/参考价", attr(listing, "original_price")),
+                ("价格可议", boolAttr(listing, "price_negotiable") ? "可商量" : nil),
+                ("购买时间", attr(listing, "purchase_time")),
+                ("配件/包装", attr(listing, "accessories")),
+                ("瑕疵说明", attr(listing, "defect_note")),
                 ("可交易时间", attr(listing, "available_time")),
                 ("交易方式", attr(listing, "delivery_method")),
                 ("取货说明", attr(listing, "pickup_note")),

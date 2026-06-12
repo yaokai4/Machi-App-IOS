@@ -257,7 +257,7 @@ struct KaiXCityListingDTO: Codable, Identifiable, Equatable {
     let ratingCount: Int?
 }
 
-// ── listing reviews（大众点评式星级点评）─────────────────────────────────────
+// ── listing reviews（星级点评）────────────────────────────────────────────
 
 struct KaiXListingReviewDTO: Codable, Identifiable, Equatable {
     let id: String

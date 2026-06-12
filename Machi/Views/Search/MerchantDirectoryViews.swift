@@ -1,6 +1,6 @@
 import SwiftUI
 
-// 商家与本地服务（大众点评 / 美团 + 携程式）：星级点评、认证商家目录、
+// 商家与本地服务：星级点评、认证商家目录、
 // 商家公开主页和点评管理。Web 端 BusinessDirectory.tsx / ListingKit 的同构实现。
 
 // MARK: - 星级
@@ -34,7 +34,7 @@ struct KXRatingStarsView: View {
     }
 }
 
-// MARK: - 服务频道卡片（大众点评式）
+// MARK: - 服务频道卡片
 
 struct KXServiceListingCard: View {
     @Environment(\.appLanguage) private var language

@@ -1,11 +1,11 @@
 import SwiftUI
 
-// 租房 · 住宿（爱彼迎式）：长租房源与民宿短住共用的照片主导卡片。
-// 与 web 端 ListingKit 的 AirbnbListingCard 同构 —— 大图、心愿收藏、
+// 租房 · 住宿：长租房源与民宿短住共用的照片主导卡片。
+// 与 web 端 ListingKit 的住宿卡同构 —— 大图、心愿收藏、
 // 评分内联、价格收尾；home 变体展示户型/面积/敷礼金，stay 变体展示
 // 房型/可住人数/每晚价。
 
-struct KXAirbnbListingCard: View {
+struct KXStayListingCard: View {
     enum Variant { case home, stay }
 
     @Environment(\.appLanguage) private var language
@@ -166,7 +166,7 @@ struct KXAirbnbListingCard: View {
         }
     }
 
-    /// 爱彼迎式右上角爱心：乐观切换，失败回滚。
+    /// 右上角爱心：乐观切换，失败回滚。
     private var heartButton: some View {
         Button {
             let next = !favorited

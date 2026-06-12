@@ -146,9 +146,9 @@ extension KXRoute {
 
     var requiresHiddenTabBar: Bool {
         switch self {
-        case .postDetail, .postDetailComment, .cityListingDetail, .createCityListing, .businessProfile, .guideArticle, .guideProduct, .guideSchool, .guideCompany, .guideCompanyReviews, .conversation:
+        case .postDetail, .postDetailComment, .cityListings, .cityListingDetail, .createCityListing, .businessProfile, .guideArticle, .guideProduct, .guideSchool, .guideCompany, .guideCompanyReviews, .conversation:
             true
-        case .profile, .topic, .city, .cityChannel, .cityListings, .businessDirectory, .guideCategory, .guideServices, .guideMemberResources, .guideSchools, .guideCompanies, .guideInterviewReviews, .search:
+        case .profile, .topic, .city, .cityChannel, .businessDirectory, .guideCategory, .guideServices, .guideMemberResources, .guideSchools, .guideCompanies, .guideInterviewReviews, .search:
             false
         }
     }
