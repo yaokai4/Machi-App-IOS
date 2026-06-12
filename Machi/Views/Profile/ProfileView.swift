@@ -327,6 +327,7 @@ struct ProfileView: View {
                         .kxGlassCircle()
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("profile.workbench")
             } else {
                 Color.clear
                     .frame(width: 42, height: 42)

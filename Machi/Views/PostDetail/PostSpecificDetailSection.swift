@@ -93,9 +93,7 @@ struct PostSpecificDetailSection: View {
             } label: {
                 HStack(spacing: 6) {
                     if openingDM {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(.white)
+                        KXSpinner(size: 16, lineWidth: 2, tint: .white)
                     } else {
                         Image(systemName: "bubble.left.and.bubble.right.fill")
                             .font(.subheadline.weight(.semibold))

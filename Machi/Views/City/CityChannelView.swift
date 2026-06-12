@@ -130,19 +130,19 @@ struct CityChannelView: View {
     }
 
     private var channelDescription: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .center, spacing: 7) {
             Image(systemName: viewModel.channel == .hot ? "flame.fill" : "info.circle.fill")
-                .font(.caption.weight(.bold))
+                .font(.caption2.weight(.bold))
                 .foregroundStyle(viewModel.channel == .hot ? KaiXTheme.heat : KXColor.accent)
-                .padding(.top, 2)
             Text(viewModel.channel.description(language))
-                .font(.caption.weight(.medium))
+                .font(.caption2.weight(.medium))
                 .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, KaiXTheme.horizontalPadding)
-        .padding(.vertical, 8)
+        .padding(.vertical, 5)
         .background(KXColor.softBackground.opacity(0.72))
         .overlay(alignment: .bottom) {
             Divider().opacity(0.18)
@@ -184,8 +184,7 @@ struct CityChannelView: View {
                 }
 
                 if viewModel.isLoadingMore {
-                    ProgressView()
-                        .padding()
+                    KXInlineLoader()
                 }
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)

@@ -11,6 +11,7 @@ struct MerchantSettingsView: View {
     @State private var isSaving = false
     @State private var isUploading = false
     @State private var isImporterPresented = false
+    @State private var isRegionPickerPresented = false
     @State private var message: String?
     @State private var pendingUploadedFileIds: [String] = []
     @State private var deletingDocumentId: String?
@@ -46,14 +47,21 @@ struct MerchantSettingsView: View {
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
             .padding(.top, 12)
-            .padding(.bottom, 42)
+            .kxTabBarSafeBottomPadding()
         }
         .navigationTitle("商家服务后台")
         .navigationBarTitleDisplayMode(.inline)
         .kxPageBackground()
+        .scrollDismissesKeyboard(.interactively)
         .task { await load() }
         .fileImporter(isPresented: $isImporterPresented, allowedContentTypes: [.pdf, .image], allowsMultipleSelection: true) { result in
             Task { await handleFileImport(result) }
+        }
+        .sheet(isPresented: $isRegionPickerPresented) {
+            RegionPickerView(initialCountry: countryCode, allowsAnyCountry: true) { region in
+                countryCode = region.countryCode
+                citySlug = region.cityCode
+            }
         }
     }
 
@@ -66,9 +74,13 @@ struct MerchantSettingsView: View {
             HStack(spacing: 12) {
                 Image(systemName: statusIcon)
                     .font(.title2.weight(.bold))
-                    .foregroundStyle(statusTint)
+                    .foregroundStyle(.white)
                     .frame(width: 46, height: 46)
-                    .background(statusTint.opacity(0.12), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .background(
+                        LinearGradient(colors: [statusTint.opacity(0.92), statusTint.opacity(0.64)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                        in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    )
+                    .shadow(color: statusTint.opacity(0.32), radius: 7, y: 3)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(business?.business_name.isEmpty == false ? business?.business_name ?? "申请认证商家服务" : "申请认证商家服务")
                         .font(.title3.weight(.bold))
@@ -78,26 +90,44 @@ struct MerchantSettingsView: View {
                 }
                 Spacer()
             }
-            Text("商家与本地服务覆盖餐厅美食、在线订座、优惠、民宿酒店、景点票务、一日游、接送机和生活支持。提交后会进入总后台人工审核，Web 与 iOS 同步显示认证状态。")
+            Text("覆盖餐厅美食、在线订座、优惠、民宿酒店、景点票务、一日游、接送机和生活支持。提交后进入人工审核，Web 与 iOS 同步显示认证状态。")
                 .font(.footnote.weight(.medium))
                 .foregroundStyle(.secondary)
                 .lineSpacing(3)
             if let message {
-                Text(message)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(message.hasPrefix("已") || message.contains("成功") ? .green : .secondary)
+                HStack(spacing: 6) {
+                    Image(systemName: messageIsPositive ? "checkmark.circle.fill" : "info.circle.fill")
+                        .font(.footnote.weight(.bold))
+                    Text(message)
+                        .font(.footnote.weight(.semibold))
+                }
+                .foregroundStyle(messageIsPositive ? Color.green : KXColor.heat)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background((messageIsPositive ? Color.green : KXColor.heat).opacity(0.09), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }
         .padding(16)
         .kxGlassSurface(radius: 24, elevated: true)
     }
 
+    private var messageIsPositive: Bool {
+        guard let message else { return false }
+        return message.hasPrefix("已") || message.contains("成功")
+    }
+
     private var dashboardCard: some View {
         SettingsSectionCard(title: "经营看板") {
             if isLoading {
-                ProgressView("正在加载商家资料")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(14)
+                HStack(spacing: 10) {
+                    KXSpinner(size: 18, lineWidth: 2.4)
+                    Text("正在加载商家资料")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
             } else {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                     MerchantMetricTile(title: "全部发布", value: dashboard?.metrics.listings ?? business?.listing_count ?? 0, icon: "square.grid.2x2.fill", tint: .blue)
@@ -110,55 +140,110 @@ struct MerchantSettingsView: View {
         }
     }
 
+    /// The server stores merchant location as bare slugs ("jp" + "tokyo");
+    /// province-based countries need a directory sweep to resolve them
+    /// back to a displayable region.
+    private var resolvedMerchantRegion: KaiXRegionDirectory.Region? {
+        let country = countryCode.trimmed.lowercased()
+        let city = citySlug.trimmed.lowercased()
+        guard !country.isEmpty, !city.isEmpty else { return nil }
+        if let direct = KaiXRegionDirectory.make(country: country, province: nil, city: city) {
+            return direct
+        }
+        guard let spec = KaiXRegionDirectory.countries.first(where: { $0.code == country }), spec.hasProvinces else {
+            return nil
+        }
+        for province in KaiXRegionDirectory.provinces(for: country) {
+            if let region = KaiXRegionDirectory.make(country: country, province: province.code, city: city) {
+                return region
+            }
+        }
+        return nil
+    }
+
+    private var regionFieldLabel: String {
+        if let region = resolvedMerchantRegion {
+            return "\(region.countryEmoji) \(KaiXRegionDirectory.localizedShortLabel(region, language: language))"
+        }
+        if let country = KaiXRegionDirectory.countries.first(where: { $0.code == countryCode.trimmed.lowercased() }) {
+            return citySlug.trimmed.isEmpty
+                ? "\(country.emoji) \(KaiXRegionDirectory.localizedCountryName(country, language: language)) · 选择城市"
+                : "\(country.emoji) \(KaiXRegionDirectory.localizedCountryName(country, language: language)) · \(citySlug)"
+        }
+        return citySlug.trimmed.isEmpty ? "选择经营城市" : "\(countryCode) · \(citySlug)"
+    }
+
     private var applicationForm: some View {
         SettingsSectionCard(title: "认证资料") {
-            VStack(spacing: 12) {
-                MerchantTextField(title: "商家/品牌名称 *", text: $businessName, placeholder: "Machi Coffee / 东京生活服务")
-                MerchantPickerField(title: "商家类型 *", selection: $businessType, values: businessTypes)
-                MerchantTextField(title: "主体全称 *", text: $legalName, placeholder: "株式会社 / 个体事业者 / 法人主体")
-                MerchantTextField(title: "负责人姓名 *", text: $representativeName, placeholder: "负责人或联系人")
-                MerchantTextField(title: "登记号 / 许可编号", text: $registrationNumber, placeholder: "法人番号、营业执照编号、许可编号")
-                HStack(spacing: 10) {
-                    MerchantTextField(title: "国家", text: $countryCode, placeholder: "jp")
-                    MerchantTextField(title: "城市 *", text: $citySlug, placeholder: "tokyo")
-                }
-                MerchantTextField(title: "电话 / Line / WhatsApp *", text: $phone, placeholder: "+81 90...")
-                MerchantTextField(title: "联系邮箱", text: $email, placeholder: "business@example.com")
-                MerchantTextField(title: "官网 / 社媒", text: $website, placeholder: "https://...")
-                MerchantTextField(title: "经营地址 *", text: $address, placeholder: "东京都新宿区...")
-                MerchantTextField(title: "邮编", text: $postalCode, placeholder: "160-0022")
-                MerchantTextField(title: "公开联系方式", text: $contactMethod, placeholder: "站内信 / 电话 / Line / 官网表单")
+            VStack(alignment: .leading, spacing: 14) {
+                MerchantFormGroupHeader(icon: "storefront.fill", title: "基本信息", tint: .teal)
+                MerchantField(icon: "building.2", title: "商家/品牌名称", required: true, text: $businessName, placeholder: "Machi Coffee / 东京生活服务")
+                MerchantPickerField(icon: "tag", title: "商家类型", required: true, selection: $businessType, values: businessTypes)
+                MerchantField(icon: "doc.text", title: "主体全称", required: true, text: $legalName, placeholder: "株式会社 / 个体事业者 / 法人主体")
+                MerchantField(icon: "person.text.rectangle", title: "负责人姓名", required: true, text: $representativeName, placeholder: "负责人或联系人", capitalization: .words)
+                MerchantField(icon: "number", title: "登记号 / 许可编号", text: $registrationNumber, placeholder: "法人番号、营业执照编号、许可编号")
 
+                MerchantFormGroupHeader(icon: "mappin.and.ellipse", title: "联系与位置", tint: .blue)
+                MerchantTapField(icon: "globe.asia.australia", title: "经营城市", required: true, valueLabel: regionFieldLabel) {
+                    isRegionPickerPresented = true
+                }
+                MerchantField(icon: "phone", title: "电话 / Line / WhatsApp", required: true, text: $phone, placeholder: "+81 90...", keyboard: .phonePad)
+                MerchantField(icon: "envelope", title: "联系邮箱", text: $email, placeholder: "business@example.com", keyboard: .emailAddress)
+                MerchantField(icon: "link", title: "官网 / 社媒", text: $website, placeholder: "https://...", keyboard: .URL)
+                MerchantField(icon: "location", title: "经营地址", required: true, text: $address, placeholder: "东京都新宿区...")
+                MerchantField(icon: "signpost.right", title: "邮编", text: $postalCode, placeholder: "160-0022", keyboard: .numbersAndPunctuation)
+                MerchantField(icon: "bubble.left.and.text.bubble.right", title: "公开联系方式", text: $contactMethod, placeholder: "站内信 / 电话 / Line / 官网表单")
+
+                MerchantFormGroupHeader(icon: "sparkles", title: "服务内容", tint: .orange)
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("服务分类 *")
-                        .font(.caption.weight(.black))
-                        .foregroundStyle(.secondary)
+                    MerchantFieldTitle(title: "服务分类", required: true)
                     FlowTags(values: serviceCategories, selected: $selectedCategories)
                 }
+                MerchantTextEditor(icon: "text.alignleft", title: "服务介绍", required: true, text: $serviceDescription, placeholder: "介绍服务范围、价格区间、服务语言、预约方式、退款/取消规则等。")
+                MerchantTextEditor(icon: "paperclip", title: "申请备注", text: $applicationNote, placeholder: "补充资质、门店照片、平台链接、过往案例等。")
 
-                MerchantTextEditor(title: "服务介绍 *", text: $serviceDescription, placeholder: "介绍服务范围、价格区间、服务语言、预约方式、退款/取消规则等。")
-                MerchantTextEditor(title: "申请备注", text: $applicationNote, placeholder: "补充资质、门店照片、平台链接、过往案例等。")
-
-                HStack(spacing: 10) {
-                    Button {
-                        Task { await save(submit: false) }
-                    } label: {
-                        Label(isSaving ? "保存中" : "保存资料", systemImage: "tray.and.arrow.down.fill")
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(isSaving || isUploading)
-
+                VStack(spacing: 10) {
                     Button {
                         Task { await save(submit: true) }
                     } label: {
-                        Label(isSaving ? "提交中" : "提交认证审核", systemImage: "paperplane.fill")
+                        HStack(spacing: 8) {
+                            if isSaving {
+                                KXSpinner(size: 16, lineWidth: 2.2)
+                            } else {
+                                Image(systemName: "paperplane.fill")
+                            }
+                            Text(isSaving ? "提交中" : "提交认证审核")
+                        }
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .background(
+                            LinearGradient(colors: [KXColor.accent, KXColor.accent.opacity(0.78)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        )
+                        .shadow(color: KXColor.accent.opacity(0.30), radius: 8, y: 4)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(KXPressableStyle())
+                    .disabled(isSaving || isUploading)
+
+                    Button {
+                        Task { await save(submit: false) }
+                    } label: {
+                        Label(isSaving ? "保存中" : "仅保存资料", systemImage: "tray.and.arrow.down")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(KXColor.accent)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                            .background(KXColor.accent.opacity(0.09), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).stroke(KXColor.accent.opacity(0.24), lineWidth: 0.8))
+                    }
+                    .buttonStyle(KXPressableStyle())
                     .disabled(isSaving || isUploading)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 2)
             }
-            .padding(12)
+            .padding(14)
         }
     }
 
@@ -173,10 +258,28 @@ struct MerchantSettingsView: View {
                 Button {
                     isImporterPresented = true
                 } label: {
-                    Label(isUploading ? "上传中" : "上传材料", systemImage: "doc.badge.plus")
-                        .frame(maxWidth: .infinity)
+                    HStack(spacing: 8) {
+                        if isUploading {
+                            KXSpinner(size: 16, lineWidth: 2.2)
+                        } else {
+                            Image(systemName: "doc.badge.plus")
+                        }
+                        Text(isUploading ? "上传中" : "上传材料")
+                    }
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(KXColor.accent)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 46)
+                    .background {
+                        RoundedRectangle(cornerRadius: 15, style: .continuous)
+                            .fill(KXColor.accent.opacity(0.07))
+                    }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 15, style: .continuous)
+                            .strokeBorder(KXColor.accent.opacity(0.45), style: StrokeStyle(lineWidth: 1.1, dash: [5, 4]))
+                    }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(KXPressableStyle())
                 .disabled(isUploading || isSaving)
 
                 let docs = business?.documents ?? []
@@ -209,8 +312,7 @@ struct MerchantSettingsView: View {
                                         Task { await deleteDocument(documentId) }
                                     } label: {
                                         if deletingDocumentId == documentId {
-                                            ProgressView()
-                                                .controlSize(.mini)
+                                            KXSpinner(size: 14, lineWidth: 2)
                                         } else {
                                             Image(systemName: "trash")
                                         }
@@ -457,9 +559,13 @@ private struct MerchantMetricTile: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Image(systemName: icon)
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(tint)
+                .frame(width: 30, height: 30)
+                .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             Text("\(value)")
                 .font(.title3.weight(.black))
+                .contentTransition(.numericText())
             Text(title)
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.secondary)
@@ -470,68 +576,232 @@ private struct MerchantMetricTile: View {
     }
 }
 
-private struct MerchantTextField: View {
+// MARK: - Form building blocks
+
+/// Mini group header that splits the long application form into
+/// scannable sections (基本信息 / 联系与位置 / 服务内容).
+private struct MerchantFormGroupHeader: View {
+    let icon: String
     let title: String
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(tint)
+                .frame(width: 24, height: 24)
+                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            Text(title)
+                .font(.subheadline.weight(.bold))
+            Rectangle()
+                .fill(KXColor.separator.opacity(0.7))
+                .frame(height: 0.7)
+        }
+        .padding(.top, 4)
+    }
+}
+
+private struct MerchantFieldTitle: View {
+    let title: String
+    var required = false
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Text(title)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.secondary)
+            if required {
+                Text("*")
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(KXColor.heat)
+            }
+        }
+    }
+}
+
+/// Single-line input with icon, required badge, focus halo and proper
+/// keyboard type — replaces the bare `.roundedBorder` text fields.
+private struct MerchantField: View {
+    let icon: String
+    let title: String
+    var required = false
     @Binding var text: String
     let placeholder: String
+    var keyboard: UIKeyboardType = .default
+    var capitalization: TextInputAutocapitalization = .never
+    @FocusState private var focused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.caption.weight(.black))
-                .foregroundStyle(.secondary)
-            TextField(placeholder, text: $text, axis: .vertical)
-                .lineLimit(1...3)
-                .textFieldStyle(.roundedBorder)
+            MerchantFieldTitle(title: title, required: required)
+            HStack(spacing: 9) {
+                Image(systemName: icon)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(focused ? KXColor.accent : .secondary)
+                    .frame(width: 20)
+                TextField(placeholder, text: $text, axis: .vertical)
+                    .lineLimit(1...3)
+                    .font(.subheadline.weight(.medium))
+                    .keyboardType(keyboard)
+                    .textInputAutocapitalization(capitalization)
+                    .autocorrectionDisabled()
+                    .focused($focused)
+                if !text.isEmpty && focused {
+                    Button {
+                        text = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.subheadline)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .background(KXColor.softBackground.opacity(focused ? 0.55 : 1), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .stroke(focused ? KXColor.accent.opacity(0.65) : KXColor.separator.opacity(0.55), lineWidth: focused ? 1.2 : 0.7)
+            }
+            .animation(.easeOut(duration: 0.16), value: focused)
+        }
+    }
+}
+
+/// Tappable field (same silhouette as MerchantField) that opens a
+/// picker — used for the country/city pair so merchants never have to
+/// type raw slugs like "jp / tokyo" again.
+private struct MerchantTapField: View {
+    let icon: String
+    let title: String
+    var required = false
+    let valueLabel: String
+    let action: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            MerchantFieldTitle(title: title, required: required)
+            Button(action: action) {
+                HStack(spacing: 9) {
+                    Image(systemName: icon)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 20)
+                    Text(valueLabel)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Spacer(minLength: 6)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 12)
+                .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .stroke(KXColor.separator.opacity(0.55), lineWidth: 0.7)
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            }
+            .buttonStyle(KXPressableStyle(scale: 0.985))
         }
     }
 }
 
 private struct MerchantPickerField: View {
+    let icon: String
     let title: String
+    var required = false
     @Binding var selection: String
     let values: [String]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.caption.weight(.black))
-                .foregroundStyle(.secondary)
-            Picker(title, selection: $selection) {
+            MerchantFieldTitle(title: title, required: required)
+            Menu {
                 ForEach(values, id: \.self) { value in
-                    Text(value).tag(value)
+                    Button {
+                        selection = value
+                    } label: {
+                        if selection == value {
+                            Label(value, systemImage: "checkmark")
+                        } else {
+                            Text(value)
+                        }
+                    }
                 }
+            } label: {
+                HStack(spacing: 9) {
+                    Image(systemName: icon)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 20)
+                    Text(selection)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 6)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 12)
+                .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .stroke(KXColor.separator.opacity(0.55), lineWidth: 0.7)
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
             }
-            .pickerStyle(.menu)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
 
 private struct MerchantTextEditor: View {
+    let icon: String
     let title: String
+    var required = false
     @Binding var text: String
     let placeholder: String
+    @FocusState private var focused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.caption.weight(.black))
-                .foregroundStyle(.secondary)
+            HStack {
+                MerchantFieldTitle(title: title, required: required)
+                Spacer()
+                if !text.isEmpty {
+                    Text("\(text.count) 字")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+            }
             ZStack(alignment: .topLeading) {
                 if text.isEmpty {
                     Text(placeholder)
-                        .font(.body)
-                        .foregroundStyle(.secondary.opacity(0.65))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 8)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary.opacity(0.6))
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 10)
                 }
                 TextEditor(text: $text)
+                    .font(.subheadline)
                     .frame(minHeight: 96)
                     .scrollContentBackground(.hidden)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
+                    .focused($focused)
             }
-            .padding(6)
-            .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(KXColor.softBackground.opacity(focused ? 0.55 : 1), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .stroke(focused ? KXColor.accent.opacity(0.65) : KXColor.separator.opacity(0.55), lineWidth: focused ? 1.2 : 0.7)
+            }
+            .animation(.easeOut(duration: 0.16), value: focused)
         }
     }
 }
@@ -543,19 +813,31 @@ private struct FlowTags: View {
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 8)], spacing: 8) {
             ForEach(values, id: \.self) { value in
+                let isOn = selected.contains(value)
                 Button {
-                    if selected.contains(value) {
-                        selected.remove(value)
-                    } else {
-                        selected.insert(value)
+                    withAnimation(.snappy(duration: 0.16)) {
+                        if isOn {
+                            selected.remove(value)
+                        } else {
+                            selected.insert(value)
+                        }
                     }
                 } label: {
-                    Text(value)
-                        .font(.caption.weight(.black))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 32)
-                        .foregroundStyle(selected.contains(value) ? KXColor.accent : .secondary)
-                        .background(selected.contains(value) ? KXColor.accent.opacity(0.12) : KXColor.softBackground, in: Capsule())
+                    HStack(spacing: 4) {
+                        if isOn {
+                            Image(systemName: "checkmark")
+                                .font(.caption2.weight(.black))
+                        }
+                        Text(value)
+                            .font(.caption.weight(.bold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 32)
+                    .foregroundStyle(isOn ? Color.white : .secondary)
+                    .background(isOn ? AnyShapeStyle(KXColor.accent) : AnyShapeStyle(KXColor.softBackground), in: Capsule())
+                    .overlay(Capsule().stroke(isOn ? Color.clear : KXColor.separator.opacity(0.6), lineWidth: 0.7))
                 }
                 .buttonStyle(.plain)
             }

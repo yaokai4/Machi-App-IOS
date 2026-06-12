@@ -237,7 +237,7 @@ struct PostDetailView: View {
             }
             .overlay(alignment: .bottom) {
                 if isPostMutationInFlight {
-                    ProgressView()
+                    KXSpinner(size: 24, lineWidth: 2.6)
                         .padding(.bottom, KXSpacing.md)
                 }
             }

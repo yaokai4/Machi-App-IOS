@@ -335,7 +335,7 @@ struct MerchantDirectoryView: View {
                 }
                 .padding(.horizontal, KaiXTheme.horizontalPadding)
                 .padding(.top, 12)
-                .padding(.bottom, 36)
+                .kxTabBarSafeBottomPadding()
             }
             .refreshable { await load() }
         }
@@ -631,7 +631,7 @@ struct BusinessPublicProfileView: View {
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
             .padding(.top, 14)
-            .padding(.bottom, 36)
+            .kxTabBarSafeBottomPadding()
         }
     }
 
@@ -952,7 +952,7 @@ struct MerchantReviewsManageView: View {
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
             .padding(.top, 12)
-            .padding(.bottom, 36)
+            .kxTabBarSafeBottomPadding()
         }
         .navigationTitle("点评管理")
         .navigationBarTitleDisplayMode(.inline)

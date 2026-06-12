@@ -180,8 +180,7 @@ struct ComposePostView: View {
             } label: {
                 if viewModel.isPublishing {
                     HStack(spacing: 6) {
-                        ProgressView()
-                            .scaleEffect(0.7)
+                        KXSpinner(size: 16, lineWidth: 2)
                         Text(L("postingEllipsis", language))
                             .font(.subheadline.weight(.semibold))
                     }
@@ -543,7 +542,7 @@ struct ComposePostView: View {
 
         if viewModel.isPublishing || viewModel.state == .loading {
             HStack(spacing: 10) {
-                ProgressView()
+                KXSpinner(size: 20, lineWidth: 2.4)
                 Text(viewModel.isPublishing ? L("postingEllipsis", language) : L("processingMedia", language))
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(.secondary)

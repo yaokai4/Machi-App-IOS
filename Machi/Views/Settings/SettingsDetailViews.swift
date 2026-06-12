@@ -57,7 +57,7 @@ struct AccountPasswordSettingsView: View {
                     Task { await saveUsername() }
                 } label: {
                     if isSavingUsername {
-                        ProgressView()
+                        KXSpinner(size: 20, lineWidth: 2.2, tint: .white)
                     } else {
                         Text(L("saveUsername", language))
                     }
@@ -107,7 +107,7 @@ struct AccountPasswordSettingsView: View {
                             Task { await sendPasswordCode() }
                         } label: {
                             if isSendingPasswordCode {
-                                ProgressView()
+                                KXSpinner(size: 18, lineWidth: 2.2)
                             } else {
                                 Text("发送")
                             }
@@ -1180,7 +1180,9 @@ struct DraftsSettingsView: View {
                     }
                 }
             }
-            .padding(KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.top, KaiXTheme.horizontalPadding)
+            .kxTabBarSafeBottomPadding()
         }
         .kxPageBackground()
         .navigationTitle(L("drafts", language))
@@ -1265,7 +1267,7 @@ private struct ManagedPostListView: View {
                 }
             }
             .padding(KaiXTheme.horizontalPadding)
-            .padding(.bottom, 24)
+            .kxTabBarSafeBottomPadding()
         }
         .kxPageBackground()
         .navigationTitle(title)
@@ -2000,7 +2002,7 @@ struct FeedbackView: View {
                 Task { await submit() }
             } label: {
                 HStack(spacing: 6) {
-                    if isSending { ProgressView().scaleEffect(0.8) }
+                    if isSending { KXSpinner(size: 18, lineWidth: 2.2, tint: .white) }
                     Text(isSending ? L("feedbackSending", language) : L("submitFeedback", language))
                 }
             }
@@ -2233,7 +2235,7 @@ struct SettingsFormPage<Content: View>: View {
             .kxGlassSurface(radius: KXRadius.sheet)
             .padding(KaiXTheme.horizontalPadding)
             .padding(.top, KXSpacing.sm)
-            .padding(.bottom, 34)
+            .kxTabBarSafeBottomPadding()
         }
         .kxPageBackground()
         .navigationTitle(title)

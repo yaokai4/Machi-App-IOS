@@ -1,34 +1,58 @@
 import SwiftUI
 
-struct LoadingView: View {
-    @Environment(\.appLanguage) private var language
-    @State private var pulse = false
+/// Brand spinner — a comet-tail arc that rotates continuously.
+///
+/// The previous loader pulsed circle *sizes* (28→44pt), which forces a
+/// layout pass on every animation frame and reads as stutter on busy
+/// screens. A `rotationEffect` is a pure Core Animation transform: the
+/// render server spins it on the GPU at a solid 60/120fps even while
+/// SwiftUI is busy diffing the rest of the page.
+struct KXSpinner: View {
+    var size: CGFloat = 34
+    var lineWidth: CGFloat = 3.4
+    var tint: Color = KXColor.accent
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isSpinning = false
 
     var body: some View {
-        VStack(spacing: KXSpacing.sm) {
-            // Branded breathing dot — replaces the system spinner so
-            // the loading state matches the rest of the app's visual
-            // language and gives the user a more "alive" cue.
-            ZStack {
-                Circle()
-                    .fill(KXColor.accent.opacity(0.18))
-                    .frame(width: pulse ? 44 : 28, height: pulse ? 44 : 28)
-                Circle()
-                    .fill(KXColor.accent.opacity(0.35))
-                    .frame(width: pulse ? 26 : 18, height: pulse ? 26 : 18)
-                Circle()
-                    .fill(LinearGradient(colors: [KXColor.accent, .blue], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(width: 12, height: 12)
-                    .shadow(color: KXColor.accent.opacity(0.45), radius: 6, y: 2)
+        ZStack {
+            Circle()
+                .stroke(tint.opacity(0.14), lineWidth: lineWidth)
+            Circle()
+                .trim(from: 0, to: 0.68)
+                .stroke(
+                    AngularGradient(
+                        colors: [tint.opacity(0.02), tint.opacity(0.45), tint],
+                        center: .center,
+                        startAngle: .degrees(0),
+                        endAngle: .degrees(245)
+                    ),
+                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+                )
+                .rotationEffect(.degrees(isSpinning ? 360 : 0))
+        }
+        .frame(width: size, height: size)
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
+                isSpinning = true
             }
-            .frame(width: 48, height: 48)
-            .animation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true), value: pulse)
+        }
+        .accessibilityLabel(Text("Loading"))
+    }
+}
+
+struct LoadingView: View {
+    @Environment(\.appLanguage) private var language
+
+    var body: some View {
+        VStack(spacing: KXSpacing.md) {
+            KXSpinner()
             Text(L("loading", language))
                 .font(KXTypography.meta)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, minHeight: 140)
-        .onAppear { pulse = true }
     }
 }
 
@@ -39,7 +63,7 @@ struct LoadingView: View {
 ///
 /// **Reduce-motion aware:** when the user has enabled accessibility
 /// "Reduce Motion", we render a static frame so we don't burn GPU
-/// with two parallel `repeatForever` animations on devices that
+/// with parallel `repeatForever` animations on devices that
 /// explicitly opted out.
 struct KXSplashView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -61,12 +85,18 @@ struct KXSplashView: View {
 
             VStack(spacing: 18) {
                 ZStack {
+                    // Halo rings animate opacity + scale (transform-only,
+                    // no layout) instead of resizing frames.
                     Circle()
-                        .fill(KXColor.accent.opacity(pulse ? 0.20 : 0.10))
+                        .fill(KXColor.accent.opacity(0.14))
                         .frame(width: 132, height: 132)
+                        .scaleEffect(pulse ? 1.0 : 0.86)
+                        .opacity(pulse ? 1 : 0.6)
                     Circle()
-                        .fill(KXColor.accent.opacity(pulse ? 0.32 : 0.16))
+                        .fill(KXColor.accent.opacity(0.22))
                         .frame(width: 100, height: 100)
+                        .scaleEffect(pulse ? 1.0 : 0.9)
+                        .opacity(pulse ? 1 : 0.7)
                     RoundedRectangle(cornerRadius: 26, style: .continuous)
                         .fill(LinearGradient(colors: [Color.indigo, Color.purple, Color.blue], startPoint: .topLeading, endPoint: .bottomTrailing))
                         .frame(width: 72, height: 72)
@@ -111,34 +141,13 @@ struct KXSplashView: View {
     }
 }
 
-/// Compact inline loader for "load more" rows — three breathing dots in
-/// the brand accent, visually quieter than a full LoadingView and
-/// distinct from the system spinner.
+/// Compact inline loader for "load more" rows — a small brand spinner,
+/// visually quieter than a full LoadingView and consistent with it.
 struct KXInlineLoader: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var phase = false
-
     var body: some View {
-        HStack(spacing: 6) {
-            ForEach(0..<3, id: \.self) { index in
-                Circle()
-                    .fill(KXColor.accent.opacity(0.75))
-                    .frame(width: 7, height: 7)
-                    .scaleEffect(phase ? 1.0 : 0.55)
-                    .animation(
-                        reduceMotion
-                            ? nil
-                            : .easeInOut(duration: 0.55)
-                                .repeatForever(autoreverses: true)
-                                .delay(Double(index) * 0.14),
-                        value: phase
-                    )
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 14)
-        .onAppear { phase = true }
-        .accessibilityLabel(Text("Loading"))
+        KXSpinner(size: 22, lineWidth: 2.6)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
     }
 }
 
@@ -148,18 +157,30 @@ struct ErrorStateView: View {
     let retry: () -> Void
 
     var body: some View {
-        VStack(spacing: KXSpacing.sm) {
-            Image(systemName: "arrow.clockwise.circle")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-            Text(L("error", language))
-                .font(KXTypography.section)
-            Text(message)
-                .font(KXTypography.meta)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            Button(L("retry", language), action: retry)
-                .buttonStyle(.bordered)
+        VStack(spacing: KXSpacing.md) {
+            Image(systemName: "wifi.exclamationmark")
+                .font(.system(size: 26, weight: .semibold))
+                .foregroundStyle(KXColor.accent)
+                .frame(width: 56, height: 56)
+                .background(KXColor.accent.opacity(0.10), in: Circle())
+            VStack(spacing: 4) {
+                Text(L("error", language))
+                    .font(.headline.weight(.semibold))
+                Text(message)
+                    .font(KXTypography.meta)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            Button(action: retry) {
+                Label(L("retry", language), systemImage: "arrow.clockwise")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(KXColor.accent)
+                    .padding(.horizontal, 18)
+                    .frame(height: 40)
+                    .background(KXColor.accent.opacity(0.10), in: Capsule())
+                    .overlay(Capsule().stroke(KXColor.accent.opacity(0.28), lineWidth: 0.8))
+            }
+            .buttonStyle(KXPressableStyle())
         }
         .padding()
         .frame(maxWidth: .infinity, minHeight: 170)
@@ -174,8 +195,10 @@ struct EmptyStateView: View {
     var body: some View {
         VStack(spacing: KXSpacing.sm) {
             Image(systemName: systemImage)
-                .font(.title3)
+                .font(.system(size: 24, weight: .semibold))
                 .foregroundStyle(.secondary)
+                .frame(width: 52, height: 52)
+                .background(KXColor.softBackground, in: Circle())
             Text(title)
                 .font(KXTypography.section)
             Text(subtitle)

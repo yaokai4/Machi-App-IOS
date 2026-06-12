@@ -53,16 +53,17 @@ struct RegionPickerView: View {
 
                     if !searchText.isEmpty {
                         searchResults
-                    } else {
-                        if allowsAnyCountry {
-                            section(L("switchCountry", language)) {
-                                countryList
-                            }
+                    } else if allowsAnyCountry {
+                        // 国家列表本身就能点进去选城市，再叠一个
+                        // 「切换本国城市」区块是重复入口 —— 只留国家列表。
+                        section(L("switchCountry", language)) {
+                            countryList
                         }
-                        if let landingCountry {
-                            section(L("switchLocalRegion", language)) {
-                                landingCountryDrilldown(landingCountry)
-                            }
+                    } else if let landingCountry {
+                        // 固定国家场景（首页/发现页切城市）：直接展示该国的
+                        // 省份/城市钻取。
+                        section(L("switchLocalRegion", language)) {
+                            landingCountryDrilldown(landingCountry)
                         }
                     }
                 }

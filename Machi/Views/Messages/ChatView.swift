@@ -354,8 +354,7 @@ struct KXMessageBubble: View {
                             if message.status == .sending {
                                 RoundedRectangle(cornerRadius: 17, style: .continuous)
                                     .fill(.black.opacity(0.20))
-                                ProgressView()
-                                    .tint(.white)
+                                KXSpinner(size: 24, lineWidth: 2.6, tint: .white)
                             } else if message.status == .failed {
                                 RoundedRectangle(cornerRadius: 17, style: .continuous)
                                     .fill(.black.opacity(0.22))
@@ -447,7 +446,7 @@ private struct ChatInputBar: View {
 
             Button(action: send) {
                 if isSending {
-                    ProgressView()
+                    KXSpinner(size: 18, lineWidth: 2.2, tint: .white)
                 } else {
                     Image(systemName: "paperplane.fill")
                         .font(.subheadline.weight(.semibold))

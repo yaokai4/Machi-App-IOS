@@ -55,7 +55,7 @@ struct EditProfileView: View {
                 }
                 .padding(.horizontal, KaiXTheme.horizontalPadding)
                 .padding(.top, 14)
-                .padding(.bottom, 28)
+                .kxTabBarSafeBottomPadding()
             }
         }
         .kxPageBackground()
@@ -87,7 +87,7 @@ struct EditProfileView: View {
                 Task { await save() }
             } label: {
                 if isSaving {
-                    ProgressView()
+                    KXSpinner(size: 22, lineWidth: 2.4)
                 } else {
                     Text(L("save", language))
                         .font(.headline.weight(.semibold))
@@ -138,7 +138,7 @@ struct EditProfileView: View {
                 Spacer()
 
                 if isPreparingMedia {
-                    ProgressView()
+                    KXSpinner(size: 22, lineWidth: 2.4)
                 }
             }
             .padding(.top, 42)

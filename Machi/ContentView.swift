@@ -75,6 +75,12 @@ struct ContentView: View {
         }
         .task(id: currentUserID) {
             await appState.bootstrap(context: modelContext, currentUserId: currentUserID)
+            #if DEBUG
+            if appState.currentUser == nil,
+               ProcessInfo.processInfo.arguments.contains("-KXAutoGuest") {
+                enterAsGuest()
+            }
+            #endif
             if let user = appState.currentUser {
                 RegionStore.shared.applyUserRegion(user)
             }
@@ -196,6 +202,8 @@ struct ContentView: View {
         appState.currentUser = guest
         sessionStore.setCurrentUser(guest.id)
         userStore.setCurrentUser(guest)
+        // 立即套用游客的默认/上次浏览城市，首页 feed 不留空白等待。
+        RegionStore.shared.applyUserRegion(guest)
         appState.state = .loaded
     }
 

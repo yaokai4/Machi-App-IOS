@@ -88,4 +88,21 @@ extension View {
     func kxHidesTabBar(reason: AppChromeHiddenReason) -> some View {
         modifier(KXHiddenTabBarModifier(reason: reason))
     }
+
+    /// Reserves scroll-past space under the floating glass tab bar.
+    /// Apply to the *content* of any scrollable page that can show the
+    /// tab bar, instead of a hard-coded `.padding(.bottom, N)` — the
+    /// value collapses automatically when the bar is hidden.
+    func kxTabBarSafeBottomPadding(extra: CGFloat = 0) -> some View {
+        modifier(KXTabBarSafeBottomPaddingModifier(extra: extra))
+    }
+}
+
+private struct KXTabBarSafeBottomPaddingModifier: ViewModifier {
+    @EnvironmentObject private var chrome: AppChromeState
+    var extra: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content.padding(.bottom, chrome.bottomContentPadding + extra)
+    }
 }

@@ -9,7 +9,7 @@ struct CitySecondaryFilterChips: View {
     @Binding var channel: CityChannel
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        KXFadingHScroll {
             HStack(spacing: 8) {
                 ForEach(primary.channels) { entry in
                     Button {
@@ -18,10 +18,10 @@ struct CitySecondaryFilterChips: View {
                         }
                     } label: {
                         Text(entry.title(language))
-                            .font(.subheadline.weight(.semibold))
+                            .font(.footnote.weight(.semibold))
                             .lineLimit(1)
                             .padding(.horizontal, 12)
-                            .frame(height: 32)
+                            .frame(height: 30)
                             .kxGlassCapsule(isSelected: channel == entry)
                             .foregroundStyle(channel == entry ? KXColor.accent : .primary)
                     }
@@ -29,7 +29,7 @@ struct CitySecondaryFilterChips: View {
                 }
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
-            .padding(.vertical, 8)
+            .padding(.vertical, 7)
         }
         .background(KXColor.softBackground.opacity(0.6))
         .overlay(alignment: .bottom) {

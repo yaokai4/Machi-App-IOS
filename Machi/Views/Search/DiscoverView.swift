@@ -619,39 +619,31 @@ private struct DiscoverCategoryGrid: View {
 
     var body: some View {
         let core = Array(primaryCategories.prefix(4))
-        return VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: KXSpacing.sm) {
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        DiscoverSectionTitle(title: "城市功能入口", trailing: nil)
-                        Text("二手、租房、工作、商家与本地服务各自独立：交易、看房、求职、预约点评都按真实场景展开。")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 2)
+        return VStack(alignment: .leading, spacing: KXSpacing.sm) {
+            HStack(alignment: .center) {
+                DiscoverSectionTitle(title: "城市功能入口", trailing: nil)
+                Spacer(minLength: 10)
+                Button(action: onMore) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "square.grid.2x2")
+                        Text("更多频道")
                     }
-                    Spacer(minLength: 10)
-                    Button(action: onMore) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "sparkles")
-                            Text("更多频道")
-                        }
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(KXColor.accent)
-                        .padding(.horizontal, 10)
-                        .frame(height: 30)
-                        .kxGlassCapsule(isSelected: false)
-                    }
-                    .buttonStyle(.plain)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(KXColor.accent)
+                    .padding(.horizontal, 10)
+                    .frame(height: 30)
+                    .kxGlassCapsule(isSelected: false)
                 }
-                LazyVGrid(columns: columns, spacing: 12) {
-                    ForEach(core) { category in
-                        Button {
-                            onOpen(category)
-                        } label: {
-                            DiscoverCategoryCell(category: category, prominence: .high)
-                        }
-                        .buttonStyle(.plain)
+                .buttonStyle(KXPressableStyle())
+            }
+            LazyVGrid(columns: columns, spacing: 12) {
+                ForEach(core) { category in
+                    Button {
+                        onOpen(category)
+                    } label: {
+                        DiscoverCategoryCell(category: category, prominence: .high)
                     }
+                    .buttonStyle(KXPressableStyle(scale: 0.97))
                 }
             }
         }
@@ -680,55 +672,54 @@ private struct DiscoverCategoryCell: View {
         category.heroTags.prefix(3).joined(separator: " · ")
     }
 
+    /// Premium tile: gradient icon squircle + one-line title + one-line
+    /// keyword caption. Fixed two-line composition keeps the four tiles
+    /// perfectly even — the old version mixed 2-line wrapping text with
+    /// a tag pill and produced the "ragged grid" the user flagged.
     private var highCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top) {
                 Image(systemName: category.icon)
-                    .font(.system(size: 21, weight: .black))
-                    .foregroundStyle(category.tint.opacity(0.94))
-                    .frame(width: 42, height: 42)
-                    .background(category.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(
+                        LinearGradient(
+                            colors: [category.tint.opacity(0.92), category.tint.opacity(0.62)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    )
+                    .shadow(color: category.tint.opacity(0.32), radius: 6, y: 3)
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.black))
-                    .foregroundStyle(.tertiary)
-                    .frame(width: 28, height: 28)
-                    .background(Color(.systemBackground).opacity(0.72), in: Circle())
+                Image(systemName: "arrow.right")
+                    .font(.footnote.weight(.bold))
+                    .foregroundStyle(category.tint)
+                    .frame(width: 26, height: 26)
+                    .background(category.tint.opacity(0.10), in: Circle())
             }
 
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(category.title)
-                    .font(.headline.weight(.black))
+                    .font(.headline.weight(.bold))
                     .foregroundStyle(.primary)
-                    .lineLimit(2)
+                    .lineLimit(1)
                     .minimumScaleFactor(0.82)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(category.subtitle)
+                Text(heroLine.isEmpty ? category.subtitle : heroLine)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.82)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if !heroLine.isEmpty {
-                Text(heroLine)
-                    .font(.caption2.weight(.black))
-                    .foregroundStyle(category.tint)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.72)
-                    .padding(.horizontal, 8)
-                    .frame(height: 23, alignment: .leading)
-                    .background(category.tint.opacity(0.10), in: Capsule())
+                    .minimumScaleFactor(0.78)
             }
         }
         .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 152, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: 122, alignment: .topLeading)
         .background {
             RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous)
                 .fill(
                     LinearGradient(
-                        colors: [category.tint.opacity(0.13), Color(.systemBackground).opacity(0.94)],
+                        colors: [category.tint.opacity(0.10), Color(.systemBackground).opacity(0.96)],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
@@ -2230,43 +2221,16 @@ struct CityListingChannelView: View {
     }
 
     private var listingControls: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if baseType == "rental" {
-                rentalTabSwitcher
-            }
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(activeScopeLabel)
-                        .font(.headline.weight(.bold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.86)
-                    Text("\(visibleItems.count) 条结果 · \(selectedCategory)")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+        VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
+                if baseType == "rental" {
+                    rentalTabSwitcher
                 }
-                Spacer(minLength: 8)
-                if activeFilterCount > 0 {
-                    Button("清空") {
-                        query = ""
-                        selectedCategory = "全部"
-                        scopeMode = .city
-                        selectedScopeArea = ""
-                        selectedScopeRegionCode = ""
-                        minimumPrice = ""
-                        maximumPrice = ""
-                        attrFilters = [:]
-                        Task { await load() }
-                    }
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(KXColor.accent)
-                    .buttonStyle(.plain)
-                }
-            }
-            ScrollView(.horizontal, showsIndicators: false) {
+                // 单行控制条：范围(城市/国家) ····· 筛选 / 排序。
                 HStack(spacing: 6) {
                     scopeButton(title: region?.cityName ?? "城市", mode: .city)
                     scopeButton(title: region?.countryName ?? "国家", mode: .country)
+                    Spacer(minLength: 6)
                     Button {
                         withAnimation(.snappy(duration: 0.22)) {
                             filtersOpen.toggle()
@@ -2274,11 +2238,11 @@ struct CityListingChannelView: View {
                     } label: {
                         Label(activeFilterCount > 0 ? "筛选 \(activeFilterCount)" : "筛选", systemImage: "slider.horizontal.3")
                             .font(.caption.weight(.bold))
-                            .foregroundStyle(filtersOpen ? KXColor.accent : .primary)
+                            .foregroundStyle(filtersOpen || activeFilterCount > 0 ? KXColor.accent : .primary)
                             .padding(.horizontal, 10)
                             .frame(height: 30)
-                            .background(filtersOpen ? KXColor.accent.opacity(0.10) : KXColor.softBackground.opacity(0.88), in: Capsule())
-                            .overlay(Capsule().stroke(filtersOpen ? KXColor.accent.opacity(0.35) : KXColor.separator.opacity(0.65), lineWidth: 0.7))
+                            .background(filtersOpen || activeFilterCount > 0 ? KXColor.accent.opacity(0.10) : KXColor.softBackground.opacity(0.88), in: Capsule())
+                            .overlay(Capsule().stroke(filtersOpen || activeFilterCount > 0 ? KXColor.accent.opacity(0.35) : KXColor.separator.opacity(0.65), lineWidth: 0.7))
                     }
                     .buttonStyle(.plain)
                     Menu {
@@ -2304,46 +2268,79 @@ struct CityListingChannelView: View {
                             .overlay(Capsule().stroke(KXColor.separator.opacity(0.65), lineWidth: 0.7))
                     }
                 }
+                searchBar
+                // 服务分区：餐厅美食 / 景点玩乐 / 生活服务。
+                if baseType == "local_service" {
+                    serviceSectionChips
+                }
+                // Persistent category rail: one tap from anywhere, never buried
+                // in a collapsed filter panel.
+                categoryChips
+                if filtersOpen {
+                    scopeFilterPanel
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
             }
-            searchBar
-            // 服务分区：餐厅美食 / 景点玩乐 / 生活服务。
-            if baseType == "local_service" {
-                serviceSectionChips
-            }
-            // Persistent category rail: one tap from anywhere, never buried
-            // in a collapsed filter panel.
-            categoryChips
-            if filtersOpen {
-                scopeFilterPanel
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-        }
-        .padding(KXSpacing.md)
-        .kxGlassSurface(radius: KXRadius.lg, elevated: true)
-    }
+            .padding(KXSpacing.md)
+            .kxGlassSurface(radius: KXRadius.lg, elevated: true)
 
-    private var serviceSectionChips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(Self.serviceSections, id: \.key) { section in
+            // 轻量结果摘要行：替代原来卡片里占两行的标题块。
+            HStack(spacing: 6) {
+                Text("\(visibleItems.count) 条结果")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                Text("·")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.tertiary)
+                Text("\(activeScopeLabel) · \(selectedCategory)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                Spacer(minLength: 6)
+                if activeFilterCount > 0 {
                     Button {
-                        serviceSection = section.key
+                        query = ""
                         selectedCategory = "全部"
-                        Task { await load(quiet: true) }
+                        scopeMode = .city
+                        selectedScopeArea = ""
+                        selectedScopeRegionCode = ""
+                        minimumPrice = ""
+                        maximumPrice = ""
+                        attrFilters = [:]
+                        Task { await load() }
                     } label: {
-                        Text(section.title)
-                            .font(.caption.weight(.black))
-                            .foregroundStyle(serviceSection == section.key && selectedCategory == "全部" ? Color.white : .primary)
-                            .padding(.horizontal, 13)
-                            .padding(.vertical, 8)
-                            .background(
-                                serviceSection == section.key && selectedCategory == "全部" ? Color.orange : KXColor.softBackground.opacity(0.88),
-                                in: Capsule()
-                            )
-                            .overlay(Capsule().stroke(serviceSection == section.key && selectedCategory == "全部" ? Color.clear : KXColor.separator.opacity(0.7), lineWidth: 0.7))
+                        Label("清空筛选", systemImage: "xmark.circle.fill")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(KXColor.accent)
                     }
                     .buttonStyle(.plain)
                 }
+            }
+            .padding(.horizontal, 4)
+        }
+    }
+
+    private var serviceSectionChips: some View {
+        FlowLayout(spacing: 8) {
+            ForEach(Self.serviceSections, id: \.key) { section in
+                Button {
+                    serviceSection = section.key
+                    selectedCategory = "全部"
+                    Task { await load(quiet: true) }
+                } label: {
+                    Text(section.title)
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(serviceSection == section.key && selectedCategory == "全部" ? Color.white : .primary)
+                        .padding(.horizontal, 13)
+                        .padding(.vertical, 8)
+                        .background(
+                            serviceSection == section.key && selectedCategory == "全部" ? Color.orange : KXColor.softBackground.opacity(0.88),
+                            in: Capsule()
+                        )
+                        .overlay(Capsule().stroke(serviceSection == section.key && selectedCategory == "全部" ? Color.clear : KXColor.separator.opacity(0.7), lineWidth: 0.7))
+                }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -2400,26 +2397,40 @@ struct CityListingChannelView: View {
         }
     }
 
+    @ViewBuilder
     private var categoryChips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(KXListingCopy.categories(for: hotelsActive ? "hotels" : staysActive ? "stays" : baseType), id: \.self) { category in
-                    Button {
-                        selectedCategory = category
-                        Task { await load(quiet: true) }
-                    } label: {
-                        Text(KXListingCopy.categoryLabel(category, language))
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(selectedCategory == category ? Color.white : .primary)
-                            .padding(.horizontal, 13)
-                            .padding(.vertical, 8)
-                            .background(selectedCategory == category ? KXColor.accent : KXColor.softBackground.opacity(0.88), in: Capsule())
-                            .overlay(Capsule().stroke(selectedCategory == category ? Color.clear : KXColor.separator.opacity(0.7), lineWidth: 0.7))
+        let categories = KXListingCopy.categories(for: hotelsActive ? "hotels" : staysActive ? "stays" : baseType)
+        if baseType == "local_service" {
+            FlowLayout(spacing: 8) {
+                ForEach(categories, id: \.self) { category in
+                    categoryChip(category)
+                }
+            }
+        } else {
+            KXFadingHScroll {
+                HStack(spacing: 8) {
+                    ForEach(categories, id: \.self) { category in
+                        categoryChip(category)
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
+    }
+
+    private func categoryChip(_ category: String) -> some View {
+        Button {
+            selectedCategory = category
+            Task { await load(quiet: true) }
+        } label: {
+            Text(KXListingCopy.categoryLabel(category, language))
+                .font(.caption.weight(.bold))
+                .foregroundStyle(selectedCategory == category ? Color.white : .primary)
+                .padding(.horizontal, 13)
+                .padding(.vertical, 8)
+                .background(selectedCategory == category ? KXColor.accent : KXColor.softBackground.opacity(0.88), in: Capsule())
+                .overlay(Capsule().stroke(selectedCategory == category ? Color.clear : KXColor.separator.opacity(0.7), lineWidth: 0.7))
+        }
+        .buttonStyle(.plain)
     }
 
     private var scopeFilterPanel: some View {
@@ -3458,7 +3469,7 @@ private struct ListingIntakeSheet: View {
 
                     Button(action: submit) {
                         HStack {
-                            if submitting { ProgressView().tint(.white) }
+                            if submitting { KXSpinner(size: 18, lineWidth: 2.2, tint: .white) }
                             Text(submitting ? "提交中" : spec.title)
                                 .font(.headline.weight(.bold))
                         }
@@ -3813,6 +3824,9 @@ struct CreateCityListingView: View {
         }
         .kxPageBackground()
         .toolbar(.hidden, for: .navigationBar)
+        // 工作台等入口用 NavigationLink 直推本页(不走 router 的
+        // requiresHiddenTabBar),不收起悬浮 TabBar 会压住底部提交栏。
+        .kxHidesTabBar(reason: .custom("focus-form"))
         .safeAreaInset(edge: .bottom, spacing: 0) {
             submitBar
         }
@@ -4076,7 +4090,7 @@ struct CreateCityListingView: View {
             }
             Button { Task { await submit() } } label: {
                 HStack(spacing: 8) {
-                    if isSubmitting { ProgressView().tint(.white) }
+                    if isSubmitting { KXSpinner(size: 18, lineWidth: 2.2, tint: .white) }
                     Text(isSubmitting ? "提交中" : isEditing ? "保存修改" : KXListingCopy.submitLabel(for: listingType))
                         .font(.headline.weight(.bold))
                 }

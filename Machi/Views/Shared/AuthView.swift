@@ -207,8 +207,7 @@ struct AuthView: View {
             } label: {
                 HStack(spacing: 10) {
                     if isGoogleLoading {
-                        ProgressView()
-                            .tint(KXColor.accent)
+                        KXSpinner(size: 22, lineWidth: 2.4)
                     } else {
                         Text("G")
                             .font(.headline.weight(.black))
@@ -335,8 +334,7 @@ struct AuthView: View {
             } label: {
                 HStack(spacing: 10) {
                 if viewModel.isLoading {
-                    ProgressView()
-                        .tint(KXColor.accent)
+                    KXSpinner(size: 22, lineWidth: 2.4)
                     }
                     Text(viewModel.mode == .login ? L("loginMachi", language) : L("createAccount", language))
                     Image(systemName: "arrow.right")
@@ -427,7 +425,7 @@ private struct AuthCodeField: View {
 
                 Button(action: onSend) {
                     HStack(spacing: 6) {
-                        if sending { ProgressView().scaleEffect(0.8) }
+                        if sending { KXSpinner(size: 16, lineWidth: 2) }
                         Text(cooldown > 0 ? "\(cooldown)s" : L("authSendCode", language))
                             .font(.subheadline.weight(.bold))
                             .lineLimit(1)
@@ -489,8 +487,7 @@ private struct AuthCaptchaField: View {
                 Button(action: onRefresh) {
                     Group {
                         if loading {
-                            ProgressView()
-                                .scaleEffect(0.8)
+                            KXSpinner(size: 24, lineWidth: 2.4)
                         } else if let image, let uiImage = UIImage(data: image) {
                             Image(uiImage: uiImage)
                                 .resizable()

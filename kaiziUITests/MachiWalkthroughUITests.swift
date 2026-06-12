@@ -1,0 +1,165 @@
+import XCTest
+
+/// Screenshot walkthrough used to visually verify UI upgrades on the
+/// simulator without manual tapping. Writes PNGs to /tmp/machi_shots/
+/// (simulator processes share the host filesystem). Not a behavioural
+/// assertion suite — failures are soft so one missing element doesn't
+/// abort the whole sweep.
+final class MachiWalkthroughUITests: XCTestCase {
+    override func setUpWithError() throws {
+        continueAfterFailure = true
+    }
+
+    @MainActor
+    func testWalkthroughScreens() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        // ── 1. 登录页
+        _ = app.buttons["auth.mode.register"].waitForExistence(timeout: 25)
+        snap("01_auth_login")
+
+        // ── 2. 注册模式 → 城市选择器（应只有国家列表）
+        if app.buttons["auth.mode.register"].exists {
+            forceTap(app.buttons["auth.mode.register"])
+            pause(1)
+            snap("02_auth_register")
+            app.swipeUp()
+            pause(1)
+            let regionRow = app.buttons["auth.region"]
+            if regionRow.waitForExistence(timeout: 5) {
+                forceTap(regionRow)
+                pause(1.2)
+                snap("03_region_picker_top")
+                app.swipeUp()
+                pause(0.8)
+                snap("04_region_picker_bottom")
+                let japan = app.staticTexts["日本"].firstMatch
+                if japan.waitForExistence(timeout: 3) {
+                    forceTap(japan)
+                    pause(1)
+                    snap("05_region_japan_provinces")
+                    let tokyo = app.staticTexts["东京都"].firstMatch
+                    if tokyo.waitForExistence(timeout: 3) {
+                        forceTap(tokyo)
+                        pause(1)
+                        snap("06_region_tokyo_cities")
+                    }
+                }
+                let cancel = app.buttons["取消"].firstMatch
+                if cancel.exists {
+                    forceTap(cancel)
+                } else {
+                    app.swipeDown(velocity: .fast)
+                }
+                pause(1)
+            }
+        }
+
+        // ── 3. 游客模式进主界面
+        let guest = app.buttons["auth.browseAsGuest"].firstMatch
+        if guest.waitForExistence(timeout: 5) {
+            forceTap(guest)
+        }
+        _ = app.buttons["tabbar.search"].waitForExistence(timeout: 30)
+        pause(3)
+        snap("07_home")
+
+        // ── 4. 发现页（新城市入口卡片）
+        tapTab(app, "tabbar.search")
+        pause(2.5)
+        snap("08_discover_cards")
+
+        // ── 5. 商家与本地服务列表页（紧凑筛选卡 + 渐隐 chips）
+        let serviceCard = app.staticTexts["商家与本地服务"].firstMatch
+        if serviceCard.waitForExistence(timeout: 6) {
+            forceTap(serviceCard)
+            pause(3)
+            snap("09_service_listing")
+            app.swipeUp()
+            pause(1)
+            snap("10_service_listing_scrolled")
+            // 列表页隐藏了底部 TabBar——必须先返回发现页再切 tab。
+            tapBack(app)
+            pause(1.5)
+        }
+
+        // ── 6. 私信 tab（游客视角）
+        tapTab(app, "tabbar.messages")
+        pause(1.5)
+        snap("11_messages_guest")
+
+        // ── 7. 指南 tab（新加载动画 → 内容）
+        tapTab(app, "tabbar.guide")
+        snap("18_guide_loading")
+        pause(3)
+        snap("19_guide_loaded")
+
+        // ── 8. 工作台 + 商家认证表单（登录后页面，用 DEBUG 直达钩子）
+        app.launchArguments = ["-KXAutoGuest", "-KXDebugPush", "workbench"]
+        app.launch()
+        pause(3)
+        snap("12_workbench_top")
+        app.swipeUp()
+        app.swipeUp()
+        pause(1)
+        snap("13_workbench_bottom")
+
+        let merchant = app.staticTexts["认证商家服务"].firstMatch
+        if merchant.waitForExistence(timeout: 5) {
+        }
+
+        app.launchArguments = ["-KXAutoGuest", "-KXDebugPush", "merchant"]
+        app.launch()
+        pause(3)
+        snap("14_merchant_form_top")
+        app.swipeUp()
+        pause(0.8)
+        snap("15_merchant_form_fields")
+        app.swipeUp()
+        pause(0.8)
+        snap("16_merchant_form_more")
+        app.swipeUp()
+        pause(0.8)
+        snap("17_merchant_form_bottom")
+    }
+
+    /// Tap via frame-center coordinate — bypasses `isHittable`, which is
+    /// false for buttons under `glassEffect` overlays (tab bar, glass
+    /// circles) even though real taps land fine.
+    private func forceTap(_ element: XCUIElement) {
+        element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+    }
+
+    /// The floating glass tab bar swallows XCUITest hit-tests on its
+    /// buttons, so tap by screen position: five equal segments centred
+    /// in the bottom capsule.
+    private func tapTab(_ app: XCUIApplication, _ identifier: String) {
+        let button = app.buttons[identifier].firstMatch
+        if button.exists {
+            forceTap(button)
+            return
+        }
+        let order = ["tabbar.home", "tabbar.search", "tabbar.guide", "tabbar.messages", "tabbar.profile"]
+        guard let index = order.firstIndex(of: identifier) else { return }
+        let xs: [CGFloat] = [0.156, 0.328, 0.5, 0.672, 0.844]
+        app.coordinate(withNormalizedOffset: CGVector(dx: xs[index], dy: 0.914)).tap()
+    }
+
+    /// Tap the custom glass back-chevron used by toolbar-hidden pages
+    /// (top-left, 42pt circle at ~(37, 60)pt on a 402×874 screen).
+    private func tapBack(_ app: XCUIApplication) {
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.092, dy: 0.069)).tap()
+    }
+
+    private func pause(_ seconds: TimeInterval) {
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: seconds))
+    }
+
+    private func snap(_ name: String) {
+        let shot = XCUIScreen.main.screenshot()
+        let dir = URL(fileURLWithPath: "/tmp/machi_shots", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? shot.pngRepresentation.write(to: dir.appendingPathComponent("\(name).png"))
+    }
+}

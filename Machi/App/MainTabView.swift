@@ -15,6 +15,9 @@ struct MainTabView: View {
     @State private var feedRefreshToken = UUID()
     @State private var profileRefreshToken = UUID()
     @State private var loadedTabs: Set<AppTab> = [.home]
+    #if DEBUG
+    @State private var debugPushScreen: KXDebugScreen?
+    #endif
 
     private var selectedTab: Binding<AppTab> {
         Binding {
@@ -73,6 +76,12 @@ struct MainTabView: View {
                 router.setActiveTab(.search)
                 router.open(.cityListings(regionCode: regionCode, type: type), in: .search)
             }
+            // 截图走查用:`-KXDebugPush workbench|merchant` 直接展示登录后
+            // 才能进的页面(工作台/商家认证表单),不用真实登录。
+            if let idx = ProcessInfo.processInfo.arguments.firstIndex(of: "-KXDebugPush"),
+               idx + 1 < ProcessInfo.processInfo.arguments.count {
+                debugPushScreen = KXDebugScreen(name: ProcessInfo.processInfo.arguments[idx + 1])
+            }
             #endif
             loadedTabs.insert(chrome.selectedTab)
             router.setActiveTab(chrome.selectedTab)
@@ -121,6 +130,23 @@ struct MainTabView: View {
                 chrome.select(.home)
             }
         }
+        #if DEBUG
+        .fullScreenCover(item: $debugPushScreen) { screen in
+            NavigationStack {
+                Group {
+                    switch screen.name {
+                    case "workbench":
+                        MyWorkbenchView(currentUser: currentUser)
+                    case "merchant":
+                        MerchantSettingsView(currentUser: currentUser)
+                    default:
+                        EmptyView()
+                    }
+                }
+                .kxRouteDestinations(currentUser: currentUser)
+            }
+        }
+        #endif
     }
 
     private func syncChromeForActiveRoute() {
@@ -170,6 +196,14 @@ struct MainTabView: View {
         }
     }
 }
+
+#if DEBUG
+/// Identifiable wrapper for the `-KXDebugPush` screenshot hook.
+struct KXDebugScreen: Identifiable {
+    let name: String
+    var id: String { name }
+}
+#endif
 
 enum AppTab: String, CaseIterable, Identifiable, Hashable {
     case home

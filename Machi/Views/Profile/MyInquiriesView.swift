@@ -77,7 +77,8 @@ struct MyInquiriesView: View {
                 }
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
-            .padding(.vertical, 10)
+            .padding(.top, 10)
+            .kxTabBarSafeBottomPadding()
         }
         .refreshable { await load(force: true) }
     }
@@ -195,7 +196,8 @@ struct MyOrdersView: View {
                         }
                     }
                     .padding(.horizontal, KaiXTheme.horizontalPadding)
-                    .padding(.vertical, 10)
+                    .padding(.top, 10)
+                    .kxTabBarSafeBottomPadding()
                 }
                 .refreshable { await load() }
             }

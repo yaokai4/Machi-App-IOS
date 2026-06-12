@@ -65,6 +65,10 @@ struct GuideHomeView: View {
                         viewModel.clearSearch()
                     }
 
+                    if let message = viewModel.errorMessage, !message.isEmpty {
+                        GuideInlineStatus(message: message)
+                    }
+
                     if !viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         GuideSearchResultsSection(
                             isSearching: viewModel.isSearching,
@@ -252,8 +256,7 @@ struct GuideCategoryView: View {
 private struct GuideRefreshIndicator: View {
     var body: some View {
         HStack(spacing: 8) {
-            ProgressView()
-                .scaleEffect(0.72)
+            KXSpinner(size: 14, lineWidth: 2)
             Text("正在更新内容")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)

@@ -9,7 +9,7 @@ struct CityPrimaryCategoryTabs: View {
     @Binding var selection: CityChannel.Primary
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        KXFadingHScroll {
             HStack(spacing: 8) {
                 ForEach(CityChannel.Primary.allCases) { primary in
                     Button {
@@ -25,7 +25,7 @@ struct CityPrimaryCategoryTabs: View {
                                 .lineLimit(1)
                         }
                         .padding(.horizontal, 13)
-                        .frame(height: 36)
+                        .frame(height: 34)
                         .kxGlassCapsule(isSelected: selection == primary)
                         .foregroundStyle(selection == primary ? KXColor.accent : .primary)
                     }
@@ -33,7 +33,7 @@ struct CityPrimaryCategoryTabs: View {
                 }
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
-            .padding(.vertical, 10)
+            .padding(.vertical, 8)
         }
         .background(KXColor.cardBackground.opacity(0.78))
         .overlay(alignment: .bottom) {

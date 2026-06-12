@@ -39,6 +39,12 @@ enum GuestSession {
             avatarColorName: "gray"
         )
         guest.syncStatus = .local
+        // 游客默认落在东京：首屏立即有本地内容，而不是空白 feed +
+        // 「选择城市」。之后游客自选的城市会写回这个实体并在重启后恢复。
+        guest.country = "jp"
+        guest.province = "tokyo"
+        guest.city = "tokyo"
+        guest.currentRegionCode = "jp.tokyo.tokyo"
         context.insert(guest)
         do {
             try context.save()

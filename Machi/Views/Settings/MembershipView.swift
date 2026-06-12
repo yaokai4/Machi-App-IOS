@@ -42,7 +42,9 @@ struct MembershipView: View {
                 subscriptionDisclosure
                 safetyNotice
             }
-            .padding(KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.top, KaiXTheme.horizontalPadding)
+            .kxTabBarSafeBottomPadding()
         }
         .kxPageBackground()
         .navigationTitle(L("membershipTitle", language))
@@ -275,7 +277,7 @@ struct MembershipView: View {
             } label: {
                 HStack {
                     if store.state == .purchasing || store.state == .verifying {
-                        ProgressView().scaleEffect(0.8)
+                        KXSpinner(size: 18, lineWidth: 2.2)
                     }
                     Text(store.selectedPlan.map { "\($0.displayName) · \($0.displayPriceLabel)" } ?? L("membershipCTA", language))
                         .font(.headline.weight(.semibold))

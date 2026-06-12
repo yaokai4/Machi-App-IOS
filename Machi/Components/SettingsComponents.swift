@@ -101,7 +101,7 @@ struct SettingsRowLink<Destination: View>: View {
                 }
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(KXPressableStyle(scale: 0.985, dim: 0.9))
         .alert(title, isPresented: $isShowingStatusMessage) {
             Button(L("ok", language), role: .cancel) {}
         } message: {

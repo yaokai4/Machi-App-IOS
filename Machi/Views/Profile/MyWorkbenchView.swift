@@ -31,7 +31,7 @@ struct MyWorkbenchView: View {
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
             .padding(.top, 12)
-            .padding(.bottom, 42)
+            .kxTabBarSafeBottomPadding()
         }
         .navigationTitle("我的工作台")
         .navigationBarTitleDisplayMode(.inline)

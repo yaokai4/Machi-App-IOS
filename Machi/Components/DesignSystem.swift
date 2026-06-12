@@ -241,6 +241,53 @@ struct KXEmptyState: View {
     }
 }
 
+/// Horizontal chip rail with soft edge fades that appear only while
+/// content actually overflows in that direction — the visual cue that
+/// the row scrolls, which plain `ScrollView(.horizontal)` never gives.
+struct KXFadingHScroll<Content: View>: View {
+    var fadeWidth: CGFloat = 22
+    @ViewBuilder let content: Content
+
+    private struct Edges: Equatable {
+        var leading = false
+        var trailing = false
+    }
+
+    @State private var edges = Edges()
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            content
+        }
+        .onScrollGeometryChange(for: Edges.self) { geometry in
+            Edges(
+                leading: geometry.contentOffset.x > 4,
+                trailing: geometry.contentOffset.x + geometry.containerSize.width < geometry.contentSize.width - 4
+            )
+        } action: { _, newEdges in
+            if newEdges != edges { edges = newEdges }
+        }
+        .mask {
+            HStack(spacing: 0) {
+                LinearGradient(
+                    colors: [edges.leading ? .clear : .black, .black],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .frame(width: fadeWidth)
+                Rectangle().fill(.black)
+                LinearGradient(
+                    colors: [.black, edges.trailing ? .clear : .black],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .frame(width: fadeWidth)
+            }
+        }
+        .animation(.easeInOut(duration: 0.16), value: edges)
+    }
+}
+
 struct KXFloatingComposeButton: View {
     let action: () -> Void
     @State private var tapCount = 0
