@@ -133,6 +133,20 @@ final class KaiXAPIClient {
         return response
     }
 
+    /// Native Sign in with Apple: post the identity token (the trust anchor)
+    /// plus the raw nonce; the server verifies it and returns the same
+    /// {token, user} session shape as password login.
+    @discardableResult
+    func appleSignIn(identityToken: String, nonce: String, fullName: String? = nil, email: String? = nil) async throws -> KaiXLoginResponse {
+        var body = ["identity_token": identityToken, "nonce": nonce]
+        if let fullName, !fullName.isEmpty { body["full_name"] = fullName }
+        if let email, !email.isEmpty { body["email"] = email }
+        let data = try await request("POST", "/api/auth/apple", body: body)
+        let response: KaiXLoginResponse = try decode(data)
+        KaiXBackend.token = response.token
+        return response
+    }
+
     func googleAuthStart(redirect: String = "machi://auth/google", intent: String = "login") async throws -> KaiXGoogleAuthStartResponse {
         let data = try await request("GET", "/api/auth/google/start", queryItems: [
             URLQueryItem(name: "client", value: "ios"),

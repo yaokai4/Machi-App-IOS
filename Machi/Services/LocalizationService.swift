@@ -121,6 +121,7 @@ struct LocalizationService {
         "continueWithGoogle": [.zh: "使用 Google 登录", .ja: "Google で続ける", .en: "Continue with Google"],
         "googleSigningIn": [.zh: "正在打开 Google…", .ja: "Google を開いています…", .en: "Opening Google…"],
         "googleLoginFailed": [.zh: "Google 登录未完成，请稍后再试。", .ja: "Google ログインが完了しませんでした。もう一度お試しください。", .en: "Google sign-in was not completed. Please try again."],
+        "appleLoginFailed": [.zh: "Apple 登录未完成，请稍后再试。", .ja: "Apple サインインが完了しませんでした。もう一度お試しください。", .en: "Sign in with Apple was not completed. Please try again."],
         // Guest browsing (App Store 5.1.1(v): browse before login)
         "browseAsGuest": [.zh: "先逛逛，看看城市内容", .ja: "ゲストとして街の投稿を見る", .en: "Browse city content first"],
         "guestModeBadge": [.zh: "游客浏览", .ja: "ゲスト閲覧", .en: "Guest"],

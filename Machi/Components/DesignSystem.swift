@@ -112,12 +112,65 @@ enum KXColor {
     static let rankSky = Color(red: 0.063, green: 0.557, blue: 0.969)
 }
 
-enum KXGlass {
-    static let surface = Glass.regular.tint(KXColor.glassSurfaceTint)
-    static let control = Glass.regular.tint(KXColor.glassControlTint)
-    static let selected = Glass.regular.tint(KXColor.accent.opacity(0.13))
-    static let bar = Glass.regular.tint(KXColor.glassBarTint)
-    static let clear = Glass.clear
+/// iOS-17-safe descriptor for the Liquid Glass styles. SwiftUI's `Glass`
+/// type only exists on iOS 26+, so we never store one directly — we map this
+/// to a `Glass` *inside* an availability check (`kxLiquidGlass`) and fall back
+/// to a frosted `.ultraThinMaterial` (the standard pre-26 glass look) on
+/// iOS 17–25. This is what lets the app deploy to iOS 17 while still showing
+/// the real Liquid Glass on iOS 26+ devices.
+enum KXGlassStyle {
+    case surface, control, selected, bar, clear
+}
+
+@available(iOS 26, *)
+private func kxResolveGlass(_ style: KXGlassStyle, interactive: Bool, tint: Color?) -> Glass {
+    var glass: Glass
+    if let tint {
+        glass = Glass.regular.tint(tint)
+    } else {
+        switch style {
+        case .surface:  glass = Glass.regular.tint(KXColor.glassSurfaceTint)
+        case .control:  glass = Glass.regular.tint(KXColor.glassControlTint)
+        case .selected: glass = Glass.regular.tint(KXColor.accent.opacity(0.13))
+        case .bar:      glass = Glass.regular.tint(KXColor.glassBarTint)
+        case .clear:    glass = Glass.clear
+        }
+    }
+    return interactive ? glass.interactive() : glass
+}
+
+extension View {
+    /// Liquid Glass on iOS 26+, frosted `.ultraThinMaterial` on iOS 17–25.
+    /// Call sites keep their own tint fill + strokes + shadow, so the
+    /// downlevel look stays cohesive even without the glass refraction.
+    @ViewBuilder
+    func kxLiquidGlass<S: Shape>(_ style: KXGlassStyle = .control, in shape: S, interactive: Bool = true, tint: Color? = nil) -> some View {
+        if #available(iOS 26, *) {
+            self.glassEffect(kxResolveGlass(style, interactive: interactive, tint: tint), in: shape)
+        } else {
+            self.background(.ultraThinMaterial, in: shape)
+        }
+    }
+
+    /// Zoom navigation transition source (iOS 18+); no-op on iOS 17 — the
+    /// preview still presents, just with the default animation.
+    @ViewBuilder
+    func kxMatchedTransitionSource<ID: Hashable>(id: ID, in namespace: Namespace.ID) -> some View {
+        if #available(iOS 18, *) {
+            self.matchedTransitionSource(id: id, in: namespace)
+        } else {
+            self
+        }
+    }
+
+    @ViewBuilder
+    func kxZoomTransition<ID: Hashable>(sourceID: ID, in namespace: Namespace.ID) -> some View {
+        if #available(iOS 18, *) {
+            self.navigationTransition(.zoom(sourceID: sourceID, in: namespace))
+        } else {
+            self
+        }
+    }
 }
 
 enum KXMaterial {
@@ -299,17 +352,7 @@ struct KXFadingHScroll<Content: View>: View {
     @State private var edges = Edges()
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            content
-        }
-        .onScrollGeometryChange(for: Edges.self) { geometry in
-            Edges(
-                leading: geometry.contentOffset.x > 4,
-                trailing: geometry.contentOffset.x + geometry.containerSize.width < geometry.contentSize.width - 4
-            )
-        } action: { _, newEdges in
-            if newEdges != edges { edges = newEdges }
-        }
+        scroller
         .mask {
             HStack(spacing: 0) {
                 LinearGradient(
@@ -328,6 +371,29 @@ struct KXFadingHScroll<Content: View>: View {
             }
         }
         .animation(.easeInOut(duration: 0.16), value: edges)
+    }
+
+    // iOS 18+ tracks scroll geometry to fade the leading/trailing edges; on
+    // iOS 17 the edges simply stay un-faded (a subtle polish, not a feature).
+    @ViewBuilder
+    private var scroller: some View {
+        if #available(iOS 18, *) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                content
+            }
+            .onScrollGeometryChange(for: Edges.self) { geometry in
+                Edges(
+                    leading: geometry.contentOffset.x > 4,
+                    trailing: geometry.contentOffset.x + geometry.containerSize.width < geometry.contentSize.width - 4
+                )
+            } action: { _, newEdges in
+                if newEdges != edges { edges = newEdges }
+            }
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                content
+            }
+        }
     }
 }
 
@@ -348,7 +414,7 @@ struct KXFloatingComposeButton: View {
                     Circle()
                         .fill(KXColor.accent.opacity(0.09))
                 }
-                .glassEffect(KXGlass.selected.interactive(), in: Circle())
+                .kxLiquidGlass(.selected, in: Circle())
                 .overlay(Circle().stroke(KXColor.glassStroke, lineWidth: 1))
                 .shadow(color: KXColor.glassShadow, radius: 7, y: 3)
         }
@@ -460,7 +526,7 @@ extension View {
                 Capsule()
                     .fill(isSelected ? KXColor.accent.opacity(0.12) : KXColor.glassControlTint)
             }
-            .glassEffect((isSelected ? KXGlass.selected : KXGlass.control).interactive(), in: Capsule())
+            .kxLiquidGlass(isSelected ? .selected : .control, in: Capsule())
             .clipShape(Capsule())
             .overlay {
                 Capsule()
@@ -480,7 +546,7 @@ extension View {
                 Circle()
                     .fill(isSelected ? KXColor.accent.opacity(0.13) : KXColor.glassControlTint)
             }
-            .glassEffect((isSelected ? KXGlass.selected : KXGlass.control).interactive(), in: Circle())
+            .kxLiquidGlass(isSelected ? .selected : .control, in: Circle())
             .clipShape(Circle())
             .overlay {
                 Circle()

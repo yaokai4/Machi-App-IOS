@@ -1,4 +1,5 @@
 import AuthenticationServices
+import CryptoKit
 import SwiftData
 import UIKit
 
@@ -87,5 +88,50 @@ final class GoogleAuthService: NSObject, ASWebAuthenticationPresentationContextP
             preconditionFailure("Google authentication requires an active window scene.")
         }
         return ASPresentationAnchor(windowScene: windowScene)
+    }
+}
+
+/// Native Sign in with Apple. The SwiftUI `SignInWithAppleButton` runs the
+/// system controller; this helper generates the nonce, and turns the returned
+/// credential into a verified Machi session via the backend (which checks the
+/// identity-token signature against Apple's keys + our nonce). No web redirect.
+enum AppleAuthService {
+    /// Cryptographically-random nonce sent (hashed) in the request and
+    /// echoed (hashed) inside the identity token — the server compares them
+    /// to block replay.
+    static func randomNonce(length: Int = 32) -> String {
+        var bytes = [UInt8](repeating: 0, count: length)
+        if SecRandomCopyBytes(kSecRandomDefault, length, &bytes) != errSecSuccess {
+            for i in bytes.indices { bytes[i] = UInt8.random(in: 0...255) }
+        }
+        let charset = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-._")
+        return String(bytes.map { charset[Int($0) % charset.count] })
+    }
+
+    static func sha256(_ input: String) -> String {
+        SHA256.hash(data: Data(input.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    @MainActor
+    static func completeSignIn(authorization: ASAuthorization, rawNonce: String, context: ModelContext) async throws -> UserEntity {
+        guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+              let tokenData = credential.identityToken,
+              let identityToken = String(data: tokenData, encoding: .utf8), !identityToken.isEmpty else {
+            throw KaiXAPIError(error: .init(code: "apple_no_token", message: "Apple 登录未返回凭证。"))
+        }
+        let fullName = [credential.fullName?.givenName, credential.fullName?.familyName]
+            .compactMap { $0 }
+            .joined(separator: " ")
+        let response = try await KaiXAPIClient.shared.appleSignIn(
+            identityToken: identityToken,
+            nonce: rawNonce,
+            fullName: fullName,
+            email: credential.email
+        )
+        let entity = RemoteSyncService.shared.upsertUser(response.user, context: context)
+        AuthService.shared.persistSession(user: entity)
+        try? context.save()
+        Task { await RemoteSyncService.shared.bootstrap(context: context) }
+        return entity
     }
 }

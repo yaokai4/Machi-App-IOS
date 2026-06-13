@@ -180,7 +180,7 @@ struct EditProfileView: View {
                             .foregroundStyle(avatarSymbol == symbol ? .white : .primary)
                             .frame(width: 38, height: 38)
                             .background(avatarSymbol == symbol ? KXColor.accent.opacity(0.78) : KXColor.glassControlTint)
-                            .glassEffect((avatarSymbol == symbol ? KXGlass.selected : KXGlass.control).interactive(), in: Circle())
+                            .kxLiquidGlass(avatarSymbol == symbol ? .selected : .control, in: Circle())
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)

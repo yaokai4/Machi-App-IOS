@@ -1,3 +1,4 @@
+import AuthenticationServices
 import SwiftData
 import SwiftUI
 import UIKit
@@ -5,11 +6,13 @@ import UIKit
 struct AuthView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
+    @Environment(\.colorScheme) private var colorScheme
     @AppStorage("appLanguageCode") private var appLanguageCode = AppLanguage.system.rawValue
     @StateObject private var viewModel = AuthViewModel()
     @State private var isPasswordVisible = false
     @State private var isShowingRegionPicker = false
     @State private var isGoogleLoading = false
+    @State private var appleNonce = ""
 
     let onAuthenticated: (UserEntity) -> Void
     /// When provided, shows a "browse as guest" affordance so people can
@@ -127,7 +130,7 @@ struct AuthView: View {
                 ZStack {
                     Circle()
                         .fill(KXColor.accent.opacity(0.18))
-                        .glassEffect(KXGlass.selected, in: Circle())
+                        .kxLiquidGlass(.selected, in: Circle(), interactive: false)
                         .frame(width: 62, height: 62)
                     Image(systemName: "bolt.fill")
                         .font(.title2.weight(.semibold))
@@ -226,6 +229,43 @@ struct AuthView: View {
             .buttonStyle(.plain)
             .disabled(isGoogleLoading || viewModel.isLoading)
             .accessibilityIdentifier("auth.google")
+
+            SignInWithAppleButton(.continue) { request in
+                let nonce = AppleAuthService.randomNonce()
+                appleNonce = nonce
+                request.requestedScopes = [.fullName, .email]
+                request.nonce = AppleAuthService.sha256(nonce)
+            } onCompletion: { result in
+                switch result {
+                case .success(let authorization):
+                    Task {
+                        do {
+                            let user = try await AppleAuthService.completeSignIn(
+                                authorization: authorization,
+                                rawNonce: appleNonce,
+                                context: modelContext
+                            )
+                            onAuthenticated(user)
+                        } catch {
+                            viewModel.errorMessage = L("appleLoginFailed", language)
+                        }
+                    }
+                case .failure(let error):
+                    // A user cancel is not an error worth surfacing.
+                    let nsError = error as NSError
+                    let canceled = nsError.domain == ASAuthorizationError.errorDomain
+                        && nsError.code == ASAuthorizationError.Code.canceled.rawValue
+                    if !canceled {
+                        viewModel.errorMessage = L("appleLoginFailed", language)
+                    }
+                }
+            }
+            .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+            .frame(maxWidth: .infinity)
+            .frame(height: 52)
+            .clipShape(Capsule())
+            .disabled(isGoogleLoading || viewModel.isLoading)
+            .accessibilityIdentifier("auth.apple")
 
             VStack(spacing: 14) {
                 AuthInputField(

@@ -586,7 +586,7 @@ struct PostDetailView: View {
                     Circle()
                         .fill(canSendComment ? KXColor.accent.opacity(0.12) : KXColor.glassControlTint)
                 }
-                .glassEffect((canSendComment ? KXGlass.selected : KXGlass.control).interactive(), in: Circle())
+                .kxLiquidGlass(canSendComment ? .selected : .control, in: Circle())
                 .clipShape(Circle())
                 .overlay(Circle().stroke(KXColor.glassStroke, lineWidth: 0.75))
                 .disabled(!canSendComment)

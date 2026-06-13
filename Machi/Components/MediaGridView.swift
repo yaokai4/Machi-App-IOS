@@ -58,12 +58,12 @@ struct MediaGridView: View {
                         .clipShape(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                     }
                     .buttonStyle(.plain)
-                    .matchedTransitionSource(id: item.id, in: mediaZoomNamespace)
+                    .kxMatchedTransitionSource(id: item.id, in: mediaZoomNamespace)
                 }
             }
             .fullScreenCover(item: $selectedMedia) { media in
                 MediaPreviewView(media: media)
-                    .navigationTransition(.zoom(sourceID: media.id, in: mediaZoomNamespace))
+                    .kxZoomTransition(sourceID: media.id, in: mediaZoomNamespace)
             }
             .onChange(of: selectedMedia) { _, media in
                 chrome.setHidden(media != nil, reason: .mediaPreview)

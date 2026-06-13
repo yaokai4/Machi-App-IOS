@@ -52,7 +52,7 @@ struct BottomTabBarView: View {
             } else {
                 Capsule()
                     .fill(Color.white.opacity(0.032))
-                    .glassEffect(Glass.regular.tint(Color.white.opacity(0.026)), in: Capsule())
+                    .kxLiquidGlass(.bar, in: Capsule(), interactive: false, tint: Color.white.opacity(0.026))
                     .overlay(Capsule().fill(Color.white.opacity(0.024)))
             }
         }
@@ -89,7 +89,7 @@ private struct SelectedTabBubble: View {
     var body: some View {
         Capsule()
             .fill(KXColor.accent.opacity(0.085))
-            .glassEffect(Glass.regular.tint(KXColor.accent.opacity(0.075)).interactive(), in: Capsule())
+            .kxLiquidGlass(.selected, in: Capsule(), tint: KXColor.accent.opacity(0.075))
             .overlay(Capsule().stroke(KXColor.accent.opacity(0.16), lineWidth: 0.65))
             .overlay(Capsule().stroke(Color.white.opacity(0.58), lineWidth: 0.4).padding(1))
             .shadow(color: KXColor.accent.opacity(0.10), radius: 7, y: 3)
