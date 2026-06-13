@@ -366,10 +366,17 @@ struct DiscoverView: View {
         DiscoverView.primarySpecs.map { spec in resolveCategory(spec) }
     }
 
-    /// Full catalog (primary + extended). Surfaces inside the grouped
-    /// MoreChannelSheet so publishing tools do not become main channels.
+    /// Channels shown in the MoreChannelSheet: the 4 primary entrances + the
+    /// genuinely-distinct community channels (matches the web's 9-channel set).
+    /// The rest of `extendedSpecs` (找工作/招聘/内推 ⊂ 工作; 商家/景点/认证商家/民宿
+    /// ⊂ 商家与本地服务; 语言交换/Food/本地小组 ⊂ 活动小组; plus publish-only types
+    /// 投票/长文/匿名) stay defined as the underlying catalog for content-type
+    /// mapping / compose / deep-links, but are hidden so the sheet isn't a
+    /// redundant wall.
+    private static let moreSheetExtendedIDs: Set<String> = ["guide", "news", "coupon", "groups", "question"]
     private var allCategories: [DiscoverCategory] {
-        (DiscoverView.primarySpecs + DiscoverView.extendedSpecs).map { resolveCategory($0) }
+        let extended = DiscoverView.extendedSpecs.filter { DiscoverView.moreSheetExtendedIDs.contains($0.id) }
+        return (DiscoverView.primarySpecs + extended).map { resolveCategory($0) }
     }
 
     private func resolveCategory(_ spec: DiscoverCategorySpec) -> DiscoverCategory {
