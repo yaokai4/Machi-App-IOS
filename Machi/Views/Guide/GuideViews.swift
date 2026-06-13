@@ -72,7 +72,9 @@ struct GuideHomeView: View {
                     if !viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         GuideSearchResultsSection(
                             isSearching: viewModel.isSearching,
-                            articles: viewModel.searchResults
+                            articles: viewModel.searchResults,
+                            schools: viewModel.schoolResults,
+                            companies: viewModel.companyResults
                         )
                     } else {
                         GuideCategoryGrid(categories: home.categories)
@@ -2288,12 +2290,6 @@ private struct GuideHeroSection: View {
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: 9) {
-                guideDoor("生活", icon: "house", keyword: "日本生活")
-                guideDoor("就职", icon: "briefcase", keyword: "日本就职")
-                guideDoor("升学", icon: "graduationcap", keyword: "日本升学")
-            }
-
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(KXColor.livingAccent)
@@ -2347,43 +2343,58 @@ private struct GuideHeroSection: View {
         .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(KXColor.livingInk.opacity(0.06), lineWidth: 0.8))
         .shadow(color: Color.black.opacity(0.05), radius: 14, y: 7)
     }
-
-    private func guideDoor(_ title: String, icon: String, keyword: String) -> some View {
-        Button {
-            searchText = keyword
-            onSearch(keyword)
-        } label: {
-            VStack(alignment: .leading, spacing: 7) {
-                Image(systemName: icon)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(KXColor.livingAccent)
-                Text(title)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(KXColor.livingInk)
-            }
-            .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
-            .padding(10)
-            .background(KXColor.livingSurface.opacity(0.92), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-        }
-        .buttonStyle(KXPressableStyle(scale: 0.97))
-    }
 }
 
 private struct GuideSearchResultsSection: View {
     let isSearching: Bool
     let articles: [KaiXGuideArticleDTO]
+    let schools: [KaiXGuideSchoolDTO]
+    let companies: [KaiXGuideCompanyDTO]
+
+    private var total: Int { articles.count + schools.count + companies.count }
 
     var body: some View {
-        GuideSectionHeader(title: "搜索结果", subtitle: isSearching ? "正在查找相关指南" : "共 \(articles.count) 条相关指南")
+        GuideSectionHeader(
+            title: "搜索结果",
+            subtitle: isSearching ? "正在查找学校、公司和指南" : "共 \(total) 条 · 学校 / 公司 / 指南都已包含"
+        )
         if isSearching {
             LoadingView()
-        } else if articles.isEmpty {
-            EmptyStateView(title: "没有找到相关内容", subtitle: "换个关键词试试。", systemImage: "magnifyingglass")
+        } else if total == 0 {
+            EmptyStateView(title: "没有找到相关内容", subtitle: "换个关键词试试，可以搜学校、公司名和任意指南内容。", systemImage: "magnifyingglass")
         } else {
-            ForEach(articles) { article in
-                GuideArticleCard(article: article, compact: true)
+            if !schools.isEmpty {
+                groupLabel(icon: "graduationcap.fill", title: "学校", count: schools.count)
+                ForEach(schools) { GuideSchoolCard(school: $0) }
+            }
+            if !companies.isEmpty {
+                groupLabel(icon: "building.2.fill", title: "就职公司", count: companies.count)
+                ForEach(companies) { GuideCompanyCard(company: $0) }
+            }
+            if !articles.isEmpty {
+                groupLabel(icon: "doc.text.fill", title: "指南文章", count: articles.count)
+                ForEach(articles) { GuideArticleCard(article: $0, compact: true) }
             }
         }
+    }
+
+    private func groupLabel(icon: String, title: String, count: Int) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: icon)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(KXColor.livingAccent)
+            Text(title)
+                .font(.subheadline.weight(.black))
+                .foregroundStyle(KXColor.livingInk)
+            Text("\(count)")
+                .font(.caption2.weight(.black))
+                .foregroundStyle(KXColor.livingAccent)
+                .padding(.horizontal, 7)
+                .frame(height: 20)
+                .background(KXColor.livingAccentSoft, in: Capsule())
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 4)
     }
 }
 

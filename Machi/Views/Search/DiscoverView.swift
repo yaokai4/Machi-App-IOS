@@ -4960,7 +4960,11 @@ private struct KXJobListingRow: View {
     private var companyVerified: Bool {
         KXListingCopy.boolAttr(listing, "company_verified") || listing.verification_status == "verified"
     }
-    private var jobTypeLabel: String? {
+    // Employment type is stored as a ready-to-show label ("全职"/"兼职"…), not a
+    // key — read it directly. Falls back to the job_type enum for older rows.
+    private var employmentLabel: String? {
+        let e = (KXListingCopy.attr(listing, "employment_type") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !e.isEmpty { return e }
         switch KXListingCopy.attr(listing, "job_type") {
         case "full_time": return L("jt_full_time", language)
         case "part_time": return L("jt_part_time", language)
@@ -4969,6 +4973,11 @@ private struct KXJobListingRow: View {
         default: return nil
         }
     }
+    private var japaneseLabel: String? {
+        let j = (KXListingCopy.attr(listing, "japanese_level") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return j.isEmpty ? nil : (j.contains("日语") || j.contains("日本語") ? j : "日语 \(j)")
+    }
+    private var visaSupport: Bool { KXListingCopy.boolAttr(listing, "visa_support") }
     private var companyInitial: String {
         let source = companyName.isEmpty ? KXListingCopy.displayTitle(listing) : companyName
         return String(source.prefix(1)).uppercased()
@@ -5025,13 +5034,27 @@ private struct KXJobListingRow: View {
                 }
 
                 FlowLayout(spacing: 6) {
-                    if let jobType = jobTypeLabel {
-                        jobChip(jobType, filled: true)
+                    if let employment = employmentLabel {
+                        jobChip(employment, filled: true)
                     }
-                    ForEach(KXListingCopy.badges(for: listing).prefix(3), id: \.self) { badge in
-                        jobChip(badge, filled: false)
+                    if let japanese = japaneseLabel {
+                        jobChip(japanese, filled: false)
+                    }
+                    if visaSupport {
+                        jobChip("签证支持", filled: false)
                     }
                 }
+
+                Divider().overlay(KXColor.livingInk.opacity(0.06))
+
+                HStack(spacing: 5) {
+                    Spacer(minLength: 0)
+                    Text("查看详情 · 投递")
+                        .font(.caption.weight(.black))
+                    Image(systemName: "arrow.right")
+                        .font(.caption2.weight(.black))
+                }
+                .foregroundStyle(KXColor.livingAccent)
             }
             .padding(14)
             .kxLivingSurface(radius: 20, elevated: true)

@@ -124,6 +124,10 @@ struct KXServiceListingCard: View {
                 }
                 .padding(12)
             }
+            // Clip the whole card to the rounded rect so the full-bleed cover's
+            // top corners are rounded too (kxLivingSurface only paints the bg /
+            // stroke / shadow — it doesn't clip — which left square top corners).
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .kxLivingSurface(radius: 20, elevated: true)
         }
         .buttonStyle(KXPressableStyle())

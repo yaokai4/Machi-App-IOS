@@ -7,8 +7,16 @@ final class GuideViewModel: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var errorMessage: String?
     @Published private(set) var searchResults: [KaiXGuideArticleDTO] = []
+    // Universal Guide search also surfaces matching schools + companies, not
+    // just articles — the hero search box is the single entry into everything.
+    @Published private(set) var schoolResults: [KaiXGuideSchoolDTO] = []
+    @Published private(set) var companyResults: [KaiXGuideCompanyDTO] = []
     @Published private(set) var isSearching = false
     @Published var searchText = ""
+
+    var hasAnySearchResult: Bool {
+        !searchResults.isEmpty || !schoolResults.isEmpty || !companyResults.isEmpty
+    }
 
     private var loadedCountry = ""
     private var loadedLanguage = ""
@@ -49,6 +57,11 @@ final class GuideViewModel: ObservableObject {
         isSearching = true
         errorMessage = nil
         defer { isSearching = false }
+        // Schools + companies are best-effort and run concurrently with the
+        // article query: a failure there must never blank the article results.
+        let normalizedCountry = country.isEmpty ? "jp" : country
+        async let schoolsResp = KaiXAPIClient.shared.guideSchools(country: normalizedCountry, keyword: q, pageSize: 8)
+        async let companiesResp = KaiXAPIClient.shared.guideCompanies(country: normalizedCountry, keyword: q, pageSize: 8)
         do {
             let response = try await KaiXAPIClient.shared.guideArticles(country: country, language: currentGuideLanguage(), keyword: q, pageSize: 20)
             searchResults = response.items
@@ -62,11 +75,15 @@ final class GuideViewModel: ObservableObject {
             }
             errorMessage = searchResults.isEmpty ? "搜索暂时无法连接服务器，换个关键词或下拉刷新试试。" : "搜索暂时无法连接服务器，先显示内置指南结果。"
         }
+        schoolResults = (try? await schoolsResp)?.items ?? []
+        companyResults = (try? await companiesResp)?.items ?? []
     }
 
     func clearSearch() {
         searchText = ""
         searchResults = []
+        schoolResults = []
+        companyResults = []
     }
 
     private func currentGuideLanguage() -> String {

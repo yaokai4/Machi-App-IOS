@@ -67,8 +67,6 @@ struct KXStayListingCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 ZStack(alignment: .topTrailing) {
                     KXStayCoverArtwork(listing: listing, isStay: variant == .stay)
-                        .frame(maxWidth: .infinity)
-                        .aspectRatio(4 / 3, contentMode: .fit)
                         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                     if coverIsVideo {
                         Image(systemName: "play.fill")
@@ -209,15 +207,25 @@ private struct KXStayCoverArtwork: View {
     private var coverURL: URL? { listing.realCoverURL }
 
     var body: some View {
-        ZStack {
-            // Placeholder always sits behind the photo: while it decodes or if
-            // the remote image fails (slow 4G), the tasteful placeholder shows
-            // through instead of a blank grey rectangle.
-            stayPlaceholder
-            if let url = coverURL {
-                CachedMediaImageView(url: url, targetPixelSize: 960, failureMode: .transparent)
+        // Reserve a clean 4:3 box first: Color.clear has no intrinsic size, so
+        // the aspect ratio is exact and never warped by the photo's own
+        // dimensions. The cover then fills it (scaledToFill + clip), so every
+        // card lands the identical size regardless of the source image.
+        Color.clear
+            .frame(maxWidth: .infinity)
+            .aspectRatio(4.0 / 3.0, contentMode: .fit)
+            .overlay {
+                ZStack {
+                    // Placeholder always sits behind the photo: while it decodes
+                    // or if the remote image fails (slow 4G), the tasteful
+                    // placeholder shows through instead of a blank grey box.
+                    stayPlaceholder
+                    if let url = coverURL {
+                        CachedMediaImageView(url: url, targetPixelSize: 960, failureMode: .transparent)
+                    }
+                }
             }
-        }
+            .clipped()
     }
 
     private var stayPlaceholder: some View {
