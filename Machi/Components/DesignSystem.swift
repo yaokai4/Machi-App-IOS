@@ -57,6 +57,49 @@ enum KXColor {
     static let glassShadow = Color.black.opacity(0.052)
     static let accent = Color.accentColor
     static let accentSoft = Color.accentColor.opacity(0.11)
+    static let livingBackground = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.055, green: 0.066, blue: 0.063, alpha: 1)
+            : UIColor(red: 0.982, green: 0.973, blue: 0.950, alpha: 1)
+    })
+    static let livingSurface = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.090, green: 0.106, blue: 0.101, alpha: 1)
+            : UIColor(red: 0.998, green: 0.996, blue: 0.988, alpha: 1)
+    })
+    static let livingSoft = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.118, green: 0.139, blue: 0.132, alpha: 1)
+            : UIColor(red: 0.946, green: 0.935, blue: 0.906, alpha: 1)
+    })
+    static let livingInk = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.948, green: 0.958, blue: 0.950, alpha: 1)
+            : UIColor(red: 0.105, green: 0.125, blue: 0.118, alpha: 1)
+    })
+    static let livingMuted = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.670, green: 0.710, blue: 0.690, alpha: 1)
+            : UIColor(red: 0.365, green: 0.392, blue: 0.378, alpha: 1)
+    })
+    /// Brand accent — deep teal-green in light, brighter teal in dark so it
+    /// stays legible on dark surfaces. Matches the AccentColor asset exactly,
+    /// so listing surfaces and app chrome read as one brand.
+    static let livingAccent = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.361, green: 0.745, blue: 0.698, alpha: 1)
+            : UIColor(red: 0.075, green: 0.390, blue: 0.350, alpha: 1)
+    })
+    static let livingAccentSoft = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.361, green: 0.745, blue: 0.698, alpha: 0.16)
+            : UIColor(red: 0.075, green: 0.390, blue: 0.350, alpha: 0.11)
+    })
+    static let livingWarm = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.910, green: 0.475, blue: 0.365, alpha: 1)
+            : UIColor(red: 0.760, green: 0.326, blue: 0.220, alpha: 1)
+    })
     static let heat = Color(red: 0.85, green: 0.45, blue: 0.12)
     static let dangerSoft = Color.red.opacity(0.10)
     static let warningSoft = Color.orange.opacity(0.12)
@@ -395,6 +438,20 @@ extension View {
                     .padding(0.8)
             }
             .modifier(_SurfaceShadow(elevated: elevated))
+    }
+
+    func kxLivingSurface(radius: CGFloat = KXRadius.card, elevated: Bool = false) -> some View {
+        self
+            .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .stroke(KXColor.livingInk.opacity(0.075), lineWidth: 0.8)
+            }
+            .shadow(
+                color: Color.black.opacity(elevated ? 0.075 : 0.035),
+                radius: elevated ? 12 : 5,
+                y: elevated ? 5 : 2
+            )
     }
 
     func kxGlassCapsule(isSelected: Bool = false) -> some View {

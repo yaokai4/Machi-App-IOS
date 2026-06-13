@@ -114,6 +114,7 @@ struct DiscoverView: View {
             }
         }
         .kxPageBackground()
+        .background(KXColor.livingBackground)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("discover.root")
         .toolbar(.hidden, for: .navigationBar)
@@ -706,11 +707,11 @@ private struct DiscoverCategoryCell: View {
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
-                Text(heroLine.isEmpty ? category.subtitle : heroLine)
+                Text(category.subtitle)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
             }
         }
         .padding(14)
@@ -1948,7 +1949,7 @@ struct CityListingChannelView: View {
         ("all", "全部", []),
         ("food", "餐厅美食", KXListingCopy.foodSectionCategories),
         ("fun", "景点玩乐", ["景点门票", "一日游", "接送机"]),
-        ("life", "生活服务", ["翻译手续", "搬家清洁", "维修安装", "认证服务"]),
+        ("life", "生活服务", KXListingCopy.lifeSectionCategories),
     ]
 
     /// 「stays / hotels」是住房频道伪类型，数据实际来自住宿类 local_service。
@@ -2173,7 +2174,8 @@ struct CityListingChannelView: View {
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(.white)
                     .frame(width: 42, height: 42)
-                    .background(KXColor.accent, in: Circle())
+                    .background(KXColor.livingAccent, in: Circle())
+                    .shadow(color: KXColor.livingAccent.opacity(0.18), radius: 9, y: 4)
             }
             .buttonStyle(.plain)
         }
@@ -2188,7 +2190,7 @@ struct CityListingChannelView: View {
     private var rentalTabSwitcher: some View {
         HStack(spacing: 4) {
             rentalTabButton(.homes, title: "长租房源", icon: "house")
-            rentalTabButton(.stays, title: "民宿·短住", icon: "bed.double")
+            rentalTabButton(.stays, title: "民宿短住", icon: "bed.double")
             rentalTabButton(.hotels, title: "酒店", icon: "building.2")
         }
         .padding(4)
@@ -2209,13 +2211,13 @@ struct CityListingChannelView: View {
         } label: {
             Label(title, systemImage: icon)
                 .font(.subheadline.weight(.black))
-                .foregroundStyle(activeRentalTab == tab ? Color.white : .primary)
+                .foregroundStyle(activeRentalTab == tab ? Color.white : KXColor.livingInk)
                 .lineLimit(1)
-                .minimumScaleFactor(0.72)
-                .padding(.horizontal, 16)
+                .minimumScaleFactor(0.62)
+                .padding(.horizontal, 10)
                 .frame(height: 38)
                 .frame(maxWidth: .infinity)
-                .background(activeRentalTab == tab ? KXColor.accent : Color.clear, in: Capsule())
+                .background(activeRentalTab == tab ? KXColor.livingAccent : Color.clear, in: Capsule())
         }
         .buttonStyle(.plain)
     }
@@ -2269,7 +2271,7 @@ struct CityListingChannelView: View {
                     }
                 }
                 searchBar
-                // 服务分区：餐厅美食 / 景点玩乐 / 生活服务。
+                // 服务分区只展示一级入口，细分类收进下方横滑与「筛选」面板。
                 if baseType == "local_service" {
                     serviceSectionChips
                 }
@@ -2282,7 +2284,7 @@ struct CityListingChannelView: View {
                 }
             }
             .padding(KXSpacing.md)
-            .kxGlassSurface(radius: KXRadius.lg, elevated: true)
+            .kxLivingSurface(radius: KXRadius.lg, elevated: true)
 
             // 轻量结果摘要行：替代原来卡片里占两行的标题块。
             HStack(spacing: 6) {
@@ -2312,7 +2314,7 @@ struct CityListingChannelView: View {
                     } label: {
                         Label("清空筛选", systemImage: "xmark.circle.fill")
                             .font(.caption.weight(.bold))
-                            .foregroundStyle(KXColor.accent)
+                            .foregroundStyle(KXColor.livingAccent)
                     }
                     .buttonStyle(.plain)
                 }
@@ -2335,7 +2337,7 @@ struct CityListingChannelView: View {
                         .padding(.horizontal, 13)
                         .padding(.vertical, 8)
                         .background(
-                            serviceSection == section.key && selectedCategory == "全部" ? Color.orange : KXColor.softBackground.opacity(0.88),
+                            serviceSection == section.key && selectedCategory == "全部" ? KXColor.livingWarm : KXColor.livingSoft.opacity(0.88),
                             in: Capsule()
                         )
                         .overlay(Capsule().stroke(serviceSection == section.key && selectedCategory == "全部" ? Color.clear : KXColor.separator.opacity(0.7), lineWidth: 0.7))
@@ -2359,7 +2361,7 @@ struct CityListingChannelView: View {
                 .minimumScaleFactor(0.82)
                 .padding(.horizontal, 10)
                 .frame(height: 30)
-                .background(scopeMode == mode ? KXColor.accent : KXColor.softBackground.opacity(0.88), in: Capsule())
+                .background(scopeMode == mode ? KXColor.livingAccent : KXColor.livingSoft.opacity(0.88), in: Capsule())
                 .overlay(Capsule().stroke(scopeMode == mode ? Color.clear : KXColor.separator.opacity(0.65), lineWidth: 0.7))
         }
         .buttonStyle(.plain)
@@ -2369,7 +2371,7 @@ struct CityListingChannelView: View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .font(.headline.weight(.semibold))
-                .foregroundStyle(KXColor.accent)
+                .foregroundStyle(KXColor.livingAccent)
             TextField(KXListingCopy.searchPlaceholder(for: hotelsActive ? "hotels" : staysActive ? "stays" : baseType, language), text: $query)
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
@@ -2389,32 +2391,45 @@ struct CityListingChannelView: View {
             }
         }
         .padding(.horizontal, KXSpacing.lg)
-        .frame(height: 46)
-        .background(KXColor.softBackground.opacity(0.78), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .frame(height: isWorkChannel ? 52 : 48)
+        .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(KXColor.glassStroke.opacity(0.7), lineWidth: 0.8)
+                .stroke(isWorkChannel ? KXColor.livingAccent.opacity(0.28) : KXColor.livingInk.opacity(0.09), lineWidth: 0.8)
         }
     }
 
     @ViewBuilder
     private var categoryChips: some View {
-        let categories = KXListingCopy.categories(for: hotelsActive ? "hotels" : staysActive ? "stays" : baseType)
-        if baseType == "local_service" {
-            FlowLayout(spacing: 8) {
+        let categories = visibleCategoryChips
+        // One consistent horizontal chip rail across every channel. The work
+        // channel used to wrap this in a nested card, which boxed the chips in
+        // awkwardly inside the already-carded control bar.
+        KXFadingHScroll {
+            HStack(spacing: 8) {
                 ForEach(categories, id: \.self) { category in
                     categoryChip(category)
                 }
             }
-        } else {
-            KXFadingHScroll {
-                HStack(spacing: 8) {
-                    ForEach(categories, id: \.self) { category in
-                        categoryChip(category)
-                    }
-                }
-            }
         }
+    }
+
+    private var visibleCategoryChips: [String] {
+        if baseType == "local_service" {
+            let quick: [String]
+            switch serviceSection {
+            case "food":
+                quick = ["全部", "中华料理", "日本料理", "居酒屋", "烧肉火锅", "咖啡甜品"]
+            case "fun":
+                quick = ["全部", "景点门票", "一日游", "接送机"]
+            case "life":
+                quick = ["全部", "翻译", "搬家", "清洁", "美容美发", "宠物服务"]
+            default:
+                quick = ["全部", "中华料理", "日本料理", "居酒屋", "咖啡甜品", "景点门票", "翻译", "搬家"]
+            }
+            return selectedCategory == "全部" || quick.contains(selectedCategory) ? quick : quick + [selectedCategory]
+        }
+        return KXListingCopy.categories(for: hotelsActive ? "hotels" : staysActive ? "stays" : baseType)
     }
 
     private func categoryChip(_ category: String) -> some View {
@@ -2424,11 +2439,11 @@ struct CityListingChannelView: View {
         } label: {
             Text(KXListingCopy.categoryLabel(category, language))
                 .font(.caption.weight(.bold))
-                .foregroundStyle(selectedCategory == category ? Color.white : .primary)
+                .foregroundStyle(selectedCategory == category ? Color.white : KXColor.livingInk)
                 .padding(.horizontal, 13)
                 .padding(.vertical, 8)
-                .background(selectedCategory == category ? KXColor.accent : KXColor.softBackground.opacity(0.88), in: Capsule())
-                .overlay(Capsule().stroke(selectedCategory == category ? Color.clear : KXColor.separator.opacity(0.7), lineWidth: 0.7))
+                .background(selectedCategory == category ? KXColor.livingAccent : KXColor.livingSoft.opacity(0.9), in: Capsule())
+                .overlay(Capsule().stroke(selectedCategory == category ? Color.clear : KXColor.livingInk.opacity(0.08), lineWidth: 0.7))
         }
         .buttonStyle(.plain)
     }
@@ -2515,6 +2530,17 @@ struct CityListingChannelView: View {
                     ("remote_ok", "可远程"),
                 ])
             } else if baseType == "local_service" {
+                filterChoiceSection(
+                    title: "服务细分类",
+                    options: serviceCategoryFilterOptions,
+                    selection: Binding(
+                        get: { selectedCategory },
+                        set: { newValue in
+                            selectedCategory = newValue
+                            Task { await load(quiet: true) }
+                        }
+                    )
+                )
                 filterToggleSection(title: "商家条件", toggles: [
                     ("booking_required", "需要预约"),
                     ("certified_provider", "认证商家"),
@@ -2587,6 +2613,24 @@ struct CityListingChannelView: View {
         }
         .padding(12)
         .background(KXColor.softBackground.opacity(0.58), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private var serviceCategoryFilterOptions: [(value: String, label: String)] {
+        let categories: [String]
+        switch serviceSection {
+        case "food":
+            categories = KXListingCopy.foodSectionCategories
+        case "fun":
+            categories = ["景点门票", "一日游", "接送机"]
+        case "life":
+            categories = KXListingCopy.lifeSectionCategories
+        default:
+            categories = KXListingCopy.foodSectionCategories + ["景点门票", "一日游", "接送机"] + KXListingCopy.lifeSectionCategories
+        }
+        let unique = categories.reduce(into: [String]()) { result, item in
+            if !result.contains(item) { result.append(item) }
+        }
+        return [("全部", "全部")] + unique.map { ($0, KXListingCopy.categoryLabel($0, language)) }
     }
 
     private func filterPriceField(title: String, text: Binding<String>) -> some View {
@@ -2676,6 +2720,17 @@ struct CityListingChannelView: View {
                 systemImage: KXListingCopy.icon(for: baseType)
             )
             .frame(maxWidth: .infinity, minHeight: 260)
+        } else if isWorkChannel {
+            // Indeed-style job cards, Airbnb layout: each role is its own
+            // elevated card with breathing room — no outer surface (which
+            // would nest card-in-card with KXJobListingRow's own surface).
+            LazyVStack(spacing: 12) {
+                ForEach(visibleItems) { item in
+                    KXJobListingRow(listing: item) {
+                        router.open(.cityListingDetail(listingId: item.id))
+                    }
+                }
+            }
         } else if baseType == "secondhand" {
             // Two-column photo grid: square covers, price first, quick scan.
             LazyVStack(spacing: 14) {
@@ -2866,7 +2921,13 @@ struct CityListingDetailView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if let listing, !isLoading, errorMessage == nil {
+                detailStickyBar(listing)
+            }
+        }
         .kxPageBackground()
+        .background(KXColor.livingBackground)
         .toolbar(.hidden, for: .navigationBar)
         .task(id: listingId) { await load() }
         .sheet(isPresented: $intakeOpen) {
@@ -2879,6 +2940,63 @@ struct CityListingDetailView: View {
             }
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
+        }
+    }
+
+    /// Airbnb-style sticky bottom bar: price on the left, primary CTA on the
+    /// right, always reachable. Translucent glass so content scrolls under it.
+    private func detailStickyBar(_ listing: KaiXCityListingDTO) -> some View {
+        let ownListing = isOwnListing(listing)
+        let spec = ListingIntakeSpec.forType(listing.type, category: listing.category)
+        let isWork = listing.type == "job" || listing.type == "hiring"
+        let ratingCount = listing.rating_count ?? listing.ratingCount ?? 0
+        let ratingAvg = listing.rating_avg ?? listing.ratingAvg ?? 0
+        return HStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(KXListingCopy.priceLabel(listing))
+                    .font(.title3.weight(.black))
+                    .foregroundStyle(isWork ? KXColor.livingAccent : KXColor.livingWarm)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                if ratingCount > 0 {
+                    HStack(spacing: 3) {
+                        Image(systemName: "star.fill").font(.system(size: 10, weight: .black)).foregroundStyle(.orange)
+                        Text(String(format: "%.1f", ratingAvg)).font(.caption2.weight(.black)).foregroundStyle(KXColor.livingInk)
+                        Text("(\(ratingCount))").font(.caption2.weight(.semibold)).foregroundStyle(KXColor.livingMuted)
+                    }
+                } else {
+                    Text(KXListingCopy.title(for: listing.type, language))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(KXColor.livingMuted)
+                }
+            }
+            Spacer(minLength: 8)
+            Button {
+                if ownListing { router.open(.editCityListing(listingId: listing.id)) }
+                else { intakeOpen = true }
+            } label: {
+                Text(ownListing ? "编辑发布" : spec.title)
+                    .font(.subheadline.weight(.black))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 28)
+                    .frame(height: 50)
+                    .background(KXColor.livingAccent, in: Capsule())
+                    .shadow(color: KXColor.livingAccent.opacity(0.32), radius: 10, y: 4)
+            }
+            .buttonStyle(KXPressableStyle(scale: 0.96))
+            .disabled(isBusy)
+        }
+        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .background {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .overlay(Rectangle().fill(KXColor.livingSurface.opacity(0.5)))
+                .ignoresSafeArea(edges: .bottom)
+        }
+        .overlay(alignment: .top) {
+            Rectangle().fill(KXColor.livingInk.opacity(0.08)).frame(height: 0.5)
         }
     }
 
@@ -2895,9 +3013,10 @@ struct CityListingDetailView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(KXListingCopy.title(for: listing?.type ?? "secondhand", language))
                     .font(.headline.weight(.semibold))
+                    .foregroundStyle(KXColor.livingInk)
                 Text(KXListingCopy.pickText(language, "详情与联系", "詳細・連絡", "Details & contact"))
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(KXColor.livingMuted)
             }
             Spacer()
             Button { Task { await favorite() } } label: {
@@ -2912,7 +3031,7 @@ struct CityListingDetailView: View {
         .padding(.horizontal, KaiXTheme.horizontalPadding)
         .padding(.top, 8)
         .padding(.bottom, 12)
-        .kxGlassBar(ignoresTopSafeArea: true)
+        .background(KXColor.livingBackground.opacity(0.94))
         .overlay(alignment: .bottom) { Divider().opacity(0.18) }
     }
 
@@ -2925,9 +3044,10 @@ struct CityListingDetailView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(KXListingCopy.priceLabel(listing))
                                 .font(.title2.weight(.black))
-                                .foregroundStyle(KXColor.heat)
+                                .foregroundStyle(listing.type == "job" || listing.type == "hiring" ? KXColor.livingAccent : KXColor.livingWarm)
                             Text(KXListingCopy.displayTitle(listing))
                                 .font(.title3.weight(.bold))
+                                .foregroundStyle(KXColor.livingInk)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer()
@@ -2935,12 +3055,12 @@ struct CityListingDetailView: View {
                     }
                     FlowLayout(spacing: 8) {
                         ForEach(KXListingCopy.badges(for: listing), id: \.self) { badge in
-                            KXListingBadge(title: badge, tint: KXColor.accent)
+                            KXListingBadge(title: badge, tint: KXColor.livingAccent)
                         }
                     }
                 }
                 .padding(KXSpacing.lg)
-                .kxGlassSurface(radius: KXRadius.lg)
+                .kxLivingSurface(radius: 24, elevated: true)
 
                 KXListingAttributeSection(listing: listing)
 
@@ -2956,9 +3076,9 @@ struct CityListingDetailView: View {
                 KXListingSection(title: "发布者", icon: "person.crop.circle") {
                     HStack(spacing: 12) {
                         Circle()
-                            .fill(KXColor.accent.opacity(0.14))
+                            .fill(KXColor.livingAccentSoft)
                             .frame(width: 44, height: 44)
-                            .overlay(Text((listing.seller?.display_name ?? "M").prefix(1)).font(.headline.weight(.bold)).foregroundStyle(KXColor.accent))
+                            .overlay(Text((listing.seller?.display_name ?? "M").prefix(1)).font(.headline.weight(.bold)).foregroundStyle(KXColor.livingAccent))
                         VStack(alignment: .leading, spacing: 3) {
                             Text(listing.seller?.display_name ?? "Machi 用户")
                                 .font(.subheadline.weight(.bold))
@@ -2992,7 +3112,7 @@ struct CityListingDetailView: View {
                 if let actionMessage {
                     Text(actionMessage)
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(KXColor.accent)
+                        .foregroundStyle(KXColor.livingAccent)
                         .padding(.horizontal, 2)
                 }
 
@@ -3000,15 +3120,18 @@ struct CityListingDetailView: View {
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
             .padding(.top, 14)
-            .padding(.bottom, chrome.bottomContentPadding + 28)
+            .padding(.bottom, 24)
         }
     }
 
     private func imageStrip(_ listing: KaiXCityListingDTO) -> some View {
+        // Drop server-generated placeholder media so the gallery shows a clean
+        // native placeholder instead of the "Generated default cover" card.
+        let realMedia = (listing.media ?? []).filter { !KaiXCityListingDTO.isGeneratedCover($0.url) }
         let mediaItems: [KaiXListingMediaDTO]
-        if let media = listing.media, !media.isEmpty {
-            mediaItems = media
-        } else if let cover = listing.primaryCoverMedia {
+        if !realMedia.isEmpty {
+            mediaItems = realMedia
+        } else if let cover = listing.primaryCoverMedia, !KaiXCityListingDTO.isGeneratedCover(cover.url) {
             mediaItems = [cover]
         } else {
             mediaItems = []
@@ -3026,8 +3149,9 @@ struct CityListingDetailView: View {
             }
         }
         .aspectRatio(16.0 / 10.0, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background(KXColor.livingSoft, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .shadow(color: Color.black.opacity(0.07), radius: 16, y: 7)
     }
 
     private func contactPanel(_ listing: KaiXCityListingDTO) -> some View {
@@ -3038,9 +3162,9 @@ struct CityListingDetailView: View {
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: ownListing ? "person.crop.circle.badge.checkmark" : "bubble.left.and.bubble.right.fill")
                         .font(.headline.weight(.bold))
-                        .foregroundStyle(ownListing ? .secondary : KXColor.accent)
+                        .foregroundStyle(ownListing ? .secondary : KXColor.livingAccent)
                         .frame(width: 38, height: 38)
-                        .background((ownListing ? Color.secondary : KXColor.accent).opacity(0.12), in: Circle())
+                        .background(ownListing ? Color.secondary.opacity(0.12) : KXColor.livingAccentSoft, in: Circle())
                     VStack(alignment: .leading, spacing: 3) {
                         Text(ownListing ? "这是你的发布" : "通过 Machi 私信联系发布者")
                             .font(.subheadline.weight(.bold))
@@ -3061,7 +3185,7 @@ struct CityListingDetailView: View {
                             .font(.subheadline.weight(.black))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 13)
-                            .background(KXColor.accent, in: Capsule())
+                            .background(KXColor.livingAccent, in: Capsule())
                             .foregroundStyle(Color.white)
                     }
                     .buttonStyle(.plain)
@@ -3072,7 +3196,7 @@ struct CityListingDetailView: View {
                             .font(.subheadline.weight(.black))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 13)
-                            .background(KXColor.accent, in: Capsule())
+                            .background(KXColor.livingAccent, in: Capsule())
                             .foregroundStyle(Color.white)
                     }
                     .buttonStyle(.plain)
@@ -3087,10 +3211,10 @@ struct CityListingDetailView: View {
                             } label: {
                                 Text(item.title)
                                     .font(.caption.weight(.bold))
-                                    .foregroundStyle(KXColor.accent)
+                                    .foregroundStyle(KXColor.livingAccent)
                                     .frame(maxWidth: .infinity)
                                     .frame(height: 36)
-                                    .background(KXColor.accent.opacity(0.10), in: Capsule())
+                                    .background(KXColor.livingAccentSoft, in: Capsule())
                             }
                             .buttonStyle(.plain)
                             .disabled(isBusy)
@@ -4701,7 +4825,7 @@ private struct KXSecondhandListingCard: View {
             .padding(.bottom, 2)
             .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .frame(width: width, alignment: .leading)
-            .kxGlassSurface(radius: 18)
+            .kxLivingSurface(radius: 18)
         }
         .frame(width: width, alignment: .leading)
         .buttonStyle(.plain)
@@ -4714,11 +4838,7 @@ private struct KXSecondhandListingCard: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
             } else {
-                LinearGradient(
-                    colors: [KXColor.accent.opacity(0.10), KXColor.softBackground, KXColor.rankTeal.opacity(0.08)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                KXColor.livingSoft
                 Image(systemName: KXListingCopy.icon(for: listing.type))
                     .font(.title2.weight(.bold))
                     .foregroundStyle(.secondary.opacity(0.56))
@@ -4794,23 +4914,141 @@ private struct ListingMediaPlaceholder: View {
         ZStack {
             LinearGradient(
                 colors: [
-                    KXColor.accent.opacity(0.13),
-                    KXColor.softBackground,
-                    KXColor.rankTeal.opacity(0.10)
+                    KXColor.livingSoft,
+                    KXColor.livingAccentSoft.opacity(0.7),
+                    Color(.systemBackground).opacity(0.92),
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            VStack(spacing: 10) {
+            Circle()
+                .fill(KXColor.livingWarm.opacity(0.10))
+                .frame(width: 200, height: 200)
+                .offset(x: -120, y: -70)
+            Circle()
+                .fill(KXColor.livingAccent.opacity(0.10))
+                .frame(width: 240, height: 240)
+                .offset(x: 150, y: 90)
+            VStack(spacing: 11) {
                 Image(systemName: type == "video" ? "play.rectangle.fill" : KXListingCopy.icon(for: type))
                     .font(.system(size: 34, weight: .bold))
-                    .foregroundStyle(KXColor.accent.opacity(0.72))
+                    .foregroundStyle(KXColor.livingAccent.opacity(0.8))
                 Text(type == "video" ? "视频封面生成中" : "暂无图片")
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(KXColor.livingMuted)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct KXJobListingRow: View {
+    @Environment(\.appLanguage) private var language
+    let listing: KaiXCityListingDTO
+    let onOpen: () -> Void
+
+    private var companyName: String {
+        (KXListingCopy.attr(listing, "company_name") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    private var workLocation: String {
+        (KXListingCopy.attr(listing, "work_location") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    private var salaryText: String {
+        let s = (KXListingCopy.attr(listing, "salary") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return s.isEmpty ? KXListingCopy.priceLabel(listing) : s
+    }
+    private var companyVerified: Bool {
+        KXListingCopy.boolAttr(listing, "company_verified") || listing.verification_status == "verified"
+    }
+    private var jobTypeLabel: String? {
+        switch KXListingCopy.attr(listing, "job_type") {
+        case "full_time": return L("jt_full_time", language)
+        case "part_time": return L("jt_part_time", language)
+        case "internship": return L("jt_internship", language)
+        case "remote": return L("jt_remote", language)
+        default: return nil
+        }
+    }
+    private var companyInitial: String {
+        let source = companyName.isEmpty ? KXListingCopy.displayTitle(listing) : companyName
+        return String(source.prefix(1)).uppercased()
+    }
+
+    var body: some View {
+        Button(action: onOpen) {
+            VStack(alignment: .leading, spacing: 11) {
+                HStack(alignment: .top, spacing: 12) {
+                    Text(companyInitial.isEmpty ? "M" : companyInitial)
+                        .font(.title3.weight(.black))
+                        .foregroundStyle(KXColor.livingAccent)
+                        .frame(width: 48, height: 48)
+                        .background(KXColor.livingAccentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(KXListingCopy.displayTitle(listing))
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(KXColor.livingInk)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                        if !companyName.isEmpty {
+                            HStack(spacing: 5) {
+                                Text(companyName)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(KXColor.livingMuted)
+                                    .lineLimit(1)
+                                if companyVerified {
+                                    Image(systemName: "checkmark.seal.fill")
+                                        .font(.caption2.weight(.bold))
+                                        .foregroundStyle(KXColor.accent)
+                                }
+                            }
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+
+                // Indeed-style key facts: salary + location with leading glyphs.
+                HStack(spacing: 14) {
+                    if !salaryText.isEmpty {
+                        Label(salaryText, systemImage: "yensign.circle.fill")
+                            .font(.subheadline.weight(.black))
+                            .foregroundStyle(KXColor.livingAccent)
+                            .lineLimit(1)
+                    }
+                    if !workLocation.isEmpty {
+                        Label(workLocation, systemImage: "mappin.and.ellipse")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(KXColor.livingMuted)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+
+                FlowLayout(spacing: 6) {
+                    if let jobType = jobTypeLabel {
+                        jobChip(jobType, filled: true)
+                    }
+                    ForEach(KXListingCopy.badges(for: listing).prefix(3), id: \.self) { badge in
+                        jobChip(badge, filled: false)
+                    }
+                }
+            }
+            .padding(14)
+            .kxLivingSurface(radius: 20, elevated: true)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(KXPressableStyle(scale: 0.985, dim: 0.9))
+    }
+
+    @ViewBuilder
+    private func jobChip(_ text: String, filled: Bool) -> some View {
+        Text(text)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(filled ? KXColor.livingAccent : KXColor.livingMuted)
+            .padding(.horizontal, 9)
+            .frame(height: 24)
+            .background(filled ? KXColor.livingAccentSoft : KXColor.livingSoft, in: Capsule())
+            .overlay(filled ? Capsule().strokeBorder(KXColor.livingAccent.opacity(0.25), lineWidth: 0.8) : nil)
     }
 }
 
@@ -4897,7 +5135,7 @@ private struct KXListingAttributeSection: View {
                     }
                     .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(KXColor.softBackground.opacity(0.75), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(KXColor.livingSoft.opacity(0.72), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                 }
             }
         }
@@ -4916,7 +5154,7 @@ struct KXListingSection<Content: View>: View {
             content
         }
         .padding(KXSpacing.lg)
-        .kxGlassSurface(radius: KXRadius.lg)
+        .kxLivingSurface(radius: 22)
     }
 }
 
@@ -4945,6 +5183,8 @@ enum KXListingCopy {
     static let foodCategories = ["中华料理", "日本料理", "居酒屋", "烧肉火锅", "拉面", "寿司海鲜", "咖啡甜品", "西餐", "韩国料理"]
     /// 餐厅美食分区还包含两个老类目（已有数据继续生效）。
     static let foodSectionCategories = foodCategories + ["餐饮点评", "优惠预约"]
+    /// 生活服务同时兼容新细分类与旧伞类目，避免筛选区漏掉真实服务。
+    static let lifeSectionCategories = ["翻译手续", "签证/手续协助", "翻译", "搬家清洁", "搬家", "清洁", "维修安装", "美容美发", "宠物服务", "生活支持", "租房申请协助", "认证服务"]
     static let homestayCategories = ["民宿"]
     static let hotelCategories = ["酒店", "温泉旅馆", "公寓式酒店", "酒店民宿"]
     static let stayCategories = homestayCategories + hotelCategories
@@ -5140,7 +5380,7 @@ enum KXListingCopy {
         case "stays": stayChips
         case "hotels": hotelChips
         case "work", "job", "hiring": ["全部", "兼职", "全职", "时给", "月给", "N3 可", "签证支持", "无经验可"]
-        case "local_service": ["全部"] + foodCategories + ["餐饮点评", "优惠预约", "民宿", "酒店", "温泉旅馆", "公寓式酒店", "酒店民宿", "景点门票", "一日游", "接送机", "翻译手续", "搬家清洁", "维修安装", "认证服务"]
+        case "local_service": ["全部"] + foodSectionCategories + ["民宿", "酒店", "温泉旅馆", "公寓式酒店", "酒店民宿", "景点门票", "一日游", "接送机"] + lifeSectionCategories
         case "discount": ["全部", "餐饮", "学校", "服务", "购物", "限时"]
         default: ["全部", "家具", "家电", "手机数码", "电脑办公", "电子产品", "教材", "书籍教材", "衣物", "生活用品", "母婴儿童", "运动户外", "票券卡券", "搬家出清", "免费送", "求购"]
         }
@@ -5191,6 +5431,11 @@ enum KXListingCopy {
         "翻译": ("翻訳", "Translation"),
         "接送": ("送迎", "Pickup"),
         "清洁": ("清掃", "Cleaning"),
+        "美容美发": ("美容・ヘア", "Beauty & hair"),
+        "宠物服务": ("ペットサービス", "Pet care"),
+        "生活支持": ("生活サポート", "Life support"),
+        "签证/手续协助": ("ビザ・手続きサポート", "Visa & paperwork"),
+        "租房申请协助": ("賃貸申込サポート", "Rental application help"),
         "餐饮点评": ("飲食口コミ", "Dining reviews"),
         "优惠预约": ("予約特典", "Deals & booking"),
         "中华料理": ("中華料理", "Chinese"),
@@ -5904,14 +6149,14 @@ private extension KaiXCityListingDTO {
     }
 
     var coverURL: URL? {
-        if let cover = primaryCoverMedia, let url = cover.previewURL {
+        // Skip server-generated placeholder covers — the native placeholder
+        // looks far better than the "Generated default cover" card.
+        if let cover = primaryCoverMedia,
+           !KaiXCityListingDTO.isGeneratedCover(cover.url),
+           let url = cover.previewURL {
             return url
         }
-        if let raw = card?.coverUrl ?? listingCard?.coverUrl ?? coverUrl ?? cover_url,
-           let url = raw.kaixMediaURL {
-            return url
-        }
-        return nil
+        return realCoverURL
     }
 
     var coverIsVideo: Bool {

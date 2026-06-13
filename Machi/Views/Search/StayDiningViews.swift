@@ -79,14 +79,23 @@ struct KXStayListingCard: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                     }
                     if listing.verification_status == "verified" {
-                        Label(variant == .stay ? "认证房东" : "已核验", systemImage: "checkmark.seal.fill")
-                            .font(.caption2.weight(.black))
-                            .foregroundStyle(.primary)
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 5)
-                            .background(.ultraThinMaterial, in: Capsule())
-                            .padding(9)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        // Solid, bordered pill (was a borderless ultraThinMaterial
+                        // that washed out over photos). Brand-green seal + hairline
+                        // stroke + soft shadow keeps it legible on any cover.
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .foregroundStyle(KXColor.accent)
+                            Text(variant == .stay ? "认证房东" : "已核验")
+                                .foregroundStyle(.primary)
+                        }
+                        .font(.caption2.weight(.black))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(.regularMaterial, in: Capsule())
+                        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.8))
+                        .shadow(color: .black.opacity(0.14), radius: 7, y: 2)
+                        .padding(9)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     }
                     heartButton
                         .padding(9)
@@ -146,9 +155,10 @@ struct KXStayListingCard: View {
                             ForEach(homeTags, id: \.self) { tag in
                                 Text(tag)
                                     .font(.caption2.weight(.black))
+                                    .foregroundStyle(KXColor.livingMuted)
                                     .padding(.horizontal, 7)
                                     .padding(.vertical, 3)
-                                    .background(KXColor.softBackground.opacity(0.9), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                    .background(KXColor.livingSoft, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                             }
                         }
                         .padding(.top, 2)
@@ -156,6 +166,8 @@ struct KXStayListingCard: View {
                 }
                 .padding(.horizontal, 2)
             }
+            .padding(8)
+            .kxLivingSurface(radius: 24, elevated: true)
         }
         .buttonStyle(KXPressableStyle())
         .onAppear {
@@ -194,26 +206,55 @@ private struct KXStayCoverArtwork: View {
     let listing: KaiXCityListingDTO
     let isStay: Bool
 
-    private var coverURLString: String {
-        listing.card?.coverUrl
-            ?? listing.coverUrl
-            ?? listing.cover_url
-            ?? listing.media?.first?.thumbnailUrl
-            ?? listing.media?.first?.url
-            ?? ""
-    }
+    private var coverURL: URL? { listing.realCoverURL }
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [Color.cyan.opacity(0.14), Color.blue.opacity(0.08), KXColor.softBackground],
-                startPoint: .topLeading, endPoint: .bottomTrailing
-            )
-            Image(systemName: isStay ? "bed.double" : "house")
-                .font(.system(size: 30, weight: .semibold))
-                .foregroundStyle(Color.blue.opacity(0.5))
-            if let url = coverURLString.kaixMediaURL {
+            // Placeholder always sits behind the photo: while it decodes or if
+            // the remote image fails (slow 4G), the tasteful placeholder shows
+            // through instead of a blank grey rectangle.
+            stayPlaceholder
+            if let url = coverURL {
                 CachedMediaImageView(url: url, targetPixelSize: 960, failureMode: .transparent)
+            }
+        }
+    }
+
+    private var stayPlaceholder: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    KXColor.livingSoft,
+                    KXColor.livingAccentSoft.opacity(0.72),
+                    Color(.systemBackground).opacity(0.92),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            Circle()
+                .fill(KXColor.livingWarm.opacity(0.10))
+                .frame(width: 150, height: 150)
+                .offset(x: -86, y: -58)
+            Circle()
+                .fill(KXColor.livingAccent.opacity(0.10))
+                .frame(width: 180, height: 180)
+                .offset(x: 118, y: 76)
+            VStack(spacing: 9) {
+                Image(systemName: isStay ? "bed.double.fill" : "house.fill")
+                    .font(.system(size: 30, weight: .semibold))
+                    .foregroundStyle(KXColor.livingAccent.opacity(0.78))
+                Text(isStay ? "精选住宿" : "精选房源")
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(KXColor.livingAccent)
+                    .padding(.horizontal, 10)
+                    .frame(height: 24)
+                    .background(Color(.systemBackground).opacity(0.68), in: Capsule())
+                Text(KXListingCopy.displayTitle(listing))
+                    .font(.footnote.weight(.black))
+                    .foregroundStyle(KXColor.livingInk)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .padding(.horizontal, 24)
             }
         }
     }

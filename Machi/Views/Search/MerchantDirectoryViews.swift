@@ -103,7 +103,7 @@ struct KXServiceListingCard: View {
                         Spacer(minLength: 8)
                         Text(priceText)
                             .font(.subheadline.weight(.black))
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(KXColor.livingWarm)
                             .lineLimit(1)
                     }
                     HStack(spacing: 4) {
@@ -117,16 +117,14 @@ struct KXServiceListingCard: View {
                             .foregroundStyle(.white)
                             .padding(.horizontal, 12)
                             .frame(height: 26)
-                            .background(Color.orange, in: Capsule())
+                            .background(KXColor.livingAccent, in: Capsule())
                     }
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 }
                 .padding(12)
             }
-            .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(KXColor.glassStroke.opacity(0.7), lineWidth: 0.8))
-            .shadow(color: KXColor.glassShadow.opacity(0.4), radius: 6, y: 2)
+            .kxLivingSurface(radius: 20, elevated: true)
         }
         .buttonStyle(KXPressableStyle())
     }
@@ -136,27 +134,64 @@ struct KXServiceListingCard: View {
 private struct ListingCoverArtwork: View {
     let listing: KaiXCityListingDTO
 
-    private var coverURLString: String {
-        listing.card?.coverUrl
-            ?? listing.coverUrl
-            ?? listing.cover_url
-            ?? listing.media?.first?.thumbnailUrl
-            ?? listing.media?.first?.url
-            ?? ""
-    }
+    private var coverURL: URL? { listing.realCoverURL }
+
+    private var category: String { listing.category ?? "" }
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [Color.orange.opacity(0.14), Color.pink.opacity(0.08), KXColor.softBackground],
-                startPoint: .topLeading, endPoint: .bottomTrailing
-            )
-            Image(systemName: "storefront")
-                .font(.system(size: 30, weight: .semibold))
-                .foregroundStyle(Color.orange.opacity(0.55))
-            if let url = coverURLString.kaixMediaURL {
+            // Placeholder behind the photo so failed/slow loads degrade to a
+            // tasteful tile instead of a blank grey rectangle.
+            servicePlaceholder
+            if let url = coverURL {
                 CachedMediaImageView(url: url, targetPixelSize: 720, failureMode: .transparent)
             }
+        }
+    }
+
+    private var servicePlaceholder: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    KXColor.livingSoft,
+                    KXColor.livingWarm.opacity(0.12),
+                    Color(.systemBackground).opacity(0.94),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            Circle()
+                .fill(KXColor.livingWarm.opacity(0.11))
+                .frame(width: 140, height: 140)
+                .offset(x: -80, y: -46)
+            Circle()
+                .fill(KXColor.livingAccent.opacity(0.09))
+                .frame(width: 160, height: 160)
+                .offset(x: 110, y: 56)
+            VStack(spacing: 8) {
+                Image(systemName: placeholderIcon)
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundStyle(KXColor.livingWarm.opacity(0.78))
+                Text(category.isEmpty ? "本地精选" : KXListingCopy.categoryLabel(category, .zh))
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(KXColor.livingWarm)
+                    .padding(.horizontal, 10)
+                    .frame(height: 24)
+                    .background(Color(.systemBackground).opacity(0.68), in: Capsule())
+            }
+        }
+    }
+
+    private var placeholderIcon: String {
+        if KXListingCopy.isFoodCategory(category) { return "fork.knife" }
+        switch category {
+        case "景点门票", "一日游": return "ticket.fill"
+        case "接送机": return "car.fill"
+        case "翻译", "翻译手续", "签证/手续协助": return "character.bubble.fill"
+        case "搬家", "搬家清洁", "清洁": return "sparkles"
+        case "美容美发": return "scissors"
+        case "宠物服务": return "heart.fill"
+        default: return "storefront.fill"
         }
     }
 }

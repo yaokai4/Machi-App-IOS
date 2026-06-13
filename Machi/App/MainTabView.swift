@@ -76,6 +76,15 @@ struct MainTabView: View {
                 router.setActiveTab(.search)
                 router.open(.cityListings(regionCode: regionCode, type: type), in: .search)
             }
+            // 直达某条信息详情:`-KXOpenListingDetail <listingId>`
+            if let idx = ProcessInfo.processInfo.arguments.firstIndex(of: "-KXOpenListingDetail"),
+               idx + 1 < ProcessInfo.processInfo.arguments.count {
+                let listingId = ProcessInfo.processInfo.arguments[idx + 1]
+                loadedTabs.insert(.search)
+                chrome.select(.search)
+                router.setActiveTab(.search)
+                router.open(.cityListingDetail(listingId: listingId), in: .search)
+            }
             // 截图走查用:`-KXDebugPush workbench|merchant` 直接展示登录后
             // 才能进的页面(工作台/商家认证表单),不用真实登录。
             if let idx = ProcessInfo.processInfo.arguments.firstIndex(of: "-KXDebugPush"),

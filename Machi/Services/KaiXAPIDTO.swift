@@ -257,6 +257,44 @@ struct KaiXCityListingDTO: Codable, Identifiable, Equatable {
     let ratingCount: Int?
 }
 
+extension KaiXCityListingDTO {
+    /// A server-generated placeholder cover (e.g. `/api/generated/listing-card.png`)
+    /// is NOT a real photo — rendering it shows the ugly "Generated default cover"
+    /// card. We detect these so views fall back to a tasteful native placeholder.
+    static func isGeneratedCover(_ raw: String?) -> Bool {
+        guard let raw, !raw.isEmpty else { return true }
+        return raw.contains("/api/generated/listing-card") || raw.contains("listing-card.svg")
+    }
+
+    /// Best *real* uploaded/seeded cover URL string, or nil when only a generated
+    /// placeholder exists. Views should render their own placeholder for nil.
+    var realCoverURLString: String? {
+        let candidates: [String?] = [
+            card?.coverUrl, listingCard?.coverUrl,
+            coverMedia?.thumbnailUrl, coverMedia?.url,
+            cover_media?.thumbnailUrl, cover_media?.url,
+            coverUrl, cover_url,
+            media?.first?.thumbnailUrl, media?.first?.url,
+        ]
+        for candidate in candidates {
+            if let value = candidate?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !value.isEmpty, !Self.isGeneratedCover(value) {
+                return value
+            }
+        }
+        return nil
+    }
+
+    /// Resolved URL for `realCoverURLString`, honouring relative `/uploads` paths.
+    var realCoverURL: URL? {
+        guard let raw = realCoverURLString else { return nil }
+        if raw.hasPrefix("/") {
+            return URL(string: raw, relativeTo: KaiXBackend.baseURL)?.absoluteURL
+        }
+        return raw.kaixMediaURL
+    }
+}
+
 // ── listing reviews（星级点评）────────────────────────────────────────────
 
 struct KaiXListingReviewDTO: Codable, Identifiable, Equatable {

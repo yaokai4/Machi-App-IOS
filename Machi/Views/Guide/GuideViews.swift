@@ -175,26 +175,36 @@ struct GuideCategoryView: View {
     }
 
     private var categoryHeader: some View {
-        KXCard(padding: 16, radius: 22) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 12) {
-                GuideIconBubble(icon: GuideCopy.symbol(for: category?.icon), color: GuideCopy.color(category?.color))
-                VStack(alignment: .leading, spacing: 5) {
+                Image(systemName: GuideCopy.symbol(for: category?.icon))
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(KXColor.livingAccent)
+                    .frame(width: 48, height: 48)
+                    .background(KXColor.livingAccentSoft, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("MACHI GUIDE")
+                        .font(.caption2.weight(.black))
+                        .tracking(1.4)
+                        .foregroundStyle(KXColor.livingAccent)
                     Text(category?.title ?? "日本指南")
                         .font(.title2.weight(.bold))
+                        .foregroundStyle(KXColor.livingInk)
                     Text(category?.subtitle ?? "系统化日本生活与成长指南")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    if let description = category?.description, !description.isEmpty {
-                        Text(description)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .padding(.top, 3)
-                    }
+                        .foregroundStyle(KXColor.livingMuted)
                 }
                 Spacer(minLength: 0)
             }
+            if let description = category?.description, !description.isEmpty {
+                Text(description)
+                    .font(.footnote)
+                    .foregroundStyle(KXColor.livingMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
+        .padding(18)
+        .kxLivingSurface(radius: 24, elevated: true)
     }
 
     @ViewBuilder
@@ -2255,32 +2265,38 @@ private struct GuideHeroSection: View {
     let onClear: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 6) {
-                Image(systemName: "sparkles")
+                Image(systemName: "book.pages")
                 Text("Machi Guide · 日本指南")
             }
             .font(.caption.weight(.bold))
-            .foregroundStyle(KXColor.accent)
+            .foregroundStyle(KXColor.livingAccent)
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .background(Color.white.opacity(0.7), in: Capsule())
+            .background(KXColor.livingAccentSoft, in: Capsule())
 
             Text(home.hero.title)
-                .font(.system(size: 25, weight: .bold))
-                .foregroundStyle(.primary)
+                .font(.system(size: 30, weight: .bold, design: .rounded))
+                .foregroundStyle(KXColor.livingInk)
             Text(home.hero.subtitle)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(KXColor.livingMuted)
             Text(home.hero.note)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
 
+            HStack(spacing: 9) {
+                guideDoor("生活", icon: "house", keyword: "日本生活")
+                guideDoor("就职", icon: "briefcase", keyword: "日本就职")
+                guideDoor("升学", icon: "graduationcap", keyword: "日本升学")
+            }
+
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(KXColor.livingAccent)
                 TextField(home.hero.searchPlaceholder, text: $searchText)
                     .textInputAutocapitalization(.never)
                     .submitLabel(.search)
@@ -2290,6 +2306,7 @@ private struct GuideHeroSection: View {
                         .font(.caption.weight(.bold))
                         .buttonStyle(.borderedProminent)
                         .buttonBorderShape(.capsule)
+                        .tint(KXColor.livingAccent)
                 } else {
                     Button {
                         onClear()
@@ -2300,8 +2317,13 @@ private struct GuideHeroSection: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(10)
-            .background(Color.white.opacity(0.78), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .padding(.horizontal, 14)
+            .frame(height: 50)
+            .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 17, style: .continuous)
+                    .stroke(KXColor.livingInk.opacity(0.08), lineWidth: 0.8)
+            }
 
             FlowLayout(spacing: 7) {
                 ForEach(home.hero.quickTags, id: \.self) { tag in
@@ -2314,26 +2336,36 @@ private struct GuideHeroSection: View {
                             .foregroundStyle(.primary.opacity(0.78))
                             .padding(.horizontal, 11)
                             .padding(.vertical, 7)
-                            .background(Color.white.opacity(0.74), in: Capsule())
+                            .background(KXColor.livingSurface.opacity(0.82), in: Capsule())
                     }
                     .buttonStyle(.plain)
                 }
             }
         }
         .padding(15)
-        .background(
-            LinearGradient(
-                colors: [
-                    Color(red: 1.0, green: 0.96, blue: 0.90),
-                    Color(red: 0.99, green: 0.98, blue: 0.95),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
-        )
-        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Color.white.opacity(0.55), lineWidth: 0.8))
-        .shadow(color: Color.black.opacity(0.045), radius: 14, y: 7)
+        .background(KXColor.livingSoft, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(KXColor.livingInk.opacity(0.06), lineWidth: 0.8))
+        .shadow(color: Color.black.opacity(0.05), radius: 14, y: 7)
+    }
+
+    private func guideDoor(_ title: String, icon: String, keyword: String) -> some View {
+        Button {
+            searchText = keyword
+            onSearch(keyword)
+        } label: {
+            VStack(alignment: .leading, spacing: 7) {
+                Image(systemName: icon)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(KXColor.livingAccent)
+                Text(title)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(KXColor.livingInk)
+            }
+            .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
+            .padding(10)
+            .background(KXColor.livingSurface.opacity(0.92), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+        }
+        .buttonStyle(KXPressableStyle(scale: 0.97))
     }
 }
 
@@ -2726,9 +2758,7 @@ private struct GuideCategoryCard: View {
             }
             .frame(maxWidth: .infinity, minHeight: 122, alignment: .topLeading)
             .padding(13)
-            .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
-            .shadow(color: Color.black.opacity(0.03), radius: 8, y: 4)
+            .kxLivingSurface(radius: 22)
         }
         .buttonStyle(.plain)
     }
@@ -2747,10 +2777,10 @@ private struct GuideArticleCard: View {
                 HStack(spacing: 6) {
                     Text("指南")
                         .font(.caption2.weight(.bold))
-                        .foregroundStyle(KXColor.accent)
+                    .foregroundStyle(KXColor.livingAccent)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
-                        .background(KXColor.accentSoft, in: Capsule())
+                    .background(KXColor.livingAccentSoft, in: Capsule())
                     Text(article.authorName)
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
@@ -2779,8 +2809,7 @@ private struct GuideArticleCard: View {
             }
             .padding(compact ? 14 : 16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
+            .kxLivingSurface(radius: 20)
         }
         .buttonStyle(.plain)
     }

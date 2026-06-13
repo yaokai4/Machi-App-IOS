@@ -123,7 +123,7 @@ struct MessagesView: View {
                 title: L("emptyMessages", language),
                 subtitle: L("newConversationsHere", language),
                 systemImage: "envelope.open",
-                accent: .cyan
+                accent: KXColor.accent
             )
             .padding(.horizontal, KaiXTheme.horizontalPadding)
             .padding(.top, 34)
