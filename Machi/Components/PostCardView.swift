@@ -840,29 +840,34 @@ struct TagWrapView: View {
     }
 
     var body: some View {
-        // X-style: hashtags read as plain inline accent text, not as
-        // chip capsules. This keeps the card silent when there are 3+
-        // tags and stops the page from looking like a tag cloud.
-        FlowLayout(spacing: 10) {
+        // Refined soft-accent pill chips: a tinted capsule + hairline rim
+        // reads more polished than flat inline text, while the low-opacity
+        // fill keeps the card calm even with several tags.
+        FlowLayout(spacing: 8) {
             ForEach(displayTags, id: \.self) { tag in
                 Button {
                     onTap(tag)
                 } label: {
                     Text("#\(tag)")
-                        .font(.subheadline.weight(.semibold))
+                        .font(.caption.weight(.bold))
                         .foregroundStyle(KXColor.accent)
                         .lineLimit(1)
+                        .padding(.horizontal, 10)
+                        .frame(height: 26)
+                        .background(KXColor.accent.opacity(0.10), in: Capsule())
+                        .overlay(Capsule().strokeBorder(KXColor.accent.opacity(0.18), lineWidth: 0.8))
                 }
                 .buttonStyle(.plain)
             }
             if overflowCount > 0 {
                 Text("+\(overflowCount)")
-                    .font(.subheadline.weight(.semibold))
+                    .font(.caption.weight(.bold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .padding(.horizontal, 8)
-                    .frame(height: 24)
-                    .kxGlassCapsule()
+                    .padding(.horizontal, 10)
+                    .frame(height: 26)
+                    .background(Color.primary.opacity(0.05), in: Capsule())
+                    .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.8))
             }
         }
     }

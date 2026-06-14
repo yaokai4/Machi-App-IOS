@@ -72,7 +72,7 @@ struct MyWorkbenchView: View {
 
     private var publishSection: some View {
         SettingsSectionCard(title: "发布与交易") {
-            SettingsRowLink(icon: "plus.circle.fill", tint: KXColor.accent, title: "发布城市信息", subtitle: "二手、租房、工作、商家与本地服务") {
+            SettingsRowLink(icon: "plus.circle.fill", tint: KXColor.accent, title: "发布城市信息", subtitle: "二手、租房、工作、商家与服务", revealsNavBar: false) {
                 CreateCityListingView(listingType: "secondhand", citySlug: currentRegionCode, currentUser: currentUser)
             }
             SettingsDivider()
@@ -137,19 +137,19 @@ struct MyWorkbenchView: View {
                 MerchantReviewsManageView(currentUser: currentUser)
             }
             SettingsDivider()
-            SettingsRowLink(icon: "briefcase.fill", tint: .indigo, title: "招聘发布", subtitle: "发布招聘或求职相关信息") {
+            SettingsRowLink(icon: "briefcase.fill", tint: .indigo, title: "招聘发布", subtitle: "发布招聘或求职相关信息", revealsNavBar: false) {
                 CreateCityListingView(listingType: "job", citySlug: currentRegionCode, currentUser: currentUser)
             }
             SettingsDivider()
-            SettingsRowLink(icon: "house.fill", tint: .blue, title: "房源发布", subtitle: "发布合租、整租和短租信息") {
+            SettingsRowLink(icon: "house.fill", tint: .blue, title: "房源发布", subtitle: "发布合租、整租和短租信息", revealsNavBar: false) {
                 CreateCityListingView(listingType: "rental", citySlug: currentRegionCode, currentUser: currentUser)
             }
             SettingsDivider()
-            SettingsRowLink(icon: "wrench.and.screwdriver.fill", tint: .brown, title: "商家与本地服务发布", subtitle: "餐厅美食、在线订座、民宿酒店、景点票务、接送机和生活服务") {
+            SettingsRowLink(icon: "wrench.and.screwdriver.fill", tint: .brown, title: "商家与服务发布", subtitle: "餐厅美食、在线订座、民宿酒店、景点票务、接送机和生活服务", revealsNavBar: false) {
                 CreateCityListingView(listingType: "local_service", citySlug: currentRegionCode, currentUser: currentUser)
             }
             SettingsDivider()
-            SettingsRowLink(icon: "tag.fill", tint: .pink, title: "优惠发布", subtitle: "发布商家优惠和本地活动") {
+            SettingsRowLink(icon: "tag.fill", tint: .pink, title: "优惠发布", subtitle: "发布商家优惠和本地活动", revealsNavBar: false) {
                 CreateCityListingView(listingType: "discount", citySlug: currentRegionCode, currentUser: currentUser)
             }
         }

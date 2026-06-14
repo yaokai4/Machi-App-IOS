@@ -64,6 +64,11 @@ struct SettingsRowLink<Destination: View>: View {
     var value: String?
     let subtitle: String
     var status: KXSettingsRowStatus
+    /// When the destination already draws its own in-content glass header
+    /// (with a back button), keep the system navigation bar hidden so the
+    /// user doesn't see two stacked back buttons. Defaults to revealing the
+    /// nav bar for the common case of plain list/detail destinations.
+    var revealsNavBar: Bool = true
     let destination: Destination
 
     init(
@@ -73,6 +78,7 @@ struct SettingsRowLink<Destination: View>: View {
         value: String? = nil,
         subtitle: String,
         status: KXSettingsRowStatus = .implemented,
+        revealsNavBar: Bool = true,
         @ViewBuilder destination: () -> Destination
     ) {
         self.icon = icon
@@ -81,6 +87,7 @@ struct SettingsRowLink<Destination: View>: View {
         self.value = value
         self.subtitle = subtitle
         self.status = status
+        self.revealsNavBar = revealsNavBar
         self.destination = destination()
     }
 
@@ -89,7 +96,7 @@ struct SettingsRowLink<Destination: View>: View {
             if status.isInteractive {
                 NavigationLink {
                     destination
-                        .toolbar(.visible, for: .navigationBar)
+                        .toolbar(revealsNavBar ? .visible : .hidden, for: .navigationBar)
                 } label: {
                     SettingsRowContent(icon: icon, tint: tint, title: title, value: value, subtitle: subtitle, status: status)
                 }

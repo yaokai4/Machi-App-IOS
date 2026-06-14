@@ -369,7 +369,7 @@ struct DiscoverView: View {
     /// Channels shown in the MoreChannelSheet: the 4 primary entrances + the
     /// genuinely-distinct community channels (matches the web's 9-channel set).
     /// The rest of `extendedSpecs` (找工作/招聘/内推 ⊂ 工作; 商家/景点/认证商家/民宿
-    /// ⊂ 商家与本地服务; 语言交换/Food/本地小组 ⊂ 活动小组; plus publish-only types
+    /// ⊂ 商家与服务; 语言交换/Food/本地小组 ⊂ 活动小组; plus publish-only types
     /// 投票/长文/匿名) stay defined as the underlying catalog for content-type
     /// mapping / compose / deep-links, but are hidden so the sheet isn't a
     /// redundant wall.
@@ -390,7 +390,7 @@ struct DiscoverView: View {
         .init(id: "secondhand", title: "二手市场", subtitle: "闲置交易、求购和搬家出清", icon: "bag", types: [.secondhand], channel: .secondhand, tint: Color.green),
         .init(id: "housing", title: "租房 · 住宿", subtitle: "长租房源、看房预约与民宿短住", icon: "house", types: [.housing, .roommate], channel: .housing, tint: Color.blue),
         .init(id: "work", title: "工作", subtitle: "职位、招聘、内推和申请进度", icon: "briefcase", types: [.job_seek, .job_post, .referral], channel: .jobPost, tint: KXColor.rankViolet),
-        .init(id: "service", title: "商家与本地服务", subtitle: "餐厅美食、订座点评、景点玩乐", icon: "storefront", types: [.service, .merchant], channel: .service, tint: Color.brown),
+        .init(id: "service", title: "商家与服务", subtitle: "餐厅美食、订座点评、景点玩乐", icon: "storefront", types: [.service, .merchant], channel: .service, tint: Color.brown),
     ]
 
     private static let extendedSpecs: [DiscoverCategorySpec] = [
@@ -5435,7 +5435,7 @@ enum KXListingCopy {
         case "work":          (zh, ja, en) = ("工作", "求人", "Jobs")
         case "job":           (zh, ja, en) = ("找工作", "仕事を探す", "Find work")
         case "hiring":        (zh, ja, en) = ("招聘", "採用", "Hiring")
-        case "local_service": (zh, ja, en) = ("商家与本地服务", "店舗・地域サービス", "Businesses & local services")
+        case "local_service": (zh, ja, en) = ("商家与服务", "店舗・地域サービス", "Businesses & local services")
         case "discount":      (zh, ja, en) = ("优惠", "クーポン", "Deals")
         case "event":         (zh, ja, en) = ("活动", "イベント", "Events")
         default:              (zh, ja, en) = ("二手市场", "フリマ", "Marketplace")
@@ -5706,7 +5706,7 @@ enum KXListingCopy {
         case "stays":                (zh, ja, en) = ("这里还没有民宿和酒店", "まだ宿泊施設がありません", "No stays yet")
         case "hotels":               (zh, ja, en) = ("这里还没有酒店住宿", "まだホテルがありません", "No hotels yet")
         case "work", "job", "hiring": (zh, ja, en) = ("这里还没有工作信息", "まだ求人がありません", "No jobs yet")
-        case "local_service":        (zh, ja, en) = ("这里还没有商家与本地服务", "まだ店舗・地域サービスがありません", "No business or local services yet")
+        case "local_service":        (zh, ja, en) = ("这里还没有商家与服务", "まだ店舗・地域サービスがありません", "No business or local services yet")
         case "discount":             (zh, ja, en) = ("这里还没有优惠", "まだ特典がありません", "No deals yet")
         default:                     (zh, ja, en) = ("这里还没有二手商品", "まだ出品がありません", "No items yet")
         }
@@ -5741,7 +5741,7 @@ enum KXListingCopy {
         case "rental": "发布房源"
         case "job": "发布求职信息"
         case "work", "hiring": "发布招聘"
-        case "local_service": "发布商家与本地服务"
+        case "local_service": "发布商家与服务"
         case "discount": "发布优惠"
         default: "发布二手"
         }
@@ -5817,7 +5817,7 @@ enum KXListingCopy {
         switch type {
         case "rental": "房源"
         case "work", "job", "hiring": "职位"
-        case "local_service": "商家与本地服务"
+        case "local_service": "商家与服务"
         case "discount": "优惠"
         default: "二手"
         }
@@ -6229,7 +6229,7 @@ enum KXListingCopy {
             return ["招聘不允许押金、保证金或培训费骗局", "核实招聘方身份、工作地点和签证支持说明", "警惕虚假高薪、违法兼职和灰产招聘", "遇到可疑内容立即举报"]
         }
         if type == "local_service" {
-            return ["商家与本地服务默认进入审核，服务方认证状态会展示", "酒店、票务、旅行、接送机等服务需写清资质、包含/不包含内容和取消规则", "暂不开放外卖配送；禁止成人服务、高风险线下服务和违法服务", "不要提前转账给未核验服务方，预约前确认服务范围、取消规则和所需材料"]
+            return ["商家与服务默认进入审核，服务方认证状态会展示", "酒店、票务、旅行、接送机等服务需写清资质、包含/不包含内容和取消规则", "暂不开放外卖配送；禁止成人服务、高风险线下服务和违法服务", "不要提前转账给未核验服务方，预约前确认服务范围、取消规则和所需材料"]
         }
         if type == "discount" {
             return ["确认优惠有效期、适用门店和使用规则", "不要把个人敏感信息发给未核验商家", "遇到虚假折扣、诱导转账或强制消费立即举报"]

@@ -1,6 +1,6 @@
 import SwiftUI
 
-// 商家与本地服务：星级点评、认证商家目录、
+// 商家与服务：星级点评、认证商家目录、
 // 商家公开主页和点评管理。Web 端 BusinessDirectory.tsx / ListingKit 的同构实现。
 
 // MARK: - 星级
@@ -74,8 +74,6 @@ struct KXServiceListingCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 ZStack(alignment: .topTrailing) {
                     ListingCoverArtwork(listing: listing)
-                        .frame(maxWidth: .infinity)
-                        .aspectRatio(4.0 / 3.0, contentMode: .fit)
                         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                     HStack(spacing: 6) {
                         if !category.isEmpty {
@@ -195,14 +193,25 @@ private struct ListingCoverArtwork: View {
     private var category: String { listing.category ?? "" }
 
     var body: some View {
-        ZStack {
-            // Placeholder behind the photo so failed/slow loads degrade to a
-            // tasteful tile instead of a blank grey rectangle.
-            servicePlaceholder
-            if let url = coverURL {
-                CachedMediaImageView(url: url, targetPixelSize: 720, failureMode: .transparent)
+        // Reserve an exact 4:3 box with a zero-intrinsic-size Color.clear so a
+        // tall/odd source photo can never stretch the card (this was the bug:
+        // applying .aspectRatio to a ZStack that already carried the image's
+        // own intrinsic size did nothing). The cover then fills + clips into
+        // the box, identical to KXStayCoverArtwork.
+        Color.clear
+            .frame(maxWidth: .infinity)
+            .aspectRatio(4.0 / 3.0, contentMode: .fit)
+            .overlay {
+                ZStack {
+                    // Placeholder behind the photo so failed/slow loads degrade
+                    // to a tasteful tile instead of a blank grey rectangle.
+                    servicePlaceholder
+                    if let url = coverURL {
+                        CachedMediaImageView(url: url, targetPixelSize: 720, failureMode: .transparent)
+                    }
+                }
             }
-        }
+            .clipped()
     }
 
     private var servicePlaceholder: some View {

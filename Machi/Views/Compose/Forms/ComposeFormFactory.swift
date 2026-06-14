@@ -14,7 +14,8 @@ struct ComposeFormFactory: View {
             EmptyView()
 
         case .image_post:
-            BasicTitleFormView(viewModel: viewModel, titleKey: "ct_image", icon: "photo.on.rectangle", includesSummary: true)
+            // 摘要对图文帖冗余(图片/正文已是主体),去掉只留标题。
+            BasicTitleFormView(viewModel: viewModel, titleKey: "ct_image", icon: "photo.on.rectangle")
 
         case .long_post:
             BasicTitleFormView(viewModel: viewModel, titleKey: "ct_long", icon: "doc.text", includesSummary: true)

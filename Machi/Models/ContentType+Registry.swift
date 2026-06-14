@@ -72,13 +72,24 @@ enum ContentTypeRegistry {
     /// Order used in the type picker. Roughly: write-first generic
     /// stuff → marketplace → social → information → utility. Tuned so
     /// the most-used types are above the fold on a 4-column grid.
+    /// The compose "+" picker now offers only social / editorial post types.
+    /// Marketplace & service listings (二手/租房/找室友/招聘/找工作/商家与服务/
+    /// 优惠/内推) were moved out: they each have a dedicated publish flow
+    /// (workbench) and a browse channel under 同城, so surfacing them here too
+    /// was redundant and read as a conflicting second entry point.
     static let pickerOrder: [ContentType] = [
         .dynamic, .image_post, .question, .rant,
-        .secondhand, .housing, .roommate, .meetup,
-        .dining, .event, .job_post, .job_seek,
-        .news, .local_info, .guide, .coupon,
-        .merchant, .service, .warning, .referral,
-        .poll, .long_post, .anonymous,
+        .meetup, .dining, .event, .guide,
+        .warning, .news, .local_info, .poll,
+        .long_post, .anonymous, .referral,
+    ]
+
+    /// Marketplace / service listing types — still fully creatable, but only
+    /// from their dedicated 同城 channel "+" and the workbench, never the
+    /// generic compose picker.
+    static let cityListingTypes: [ContentType] = [
+        .secondhand, .housing, .roommate, .job_post, .job_seek,
+        .merchant, .service, .coupon,
     ]
 }
 
