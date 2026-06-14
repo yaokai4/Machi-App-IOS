@@ -467,7 +467,7 @@ struct GuideServicesView: View {
                 }
             }
         }
-        .navigationTitle("资料与服务")
+        .navigationTitle("商城")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: productType) { await load() }
     }
@@ -477,7 +477,7 @@ struct GuideServicesView: View {
             HStack(alignment: .top, spacing: 12) {
                 GuideIconBubble(icon: "shippingbox.fill", color: KXColor.heat)
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("资料与服务")
+                    Text("商城")
                         .font(.title2.weight(.bold))
                     Text("资料包、模板、清单、课程与人工辅导服务")
                         .font(.subheadline.weight(.semibold))
@@ -683,7 +683,7 @@ struct GuideProductDetailView: View {
                 EmptyStateView(title: "资料/服务不存在", subtitle: "它可能已被移动或下线。", systemImage: "shippingbox")
             }
         }
-        .navigationTitle("资料与服务")
+        .navigationTitle("商城")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: "\(country):\(slug)") { await load() }
         .alert("Machi Guide", isPresented: Binding(
@@ -2565,7 +2565,7 @@ private struct GuideZoneSection: View {
 private struct GuideProductsSection: View {
     @EnvironmentObject private var router: AppRouter
     let products: [KaiXGuideProductDTO]
-    var title: String = "资料与服务"
+    var title: String = "商城"
     var subtitle: String = "资料包、模板、清单与人工辅导"
 
     var body: some View {
@@ -2613,7 +2613,7 @@ private struct GuideDualEntrySection: View {
                 entryTile(
                     icon: "bag.fill",
                     tint: .orange,
-                    title: "资料商城",
+                    title: "商城",
                     subtitle: "资料包与人工服务\n按需购买预约"
                 ) {
                     router.open(.guideServices)
