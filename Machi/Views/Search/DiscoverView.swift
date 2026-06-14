@@ -968,6 +968,52 @@ private struct CityHotRankingRow: View {
     }
 }
 
+/// Unified ranking-board row for 正在发生 (recent, time chip) and 热榜 (heat pill).
+/// Rank badge + title + content-type chip + author, compact so the board scans
+/// like a leaderboard rather than a feed of full cards.
+private struct DiscoverRankingRow: View {
+    let rank: Int
+    let post: PostEntity
+    let author: UserEntity?
+    let language: AppLanguage
+    var showHeat: Bool = false
+
+    var body: some View {
+        HStack(spacing: KXSpacing.sm) {
+            DiscoverRankBadge(rank: rank)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(post.discoverTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                HStack(spacing: 6) {
+                    Text(L(post.contentType.spec.titleKey, language))
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(post.contentType.spec.tint)
+                        .padding(.horizontal, 6)
+                        .frame(height: 19)
+                        .background(post.contentType.spec.tint.opacity(0.11), in: Capsule())
+                    Text(author?.displayName ?? "@\(post.authorId.prefix(8))")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if showHeat {
+                HeatPill(score: post.heatScore, rank: rank)
+            }
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, KXSpacing.md)
+        .padding(.vertical, 11)
+        .contentShape(Rectangle())
+    }
+}
+
 /// 编辑部精选 / 城市助手 — the official City Seed Bot row that replaced the
 /// old 热门话题 + 热门城市 chips. Renders official cold-start content with a
 /// clear official identity (account name + light "编辑部整理/城市助手" badge +
@@ -1158,43 +1204,32 @@ private struct DiscoverContentList: View {
     }
 
     private func postList(_ items: [PostEntity]) -> some View {
-        // Same PostCardView as the home feed — Discover must not grow its own
-        // card spec (media rules, action bar, fonts all stay identical).
-        VStack(spacing: 10) {
-            if items.isEmpty {
+        // 正在发生 / 热榜 = 排行榜（名次 + 标题 + 类型 + 热度/时间），只看标题就能扫，
+        // 不再把首页整张卡片塞进来。正在发生取近 2 天、热榜取近 7 天（后端窗口）。
+        let visible = Array(items.prefix(12))
+        return VStack(spacing: 0) {
+            if visible.isEmpty {
                 DiscoverSoftEmptyRow(text: "这里还在等待新的本地内容")
             } else {
-                ForEach(items.prefix(12)) { post in
-                    let displayedPost = postStore.post(id: post.id) ?? post
-                    let originalPost = displayedPost.repostOfPostId.flatMap { postStore.post(id: $0) }
-                    let isQuoteRepost = originalPost != nil && !displayedPost.previewText.isEmpty
-                    let targetPost = isQuoteRepost ? displayedPost : (originalPost ?? displayedPost)
-                    PostCardView(
-                        post: displayedPost,
-                        author: authors[displayedPost.authorId],
-                        mediaItems: mediaByPostId[displayedPost.id] ?? [],
-                        currentUser: currentUser,
-                        originalPost: originalPost,
-                        originalAuthor: originalPost.flatMap { authors[$0.authorId] },
-                        originalMediaItems: originalPost == nil ? [] : (mediaByPostId[originalPost?.id ?? ""] ?? []),
-                        onOpen: { onOpenPost(targetPost) },
-                        onOpenOriginal: { if let originalPost { onOpenPost(originalPost) } },
-                        onAuthor: {
-                            if let author = authors[targetPost.authorId] {
-                                onOpenUser(author)
-                            }
-                        },
-                        onTag: onOpenTopic,
-                        onComment: { onOpenPost(targetPost) },
-                        onLike: { onLike(targetPost) },
-                        onBookmark: { onBookmark(targetPost) },
-                        onRepost: { onRepost(targetPost) },
-                        onQuoteRepost: { onQuoteRepost(targetPost, $0) }
-                    )
-                    .equatable()
+                ForEach(Array(visible.enumerated()), id: \.element.id) { index, post in
+                    let displayed = postStore.post(id: post.id) ?? post
+                    Button { onOpenPost(displayed) } label: {
+                        DiscoverRankingRow(
+                            rank: index + 1,
+                            post: displayed,
+                            author: authors[displayed.authorId],
+                            language: language,
+                            showHeat: segment == .ranking
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    if displayed.id != visible.last?.id {
+                        Divider().opacity(0.16).padding(.leading, 52)
+                    }
                 }
             }
         }
+        .kxGlassSurface(radius: KXRadius.lg, elevated: true)
     }
 
     private var topicList: some View {
