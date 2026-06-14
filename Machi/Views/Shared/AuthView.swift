@@ -160,18 +160,6 @@ struct AuthView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .kxGlassCapsule()
-
-                    HStack(spacing: 7) {
-                        Circle()
-                            .fill(.green)
-                            .frame(width: 9, height: 9)
-                        Text(L("localDatabaseOnline", language))
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 8)
-                    .kxGlassCapsule()
                 }
             }
 
@@ -182,12 +170,11 @@ struct AuthView: View {
                     .font(.headline)
                     .foregroundStyle(.secondary)
             }
-            // Removed the three "国家 / 城市 / 生活" stat pills — they
-            // were decorative placeholders that didn't communicate
-            // actual product state and added visual weight above the
-            // form. Header now reads: logo + DB-online indicator +
-            // brand title + tagline, then straight into the login
-            // card.
+            // Removed the three "国家 / 城市 / 生活" stat pills and the
+            // "本地数据库在线" indicator — decorative placeholders that
+            // didn't communicate actual product state. Header now reads:
+            // logo + language switcher + brand title + tagline, then
+            // straight into the login card.
         }
     }
 

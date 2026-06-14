@@ -580,6 +580,44 @@ extension View {
                 KXGlassBackground()
             }
     }
+
+    /// Shared input-field surface — replaces the stock `.roundedBorder` (which
+    /// reads as a cramped grey hairline box) with a soft, tappable 48pt field:
+    /// living surface, generous corner radius, faint accent-able rim. Works for
+    /// TextField and SecureField alike via `.textFieldStyle(.plain)`.
+    func kxInputField(focused: Bool = false) -> some View {
+        self
+            .textFieldStyle(.plain)
+            .font(.body)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 48)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(KXColor.softBackground.opacity(0.7), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(focused ? KXColor.accent.opacity(0.5) : KXColor.separator.opacity(0.7), lineWidth: focused ? 1.4 : 1)
+            }
+    }
+
+    /// Primary action button content styled like the profile "编辑资料" capsule —
+    /// a raised liquid-glass pill. Use on a label inside a Button; pass
+    /// `prominent: true` for the brand-accent fill (main submit actions).
+    func kxGlassButton(prominent: Bool = true, enabled: Bool = true) -> some View {
+        self
+            .font(.subheadline.weight(.black))
+            .foregroundStyle(prominent ? (enabled ? Color.white : Color.secondary) : KXColor.accent)
+            .frame(maxWidth: .infinity)
+            .frame(height: 50)
+            .background {
+                Capsule().fill(prominent ? (enabled ? KXColor.accent : KXColor.softBackground) : KXColor.cardBackground)
+            }
+            .kxLiquidGlass(prominent && enabled ? .selected : .control, in: Capsule())
+            .clipShape(Capsule())
+            .overlay {
+                Capsule().stroke(prominent && enabled ? Color.white.opacity(0.25) : KXColor.accent.opacity(0.32), lineWidth: 0.9)
+            }
+            .shadow(color: (prominent && enabled ? KXColor.accent : KXColor.glassShadow).opacity(0.3), radius: 14, y: 6)
+    }
 }
 
 private struct _SurfaceShadow: ViewModifier {

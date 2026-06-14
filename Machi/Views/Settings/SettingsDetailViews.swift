@@ -50,20 +50,20 @@ struct AccountPasswordSettingsView: View {
                 TextField(L("username", language), text: $username)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                    .textFieldStyle(.roundedBorder)
-                    .font(.body)
-                    .controlSize(.large)
+                    .kxInputField()
                 Button {
                     Task { await saveUsername() }
                 } label: {
-                    if isSavingUsername {
-                        KXSpinner(size: 20, lineWidth: 2.2, tint: .white)
-                    } else {
-                        Text(L("saveUsername", language))
+                    Group {
+                        if isSavingUsername {
+                            KXSpinner(size: 20, lineWidth: 2.2, tint: .white)
+                        } else {
+                            Text(L("saveUsername", language))
+                        }
                     }
+                    .kxGlassButton(enabled: canSaveUsername)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .buttonStyle(KXPressableStyle(scale: 0.98))
                 .disabled(!canSaveUsername)
 
                 if !username.normalizedUsername.isEmpty, username.normalizedUsername != username.trimmingCharacters(in: .whitespacesAndNewlines) {
@@ -93,26 +93,28 @@ struct AccountPasswordSettingsView: View {
 
                 if verificationMethod == .password {
                     SecureField(L("currentPassword", language), text: $currentPassword)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.body)
-                        .controlSize(.large)
+                        .kxInputField()
                 } else {
                     HStack(spacing: 10) {
                         TextField("输入当前邮箱验证码", text: $passwordCode)
                             .keyboardType(.numberPad)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.body)
-                            .controlSize(.large)
+                            .kxInputField()
                         Button {
                             Task { await sendPasswordCode() }
                         } label: {
-                            if isSendingPasswordCode {
-                                KXSpinner(size: 18, lineWidth: 2.2)
-                            } else {
-                                Text("发送")
+                            Group {
+                                if isSendingPasswordCode {
+                                    KXSpinner(size: 18, lineWidth: 2.2)
+                                } else {
+                                    Text("发送").font(.subheadline.weight(.bold))
+                                }
                             }
+                            .foregroundStyle(KXColor.accent)
+                            .padding(.horizontal, 16)
+                            .frame(height: 48)
+                            .kxGlassCapsule()
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(KXPressableStyle(scale: 0.97))
                         .disabled(isSendingPasswordCode || user.email.isEmpty)
                     }
                     Text(user.email.isEmpty ? "当前账号未绑定邮箱，请使用当前密码验证。" : "验证码将发送到 \(maskedEmail(user.email))。")
@@ -121,24 +123,22 @@ struct AccountPasswordSettingsView: View {
                 }
             }
             SecureField(L("newPassword", language), text: $newPassword)
-                .textFieldStyle(.roundedBorder)
-                .font(.body)
-                .controlSize(.large)
+                .kxInputField()
             SecureField(L("confirmPassword", language), text: $confirmPassword)
-                .textFieldStyle(.roundedBorder)
-                .font(.body)
-                .controlSize(.large)
+                .kxInputField()
             Button {
                 Task { await savePassword() }
             } label: {
-                if isSavingPassword {
-                    ProgressView()
-                } else {
-                    Text(L("savePassword", language))
+                Group {
+                    if isSavingPassword {
+                        KXSpinner(size: 20, lineWidth: 2.2, tint: .white)
+                    } else {
+                        Text(L("savePassword", language))
+                    }
                 }
+                .kxGlassButton(enabled: canSavePassword && !isSavingPassword)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(KXPressableStyle(scale: 0.98))
             .disabled(!canSavePassword || isSavingPassword)
             if (hasPasswordDraft), !canSavePassword {
                 Text(L("passwordValidationMessage", language))

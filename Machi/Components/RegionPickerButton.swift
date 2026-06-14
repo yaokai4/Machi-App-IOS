@@ -44,13 +44,23 @@ struct RegionPickerButton: View {
             .frame(minHeight: compact ? 40 : 38)
             .frame(maxWidth: compact ? 118 : 180, alignment: .leading)
             .fixedSize(horizontal: !compact, vertical: false)
-            .background(.ultraThinMaterial, in: Capsule())
-            .background(Color(.systemBackground).opacity(0.72), in: Capsule())
-            .overlay {
-                Capsule()
-                    .stroke(KXColor.separator.opacity(0.55), lineWidth: 0.8)
+            // Floating control: an opaque card surface (so it lifts off the
+            // translucent glass header instead of dissolving into it), an
+            // accent-tinted rim, a glass highlight, and a deeper drop shadow
+            // for the raised feel.
+            .background {
+                Capsule().fill(KXColor.cardBackground)
             }
-            .shadow(color: KXColor.glassShadow.opacity(0.14), radius: 10, y: 4)
+            .kxLiquidGlass(.selected, in: Capsule())
+            .clipShape(Capsule())
+            .overlay {
+                Capsule().stroke(KXColor.accent.opacity(0.32), lineWidth: 1)
+            }
+            .overlay {
+                Capsule().stroke(KXColor.glassHighlight.opacity(0.7), lineWidth: 0.5).padding(0.8)
+            }
+            .shadow(color: KXColor.glassShadow.opacity(0.28), radius: 16, y: 7)
+            .shadow(color: .black.opacity(0.05), radius: 2, y: 1)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)

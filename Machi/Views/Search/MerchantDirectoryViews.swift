@@ -41,6 +41,9 @@ struct KXServiceListingCard: View {
     let listing: KaiXCityListingDTO
     let onOpen: () -> Void
 
+    @State private var favorited: Bool = false
+    @State private var favoriteSeeded = false
+
     private var ratingAvg: Double { listing.rating_avg ?? listing.ratingAvg ?? 0 }
     private var ratingCount: Int { listing.rating_count ?? listing.ratingCount ?? 0 }
     private var category: String { listing.category ?? "" }
@@ -59,78 +62,127 @@ struct KXServiceListingCard: View {
         return KXListingCopy.priceLabel(listing)
     }
 
+    private var openHours: String {
+        KXListingCopy.attr(listing, "open_hours") ?? KXListingCopy.attr(listing, "availability") ?? ""
+    }
+
+    // Mirrors KXStayListingCard exactly: inset 4:3 cover with rounded corners,
+    // save heart top-right, bordered verified pill top-left — so merchant
+    // cards read as photo-led Airbnb listings, not boxy rectangles.
     var body: some View {
         Button(action: onOpen) {
-            VStack(alignment: .leading, spacing: 0) {
-                ZStack(alignment: .topLeading) {
+            VStack(alignment: .leading, spacing: 10) {
+                ZStack(alignment: .topTrailing) {
                     ListingCoverArtwork(listing: listing)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 150)
-                        .clipped()
-                    HStack {
+                        .aspectRatio(4.0 / 3.0, contentMode: .fit)
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    HStack(spacing: 6) {
                         if !category.isEmpty {
                             Text(KXListingCopy.categoryLabel(category, language))
                                 .font(.caption2.weight(.black))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(.ultraThinMaterial, in: Capsule())
+                                .foregroundStyle(.primary)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(.regularMaterial, in: Capsule())
+                                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.8))
+                                .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
                         }
-                        Spacer()
                         if listing.verification_status == "verified" {
-                            Label("认证", systemImage: "checkmark.seal.fill")
-                                .font(.caption2.weight(.black))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.green.opacity(0.92), in: Capsule())
+                            HStack(spacing: 4) {
+                                Image(systemName: "checkmark.seal.fill").foregroundStyle(KXColor.accent)
+                                Text("认证商家").foregroundStyle(.primary)
+                            }
+                            .font(.caption2.weight(.black))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(.regularMaterial, in: Capsule())
+                            .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.8))
+                            .shadow(color: .black.opacity(0.14), radius: 7, y: 2)
                         }
                     }
-                    .padding(8)
+                    .padding(9)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    heartButton
+                        .padding(9)
                 }
-                VStack(alignment: .leading, spacing: 7) {
-                    Text(KXListingCopy.displayTitle(listing))
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(alignment: .top, spacing: 8) {
+                        Text(KXListingCopy.displayTitle(listing))
+                            .font(.subheadline.weight(.black))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        Spacer(minLength: 4)
                         if ratingCount > 0 {
-                            KXRatingStarsView(value: ratingAvg, count: ratingCount)
+                            HStack(spacing: 3) {
+                                Image(systemName: "star.fill").font(.caption2.weight(.black)).foregroundStyle(.orange)
+                                Text(String(format: "%.1f", ratingAvg)).font(.caption.weight(.black)).foregroundStyle(.primary)
+                                Text("(\(ratingCount))").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                            }
                         } else {
-                            Text("暂无点评 · 期待你的体验")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
+                            Text("暂无点评")
+                                .font(.caption2.weight(.black))
+                                .foregroundStyle(KXColor.livingWarm)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(KXColor.livingWarm.opacity(0.1), in: Capsule())
                         }
-                        Spacer(minLength: 8)
+                    }
+                    Label(listing.location_text?.isEmpty == false ? listing.location_text! : (listing.city_slug ?? ""), systemImage: "mappin.and.ellipse")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    if !openHours.isEmpty {
+                        Label(openHours, systemImage: "clock")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    HStack(spacing: 6) {
                         Text(priceText)
                             .font(.subheadline.weight(.black))
                             .foregroundStyle(KXColor.livingWarm)
-                            .lineLimit(1)
-                    }
-                    HStack(spacing: 4) {
-                        Image(systemName: "mappin.and.ellipse")
-                            .font(.caption2.weight(.bold))
-                        Text(listing.location_text?.isEmpty == false ? listing.location_text! : (listing.city_slug ?? ""))
                             .lineLimit(1)
                         Spacer(minLength: 8)
                         Text(ctaTitle)
                             .font(.caption.weight(.black))
                             .foregroundStyle(.white)
-                            .padding(.horizontal, 12)
-                            .frame(height: 26)
+                            .padding(.horizontal, 13)
+                            .frame(height: 28)
                             .background(KXColor.livingAccent, in: Capsule())
                     }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .padding(.top, 2)
                 }
-                .padding(12)
+                .padding(.horizontal, 2)
             }
-            // Clip the whole card to the rounded rect so the full-bleed cover's
-            // top corners are rounded too (kxLivingSurface only paints the bg /
-            // stroke / shadow — it doesn't clip — which left square top corners).
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .kxLivingSurface(radius: 20, elevated: true)
+            .padding(8)
+            .kxLivingSurface(radius: 24, elevated: true)
         }
         .buttonStyle(KXPressableStyle())
+        .onAppear {
+            if !favoriteSeeded {
+                favorited = listing.favorited ?? listing.isFavorited ?? false
+                favoriteSeeded = true
+            }
+        }
+    }
+
+    private var heartButton: some View {
+        Button {
+            let next = !favorited
+            favorited = next
+            Task {
+                do { try await KaiXAPIClient.shared.favoriteListing(listing.id, on: next) }
+                catch { favorited = !next }
+            }
+        } label: {
+            Image(systemName: favorited ? "heart.fill" : "heart")
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(favorited ? KXColor.heat : .primary)
+                .frame(width: 32, height: 32)
+                .background(.ultraThinMaterial, in: Circle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
