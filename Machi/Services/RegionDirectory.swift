@@ -323,6 +323,40 @@ enum KaiXRegionDirectory {
         return citiesByParent[c] ?? []
     }
 
+    // 日本「都市圈」分组：选地区时按生活圈聚合（关东圈/关西圈/名古屋…），
+    // 与 Web regions.ts 的 JP_METRO_CIRCLES 保持一致。
+    struct MetroCircle: Identifiable, Hashable {
+        let code: String
+        let name: String
+        let provinceCodes: [String]
+        var id: String { code }
+    }
+
+    static let jpMetroCircles: [MetroCircle] = [
+        .init(code: "kanto", name: "关东圈", provinceCodes: ["tokyo", "kanagawa", "saitama", "chiba", "ibaraki", "tochigi", "gunma"]),
+        .init(code: "kansai", name: "关西圈", provinceCodes: ["osaka", "kyoto", "hyogo", "nara", "shiga", "mie"]),
+        .init(code: "nagoya", name: "名古屋·中部", provinceCodes: ["aichi", "gifu", "shizuoka", "nagano", "niigata", "ishikawa"]),
+        .init(code: "fukuoka", name: "福冈·九州", provinceCodes: ["fukuoka", "kumamoto", "kagoshima"]),
+        .init(code: "sapporo", name: "札幌·北海道", provinceCodes: ["hokkaido"]),
+        .init(code: "sendai", name: "仙台·东北", provinceCodes: ["miyagi"]),
+        .init(code: "other", name: "其他城市", provinceCodes: ["hiroshima", "okayama", "okinawa"]),
+    ]
+
+    /// (province, city-region) pairs for every city inside a JP metro circle.
+    static func regionsForMetroCircle(_ circleCode: String) -> [(province: Province, region: Region)] {
+        guard let circle = jpMetroCircles.first(where: { $0.code == circleCode }) else { return [] }
+        var out: [(Province, Region)] = []
+        for provinceCode in circle.provinceCodes {
+            guard let province = provinces(for: "jp").first(where: { $0.code == provinceCode }) else { continue }
+            for city in cities(country: "jp", province: provinceCode) {
+                if let region = make(country: "jp", province: provinceCode, city: city.code) {
+                    out.append((province, region))
+                }
+            }
+        }
+        return out
+    }
+
     static func resolve(regionCode: String) -> Region? {
         let parts = regionCode.lowercased().split(separator: ".").map(String.init)
         guard parts.count == 2 || parts.count == 3 else { return nil }

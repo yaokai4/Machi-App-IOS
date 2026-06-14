@@ -89,6 +89,11 @@ struct RegionPickerView: View {
                     deliver(region)
                 }
             }
+            .navigationDestination(for: CircleRoute.self) { route in
+                CircleCityListView(country: route.country, circleCode: route.circleCode, circleName: route.circleName) { region in
+                    deliver(region)
+                }
+            }
         }
     }
 
@@ -135,7 +140,23 @@ struct RegionPickerView: View {
     @ViewBuilder
     private func landingCountryDrilldown(_ country: KaiXRegionDirectory.Country) -> some View {
         VStack(spacing: 0) {
-            if country.hasProvinces {
+            if country.code == "jp" {
+                ForEach(KaiXRegionDirectory.jpMetroCircles) { circle in
+                    NavigationLink(value: CircleRoute(country: country, circleCode: circle.code, circleName: circle.name)) {
+                        HStack(spacing: KXSpacing.sm) {
+                            Text(circle.name).font(.body)
+                            Spacer()
+                            Text("\(KaiXRegionDirectory.regionsForMetroCircle(circle.code).count) 城")
+                                .font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                            Image(systemName: "chevron.right").font(.footnote.weight(.medium)).foregroundStyle(.tertiary)
+                        }
+                        .padding(.vertical, 12)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    Divider().opacity(0.25)
+                }
+            } else if country.hasProvinces {
                 ForEach(KaiXRegionDirectory.provinces(for: country.code)) { province in
                     NavigationLink(value: ProvinceRoute(country: country, province: province)) {
                         HStack(spacing: KXSpacing.sm) {
@@ -290,6 +311,53 @@ private struct ProvinceRoute: Hashable {
     let province: KaiXRegionDirectory.Province
 }
 
+private struct CircleRoute: Hashable {
+    let country: KaiXRegionDirectory.Country
+    let circleCode: String
+    let circleName: String
+}
+
+/// Cities inside a Japan metro circle (关东圈 → 东京/横滨/川崎…），with a
+/// trailing prefecture label so the origin stays clear.
+private struct CircleCityListView: View {
+    @Environment(\.appLanguage) private var language
+    let country: KaiXRegionDirectory.Country
+    let circleCode: String
+    let circleName: String
+    let onSelect: (KaiXRegionDirectory.Region) -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(KaiXRegionDirectory.regionsForMetroCircle(circleCode), id: \.region.regionCode) { pair in
+                    Button {
+                        onSelect(pair.region)
+                    } label: {
+                        HStack {
+                            Text(pair.region.cityName).font(.body)
+                            Spacer()
+                            Text(KaiXRegionDirectory.localizedProvinceName(countryCode: country.code, province: pair.province, language: language))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.vertical, 12)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    Divider().opacity(0.25)
+                }
+            }
+            .padding(.horizontal, KXSpacing.md)
+            .kxGlassSurface(radius: KXRadius.lg)
+            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.top, KXSpacing.md)
+        }
+        .kxPageBackground()
+        .navigationTitle(circleName)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
 private struct ProvinceListView: View {
     @Environment(\.appLanguage) private var language
     let country: KaiXRegionDirectory.Country
@@ -298,7 +366,27 @@ private struct ProvinceListView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                if country.hasProvinces {
+                if country.code == "jp" {
+                    // 日本：先选都市圈（关东圈/关西圈/名古屋…），再进城市。
+                    ForEach(KaiXRegionDirectory.jpMetroCircles) { circle in
+                        NavigationLink(value: CircleRoute(country: country, circleCode: circle.code, circleName: circle.name)) {
+                            HStack {
+                                Text(circle.name).font(.body)
+                                Spacer()
+                                Text("\(KaiXRegionDirectory.regionsForMetroCircle(circle.code).count) 城")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                                Image(systemName: "chevron.right")
+                                    .font(.footnote.weight(.medium))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(.vertical, 12)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        Divider().opacity(0.25)
+                    }
+                } else if country.hasProvinces {
                     ForEach(KaiXRegionDirectory.provinces(for: country.code)) { province in
                         NavigationLink(value: ProvinceRoute(country: country, province: province)) {
                             HStack {
