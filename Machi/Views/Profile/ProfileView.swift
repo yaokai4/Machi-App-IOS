@@ -902,13 +902,20 @@ private struct ProfileRoleBadge: View {
     let title: String
     var isOfficial = false
 
+    private var tint: Color { isOfficial ? Color(red: 0.05, green: 0.48, blue: 0.45) : KXColor.accent }
+
     var body: some View {
         Label(title, systemImage: isOfficial ? "checkmark.shield.fill" : "checkmark.seal.fill")
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(isOfficial ? Color(red: 0.05, green: 0.48, blue: 0.45) : KXColor.accent)
+            .font(.caption.weight(.bold))
+            .foregroundStyle(tint)
             .lineLimit(1)
             .labelStyle(.titleAndIcon)
-            .frame(height: 22)
+            .padding(.horizontal, 9)
+            .frame(height: 26)
+            // Faint tinted rim so identity tags read as distinct chips, not loose
+            // floating text (the user asked badges to have a light border).
+            .background(tint.opacity(0.08), in: Capsule())
+            .overlay(Capsule().strokeBorder(tint.opacity(0.28), lineWidth: 0.8))
     }
 }
 
