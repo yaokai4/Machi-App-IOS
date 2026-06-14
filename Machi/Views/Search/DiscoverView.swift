@@ -4990,6 +4990,24 @@ private struct KXJobListingRow: View {
         return String(source.prefix(1)).uppercased()
     }
 
+    /// Indeed-style fact chips beyond employment + japanese: visa, no-experience,
+    /// remote, students, commute, weekly holidays, benefits. Capped so the row
+    /// stays tidy.
+    private var jobFactChips: [String] {
+        var chips: [String] = []
+        let visa = (KXListingCopy.attr(listing, "visa_support") ?? "").lowercased()
+        if visa == "available" || visa == "support" || visa == "true" { chips.append("签证支持") }
+        else if visa == "consult" { chips.append("签证可咨询") }
+        if KXListingCopy.boolAttr(listing, "no_experience_ok") { chips.append("无经验可") }
+        if KXListingCopy.boolAttr(listing, "remote_ok") { chips.append("可远程") }
+        if KXListingCopy.boolAttr(listing, "student_ok") { chips.append("留学生可") }
+        if KXListingCopy.boolAttr(listing, "transportation_fee") { chips.append("交通费支给") }
+        let holidays = KXListingCopy.attr(listing, "holidays") ?? ""
+        if !holidays.isEmpty { chips.append(holidays.count > 6 ? String(holidays.prefix(6)) : holidays) }
+        if KXListingCopy.boolAttr(listing, "foreigner_friendly"), chips.count < 5 { chips.append("外国人友好") }
+        return Array(chips.prefix(5))
+    }
+
     var body: some View {
         Button(action: onOpen) {
             VStack(alignment: .leading, spacing: 11) {
@@ -5047,8 +5065,8 @@ private struct KXJobListingRow: View {
                     if let japanese = japaneseLabel {
                         jobChip(japanese, filled: false)
                     }
-                    if visaSupport {
-                        jobChip("签证支持", filled: false)
+                    ForEach(jobFactChips, id: \.self) { chip in
+                        jobChip(chip, filled: false)
                     }
                 }
 
