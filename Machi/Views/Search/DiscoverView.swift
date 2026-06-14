@@ -717,7 +717,9 @@ private struct DiscoverCategoryCell: View {
                 Text(category.subtitle)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    // Always reserve two lines so a 1-line subtitle tile is the
+                    // exact same height as a 2-line one — kills the ragged grid.
+                    .lineLimit(2, reservesSpace: true)
                     .minimumScaleFactor(0.82)
             }
         }

@@ -201,10 +201,6 @@ struct PostCardView: View, Equatable {
                         TagWrapView(tags: visibleHashtags, onTap: onTag)
                     }
 
-                    if let summary = attributeSummary(for: contentPost, visibleHashtags: visibleHashtags) {
-                        TypedSummaryView(summary: summary, tint: contentPost.contentType.spec.tint)
-                    }
-
                     if !contentMedia.isEmpty {
                         MediaGridView(mediaItems: contentMedia)
                     }
