@@ -37,6 +37,11 @@ final class UserEntity {
     var membershipLevel: String = "free"
     var totalHeat: Double = 0
     var creatorBadge: String = ""
+    // Admin-assigned custom tags, stored "|"-joined (SwiftData-safe default).
+    var customTagsRaw: String = ""
+    // Published listing counts per type as JSON {type:count}; only populated by
+    // the profile-detail endpoint, powering tappable count tags.
+    var listingCountsRaw: String = ""
     var isMerchant: Bool = false
     var merchantVerified: Bool = false
     var profileViewCount: Int = 0
@@ -93,6 +98,8 @@ final class UserEntity {
         membershipLevel: String = "free",
         totalHeat: Double = 0,
         creatorBadge: String = "",
+        customTagsRaw: String = "",
+        listingCountsRaw: String = "",
         isMerchant: Bool = false,
         merchantVerified: Bool = false,
         profileViewCount: Int = 0,
@@ -134,6 +141,8 @@ final class UserEntity {
         self.membershipLevel = membershipLevel
         self.totalHeat = totalHeat
         self.creatorBadge = creatorBadge
+        self.customTagsRaw = customTagsRaw
+        self.listingCountsRaw = listingCountsRaw
         self.isMerchant = isMerchant
         self.merchantVerified = merchantVerified
         self.profileViewCount = profileViewCount
@@ -152,6 +161,18 @@ extension UserEntity {
     /// verified members AND legacy/admin-verified accounts, so the
     /// existing badge behaviour is preserved while membership lights it up.
     var displaysVerifiedBadge: Bool { isVerified || isVerifiedMember }
+
+    /// Admin-assigned tags shown as bordered chips on the profile.
+    var customTags: [String] {
+        customTagsRaw.split(separator: "|").map(String.init).filter { !$0.isEmpty }
+    }
+
+    /// Published listing counts per type (二手/租房/招聘/服务…) for tappable tags.
+    var listingCounts: [String: Int] {
+        guard let data = listingCountsRaw.data(using: .utf8),
+              let dict = try? JSONDecoder().decode([String: Int].self, from: data) else { return [:] }
+        return dict
+    }
 
     var role: UserRole {
         get { UserRole(rawValue: roleRaw) ?? .member }

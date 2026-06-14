@@ -36,6 +36,12 @@ final class RemoteSyncService {
         return f.date(from: s)
     }
 
+    /// Encode listing-count map → compact JSON for UserEntity.listingCountsRaw.
+    private func encodeListingCounts(_ counts: [String: Int]) -> String {
+        guard let data = try? JSONEncoder().encode(counts), let s = String(data: data, encoding: .utf8) else { return "" }
+        return s
+    }
+
     /// Decode an ISO8601 timestamp emitted by the backend. Falls back
     /// to `.now` when missing — appropriate for "last seen" style
     /// fields, NOT for immutable fields like joinDate.
@@ -304,6 +310,8 @@ final class RemoteSyncService {
             if let v = dto.membership_tier { existing.membershipLevel = v }
             if let v = dto.total_heat { existing.totalHeat = v }
             if let v = dto.creator_badge { existing.creatorBadge = v }
+            if let v = dto.custom_tags { existing.customTagsRaw = v.joined(separator: "|") }
+            if let v = dto.listing_counts { existing.listingCountsRaw = encodeListingCounts(v) }
             if let v = dto.is_merchant { existing.isMerchant = v }
             if let v = dto.merchant_verified { existing.merchantVerified = v }
             if let v = dto.profile_view_count { existing.profileViewCount = v }
@@ -350,6 +358,8 @@ final class RemoteSyncService {
             membershipLevel: dto.membership_tier ?? "free",
             totalHeat: dto.total_heat ?? 0,
             creatorBadge: dto.creator_badge ?? "",
+            customTagsRaw: (dto.custom_tags ?? []).joined(separator: "|"),
+            listingCountsRaw: dto.listing_counts.map(encodeListingCounts) ?? "",
             isMerchant: dto.is_merchant ?? false,
             merchantVerified: dto.merchant_verified ?? false,
             profileViewCount: dto.profile_view_count ?? 0,

@@ -10,6 +10,7 @@ enum KXRoute: Hashable {
     case city(regionCode: String)
     case cityChannel(regionCode: String, channel: CityChannel)
     case cityListings(regionCode: String, type: String)
+    case userListings(userId: String, type: String, title: String)
     case cityListingDetail(listingId: String)
     case createCityListing(type: String, citySlug: String?)
     case editCityListing(listingId: String)
@@ -140,14 +141,14 @@ extension KXRoute {
             return .none
         case .postDetailComment(_, let commentId):
             return commentId.map { .comment($0) } ?? .comments
-        case .profile, .topic, .city, .cityChannel, .cityListings, .cityListingDetail, .createCityListing, .editCityListing, .businessDirectory, .businessProfile, .guideCategory, .guideServices, .guideMemberResources, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .conversation, .search:
+        case .profile, .topic, .city, .cityChannel, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .businessDirectory, .businessProfile, .guideCategory, .guideServices, .guideMemberResources, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .conversation, .search:
             return .none
         }
     }
 
     var requiresHiddenTabBar: Bool {
         switch self {
-        case .postDetail, .postDetailComment, .cityListings, .cityListingDetail, .createCityListing, .editCityListing, .businessProfile, .guideArticle, .guideProduct, .guideSchool, .guideCompany, .guideCompanyReviews, .conversation:
+        case .postDetail, .postDetailComment, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .businessProfile, .guideArticle, .guideProduct, .guideSchool, .guideCompany, .guideCompanyReviews, .conversation:
             true
         case .profile, .topic, .city, .cityChannel, .businessDirectory, .guideCategory, .guideServices, .guideMemberResources, .guideSchools, .guideCompanies, .guideInterviewReviews, .search:
             false
@@ -162,7 +163,7 @@ extension KXRoute {
             L("unknownUser", language)
         case .topic:
             L("noTopicPosts", language)
-        case .city, .cityChannel, .cityListings, .cityListingDetail, .createCityListing, .editCityListing, .businessDirectory, .businessProfile:
+        case .city, .cityChannel, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .businessDirectory, .businessProfile:
             L("emptyFeed", language)
         case .guideCategory, .guideServices, .guideMemberResources, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews:
             L("guideOpenFailed", language)
@@ -202,6 +203,8 @@ private struct KXRouteDestinations: ViewModifier {
                     CityChannelView(regionCode: regionCode, currentUser: currentUser, initialChannel: channel)
                 case .cityListings(let regionCode, let type):
                     CityListingChannelView(regionCode: regionCode, listingType: type, currentUser: currentUser)
+                case .userListings(let userId, let type, let title):
+                    UserListingsView(userId: userId, listingType: type, title: title, currentUser: currentUser)
                 case .cityListingDetail(let listingId):
                     CityListingDetailView(listingId: listingId, currentUser: currentUser)
                 case .createCityListing(let type, let citySlug):
@@ -310,6 +313,9 @@ private extension KXRoute {
             return KaiXRegionDirectory.resolve(regionCode: code) == nil || normalizedType.isEmpty
                 ? nil
                 : .cityListings(regionCode: code, type: normalizedType)
+        case .userListings:
+            // Internal-only route (opened from a profile tag), not deep-linkable.
+            return nil
         case .cityListingDetail(let listingId):
             let id = listingId.trimmingCharacters(in: .whitespacesAndNewlines)
             return id.isEmpty ? nil : .cityListingDetail(listingId: id)

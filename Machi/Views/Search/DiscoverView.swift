@@ -2930,6 +2930,139 @@ struct CityListingChannelView: View {
     }
 }
 
+/// One user's published listings of a single type — opened from a tappable
+/// count tag on their profile ("出售二手 5" → their secondhand items). Reuses
+/// the channel cards but is seller-scoped across all cities (no region filter).
+struct UserListingsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.appLanguage) private var language
+    @EnvironmentObject private var router: AppRouter
+    let userId: String
+    let listingType: String
+    let title: String
+    let currentUser: UserEntity
+
+    @State private var items: [KaiXCityListingDTO] = []
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+
+    private var baseType: String {
+        listingType == "hiring" ? "job" : listingType
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            Group {
+                if isLoading {
+                    LoadingView()
+                } else if let errorMessage {
+                    ErrorStateView(message: errorMessage) { Task { await load() } }
+                } else if items.isEmpty {
+                    KXEmptyState(title: "暂无发布", subtitle: "TA 还没有发布该类型的内容。", systemImage: "tray")
+                } else {
+                    resultsList
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .kxPageBackground()
+        .background(KXColor.livingBackground)
+        .toolbar(.hidden, for: .navigationBar)
+        .task(id: "\(userId)-\(listingType)") { await load() }
+    }
+
+    private var header: some View {
+        HStack(spacing: KXSpacing.sm) {
+            Button { dismiss() } label: {
+                Image(systemName: "chevron.left")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(KXColor.livingInk)
+                    .frame(width: 42, height: 42)
+                    .kxGlassCircle()
+            }
+            .buttonStyle(.plain)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(KXColor.livingInk)
+                Text("\(items.count) 条发布")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(KXColor.livingMuted)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
+        .background(KXColor.livingBackground.opacity(0.94))
+        .overlay(alignment: .bottom) { Divider().opacity(0.18) }
+    }
+
+    @ViewBuilder
+    private var resultsList: some View {
+        ScrollView {
+            Group {
+                if baseType == "secondhand" {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 14) {
+                        ForEach(items) { item in
+                            KXSecondhandListingCard(listing: item) { router.open(.cityListingDetail(listingId: item.id)) }
+                        }
+                    }
+                } else if baseType == "rental" {
+                    LazyVStack(spacing: 18) {
+                        ForEach(items) { item in
+                            KXStayListingCard(listing: item, variant: KXListingCopy.isStayCategory(item.category) ? .stay : .home) {
+                                router.open(.cityListingDetail(listingId: item.id))
+                            }
+                        }
+                    }
+                } else if baseType == "job" {
+                    LazyVStack(spacing: 12) {
+                        ForEach(items) { item in
+                            KXJobListingRow(listing: item) { router.open(.cityListingDetail(listingId: item.id)) }
+                        }
+                    }
+                } else if baseType == "local_service" {
+                    LazyVStack(spacing: 12) {
+                        ForEach(items) { item in
+                            KXServiceListingCard(listing: item) { router.open(.cityListingDetail(listingId: item.id)) }
+                        }
+                    }
+                } else {
+                    LazyVStack(spacing: 12) {
+                        ForEach(items) { item in
+                            KXStructuredListingRow(listing: item) { router.open(.cityListingDetail(listingId: item.id)) }
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.top, 14)
+            .padding(.bottom, 28)
+        }
+    }
+
+    private func load() async {
+        isLoading = true
+        errorMessage = nil
+        do {
+            // job tag covers both job + hiring; fetch both and merge.
+            if listingType == "job" {
+                async let jobs = KaiXAPIClient.shared.listingsPage(type: "job", sellerId: userId, limit: 50)
+                async let hiring = KaiXAPIClient.shared.listingsPage(type: "hiring", sellerId: userId, limit: 50)
+                items = (try await jobs).items + (try await hiring).items
+            } else {
+                items = try await KaiXAPIClient.shared.listingsPage(type: listingType, sellerId: userId, limit: 50).items
+            }
+            isLoading = false
+        } catch {
+            errorMessage = error.kaixUserMessage
+            isLoading = false
+        }
+    }
+}
+
 struct CityListingDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appLanguage) private var language

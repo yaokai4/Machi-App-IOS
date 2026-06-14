@@ -104,6 +104,8 @@ struct KaiXUserDTO: Codable, Equatable {
     let dm_privacy: String?
     let total_heat: Double?
     let creator_badge: String?
+    let custom_tags: [String]?
+    let listing_counts: [String: Int]?
     let is_merchant: Bool?
     let merchant_verified: Bool?
     let profile_view_count: Int?

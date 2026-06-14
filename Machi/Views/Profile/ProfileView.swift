@@ -255,13 +255,22 @@ struct ProfileView: View {
             profileTab = .posts
         }
         do {
+            // Pull the authoritative profile from the server first so identity
+            // tags, custom tags and per-type listing counts are always fresh
+            // (these only ride the user-detail endpoint, not feed payloads).
+            // Offline / failure quietly falls back to the local copy.
+            if profileUserId != currentUser.id {
+                if let dto = try? await KaiXAPIClient.shared.userDetail(profileUserId) {
+                    _ = RemoteSyncService.shared.upsertUser(dto, context: modelContext)
+                }
+            }
             let resolvedUser: UserEntity?
             if profileUserId == currentUser.id {
                 resolvedUser = currentUser
-            } else if initialProfileUser?.id == profileUserId {
-                resolvedUser = initialProfileUser
+            } else if let fetched = try await UserRepository(context: modelContext).fetchUser(id: profileUserId) {
+                resolvedUser = fetched
             } else {
-                resolvedUser = try await UserRepository(context: modelContext).fetchUser(id: profileUserId)
+                resolvedUser = initialProfileUser?.id == profileUserId ? initialProfileUser : nil
             }
 
             guard let resolvedUser else {
@@ -481,7 +490,7 @@ struct ProfileView: View {
             .foregroundStyle(.secondary)
 
             profileStatsStrip
-            contentSummaryStrip
+            listingCountTags
         }
         .padding(14)
         .kxGlassSurface(radius: KXRadius.lg)
@@ -528,9 +537,65 @@ struct ProfileView: View {
                 if !profileUser.contentLanguagePreference.isEmpty {
                     ProfileRoleBadge(title: ContentLanguage(rawValue: profileUser.contentLanguagePreference)?.title(language) ?? profileUser.contentLanguagePreference)
                 }
+                // Admin-assigned custom tags (优质房东 / 资深卖家…).
+                ForEach(profileUser.customTags, id: \.self) { tag in
+                    ProfileCustomTagChip(title: tag)
+                }
             }
         }
         .padding(.top, 2)
+    }
+
+    /// Tappable per-type listing counts — open this user's published items of a
+    /// type (出售二手 5 → their secondhand listings). Accurate listing counts
+    /// from the profile-detail payload, not post counts.
+    @ViewBuilder
+    private var listingCountTags: some View {
+        let tags = profileListingCountTags
+        if !tags.isEmpty {
+            FlowLayout(spacing: 7) {
+                ForEach(tags, id: \.type) { tag in
+                    Button {
+                        router.open(.userListings(userId: profileUser.id, type: tag.type, title: "\(profileUser.displayName) · \(tag.label)"))
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: tag.icon).font(.caption2.weight(.bold))
+                            Text(tag.label).font(.caption.weight(.bold))
+                            Text("\(tag.count)")
+                                .font(.caption2.weight(.black))
+                                .foregroundStyle(KXColor.accent)
+                                .padding(.horizontal, 5)
+                                .frame(minWidth: 18, minHeight: 16)
+                                .background(KXColor.accentSoft, in: Capsule())
+                        }
+                        .foregroundStyle(KXColor.livingInk)
+                        .padding(.horizontal, 10)
+                        .frame(height: 30)
+                        .background(KXColor.livingSurface, in: Capsule())
+                        .overlay(Capsule().strokeBorder(KXColor.livingInk.opacity(0.12), lineWidth: 0.8))
+                    }
+                    .buttonStyle(KXPressableStyle(scale: 0.96))
+                }
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    /// Listing types worth surfacing as tappable tags, merged (job+hiring → 招聘).
+    private var profileListingCountTags: [(type: String, label: String, icon: String, count: Int)] {
+        let counts = profileUser.listingCounts
+        let order: [(type: String, label: String, icon: String, keys: [String])] = [
+            ("secondhand", "二手", "bag.fill", ["secondhand"]),
+            ("rental", "租房", "house.fill", ["rental"]),
+            ("job", "招聘", "briefcase.fill", ["job", "hiring"]),
+            ("local_service", "本地服务", "storefront.fill", ["local_service"]),
+            ("discount", "优惠", "tag.fill", ["discount"]),
+        ]
+        return order.compactMap { entry in
+            let total = entry.keys.reduce(0) { $0 + (counts[$1] ?? 0) }
+            guard total > 0 else { return nil }
+            return (entry.type, entry.label, entry.icon, total)
+        }
     }
 
     @ViewBuilder
@@ -916,6 +981,22 @@ private struct ProfileRoleBadge: View {
             // floating text (the user asked badges to have a light border).
             .background(tint.opacity(0.08), in: Capsule())
             .overlay(Capsule().strokeBorder(tint.opacity(0.28), lineWidth: 0.8))
+    }
+}
+
+/// Admin-assigned custom tag — a soft bordered chip (no seal icon) in the
+/// brand-warm tone so it reads distinctly from the verification badges.
+private struct ProfileCustomTagChip: View {
+    let title: String
+    var body: some View {
+        Text(title)
+            .font(.caption.weight(.bold))
+            .foregroundStyle(KXColor.livingWarm)
+            .lineLimit(1)
+            .padding(.horizontal, 9)
+            .frame(height: 26)
+            .background(KXColor.livingWarm.opacity(0.10), in: Capsule())
+            .overlay(Capsule().strokeBorder(KXColor.livingWarm.opacity(0.32), lineWidth: 0.8))
     }
 }
 
