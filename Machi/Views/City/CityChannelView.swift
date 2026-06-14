@@ -191,6 +191,7 @@ struct CityChannelView: View {
             .padding(.vertical, KXSpacing.sm)
             .padding(.bottom, chrome.bottomContentPadding)
         }
+        .scrollIndicators(.hidden)
         .refreshable {
             await viewModel.refresh(context: modelContext, currentUser: currentUser, postStore: postStore)
         }
