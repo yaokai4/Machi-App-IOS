@@ -404,6 +404,71 @@ enum KaiXRegionDirectory {
         return "\(c).\(ci)"
     }
 
+    // MARK: - Reverse-geocode matching (auto location)
+
+    /// ISO country codes that differ from our internal slugs.
+    private static let isoCountryAlias: [String: String] = ["gb": "uk"]
+
+    /// US state full names → our state slugs (CLPlacemark gives full names).
+    private static let usStateAlias: [String: String] = [
+        "california": "ca", "new york": "ny", "washington": "wa", "texas": "tx",
+        "florida": "fl", "illinois": "il", "massachusetts": "ma", "new jersey": "nj",
+    ]
+
+    /// Fold an English/romaji place name to a comparison key: lowercase,
+    /// diacritic-insensitive (Tōkyō→tokyo), suffix-stripped, no spaces — so a
+    /// geocoded prefecture/state lines up with our romaji/pinyin province codes.
+    private static func foldPlaceKey(_ raw: String?) -> String {
+        guard var t = raw?.lowercased() else { return "" }
+        t = t.folding(options: .diacriticInsensitive, locale: Locale(identifier: "en_US"))
+        for suffix in [" prefecture", " metropolis", " province", "-to", "-fu", "-ken", "-do",
+                       "都", "府", "県", "县", "省", "市"] {
+            if t.hasSuffix(suffix) { t = String(t.dropLast(suffix.count)) }
+        }
+        return t.replacingOccurrences(of: " ", with: "")
+                .replacingOccurrences(of: "-", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Best-effort map a reverse-geocoded placemark to a directory Region.
+    /// Pass English-locale fields (`isoCountryCode`, `administrativeArea`,
+    /// `locality`). Province codes are romaji/pinyin so they match the
+    /// geocoded admin area directly; city falls back to the province's first
+    /// entry when the locality can't be matched (the directory is city-coarse).
+    static func match(isoCountryCode: String?, adminArea: String?, locality: String?) -> Region? {
+        guard let isoRaw = isoCountryCode?.lowercased(), !isoRaw.isEmpty else { return nil }
+        let countryCode = isoCountryAlias[isoRaw] ?? isoRaw
+        guard let country = country(code: countryCode) else { return nil }
+
+        if country.hasProvinces {
+            let adminKey = foldPlaceKey(adminArea)
+            let adminLower = (adminArea ?? "").lowercased().trimmingCharacters(in: .whitespaces)
+            let provs = provinces(for: countryCode)
+            var province = provs.first { foldPlaceKey($0.code) == adminKey }
+            if province == nil, let stateCode = usStateAlias[adminLower] {
+                province = provs.first { $0.code == stateCode }
+            }
+            if province == nil {
+                province = provs.first { foldPlaceKey($0.name) == adminKey }
+            }
+            guard let province else { return nil }
+            let provCities = cities(country: countryCode, province: province.code)
+            let locKey = foldPlaceKey(locality)
+            let city = provCities.first { foldPlaceKey($0.code) == locKey || foldPlaceKey($0.name) == locKey }
+                ?? provCities.first
+            guard let city else { return nil }
+            return make(country: countryCode, province: province.code, city: city.code)
+        } else {
+            let locKey = foldPlaceKey(locality)
+            let flatCities = cities(country: countryCode, province: nil)
+            if let city = flatCities.first(where: { foldPlaceKey($0.code) == locKey || foldPlaceKey($0.name) == locKey }) {
+                return make(country: countryCode, province: nil, city: city.code)
+            }
+            if let code = defaultRegionCode(forCountry: countryCode) { return resolve(regionCode: code) }
+            return nil
+        }
+    }
+
     static func localizedCountryName(_ country: Country, language: AppLanguage) -> String {
         guard language != .zh else { return country.name }
         return localizedCountryNames[language]?[country.code] ?? country.name

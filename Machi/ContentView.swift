@@ -84,6 +84,15 @@ struct ContentView: View {
             if let user = appState.currentUser {
                 RegionStore.shared.applyUserRegion(user)
             }
+            // First-run auto-locate: when no browsing region is set yet, fill it
+            // from the device's current city so the user never has to pick one by
+            // hand. Skips silently if location was denied; a manual picker (with a
+            // "使用当前位置" button) remains available either way.
+            if RegionStore.shared.current == nil, !LocationService.shared.isDenied {
+                if let region = await LocationService.shared.detectRegion() {
+                    RegionStore.shared.setCurrent(region)
+                }
+            }
             sessionStore.setCurrentUser(appState.currentUser?.id)
             userStore.setCurrentUser(appState.currentUser)
             // After local SwiftData is in shape, pull the latest state

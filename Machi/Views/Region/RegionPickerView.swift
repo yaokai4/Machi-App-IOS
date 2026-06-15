@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct RegionSelectorView: View {
     var initialCountry: String? = nil
@@ -34,6 +35,8 @@ struct RegionPickerView: View {
 
     @State private var searchText = ""
     @State private var path: NavigationPath = NavigationPath()
+    @ObservedObject private var location = LocationService.shared
+    @State private var showLocationDeniedAlert = false
 
     private var allowedCountryCode: String? {
         guard !allowsAnyCountry, let initialCountry else { return nil }
@@ -50,6 +53,10 @@ struct RegionPickerView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: KXSpacing.lg) {
                     searchField
+
+                    if searchText.isEmpty {
+                        locateButton
+                    }
 
                     if !searchText.isEmpty {
                         searchResults
@@ -79,6 +86,16 @@ struct RegionPickerView: View {
                     Button(L("cancel", language)) { dismiss() }
                 }
             }
+            .alert("无法获取定位", isPresented: $showLocationDeniedAlert) {
+                Button("去设置开启") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                Button(L("cancel", language), role: .cancel) {}
+            } message: {
+                Text("请在 系统设置 → Machi → 位置 里允许「使用 App 期间」访问，或在下方手动选择城市。")
+            }
             .navigationDestination(for: KaiXRegionDirectory.Country.self) { country in
                 ProvinceListView(country: country) { region in
                     deliver(region)
@@ -102,6 +119,61 @@ struct RegionPickerView: View {
     private var landingCountry: KaiXRegionDirectory.Country? {
         let code = (allowedCountryCode ?? initialCountry ?? store.current?.countryCode ?? "jp").lowercased()
         return availableCountries.first(where: { $0.code == code }) ?? availableCountries.first
+    }
+
+    private var isLocating: Bool {
+        location.phase == .requesting || location.phase == .locating
+    }
+
+    /// One-tap "use my current city" — requests When-In-Use permission, takes a
+    /// single fix, reverse-geocodes it, and delivers the matched region.
+    private var locateButton: some View {
+        Button {
+            Task {
+                if let region = await location.detectRegion() {
+                    deliver(region)
+                } else if location.isDenied {
+                    showLocationDeniedAlert = true
+                }
+            }
+        } label: {
+            HStack(spacing: KXSpacing.sm) {
+                Group {
+                    if isLocating {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "location.fill")
+                            .font(.headline)
+                            .foregroundStyle(KXColor.accent)
+                    }
+                }
+                .frame(width: 26)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("使用当前位置")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.primary)
+                    Text(isLocating ? "正在定位你所在的城市…" : "自动获取你所在的城市，无需手动选择")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+                if !isLocating {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .padding(.horizontal, KXSpacing.md)
+            .frame(minHeight: 58)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(KXColor.accent.opacity(0.06), in: RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous)
+                    .strokeBorder(KXColor.accent.opacity(0.22), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isLocating)
     }
 
     private var searchField: some View {
