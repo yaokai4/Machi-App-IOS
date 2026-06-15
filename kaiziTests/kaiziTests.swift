@@ -5,15 +5,24 @@ import Testing
 
 @MainActor
 struct kaiziTests {
-    @Test func commentStateDoesNotShowEmptyWhenCountIsPositive() async throws {
-        let state = CommentLoadState.resolved(commentCount: 3, loadedComments: [])
+    @Test func commentStateTrustsLoadedCommentsNotStaleCount() async throws {
+        // Loaded comments are the source of truth. An empty list shows the
+        // empty state even when the server's commentCount is stale-positive
+        // (comments later hidden/deleted): the old "retry wall" on
+        // count>0 + empty array was a false positive and was deliberately
+        // removed — see CommentLoadState.resolved. Genuine fetch failures
+        // surface upstream as the view-model's .error state instead.
+        #expect(CommentLoadState.resolved(commentCount: 3, loadedComments: []) == .empty)
 
-        #expect(state != .empty)
-        if case .failed = state {
-            return
-        } else {
-            Issue.record("Positive commentCount with an empty array must show retry/loading, not empty.")
-        }
+        let comment = CommentEntity(
+            id: "comment-load-state",
+            postId: "post-load-state",
+            authorId: "author",
+            content: "hi",
+            likeCount: 0,
+            createdAt: Date()
+        )
+        #expect(CommentLoadState.resolved(commentCount: 3, loadedComments: [comment]) == .loaded)
     }
 
     @Test func commentRepositoryDefaultsToHotThenNewestOrdering() async throws {

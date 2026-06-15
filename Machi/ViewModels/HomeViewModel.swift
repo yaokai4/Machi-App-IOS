@@ -142,12 +142,17 @@ final class HomeViewModel: ObservableObject {
             // the same SwiftData store transparently. On reset that's page 1;
             // on "load more" we advance the server cursor so infinite scroll
             // keeps serving NEW content instead of recycling the local cache.
-            if KaiXBackend.token != nil {
-                if reset {
-                    await syncFromRemote(context: context, cursor: nil)
-                } else if remoteHasMore {
-                    await syncFromRemote(context: context, cursor: remoteCursor)
-                }
+            // Pull the public feed for EVERYONE, including guests. The
+            // backend serves GET /api/feed unauthenticated (verified: 200
+            // with content), and a logged-out browser landing on an empty
+            // 首页 — while 发现 was full of city content — was the app's
+            // worst first impression. Best-effort: syncFromRemote swallows
+            // failures and falls back to the local cache, so offline (and
+            // a guest's empty 关注 tab) degrade gracefully.
+            if reset {
+                await syncFromRemote(context: context, cursor: nil)
+            } else if remoteHasMore {
+                await syncFromRemote(context: context, cursor: remoteCursor)
             }
 
             let repository = PostRepository(context: context)
@@ -177,7 +182,7 @@ final class HomeViewModel: ObservableObject {
             // deterministic local windows keep deeper browsing alive.
             canLoadMore = usedRemotePage
                 ? (remoteHasMore || mode == .hot)
-                : (page.count == KaiXConfig.pageSize || (KaiXBackend.token != nil && remoteHasMore))
+                : (page.count == KaiXConfig.pageSize || remoteHasMore)
             try await hydrate(
                 context: context,
                 repository: repository,

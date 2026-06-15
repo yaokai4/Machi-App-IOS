@@ -115,7 +115,11 @@ final class CityChannelViewModel: ObservableObject {
             // Advance the server cursor on every page (reset → page 1),
             // not just on reset — "load more" used to re-read only the
             // local cache, so deep scrolling recycled stale content.
-            if KaiXBackend.token != nil, reset || remoteHasMore {
+            // Guests included: the city feed is public (GET /api/feed is
+            // served unauthenticated), so a logged-out user opening a city
+            // channel sees real content instead of an empty page. Best-effort
+            // — falls back to the local cache on any failure.
+            if reset || remoteHasMore {
                 await syncFromRemote(context: context, region: region, cursor: reset ? nil : remoteCursor)
             }
             let repository = PostRepository(context: context)

@@ -31,6 +31,9 @@ struct kaiziApp: App {
         // Must be installed before the first banner is shown or tapped,
         // so foreground presentation + tap routing work from cold start.
         SystemNotificationService.shared.activate()
+        // Subscribe to MetricKit so crash / hang diagnostics from the
+        // previous run are captured on this launch.
+        DiagnosticsService.shared.activate()
     }
 
     var body: some Scene {

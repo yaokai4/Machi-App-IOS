@@ -63,29 +63,70 @@ final class KaiXAPIClient {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             req.httpBody = try JSONEncoder().encode(AnyEncodable(body))
         }
-        let (data, response) = try await session.data(for: req)
-        guard let http = response as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
-        }
-        if !(200..<300).contains(http.statusCode) {
-            // On 401 the session is gone server-side (expired / revoked
-            // / rotated). Clear the token now so subsequent calls don't
-            // keep replaying a dead bearer, and notify the app so it
-            // can route to login. Doing this in one central place
-            // avoids the "stuck on a blank screen" symptom that used
-            // to happen because RemoteSyncService swallowed every
-            // failure.
-            if http.statusCode == 401 {
-                KaiXBackend.token = nil
-                NotificationCenter.default.post(name: .kaiXSessionInvalidated, object: nil)
+        // Transient failures (mobile networks drop, gateways recycle) get a
+        // couple of jittered retries — but ONLY for requests safe to replay:
+        // idempotent verbs, or anything carrying an Idempotency-Key so the
+        // server dedupes. Non-idempotent POSTs are never auto-retried, to
+        // avoid double-creating posts / messages / likes.
+        let isReplaySafe = ["GET", "HEAD", "DELETE", "PUT"].contains(method)
+            || (idempotencyKey?.isEmpty == false)
+        let maxAttempts = isReplaySafe ? 3 : 1
+        var attempt = 0
+        while true {
+            attempt += 1
+            do {
+                let (data, response) = try await session.data(for: req)
+                guard let http = response as? HTTPURLResponse else {
+                    throw URLError(.badServerResponse)
+                }
+                if (200..<300).contains(http.statusCode) {
+                    return http.statusCode == 204 ? Data() : data
+                }
+                // On 401 the session is gone server-side (expired / revoked
+                // / rotated). Clear the token now so subsequent calls don't
+                // keep replaying a dead bearer, and notify the app so it can
+                // route to login. Centralizing this avoids the "stuck on a
+                // blank screen" symptom. Never retried.
+                if http.statusCode == 401 {
+                    KaiXBackend.token = nil
+                    NotificationCenter.default.post(name: .kaiXSessionInvalidated, object: nil)
+                }
+                // 502/503/504 are transient gateway states — replay-safe calls
+                // back off and retry before surfacing the error to the user.
+                if isReplaySafe, attempt < maxAttempts, [502, 503, 504].contains(http.statusCode) {
+                    try? await Task.sleep(nanoseconds: Self.retryBackoff(attempt))
+                    continue
+                }
+                if let api = try? JSONDecoder().decode(KaiXAPIError.self, from: data) {
+                    throw api
+                }
+                throw KaiXAPIError(error: .init(code: "http_\(http.statusCode)", message: "HTTP \(http.statusCode)"))
+            } catch let urlError as URLError where isReplaySafe
+                && attempt < maxAttempts
+                && Self.isRetryableURLError(urlError) {
+                try? await Task.sleep(nanoseconds: Self.retryBackoff(attempt))
+                continue
             }
-            if let api = try? JSONDecoder().decode(KaiXAPIError.self, from: data) {
-                throw api
-            }
-            throw KaiXAPIError(error: .init(code: "http_\(http.statusCode)", message: "HTTP \(http.statusCode)"))
         }
-        if http.statusCode == 204 { return Data() }
-        return data
+    }
+
+    /// Network-layer errors worth a retry: transient connectivity blips, not
+    /// hard "you're offline" or "request cancelled" states.
+    private static func isRetryableURLError(_ error: URLError) -> Bool {
+        switch error.code {
+        case .timedOut, .networkConnectionLost, .cannotConnectToHost,
+             .dnsLookupFailed, .cannotFindHost:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// ~0.4s then ~0.8s, with ±25% jitter so a fleet doesn't retry in lockstep.
+    private static func retryBackoff(_ attempt: Int) -> UInt64 {
+        let base = 0.4 * pow(2.0, Double(attempt - 1))
+        let jitter = Double.random(in: 0.75...1.25)
+        return UInt64(base * jitter * 1_000_000_000)
     }
 
     private func decode<T: Decodable>(_ data: Data) throws -> T {
