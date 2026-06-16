@@ -5,11 +5,14 @@ import UniformTypeIdentifiers
 
 actor UploadService {
     static let shared = UploadService()
+    private static let postImageUploadLimitBytes = 10 * 1024 * 1024
+    private static let postVideoUploadLimitBytes = 200 * 1024 * 1024
 
     enum UploadError: Error {
         case invalidMedia
         case writeFailed
         case thumbnailFailed
+        case mediaTooLarge
     }
 
     func prepareImage(data: Data) async throws -> MediaDraft {
@@ -19,12 +22,14 @@ actor UploadService {
         let imageURL = directory.appendingPathComponent(fileName)
         let thumbnailURL = directory.appendingPathComponent("\(id)-thumb.jpg")
 
-        // 上传接近全分辨率(原来 1600px 偏糊):最长边 3072px、质量 0.9,九宫格与
-        // 大图都清晰;缩略图仍走 640 保证列表加载快。
-        guard let compressed = encodedJPEG(from: data, maxPixel: 3072, quality: 0.9),
-              let thumbnail = encodedJPEG(from: data, maxPixel: 640, quality: 0.72)
-        else {
+        // 上传接近全分辨率(原来 1600px 偏糊):优先最长边 3072px、质量 0.9。
+        // 若仍超过移动端上传上限,再逐级降档,避免服务端拒绝但不把所有图
+        // 一刀切压糊。
+        guard let thumbnail = encodedJPEG(from: data, maxPixel: 640, quality: 0.72) else {
             throw UploadError.invalidMedia
+        }
+        guard let compressed = encodedPublishJPEG(from: data) else {
+            throw UploadError.mediaTooLarge
         }
 
         do {
@@ -43,7 +48,9 @@ actor UploadService {
             fileName: fileName,
             width: compressed.size.width,
             height: compressed.size.height,
-            duration: 0
+            duration: 0,
+            originalFileSize: data.count,
+            uploadFileSize: compressed.data.count
         )
     }
 
@@ -61,18 +68,28 @@ actor UploadService {
             throw UploadError.writeFailed
         }
 
-        // 视频统一压到 ≤1080p(4K 也降到 1080p),控制上传体积与清晰度的平衡。
-        // 任何失败都回退用原片,绝不阻断发布。
-        if let capped = await transcodeTo1080pIfNeeded(sourceURL: videoURL, directory: directory, id: id) {
+        // 视频统一压到 ≤1080p(4K 也降到 1080p),或当源文件超过发布上限时
+        // 尝试重新编码。转码失败会回退原片;最终仍超过 200MB 时再明确拒绝。
+        if let capped = await transcodeTo1080pIfNeeded(
+            sourceURL: videoURL,
+            directory: directory,
+            id: id,
+            sourceByteCount: data.count
+        ) {
             try? FileManager.default.removeItem(at: videoURL)
             videoURL = capped
             mime = "video/mp4"
             fileName = capped.lastPathComponent
         }
+        let uploadFileSize = fileSize(at: videoURL)
+        guard uploadFileSize <= Self.postVideoUploadLimitBytes else {
+            throw UploadError.mediaTooLarge
+        }
 
         let asset = AVURLAsset(url: videoURL)
         let durationTime = (try? await asset.load(.duration)) ?? .zero
         let duration = CMTimeGetSeconds(durationTime).isFinite ? CMTimeGetSeconds(durationTime) : 0
+        let videoSize = await videoPresentationSize(asset: asset)
         let thumbnail = await VideoThumbnailService.shared.thumbnail(for: videoURL) ?? videoPlaceholderThumbnail()
         guard let thumbnailData = thumbnail.jpegData(compressionQuality: 0.72) else {
             throw UploadError.thumbnailFailed
@@ -91,21 +108,30 @@ actor UploadService {
             thumbnailURL: thumbnailURL,
             contentType: mime,
             fileName: fileName,
-            width: thumbnail.size.width,
-            height: thumbnail.size.height,
-            duration: duration
+            width: videoSize.width,
+            height: videoSize.height,
+            duration: duration,
+            originalFileSize: data.count,
+            uploadFileSize: uploadFileSize
         )
     }
 
     /// Re-encode a video to ≤1080p (mp4) when its longest side exceeds 1080.
     /// Returns the new file URL, or nil when no transcode is needed/possible
     /// (caller keeps the original — never blocks publishing).
-    private func transcodeTo1080pIfNeeded(sourceURL: URL, directory: URL, id: String) async -> URL? {
+    private func transcodeTo1080pIfNeeded(
+        sourceURL: URL,
+        directory: URL,
+        id: String,
+        sourceByteCount: Int
+    ) async -> URL? {
         let asset = AVURLAsset(url: sourceURL)
         guard let track = try? await asset.loadTracks(withMediaType: .video).first,
               let size = try? await track.load(.naturalSize) else { return nil }
         let longest = Swift.max(abs(size.width), abs(size.height))
-        guard longest > 1080 else { return nil }  // already ≤1080p
+        guard longest > 1080 || sourceByteCount > Self.postVideoUploadLimitBytes else {
+            return nil
+        }
         guard let export = AVAssetExportSession(asset: asset, presetName: AVAssetExportPreset1920x1080) else { return nil }
         let outURL = directory.appendingPathComponent("\(id).mp4")
         try? FileManager.default.removeItem(at: outURL)
@@ -125,8 +151,33 @@ actor UploadService {
     func upload(
         draft: MediaDraft,
         purpose: String,
-        entityType: String
+        entityType: String,
+        onProgress: ((Double) -> Void)? = nil
     ) async throws -> KaiXMediaDTO {
+        let metadata: [String: String]?
+        if draft.type == .video {
+            let thumbnailData: Data
+            do {
+                thumbnailData = try Data(contentsOf: draft.thumbnailURL)
+            } catch {
+                throw UploadError.thumbnailFailed
+            }
+            let cover = try await KaiXAPIClient.shared.uploadFile(
+                data: thumbnailData,
+                mime: "image/jpeg",
+                fileName: "\(draft.id)-cover.jpg",
+                purpose: "video_thumbnail",
+                entityType: entityType,
+                width: Int(draft.width),
+                height: Int(draft.height)
+            ) { progress in
+                onProgress?(min(0.18, progress * 0.18))
+            }
+            metadata = ["thumbnailFileId": cover.file.id]
+        } else {
+            metadata = nil
+        }
+
         let data: Data
         do {
             data = try Data(contentsOf: draft.localURL)
@@ -142,8 +193,15 @@ actor UploadService {
             entityType: entityType,
             width: Int(draft.width),
             height: Int(draft.height),
-            duration: draft.duration
-        )
+            duration: draft.duration,
+            metadata: metadata
+        ) { progress in
+            if draft.type == .video {
+                onProgress?(0.18 + progress * 0.82)
+            } else {
+                onProgress?(progress)
+            }
+        }
         return uploaded.media
     }
 
@@ -176,6 +234,42 @@ actor UploadService {
         guard CGImageDestinationFinalize(destination) else { return nil }
 
         return (output as Data, CGSize(width: cgImage.width, height: cgImage.height))
+    }
+
+    private func encodedPublishJPEG(from data: Data) -> (data: Data, size: CGSize)? {
+        let attempts: [(CGFloat, CGFloat)] = [
+            (3072, 0.9),
+            (2400, 0.82),
+            (2000, 0.76),
+            (1600, 0.72)
+        ]
+        var fallback: (data: Data, size: CGSize)?
+        for (maxPixel, quality) in attempts {
+            guard let encoded = encodedJPEG(from: data, maxPixel: maxPixel, quality: quality) else { continue }
+            fallback = encoded
+            if encoded.data.count <= Self.postImageUploadLimitBytes {
+                return encoded
+            }
+        }
+        guard let fallback, fallback.data.count <= Self.postImageUploadLimitBytes else {
+            return nil
+        }
+        return fallback
+    }
+
+    private func fileSize(at url: URL) -> Int {
+        let values = try? url.resourceValues(forKeys: [.fileSizeKey])
+        return values?.fileSize ?? 0
+    }
+
+    private func videoPresentationSize(asset: AVURLAsset) async -> CGSize {
+        guard let track = try? await asset.loadTracks(withMediaType: .video).first,
+              let natural = try? await track.load(.naturalSize),
+              let transform = try? await track.load(.preferredTransform) else {
+            return CGSize(width: 0, height: 0)
+        }
+        let transformed = natural.applying(transform)
+        return CGSize(width: abs(transformed.width), height: abs(transformed.height))
     }
 
     private func videoPlaceholderThumbnail() -> UIImage {

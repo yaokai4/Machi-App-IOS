@@ -37,6 +37,7 @@ struct ComposePostView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
+                        uploadState
                         typeRow
                         if needsMembership { membershipGate }
                         composer
@@ -44,9 +45,7 @@ struct ComposePostView: View {
                         missingFieldsHint
                         regionLanguageRow
                         topicComposer
-                        suggestedTopicChips
                         mediaPreview
-                        uploadState
                     }
                     .padding(.horizontal, KaiXTheme.horizontalPadding)
                     .padding(.top, 16)
@@ -68,7 +67,13 @@ struct ComposePostView: View {
                     }
                 }
             }
-            Button(L("discard", language), role: .destructive) { dismiss() }
+            Button(L("discard", language), role: .destructive) {
+                Task {
+                    await viewModel.discardDraftAndDeleteUploads()
+                    composeStore.clear()
+                    dismiss()
+                }
+            }
             Button(L("keepEditing", language), role: .cancel) {}
         }
         .onChange(of: pickerItems) { _, newValue in
@@ -88,7 +93,6 @@ struct ComposePostView: View {
             if let initial = initialContentType, viewModel.contentType == .dynamic {
                 viewModel.setContentType(initial)
             }
-            await viewModel.loadSuggestedTopics(context: modelContext)
         }
         .onChange(of: viewModel.content) { _, _ in
             syncComposeStore()
@@ -140,6 +144,22 @@ struct ComposePostView: View {
         )
     }
 
+    @MainActor
+    private func performPublish() async {
+        viewModel.clearPublishErrorForRetry()
+        let ok = await viewModel.publish(context: modelContext, currentUser: currentUser, language: language)
+        if ok {
+            if let post = viewModel.publishedPost {
+                postStore.insertPublishedPost(post, currentUserId: currentUser.id)
+            }
+            composeStore.clear()
+            onPublished()
+            dismiss()
+        } else {
+            toastManager.show(.requestFailed(message: L("composePublishFailed", language), technicalDetails: viewModel.errorMessage))
+        }
+    }
+
     private var header: some View {
         HStack {
             Button(L("cancel", language)) {
@@ -165,23 +185,13 @@ struct ComposePostView: View {
                     return
                 }
                 Task {
-                    let ok = await viewModel.publish(context: modelContext, currentUser: currentUser, language: language)
-                    if ok {
-                        if let post = viewModel.publishedPost {
-                            postStore.insertPublishedPost(post, currentUserId: currentUser.id)
-                        }
-                        composeStore.clear()
-                        onPublished()
-                        dismiss()
-                    } else {
-                        toastManager.show(.requestFailed(message: L("composePublishFailed", language), technicalDetails: viewModel.errorMessage))
-                    }
+                    await performPublish()
                 }
             } label: {
                 if viewModel.isPublishing {
                     HStack(spacing: 6) {
                         KXSpinner(size: 16, lineWidth: 2)
-                        Text(L("postingEllipsis", language))
+                        Text(L("postingCompact", language))
                             .font(.subheadline.weight(.semibold))
                     }
                 } else {
@@ -189,18 +199,17 @@ struct ComposePostView: View {
                         .font(.headline.weight(.semibold))
                 }
             }
-            .foregroundStyle(viewModel.canPublish ? .white : .secondary)
-            .padding(.horizontal, 16)
-            .frame(height: 36)
+            .foregroundStyle((viewModel.canPublish || viewModel.isPublishing) ? .white : .secondary)
+            .frame(width: 118, height: 36)
             .background(
                 Capsule()
-                    .fill(viewModel.canPublish ? KXColor.accent : KXColor.softBackground)
+                    .fill((viewModel.canPublish || viewModel.isPublishing) ? KXColor.accent : KXColor.softBackground)
             )
             .overlay(
                 Capsule()
-                    .stroke(viewModel.canPublish ? KXColor.accent.opacity(0.4) : KXColor.separator, lineWidth: 0.7)
+                    .stroke((viewModel.canPublish || viewModel.isPublishing) ? KXColor.accent.opacity(0.4) : KXColor.separator, lineWidth: 0.7)
             )
-            .opacity(viewModel.canPublish ? 1.0 : 0.65)
+            .opacity((viewModel.canPublish || viewModel.isPublishing) ? 1.0 : 0.65)
             .disabled(!viewModel.canPublish || viewModel.isPublishing)
         }
         .padding(.horizontal, 18)
@@ -447,37 +456,6 @@ struct ComposePostView: View {
         }
     }
 
-    private var suggestedTopicChips: some View {
-        let topics = viewModel.suggestedTopics.filter { topic in
-            !viewModel.selectedTopics.map(\.normalizedTopicName).contains(topic.normalizedTopicName)
-        }
-
-        return VStack(alignment: .leading, spacing: 8) {
-            if !topics.isEmpty {
-                Text(L("recommendedTopics", language))
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.secondary)
-
-                FlowLayout(spacing: 8) {
-                    ForEach(topics, id: \.self) { topic in
-                        Button {
-                            viewModel.addTopic(topic)
-                        } label: {
-                            Text("#\(topic)")
-                                .font(.subheadline.weight(.bold))
-                                .foregroundStyle(.blue)
-                                .lineLimit(1)
-                                .padding(.horizontal, 11)
-                                .padding(.vertical, 7)
-                                .kxGlassCapsule()
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-        }
-    }
-
     @ViewBuilder
     private var mediaPreview: some View {
         if !viewModel.mediaDrafts.isEmpty {
@@ -497,15 +475,34 @@ struct ComposePostView: View {
                                 }
                                 .clipShape(RoundedRectangle(cornerRadius: 16))
                                 .overlay(alignment: .bottomLeading) {
-                                    if draft.type == .video {
-                                        Label(durationText(draft.duration), systemImage: "play.fill")
+                                    let status = viewModel.mediaUploadStates[draft.id] ?? .waiting
+                                    let progress = viewModel.mediaUploadProgress[draft.id] ?? 0
+                                    if draft.type == .video || status != .waiting {
+                                        Label(mediaBadgeText(for: draft, state: status, progress: progress), systemImage: mediaBadgeIcon(for: draft, state: status))
                                             .font(.caption2.weight(.semibold))
                                             .foregroundStyle(.white)
                                             .padding(.horizontal, 7)
                                             .padding(.vertical, 4)
-                                            .background(.black.opacity(0.72))
+                                            .background(mediaBadgeColor(for: status))
                                             .clipShape(Capsule())
                                             .padding(6)
+                                    }
+                                }
+                                .overlay(alignment: .bottom) {
+                                    let status = viewModel.mediaUploadStates[draft.id] ?? .waiting
+                                    let progress = viewModel.mediaUploadProgress[draft.id] ?? 0
+                                    if status == .uploading || status == .compressing {
+                                        GeometryReader { proxy in
+                                            ZStack(alignment: .leading) {
+                                                Capsule().fill(.black.opacity(0.22))
+                                                Capsule()
+                                                    .fill(KXColor.accent)
+                                                    .frame(width: proxy.size.width * min(max(progress, 0.04), 1))
+                                            }
+                                        }
+                                        .frame(height: 4)
+                                        .padding(.horizontal, 8)
+                                        .padding(.bottom, 8)
                                     }
                                 }
 
@@ -532,9 +529,14 @@ struct ComposePostView: View {
                 Text(errorMessage)
                 Spacer()
                 Button(L("retry", language)) {
-                    viewModel.errorMessage = nil
+                    if viewModel.hasFailedMediaUploads {
+                        viewModel.retryFailedMediaUploads(language: language)
+                    } else {
+                        Task { await performPublish() }
+                    }
                 }
                 .font(.caption.weight(.semibold))
+                .disabled(viewModel.isPublishing)
             }
             .font(.footnote.weight(.semibold))
             .foregroundStyle(.red)
@@ -543,12 +545,29 @@ struct ComposePostView: View {
             .clipShape(RoundedRectangle(cornerRadius: 14))
         }
 
-        if viewModel.isPublishing || viewModel.state == .loading {
-            HStack(spacing: 10) {
-                KXSpinner(size: 20, lineWidth: 2.4)
-                Text(viewModel.isPublishing ? L("postingEllipsis", language) : L("processingMedia", language))
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.secondary)
+        if viewModel.shouldShowUploadProgress {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
+                    if viewModel.hasFailedMediaUploads {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                    } else {
+                        KXSpinner(size: 20, lineWidth: 2.4)
+                    }
+                    Text(viewModel.uploadProgressText.isEmpty ? L("processingMedia", language) : viewModel.uploadProgressText)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if !viewModel.mediaDrafts.isEmpty && !viewModel.hasFailedMediaUploads {
+                        Text("\(Int((viewModel.overallUploadProgress * 100).rounded()))%")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if !viewModel.mediaDrafts.isEmpty && !viewModel.hasFailedMediaUploads {
+                    ProgressView(value: viewModel.overallUploadProgress)
+                        .tint(KXColor.accent)
+                }
             }
             .padding(12)
             .kxGlassSurface(radius: KXRadius.md)
@@ -557,7 +576,6 @@ struct ComposePostView: View {
 
     @ViewBuilder
     private var bottomToolbar: some View {
-        let hasVideo = viewModel.mediaDrafts.contains { $0.type == .video }
         let imageCount = viewModel.mediaDrafts.filter { $0.type == .image }.count
         let remainingImageSlots = Swift.max(1, KaiXConfig.maxImageItemsPerPost - imageCount)
         HStack(spacing: 18) {
@@ -565,13 +583,11 @@ struct ComposePostView: View {
                 Image(systemName: "photo")
                     .font(.title3.weight(.semibold))
             }
-            .disabled(hasVideo || imageCount >= KaiXConfig.maxImageItemsPerPost)
 
             PhotosPicker(selection: $pickerItems, maxSelectionCount: KaiXConfig.maxVideoItemsPerPost, matching: .videos) {
                 Image(systemName: "video")
                     .font(.title3.weight(.semibold))
             }
-            .disabled(!viewModel.mediaDrafts.isEmpty)
 
             Spacer()
 
@@ -633,5 +649,46 @@ struct ComposePostView: View {
     private func durationText(_ duration: Double) -> String {
         let total = max(0, Int(duration.rounded()))
         return String(format: "%02d:%02d", total / 60, total % 60)
+    }
+
+    private func mediaBadgeText(for draft: MediaDraft, state: UploadState, progress: Double) -> String {
+        switch state {
+        case .waiting, .local:
+            return draft.type == .video ? durationText(draft.duration) : ""
+        case .compressing:
+            return "压缩中"
+        case .uploading:
+            return "上传 \(Int((progress * 100).rounded()))%"
+        case .uploaded:
+            return "完成"
+        case .failed:
+            return "失败"
+        }
+    }
+
+    private func mediaBadgeIcon(for draft: MediaDraft, state: UploadState) -> String {
+        switch state {
+        case .waiting, .local:
+            return draft.type == .video ? "play.fill" : "photo"
+        case .compressing:
+            return "wand.and.stars"
+        case .uploading:
+            return "arrow.up"
+        case .uploaded:
+            return "checkmark"
+        case .failed:
+            return "exclamationmark.triangle.fill"
+        }
+    }
+
+    private func mediaBadgeColor(for state: UploadState) -> Color {
+        switch state {
+        case .failed:
+            return Color.red.opacity(0.82)
+        case .uploaded:
+            return KXColor.accent.opacity(0.82)
+        default:
+            return Color.black.opacity(0.72)
+        }
     }
 }

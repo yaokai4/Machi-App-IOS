@@ -11,25 +11,26 @@ struct MediaGridView: View {
     var body: some View {
         if !mediaItems.isEmpty {
             let count = mediaItems.count
-            // 九宫格:1 张单图大图;2/4 张两列;3 张及以上(5–9)三列方格。
+            // 朋友圈式预览:所有卡片都用固定正方形裁切,点开后再看完整比例。
             let columnCount = count == 1 ? 1 : (count == 2 || count == 4 ? 2 : 3)
             let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: columnCount)
-            let isGrid = count > 1
 
             LazyVGrid(columns: columns, spacing: 4) {
                 ForEach(mediaItems) { item in
                     Button {
                         selectedMedia = item
                     } label: {
-                        let height = mediaHeight(for: item)
                         ZStack {
-                            if let url = item.displayURL {
-                                // 单图用高清大图;九宫格方格用更高目标分辨率,避免被压糊。
-                                MediaImageView(url: url, targetPixelSize: count == 1 ? 1080 : 640)
+                            if let url = item.displayURL ?? item.mediumSourceURL ?? item.sourceURL {
+                                MediaImageView(
+                                    url: url,
+                                    targetPixelSize: count == 1 ? 960 : 640,
+                                    contentMode: .fill
+                                )
                                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                                     .clipped()
                             } else {
-                                MediaPlaceholderTile(item: item, height: isGrid ? nil : height)
+                                MediaPlaceholderTile(item: item, height: nil)
                             }
 
                             if item.type == .video {
@@ -46,8 +47,7 @@ struct MediaGridView: View {
                             }
                         }
                         .frame(maxWidth: .infinity)
-                        // 九宫格:每格强制 1:1 正方形(不再压成长方形);单图保留自然比例。
-                        .modifier(MediaTileShape(square: isGrid, height: height))
+                        .modifier(MediaTileShape())
                         .overlay(alignment: .bottomTrailing) {
                             if item.type == .video, item.duration > 0 {
                                 Text(durationText(item.duration))
@@ -66,7 +66,7 @@ struct MediaGridView: View {
                 }
             }
             .fullScreenCover(item: $selectedMedia) { media in
-                MediaPreviewView(media: media)
+                MediaPreviewView(mediaItems: mediaItems, initialMediaID: media.id)
                     .kxZoomTransition(sourceID: media.id, in: mediaZoomNamespace)
             }
             .onChange(of: selectedMedia) { _, media in
@@ -83,34 +83,15 @@ struct MediaGridView: View {
         return String(format: "%02d:%02d", total / 60, total % 60)
     }
 
-    private func mediaHeight(for item: MediaEntity) -> CGFloat {
-        guard mediaItems.count == 1 else { return 112 }
-        guard item.width > 0, item.height > 0 else {
-            return item.type == .video ? 176 : 188
-        }
-
-        // Honor the real orientation: landscape stays compact, portrait is
-        // allowed to grow tall enough that it doesn't read as a squashed
-        // letterbox (full view lives in the media preview).
-        let ratio = CGFloat(item.height / max(item.width, 1))
-        return min(max(156, 220 * ratio), item.type == .video ? 300 : 340)
-    }
 }
 
-/// 九宫格的每格强制 1:1 正方形(用零固有尺寸的 Color.clear 卡出精确方框,图片
-/// 填充裁剪);单图保留自然高度。
+/// Feed 预览始终用 1:1 方格。原图比例只在全屏预览里展示。
 private struct MediaTileShape: ViewModifier {
-    let square: Bool
-    let height: CGFloat
     func body(content: Content) -> some View {
-        if square {
-            Color.clear
-                .aspectRatio(1, contentMode: .fit)
-                .overlay { content }
-                .clipped()
-        } else {
-            content.frame(height: height)
-        }
+        Color.clear
+            .aspectRatio(1, contentMode: .fit)
+            .overlay { content }
+            .clipped()
     }
 }
 

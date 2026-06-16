@@ -1,7 +1,7 @@
 import SwiftData
 
 enum KaiXSchemaV5: VersionedSchema {
-    static var versionIdentifier = Schema.Version(6, 0, 0)
+    static var versionIdentifier = Schema.Version(7, 0, 0)
 
     static var models: [any PersistentModel.Type] {
         [

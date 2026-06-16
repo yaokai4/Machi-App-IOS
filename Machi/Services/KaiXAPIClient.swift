@@ -70,7 +70,7 @@ final class KaiXAPIClient {
         // avoid double-creating posts / messages / likes.
         let isReplaySafe = ["GET", "HEAD", "DELETE", "PUT"].contains(method)
             || (idempotencyKey?.isEmpty == false)
-        let maxAttempts = isReplaySafe ? 3 : 1
+        let maxAttempts = isReplaySafe ? 4 : 1
         var attempt = 0
         while true {
             attempt += 1
@@ -91,10 +91,17 @@ final class KaiXAPIClient {
                     KaiXBackend.token = nil
                     NotificationCenter.default.post(name: .kaiXSessionInvalidated, object: nil)
                 }
-                // 502/503/504 are transient gateway states — replay-safe calls
-                // back off and retry before surfacing the error to the user.
-                if isReplaySafe, attempt < maxAttempts, [502, 503, 504].contains(http.statusCode) {
-                    try? await Task.sleep(nanoseconds: Self.retryBackoff(attempt))
+                if http.statusCode == 429,
+                   let api = try? JSONDecoder().decode(KaiXAPIError.self, from: data),
+                   api.error.code != "rate_limited" {
+                    throw api
+                }
+                // 429/502/503/504 are transient for replay-safe calls. Upload
+                // presign/complete carries Idempotency-Key, so backing off here
+                // prevents a 9-image publish from failing just because the
+                // production upload bucket refills between requests.
+                if isReplaySafe, attempt < maxAttempts, Self.isRetryableHTTPStatus(http.statusCode) {
+                    try? await Task.sleep(nanoseconds: Self.retryBackoff(attempt, response: http))
                     continue
                 }
                 if let api = try? JSONDecoder().decode(KaiXAPIError.self, from: data) {
@@ -110,6 +117,10 @@ final class KaiXAPIClient {
         }
     }
 
+    private static func isRetryableHTTPStatus(_ status: Int) -> Bool {
+        status == 429 || [502, 503, 504].contains(status)
+    }
+
     /// Network-layer errors worth a retry: transient connectivity blips, not
     /// hard "you're offline" or "request cancelled" states.
     private static func isRetryableURLError(_ error: URLError) -> Bool {
@@ -123,7 +134,12 @@ final class KaiXAPIClient {
     }
 
     /// ~0.4s then ~0.8s, with ±25% jitter so a fleet doesn't retry in lockstep.
-    private static func retryBackoff(_ attempt: Int) -> UInt64 {
+    private static func retryBackoff(_ attempt: Int, response: HTTPURLResponse? = nil) -> UInt64 {
+        if let retryAfter = response?.value(forHTTPHeaderField: "Retry-After"),
+           let seconds = Double(retryAfter.trimmingCharacters(in: .whitespaces)),
+           seconds > 0 {
+            return UInt64(min(seconds, 30) * 1_000_000_000)
+        }
         let base = 0.4 * pow(2.0, Double(attempt - 1))
         let jitter = Double.random(in: 0.75...1.25)
         return UInt64(base * jitter * 1_000_000_000)
@@ -480,6 +496,7 @@ final class KaiXAPIClient {
     func feed(
         mode: FeedMode = .recommend,
         cursor: String? = nil,
+        regionCode: String? = nil,
         country: String? = nil,
         province: String? = nil,
         city: String? = nil,
@@ -489,6 +506,7 @@ final class KaiXAPIClient {
         if let cursor { q.append(URLQueryItem(name: "cursor", value: cursor)) }
         // Region filter — required for .local, optional everywhere else
         // (server falls back to the viewer's saved home region).
+        if let regionCode, !regionCode.isEmpty { q.append(URLQueryItem(name: "region_code", value: regionCode)) }
         if let country, !country.isEmpty { q.append(URLQueryItem(name: "country", value: country)) }
         if let province, !province.isEmpty { q.append(URLQueryItem(name: "province", value: province)) }
         if let city, !city.isEmpty { q.append(URLQueryItem(name: "city", value: city)) }
@@ -534,7 +552,8 @@ final class KaiXAPIClient {
                                                 city: city,
                                                 region_code: regionCode,
                                                 content_type: contentType,
-                                                attributes: attributes))
+                                                attributes: attributes),
+                                     idempotencyKey: "post-create-\(UUID().uuidString)")
         return try decode(data) as Wrapper |> \.post
     }
 
@@ -1495,6 +1514,86 @@ final class KaiXAPIClient {
 
     // MARK: - media / S3 uploads
 
+    private final class UploadTaskBox: @unchecked Sendable {
+        nonisolated(unsafe) var task: URLSessionUploadTask?
+        nonisolated(unsafe) var progressObservation: NSKeyValueObservation?
+    }
+
+    private func uploadData(
+        request: URLRequest,
+        data: Data,
+        onProgress: ((Double) -> Void)? = nil
+    ) async throws -> (Data, URLResponse) {
+        let box = UploadTaskBox()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let task = session.uploadTask(with: request, from: data) { body, response, error in
+                    box.progressObservation?.invalidate()
+                    box.progressObservation = nil
+                    if let error {
+                        continuation.resume(throwing: error)
+                        return
+                    }
+                    guard let response else {
+                        continuation.resume(throwing: URLError(.badServerResponse))
+                        return
+                    }
+                    continuation.resume(returning: (body ?? Data(), response))
+                }
+                box.task = task
+                if let onProgress {
+                    box.progressObservation = task.progress.observe(\.fractionCompleted, options: [.new]) { progress, _ in
+                        onProgress(min(max(progress.fractionCompleted, 0), 0.98))
+                    }
+                }
+                task.resume()
+            }
+        } onCancel: {
+            box.task?.cancel()
+        }
+    }
+
+    private func uploadPUTWithRetry(
+        request: URLRequest,
+        data: Data,
+        onProgress: ((Double) -> Void)? = nil
+    ) async throws -> String {
+        let maxAttempts = 4
+        var attempt = 0
+        while true {
+            attempt += 1
+            do {
+                let (body, response) = try await uploadData(request: request, data: data, onProgress: onProgress)
+                guard let http = response as? HTTPURLResponse else {
+                    throw URLError(.badServerResponse)
+                }
+                if (200..<300).contains(http.statusCode) {
+                    return http.value(forHTTPHeaderField: "ETag")?.replacingOccurrences(of: "\"", with: "") ?? ""
+                }
+                if let api = try? JSONDecoder().decode(KaiXAPIError.self, from: body),
+                   http.statusCode == 409,
+                   api.error.code == "invalid_upload_state" {
+                    // Mobile networks can lose the PUT response after the
+                    // backend has already stored the object in S3. In that
+                    // case the retry sees an already-uploaded row; let the
+                    // following /complete call verify S3 and finish.
+                    return ""
+                }
+                if attempt < maxAttempts, Self.isRetryableHTTPStatus(http.statusCode) {
+                    try? await Task.sleep(nanoseconds: Self.retryBackoff(attempt, response: http))
+                    continue
+                }
+                if let api = try? JSONDecoder().decode(KaiXAPIError.self, from: body) {
+                    throw api
+                }
+                throw KaiXAPIError(error: .init(code: "upload_failed", message: "Upload failed (\(http.statusCode))"))
+            } catch let urlError as URLError where attempt < maxAttempts && Self.isRetryableURLError(urlError) {
+                try? await Task.sleep(nanoseconds: Self.retryBackoff(attempt))
+                continue
+            }
+        }
+    }
+
     func uploadFile(
         data: Data,
         mime: String,
@@ -1506,7 +1605,9 @@ final class KaiXAPIClient {
         groupId: String = "",
         width: Int = 0,
         height: Int = 0,
-        duration: Double = 0
+        duration: Double = 0,
+        metadata: [String: String]? = nil,
+        onProgress: ((Double) -> Void)? = nil
     ) async throws -> (file: KaiXUploadedFileDTO, media: KaiXMediaDTO) {
         let actionKey = "upload-\(UUID().uuidString)"
         struct PresignBody: Encodable {
@@ -1520,6 +1621,9 @@ final class KaiXAPIClient {
             let groupId: String
             let duration: Double
             let durationSeconds: Double
+            let metadata: [String: String]?
+            let client: String
+            let directS3: Bool
         }
         let presignData = try await request("POST", "/api/uploads/presign", body: PresignBody(
             fileName: fileName,
@@ -1531,10 +1635,14 @@ final class KaiXAPIClient {
             threadId: threadId,
             groupId: groupId,
             duration: duration,
-            durationSeconds: duration
+            durationSeconds: duration,
+            metadata: metadata,
+            client: "ios",
+            directS3: true
         ), idempotencyKey: "\(actionKey)-presign")
+        onProgress?(0.03)
         let presign: KaiXUploadPresignDTO = try decode(presignData)
-        guard let uploadURL = URL(string: presign.data.uploadUrl) else {
+        guard let uploadURL = URL(string: presign.data.uploadUrl, relativeTo: KaiXBackend.baseURL)?.absoluteURL else {
             throw URLError(.badURL)
         }
         var put = URLRequest(url: uploadURL)
@@ -1542,11 +1650,10 @@ final class KaiXAPIClient {
         for (key, value) in presign.data.headers {
             put.setValue(value, forHTTPHeaderField: key)
         }
-        let (_, putResponse) = try await session.upload(for: put, from: data)
-        guard let http = putResponse as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw KaiXAPIError(error: .init(code: "upload_failed", message: "Upload failed"))
+        let etag = try await uploadPUTWithRetry(request: put, data: data) { progress in
+            onProgress?(0.03 + min(max(progress, 0), 0.98) * 0.92)
         }
-        let etag = (putResponse as? HTTPURLResponse)?.value(forHTTPHeaderField: "ETag")?.replacingOccurrences(of: "\"", with: "") ?? ""
+        onProgress?(0.96)
         struct CompleteBody: Encodable {
             let uploadId: String
             let fileKey: String
@@ -1566,6 +1673,7 @@ final class KaiXAPIClient {
             durationSeconds: duration
         ), idempotencyKey: "\(actionKey)-complete")
         let completed: KaiXUploadCompleteDTO = try decode(completedData)
+        onProgress?(1)
         return (completed.data.file, completed.data.media)
     }
 
@@ -1600,6 +1708,10 @@ final class KaiXAPIClient {
             duration: duration
         )
         return uploaded.media
+    }
+
+    func deleteUploadedFile(_ fileId: String) async throws {
+        _ = try await request("DELETE", "/api/uploads/\(fileId.encodedPathSegment)")
     }
 
     func uploadMediaLegacy(data: Data, mime: String, width: Int = 0, height: Int = 0, duration: Double = 0) async throws -> KaiXMediaDTO {

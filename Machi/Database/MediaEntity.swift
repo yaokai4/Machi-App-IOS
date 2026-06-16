@@ -8,10 +8,14 @@ final class MediaEntity {
     var typeRaw: String
     var localURL: String
     var remoteURL: String
+    var mediumURL: String = ""
+    var originalURL: String = ""
     var thumbnailURL: String
     var width: Double
     var height: Double
     var duration: Double
+    var fileSize: Int = 0
+    var mimeType: String = ""
     var uploadStateRaw: String
     var uploadProgress: Double
     var createdAt: Date
@@ -30,10 +34,14 @@ final class MediaEntity {
         type: MediaType,
         localURL: String = "",
         remoteURL: String = "",
+        mediumURL: String = "",
+        originalURL: String = "",
         thumbnailURL: String = "",
         width: Double = 0,
         height: Double = 0,
         duration: Double = 0,
+        fileSize: Int = 0,
+        mimeType: String = "",
         uploadState: UploadState = .local,
         uploadProgress: Double = 0,
         createdAt: Date = .now,
@@ -51,10 +59,14 @@ final class MediaEntity {
         self.typeRaw = type.rawValue
         self.localURL = localURL
         self.remoteURL = remoteURL
+        self.mediumURL = mediumURL
+        self.originalURL = originalURL
         self.thumbnailURL = thumbnailURL
         self.width = width
         self.height = height
         self.duration = duration
+        self.fileSize = fileSize
+        self.mimeType = mimeType
         self.uploadStateRaw = uploadState.rawValue
         self.uploadProgress = uploadProgress
         self.createdAt = createdAt
@@ -99,12 +111,22 @@ extension MediaEntity {
     var previewURL: URL? {
         if !thumbnailURL.isEmpty { return thumbnailURL.asMediaURL }
         if type != .video, !localURL.isEmpty { return localURL.asMediaURL }
+        if type != .video, !mediumURL.isEmpty { return mediumURL.asMediaURL }
         if type != .video, !remoteURL.isEmpty { return remoteURL.asMediaURL }
+        return nil
+    }
+
+    var mediumSourceURL: URL? {
+        if !localURL.isEmpty { return localURL.asMediaURL }
+        if !mediumURL.isEmpty { return mediumURL.asMediaURL }
+        if !remoteURL.isEmpty { return remoteURL.asMediaURL }
+        if !originalURL.isEmpty { return originalURL.asMediaURL }
         return nil
     }
 
     var sourceURL: URL? {
         if !localURL.isEmpty { return localURL.asMediaURL }
+        if !originalURL.isEmpty { return originalURL.asMediaURL }
         if !remoteURL.isEmpty { return remoteURL.asMediaURL }
         return nil
     }

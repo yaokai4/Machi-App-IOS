@@ -33,6 +33,8 @@ enum MediaType: String, CaseIterable, Identifiable {
 }
 
 enum UploadState: String, CaseIterable, Identifiable {
+    case waiting
+    case compressing
     case local
     case uploading
     case uploaded

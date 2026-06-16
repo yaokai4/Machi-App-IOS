@@ -335,10 +335,10 @@ enum KaiXRegionDirectory {
     static let jpMetroCircles: [MetroCircle] = [
         .init(code: "kanto", name: "关东圈", provinceCodes: ["tokyo", "kanagawa", "saitama", "chiba", "ibaraki", "tochigi", "gunma"]),
         .init(code: "kansai", name: "关西圈", provinceCodes: ["osaka", "kyoto", "hyogo", "nara", "shiga", "mie"]),
-        .init(code: "nagoya", name: "名古屋·中部", provinceCodes: ["aichi", "gifu", "shizuoka", "nagano", "niigata", "ishikawa"]),
-        .init(code: "fukuoka", name: "福冈·九州", provinceCodes: ["fukuoka", "kumamoto", "kagoshima"]),
-        .init(code: "sapporo", name: "札幌·北海道", provinceCodes: ["hokkaido"]),
-        .init(code: "sendai", name: "仙台·东北", provinceCodes: ["miyagi"]),
+        .init(code: "nagoya", name: "名古屋・中部", provinceCodes: ["aichi", "gifu", "shizuoka", "nagano", "niigata", "ishikawa"]),
+        .init(code: "fukuoka", name: "福冈・九州", provinceCodes: ["fukuoka", "kumamoto", "kagoshima"]),
+        .init(code: "sapporo", name: "札幌・北海道", provinceCodes: ["hokkaido"]),
+        .init(code: "sendai", name: "仙台・东北", provinceCodes: ["miyagi"]),
         .init(code: "other", name: "其他城市", provinceCodes: ["hiroshima", "okayama", "okinawa"]),
     ]
 
@@ -355,6 +355,57 @@ enum KaiXRegionDirectory {
             }
         }
         return out
+    }
+
+    static func metroCircle(for region: Region?) -> MetroCircle? {
+        guard let region, region.countryCode == "jp" else { return nil }
+        return jpMetroCircles.first { $0.provinceCodes.contains(region.provinceCode) }
+    }
+
+    static func regionsForMetro(region: Region?) -> [Region] {
+        guard let region else { return [] }
+        guard let circle = metroCircle(for: region) else { return [region] }
+        let regions = regionsForMetroCircle(circle.code).map(\.region)
+        return regions.isEmpty ? [region] : regions
+    }
+
+    static func regionCodesForMetro(region: Region?) -> [String] {
+        regionsForMetro(region: region).map(\.regionCode)
+    }
+
+    static func cityCodesForMetro(region: Region?) -> [String] {
+        regionsForMetro(region: region).map(\.cityCode)
+    }
+
+    static func localizedMetroName(for region: Region?, language: AppLanguage) -> String? {
+        guard let region else { return nil }
+        guard let circle = metroCircle(for: region) else {
+            return localizedShortLabel(region, language: language)
+        }
+        switch language {
+        case .ja:
+            switch circle.code {
+            case "kanto": return "関東圏"
+            case "kansai": return "関西圏"
+            case "nagoya": return "名古屋・中部"
+            case "fukuoka": return "福岡・九州"
+            case "sapporo": return "札幌・北海道"
+            case "sendai": return "仙台・東北"
+            default: return "その他都市"
+            }
+        case .en:
+            switch circle.code {
+            case "kanto": return "Kanto"
+            case "kansai": return "Kansai"
+            case "nagoya": return "Nagoya / Chubu"
+            case "fukuoka": return "Fukuoka / Kyushu"
+            case "sapporo": return "Sapporo / Hokkaido"
+            case "sendai": return "Sendai / Tohoku"
+            default: return "Other cities"
+            }
+        case .zh, .system:
+            return circle.name
+        }
     }
 
     static func resolve(regionCode: String) -> Region? {

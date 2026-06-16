@@ -111,7 +111,7 @@ struct CityChannelView: View {
             .buttonStyle(.plain)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(viewModel.region.map { KaiXRegionDirectory.localizedHeaderLabel($0, language: language) } ?? L("selectCity", language))
+                Text(viewModel.region.map { "\($0.countryEmoji) \(KaiXRegionDirectory.localizedMetroName(for: $0, language: language) ?? KaiXRegionDirectory.localizedShortLabel($0, language: language))" } ?? L("selectCity", language))
                     .font(.headline.weight(.semibold))
                     .lineLimit(1)
                 Text(L("cityChannel", language))

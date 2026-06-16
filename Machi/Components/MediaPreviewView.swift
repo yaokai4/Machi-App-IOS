@@ -3,57 +3,149 @@ import SwiftUI
 struct MediaPreviewView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appLanguage) private var language
-    let media: MediaEntity
+
+    let mediaItems: [MediaEntity]
+    let initialMediaID: String
+
+    @State private var selection: String
+    @State private var originalImageIDs: Set<String> = []
+
+    init(mediaItems: [MediaEntity], initialMediaID: String) {
+        self.mediaItems = mediaItems
+        self.initialMediaID = initialMediaID
+        _selection = State(initialValue: initialMediaID)
+    }
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            if media.type == .video {
-                MediaVideoView(sourceURL: media.sourceURL, posterURL: media.previewURL, autoPlay: true)
-                    .padding()
-            } else if let url = media.displayURL {
-                ZoomableMediaImage(url: url)
-            } else {
-                VStack(spacing: 16) {
-                    Image(systemName: media.placeholderSymbol.isEmpty ? "photo.fill" : media.placeholderSymbol)
-                        .font(.system(size: 72, weight: .bold))
-                    Text(media.placeholderTitle.isEmpty ? L("mediaPreview", language) : media.placeholderTitle)
-                        .font(.title2.weight(.semibold))
+            TabView(selection: $selection) {
+                ForEach(mediaItems) { item in
+                    mediaPage(item)
+                        .tag(item.id)
                 }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(
-                    LinearGradient(
-                        colors: [Color.kaixNamed(media.placeholderColorName).opacity(0.8), .black],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
             }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .ignoresSafeArea()
 
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.headline.weight(.semibold))
+            topChrome
+            bottomChrome
+        }
+        .onAppear {
+            if !mediaItems.contains(where: { $0.id == selection }) {
+                selection = mediaItems.first?.id ?? initialMediaID
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func mediaPage(_ media: MediaEntity) -> some View {
+        if media.type == .video {
+            MediaVideoView(sourceURL: media.sourceURL, posterURL: media.previewURL, autoPlay: selection == media.id)
+                .padding()
+        } else if let url = imageURL(for: media) {
+            ZoomableMediaImage(
+                url: url,
+                targetPixelSize: originalImageIDs.contains(media.id) ? 4096 : 1800
+            )
+            .id("\(media.id)-\(url.absoluteString)-\(originalImageIDs.contains(media.id))")
+        } else {
+            VStack(spacing: 16) {
+                Image(systemName: media.placeholderSymbol.isEmpty ? "photo.fill" : media.placeholderSymbol)
+                    .font(.system(size: 72, weight: .bold))
+                Text(media.placeholderTitle.isEmpty ? L("mediaPreview", language) : media.placeholderTitle)
+                    .font(.title2.weight(.semibold))
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(
+                LinearGradient(
+                    colors: [Color.kaixNamed(media.placeholderColorName).opacity(0.8), .black],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+        }
+    }
+
+    private var topChrome: some View {
+        VStack {
+            HStack {
+                Text(counterText)
+                    .font(.subheadline.weight(.bold))
                     .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-                    .background(.black.opacity(0.55))
-                    .clipShape(Circle())
+                    .padding(.horizontal, 12)
+                    .frame(height: 34)
+                    .background(.black.opacity(0.45), in: Capsule())
+
+                Spacer()
+
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 44, height: 44)
+                        .background(.black.opacity(0.55))
+                        .clipShape(Circle())
+                }
             }
             .padding(.top, 18)
-            .padding(.trailing, 18)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            .padding(.horizontal, 18)
+            Spacer()
         }
+    }
+
+    @ViewBuilder
+    private var bottomChrome: some View {
+        if let current = currentMedia, current.type == .image, current.sourceURL != nil {
+            VStack {
+                Spacer()
+                Button {
+                    originalImageIDs.insert(current.id)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: originalImageIDs.contains(current.id) ? "checkmark.circle.fill" : "arrow.down.circle")
+                        Text(originalImageIDs.contains(current.id) ? "已加载原图" : "查看原图")
+                    }
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .frame(height: 38)
+                    .background(.black.opacity(0.55), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, 28)
+            }
+        }
+    }
+
+    private var currentMedia: MediaEntity? {
+        mediaItems.first { $0.id == selection }
+    }
+
+    private var counterText: String {
+        guard let index = mediaItems.firstIndex(where: { $0.id == selection }) else {
+            return mediaItems.isEmpty ? "0/0" : "1/\(mediaItems.count)"
+        }
+        return "\(index + 1)/\(mediaItems.count)"
+    }
+
+    private func imageURL(for media: MediaEntity) -> URL? {
+        if originalImageIDs.contains(media.id) {
+            return media.sourceURL ?? media.mediumSourceURL ?? media.displayURL
+        }
+        return media.mediumSourceURL ?? media.displayURL ?? media.sourceURL
     }
 }
 
 /// Full-screen image with pinch-zoom, drag-pan and double-tap toggle so long
-/// screenshots can actually be read (scaledToFit alone shrinks a 1:4 chat
-/// capture into an unreadable strip).
+/// screenshots can actually be read.
 private struct ZoomableMediaImage: View {
     let url: URL
+    let targetPixelSize: CGFloat
 
     @State private var scale: CGFloat = 1
     @State private var lastScale: CGFloat = 1
@@ -62,46 +154,58 @@ private struct ZoomableMediaImage: View {
 
     var body: some View {
         GeometryReader { proxy in
-            MediaImageView(url: url, targetPixelSize: 1600)
-                .scaledToFit()
-                .frame(width: proxy.size.width, height: proxy.size.height)
-                .scaleEffect(scale)
-                .offset(offset)
-                .gesture(
-                    MagnificationGesture()
-                        .onChanged { value in
-                            scale = min(max(lastScale * value, 1), 5)
-                        }
-                        .onEnded { _ in
-                            lastScale = scale
-                            if scale <= 1.02 { resetZoom() }
-                        }
-                )
-                .simultaneousGesture(
-                    DragGesture()
-                        .onChanged { value in
-                            guard scale > 1 else { return }
-                            offset = CGSize(
-                                width: lastOffset.width + value.translation.width,
-                                height: lastOffset.height + value.translation.height
-                            )
-                        }
-                        .onEnded { _ in
-                            lastOffset = offset
-                        }
-                )
-                .onTapGesture(count: 2) {
-                    withAnimation(.snappy(duration: 0.22)) {
-                        if scale > 1 {
-                            resetZoom()
-                        } else {
-                            scale = 2.6
-                            lastScale = 2.6
-                        }
-                    }
-                }
+            zoomableImage(in: proxy.size)
         }
         .ignoresSafeArea()
+    }
+
+    @ViewBuilder
+    private func zoomableImage(in size: CGSize) -> some View {
+        let base = MediaImageView(url: url, targetPixelSize: targetPixelSize, contentMode: .fit)
+            .frame(width: size.width, height: size.height)
+            .scaleEffect(scale)
+            .offset(offset)
+            .gesture(magnificationGesture)
+            .onTapGesture(count: 2) {
+                withAnimation(.snappy(duration: 0.22)) {
+                    if scale > 1 {
+                        resetZoom()
+                    } else {
+                        scale = 2.6
+                        lastScale = 2.6
+                    }
+                }
+            }
+
+        if scale > 1.01 {
+            base.simultaneousGesture(panGesture)
+        } else {
+            base
+        }
+    }
+
+    private var magnificationGesture: some Gesture {
+        MagnificationGesture()
+            .onChanged { value in
+                scale = min(max(lastScale * value, 1), 5)
+            }
+            .onEnded { _ in
+                lastScale = scale
+                if scale <= 1.02 { resetZoom() }
+            }
+    }
+
+    private var panGesture: some Gesture {
+        DragGesture()
+            .onChanged { value in
+                offset = CGSize(
+                    width: lastOffset.width + value.translation.width,
+                    height: lastOffset.height + value.translation.height
+                )
+            }
+            .onEnded { _ in
+                lastOffset = offset
+            }
     }
 
     private func resetZoom() {

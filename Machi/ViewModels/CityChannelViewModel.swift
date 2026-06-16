@@ -165,6 +165,7 @@ final class CityChannelViewModel: ObservableObject {
             let page = try await RemoteSyncService.shared.syncFeed(
                 mode: channel == .hot ? .hot : .recommend,
                 cursor: cursor,
+                regionCode: region.regionCode,
                 country: region.countryCode,
                 province: region.provinceCode.isEmpty ? nil : region.provinceCode,
                 city: region.cityCode,

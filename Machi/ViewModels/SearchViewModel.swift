@@ -189,10 +189,14 @@ final class SearchViewModel: ObservableObject {
     }
 
     func trendingItems(region: KaiXRegionDirectory.Region?, contentTypes: [ContentType]? = nil, limit: Int = 8) -> [TrendingItem] {
+        let regionCodes = KaiXRegionDirectory.regionCodesForMetro(region: region)
+        let cityCodes = KaiXRegionDirectory.cityCodesForMetro(region: region)
         let filtered = hotPosts.filter { post in
             let matchesRegion: Bool
             if let region {
-                matchesRegion = post.regionCode == region.regionCode || (post.country == region.countryCode && post.city == region.cityCode)
+                matchesRegion = regionCodes.contains(post.regionCode)
+                    || (post.country == region.countryCode && cityCodes.contains(post.city))
+                    || (post.regionCode.isEmpty && post.country.isEmpty && post.city.isEmpty)
             } else {
                 matchesRegion = true
             }

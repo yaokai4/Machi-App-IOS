@@ -27,6 +27,33 @@ final class PostRepository {
         return Array(rows.dropFirst(page * pageSize))
     }
 
+    private func fetchLegacyLocationlessWindow(
+        published: String,
+        active: String,
+        page: Int,
+        pageSize: Int,
+        sortDescriptors: [SortDescriptor<PostEntity>],
+        recentCutoff: Date? = nil,
+        typeRaws: [String] = []
+    ) throws -> [PostEntity] {
+        let emptyLocation = ""
+        let descriptor = FetchDescriptor<PostEntity>(
+            predicate: #Predicate {
+                ($0.statusRaw == published || $0.statusRaw == active)
+                && $0.regionCode == emptyLocation
+                && $0.country == emptyLocation
+                && $0.city == emptyLocation
+            },
+            sortBy: sortDescriptors
+        )
+        let rows = try fetchWindow(descriptor, page: page, pageSize: pageSize * 3)
+        return Array(rows.filter { post in
+            let matchesRecent = recentCutoff.map { post.createdAt >= $0 } ?? true
+            let matchesType = typeRaws.isEmpty || typeRaws.contains(post.contentTypeRaw)
+            return matchesRecent && matchesType
+        }.prefix(pageSize))
+    }
+
     func fetchPage(mode: TimelineMode, currentUserId: String, page: Int, pageSize: Int) async throws -> [PostEntity] {
         let published = PostStatus.published.rawValue
         let active = PostStatus.active.rawValue
@@ -88,20 +115,38 @@ final class PostRepository {
             guard let region = await MainActor.run(body: { RegionStore.shared.current }) else {
                 return []
             }
-            let regionCode = region.regionCode
+            let regionCodes = KaiXRegionDirectory.regionCodesForMetro(region: region)
             let country = region.countryCode
-            let city = region.cityCode
+            let cityCodes = KaiXRegionDirectory.cityCodesForMetro(region: region)
             descriptor.predicate = #Predicate {
                 ($0.statusRaw == published || $0.statusRaw == active)
-                && ($0.regionCode == regionCode || ($0.country == country && $0.city == city))
+                && (regionCodes.contains($0.regionCode) || ($0.country == country && cityCodes.contains($0.city)))
             }
-            let pagePosts = try fetchWindow(descriptor, page: page, pageSize: limit)
+            var pagePosts = try fetchWindow(descriptor, page: page, pageSize: limit)
+            if page == 0 && pagePosts.isEmpty {
+                pagePosts = try fetchLegacyLocationlessWindow(
+                    published: published,
+                    active: active,
+                    page: page,
+                    pageSize: limit,
+                    sortDescriptors: sortDescriptors
+                )
+            }
             try refreshRepostState(for: pagePosts, currentUserId: currentUserId)
             return FeedQueryBuilder.rank(pagePosts, using: ranking)
         }
 
         if mode == .hot {
-            if selectedCountry.isEmpty {
+            if let selectedRegion = ranking.region {
+                let regionCodes = KaiXRegionDirectory.regionCodesForMetro(region: selectedRegion)
+                let cityCodes = KaiXRegionDirectory.cityCodesForMetro(region: selectedRegion)
+                let country = selectedRegion.countryCode
+                descriptor.predicate = #Predicate {
+                    ($0.statusRaw == published || $0.statusRaw == active)
+                    && $0.createdAt >= recentCutoff
+                    && (regionCodes.contains($0.regionCode) || ($0.country == country && cityCodes.contains($0.city)))
+                }
+            } else if selectedCountry.isEmpty {
                 descriptor.predicate = #Predicate {
                     ($0.statusRaw == published || $0.statusRaw == active) && $0.createdAt >= recentCutoff
                 }
@@ -112,7 +157,17 @@ final class PostRepository {
                     && $0.country == selectedCountry
                 }
             }
-            let pagePosts = try fetchWindow(descriptor, page: page, pageSize: pageSize)
+            var pagePosts = try fetchWindow(descriptor, page: page, pageSize: pageSize)
+            if page == 0 && pagePosts.isEmpty {
+                pagePosts = try fetchLegacyLocationlessWindow(
+                    published: published,
+                    active: active,
+                    page: page,
+                    pageSize: pageSize,
+                    sortDescriptors: sortDescriptors,
+                    recentCutoff: recentCutoff
+                )
+            }
             try refreshRepostState(for: pagePosts, currentUserId: currentUserId)
             return FeedQueryBuilder.rank(pagePosts, using: ranking)
         }
@@ -138,9 +193,9 @@ final class PostRepository {
     ) async throws -> [PostEntity] {
         let published = PostStatus.published.rawValue
         let active = PostStatus.active.rawValue
-        let regionCode = region.regionCode
+        let regionCodes = KaiXRegionDirectory.regionCodesForMetro(region: region)
         let country = region.countryCode
-        let city = region.cityCode
+        let cityCodes = KaiXRegionDirectory.cityCodesForMetro(region: region)
         let typeRaws = channel.contentTypes?.map(\.rawValue) ?? []
         let cutoff = Date().addingTimeInterval(-24 * 3600)
         // Same total-order requirement as fetchPage: equal-timestamp rows
@@ -155,7 +210,7 @@ final class PostRepository {
             descriptor = FetchDescriptor<PostEntity>(
                 predicate: #Predicate {
                     ($0.statusRaw == published || $0.statusRaw == active)
-                    && ($0.regionCode == regionCode || ($0.country == country && $0.city == city))
+                    && (regionCodes.contains($0.regionCode) || ($0.country == country && cityCodes.contains($0.city)))
                     && typeRaws.contains($0.contentTypeRaw)
                     && $0.createdAt >= cutoff
                 },
@@ -165,7 +220,7 @@ final class PostRepository {
             descriptor = FetchDescriptor<PostEntity>(
                 predicate: #Predicate {
                     ($0.statusRaw == published || $0.statusRaw == active)
-                    && ($0.regionCode == regionCode || ($0.country == country && $0.city == city))
+                    && (regionCodes.contains($0.regionCode) || ($0.country == country && cityCodes.contains($0.city)))
                     && typeRaws.contains($0.contentTypeRaw)
                 },
                 sortBy: sortDescriptors
@@ -174,7 +229,7 @@ final class PostRepository {
             descriptor = FetchDescriptor<PostEntity>(
                 predicate: #Predicate {
                     ($0.statusRaw == published || $0.statusRaw == active)
-                    && ($0.regionCode == regionCode || ($0.country == country && $0.city == city))
+                    && (regionCodes.contains($0.regionCode) || ($0.country == country && cityCodes.contains($0.city)))
                     && $0.createdAt >= cutoff
                 },
                 sortBy: sortDescriptors
@@ -183,14 +238,25 @@ final class PostRepository {
             descriptor = FetchDescriptor<PostEntity>(
                 predicate: #Predicate {
                     ($0.statusRaw == published || $0.statusRaw == active)
-                    && ($0.regionCode == regionCode || ($0.country == country && $0.city == city))
+                    && (regionCodes.contains($0.regionCode) || ($0.country == country && cityCodes.contains($0.city)))
                 },
                 sortBy: sortDescriptors
             )
         }
         // Disjoint windows + within-window ranking only — see fetchWindow
         // for why offset-based windows repeated posts on-device.
-        let posts = try fetchWindow(descriptor, page: page, pageSize: pageSize)
+        var posts = try fetchWindow(descriptor, page: page, pageSize: pageSize)
+        if page == 0 && posts.isEmpty {
+            posts = try fetchLegacyLocationlessWindow(
+                published: published,
+                active: active,
+                page: page,
+                pageSize: pageSize,
+                sortDescriptors: sortDescriptors,
+                recentCutoff: channel.limitsToRecentHotWindow ? cutoff : nil,
+                typeRaws: typeRaws
+            )
+        }
         try refreshRepostState(for: posts, currentUserId: currentUserId)
         let appLang = await MainActor.run(body: { AppLanguage.resolved(from: UserDefaults.standard.string(forKey: "appLanguageCode") ?? "") })
         let ranking = await MainActor.run(body: { FeedQueryBuilder.context(for: appLang) })
@@ -318,7 +384,10 @@ final class PostRepository {
         region: KaiXRegionDirectory.Region? = nil,
         contentType: ContentType = .dynamic,
         attributes: [String: KaiXAttributeValue] = [:],
-        language: String = ""
+        language: String = "",
+        uploadedMediaByDraftID: [String: KaiXMediaDTO] = [:],
+        onMediaUploadState: ((String, UploadState, Double) -> Void)? = nil,
+        onMediaUploaded: ((String, KaiXMediaDTO) -> Void)? = nil
     ) async throws -> PostEntity {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         let storedHashtags = hashtags.normalizedDisplayHashtags.isEmpty ? trimmed.extractedHashtags : hashtags.normalizedDisplayHashtags
@@ -329,6 +398,58 @@ final class PostRepository {
             guard trimmed.isEmpty == false || mediaDrafts.isEmpty == false || storedHashtags.isEmpty == false else {
                 throw RepositoryError.validationFailed
             }
+        }
+
+        // Online compose is transactional from the user's perspective: upload
+        // every media item first, create the server post, then mirror the
+        // confirmed server row into SwiftData. A failed 9-image/video upload
+        // therefore leaves no half-created local post that can poison the next
+        // publish attempt.
+        if KaiXBackend.token != nil {
+            var mediaIds: [String] = []
+            mediaIds.reserveCapacity(mediaDrafts.count)
+            for draft in mediaDrafts {
+                if let uploaded = uploadedMediaByDraftID[draft.id] {
+                    mediaIds.append(uploaded.id)
+                    onMediaUploadState?(draft.id, .uploaded, 1)
+                    continue
+                }
+                onMediaUploadState?(draft.id, .uploading, 0)
+                do {
+                    let uploaded = try await UploadService.shared.upload(
+                        draft: draft,
+                        purpose: draft.type == .video ? "post_video" : "post_image",
+                        entityType: "post"
+                    ) { itemProgress in
+                        onMediaUploadState?(draft.id, .uploading, min(max(itemProgress, 0), 1))
+                    }
+                    mediaIds.append(uploaded.id)
+                    onMediaUploaded?(draft.id, uploaded)
+                    onMediaUploadState?(draft.id, .uploaded, 1)
+                } catch {
+                    onMediaUploadState?(draft.id, .failed, 0)
+                    throw error
+                }
+            }
+
+            let remote = try await KaiXAPIClient.shared.createPost(
+                content: trimmed,
+                mediaIds: mediaIds,
+                tags: storedHashtags,
+                country: region?.countryCode,
+                province: region?.provinceCode.isEmpty == true ? nil : region?.provinceCode,
+                city: region?.cityCode,
+                regionCode: region?.regionCode,
+                contentType: contentType.rawValue,
+                attributes: attributes.isEmpty ? nil : attributes
+            )
+            if let author = remote.author {
+                _ = RemoteSyncService.shared.upsertUser(author, context: context)
+            }
+            let post = RemoteSyncService.shared.upsertPost(remote, context: context)
+            post.syncStatus = .synced
+            try context.save()
+            return post
         }
 
         let post = PostEntity(
@@ -356,6 +477,8 @@ final class PostRepository {
                 width: draft.width,
                 height: draft.height,
                 duration: draft.duration,
+                fileSize: draft.uploadFileSize,
+                mimeType: draft.contentType,
                 uploadState: .local,
                 uploadProgress: 1
             ))
@@ -365,55 +488,6 @@ final class PostRepository {
         heatService.refresh(post)
         try rebuildTopics()
         try context.save()
-        // Mirror to the unified backend BEFORE we hand the post back
-        // to the UI. Previously this ran in a detached task: the user
-        // could like / edit / delete the post before the remote id
-        // arrived, and the write-through path (`remoteId ?? id`) would
-        // ship a local UUID to the server → 404 → silently dropped
-        // because every detached path is `try?`. The fix: wait for the
-        // remote id when a session is present. Pure-offline use still
-        // works (no token → no mirror), and the network call is short
-        // because composing is already a deliberate, infrequent
-        // action.
-        if KaiXBackend.token != nil {
-            var mediaIds: [String] = []
-            for draft in mediaDrafts {
-                let data = try Data(contentsOf: draft.localURL)
-                let dto = try await KaiXAPIClient.shared.uploadMedia(
-                    data: data,
-                    mime: draft.contentType,
-                    width: Int(draft.width),
-                    height: Int(draft.height),
-                    duration: draft.duration
-                )
-                mediaIds.append(dto.id)
-            }
-            do {
-                let remote = try await KaiXAPIClient.shared.createPost(
-                    content: trimmed,
-                    mediaIds: mediaIds,
-                    tags: storedHashtags,
-                    country: region?.countryCode,
-                    province: region?.provinceCode.isEmpty == true ? nil : region?.provinceCode,
-                    city: region?.cityCode,
-                    regionCode: region?.regionCode,
-                    contentType: contentType.rawValue,
-                    attributes: attributes.isEmpty ? nil : attributes
-                )
-                post.remoteId = remote.id
-                post.syncStatus = .synced
-                try? context.save()
-            } catch {
-                // Remote mirror failed. The local post still exists so
-                // the user sees their content. Flag it `.failed` so a
-                // later sync pass (or a manual retry) can finish the
-                // job — and so the write-through guards in `setLike`
-                // / `setBookmark` / `addComment` know not to ship the
-                // local id to the server.
-                post.syncStatus = .failed
-                try? context.save()
-            }
-        }
         return post
     }
 
@@ -490,6 +564,8 @@ final class PostRepository {
                 width: draft.width,
                 height: draft.height,
                 duration: draft.duration,
+                fileSize: draft.uploadFileSize,
+                mimeType: draft.contentType,
                 uploadState: .local,
                 uploadProgress: 1
             ))

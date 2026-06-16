@@ -223,6 +223,7 @@ final class HomeViewModel: ObservableObject {
             let page = try await RemoteSyncService.shared.syncFeed(
                 mode: apiMode,
                 cursor: cursor,
+                regionCode: cityScoped ? region?.regionCode : nil,
                 country: region?.countryCode,
                 province: cityScoped ? (region?.provinceCode.isEmpty == true ? nil : region?.provinceCode) : nil,
                 city: cityScoped ? region?.cityCode : nil,

@@ -228,6 +228,12 @@ struct KaiXListingMediaDTO: Codable, Equatable, Hashable {
     let url: String
     let cdnUrl: String?
     let publicUrl: String?
+    let original_url: String?
+    let originalUrl: String?
+    let medium_url: String?
+    let mediumUrl: String?
+    let large_url: String?
+    let largeUrl: String?
     let thumb_url: String?
     let thumbUrl: String?
     let thumbnail_url: String?
@@ -750,6 +756,12 @@ struct KaiXMediaDTO: Codable, Equatable {
     let url: String?
     let cdnUrl: String?
     let publicUrl: String?
+    let original_url: String?
+    let originalUrl: String?
+    let medium_url: String?
+    let mediumUrl: String?
+    let large_url: String?
+    let largeUrl: String?
     let thumb_url: String?
     let thumbUrl: String?
     let thumbnail_url: String?
@@ -836,7 +848,11 @@ extension KaiXMediaDTO {
     }
 
     var sourceURLString: String {
-        cdnUrl ?? publicUrl ?? url ?? ""
+        originalUrl ?? original_url ?? largeUrl ?? large_url ?? cdnUrl ?? publicUrl ?? url ?? ""
+    }
+
+    var mediumURLString: String {
+        mediumUrl ?? medium_url ?? largeUrl ?? large_url ?? sourceURLString
     }
 
     var thumbnailURLString: String {

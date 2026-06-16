@@ -6,6 +6,7 @@ struct CachedMediaImageView: View {
     let url: URL?
     var targetPixelSize: CGFloat = 900
     var failureMode: CachedMediaImageFailureMode = .quietPlaceholder
+    var contentMode: ContentMode = .fill
 
     @State private var image: UIImage?
     @State private var failed = false
@@ -21,7 +22,7 @@ struct CachedMediaImageView: View {
             if let image {
                 Image(uiImage: image)
                     .resizable()
-                    .scaledToFill()
+                    .aspectRatio(contentMode: contentMode)
                     .transition(.opacity)
             }
             if failed {
@@ -80,12 +81,16 @@ struct CachedMediaImageView: View {
             failed = false
         }
 
-        if let loaded = await ImageCacheService.shared.image(for: url, targetPixelSize: targetPixelSize) {
+        let requestedURL = url
+        let requestedPixelSize = targetPixelSize
+        if let loaded = await ImageCacheService.shared.image(for: requestedURL, targetPixelSize: requestedPixelSize) {
+            guard !Task.isCancelled else { return }
             image = loaded
-            loadedURL = url
-            loadedPixelSize = targetPixelSize
+            loadedURL = requestedURL
+            loadedPixelSize = requestedPixelSize
             failed = false
         } else {
+            guard !Task.isCancelled else { return }
             if !isSameRequest {
                 image = nil
                 loadedURL = nil
@@ -123,9 +128,10 @@ struct MediaImageView: View {
     let url: URL?
     var targetPixelSize: CGFloat = 900
     var failureMode: CachedMediaImageFailureMode = .quietPlaceholder
+    var contentMode: ContentMode = .fill
 
     var body: some View {
-        CachedMediaImageView(url: url, targetPixelSize: targetPixelSize, failureMode: failureMode)
+        CachedMediaImageView(url: url, targetPixelSize: targetPixelSize, failureMode: failureMode, contentMode: contentMode)
     }
 }
 

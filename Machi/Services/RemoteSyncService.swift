@@ -225,6 +225,7 @@ final class RemoteSyncService {
     func syncFeed(
         mode: KaiXAPIClient.FeedMode = .recommend,
         cursor: String? = nil,
+        regionCode: String? = nil,
         country: String? = nil,
         province: String? = nil,
         city: String? = nil,
@@ -234,6 +235,7 @@ final class RemoteSyncService {
         let response = try await api.feed(
             mode: mode,
             cursor: cursor,
+            regionCode: regionCode,
             country: country,
             province: province,
             city: city,
@@ -474,14 +476,20 @@ final class RemoteSyncService {
             let entity = existing.first { $0.remoteId == remoteId || $0.id == dto.id }
             let mediaType: MediaType = dto.normalizedType == "video" ? .video : .image
             let preview = mediaType == .video ? dto.posterURLString : dto.thumbnailURLString
+            let medium = mediaType == .video ? dto.sourceURLString : dto.mediumURLString
+            let original = dto.sourceURLString
             if let entity {
                 entity.postId = postId
                 entity.type = mediaType
-                entity.remoteURL = dto.sourceURLString
+                entity.remoteURL = medium
+                entity.mediumURL = medium
+                entity.originalURL = original
                 entity.thumbnailURL = preview
                 entity.width = Double(dto.width ?? 0)
                 entity.height = Double(dto.height ?? 0)
                 entity.duration = dto.durationSeconds ?? dto.duration_seconds ?? dto.duration ?? 0
+                entity.fileSize = dto.fileSize ?? dto.file_size ?? dto.byte_size ?? 0
+                entity.mimeType = dto.contentType ?? dto.content_type ?? dto.mime ?? ""
                 entity.uploadState = .uploaded
                 entity.uploadProgress = 1
                 entity.updatedAt = .now
@@ -493,11 +501,15 @@ final class RemoteSyncService {
                     id: dto.id,
                     postId: postId,
                     type: mediaType,
-                    remoteURL: dto.sourceURLString,
+                    remoteURL: medium,
+                    mediumURL: medium,
+                    originalURL: original,
                     thumbnailURL: preview,
                     width: Double(dto.width ?? 0),
                     height: Double(dto.height ?? 0),
                     duration: dto.durationSeconds ?? dto.duration_seconds ?? dto.duration ?? 0,
+                    fileSize: dto.fileSize ?? dto.file_size ?? dto.byte_size ?? 0,
+                    mimeType: dto.contentType ?? dto.content_type ?? dto.mime ?? "",
                     uploadState: .uploaded,
                     uploadProgress: 1,
                     createdAt: parsedDate(dto.created_at) ?? .now,

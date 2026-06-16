@@ -20,7 +20,7 @@ enum KaiXTheme {
 }
 
 enum KaiXConfig {
-    static let schemaVersion = 6
+    static let schemaVersion = 7
     static let seedVersion = 7
     static let pageSize = 15
     static let maxImageItemsPerPost = 9
@@ -28,6 +28,12 @@ enum KaiXConfig {
     static let maxMediaItemsPerPost = maxImageItemsPerPost
     static let maxPostImageBytes = 10 * 1024 * 1024
     static let maxPostVideoBytes = 200 * 1024 * 1024
+    /// Selection-time guard before compression/transcoding. The upload guard
+    /// remains `maxPostImageBytes` / `maxPostVideoBytes`; these larger caps
+    /// avoid rejecting high-resolution camera originals before we can shrink
+    /// them into the publishable format.
+    static let maxPostImageSourceBytes = 80 * 1024 * 1024
+    static let maxPostVideoSourceBytes = 1024 * 1024 * 1024
     static let maxMessageImageBytes = 10 * 1024 * 1024
     static let maxMessageVideoBytes = 100 * 1024 * 1024
     /// Hard cap on a single post's character count. Mirrors the

@@ -67,7 +67,7 @@ struct DiscoverView: View {
     private var scopedHotTitle: String {
         switch selectedHotScope {
         case .city:
-            return currentRegion.map { "\(KaiXRegionDirectory.localizedShortLabel($0, language: language))\(L("hot", language))" } ?? "\(L("currentRegion", language))\(L("hot", language))"
+            return currentRegion.map { "\((KaiXRegionDirectory.localizedMetroName(for: $0, language: language) ?? KaiXRegionDirectory.localizedShortLabel($0, language: language)))\(L("hot", language))" } ?? "\(L("currentRegion", language))\(L("hot", language))"
         case .country:
             return currentRegion.map {
                 let country = KaiXRegionDirectory.localizedCountryName(
@@ -490,7 +490,7 @@ private enum DiscoverHotScope: String, CaseIterable, Identifiable, Hashable {
     func title(region: KaiXRegionDirectory.Region?, language: AppLanguage) -> String {
         switch self {
         case .city:
-            return region.map { KaiXRegionDirectory.localizedShortLabel($0, language: language) } ?? L("hotScopeCity", language)
+            return region.map { KaiXRegionDirectory.localizedMetroName(for: $0, language: language) ?? KaiXRegionDirectory.localizedShortLabel($0, language: language) } ?? L("hotScopeCity", language)
         case .country:
             guard let region else { return L("hotScopeCountry", language) }
             return KaiXRegionDirectory.localizedCountryName(
@@ -580,7 +580,7 @@ private struct CurrentRegionCard: View {
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.78)
-                    Text(region.map { "正在浏览\($0.cityName)的本地动态和生活信息" } ?? "选择城市后，首页、发现和热榜会围绕本地内容展开")
+                    Text(region.map { "正在浏览\(KaiXRegionDirectory.localizedMetroName(for: $0, language: language) ?? $0.cityName)的本地动态和生活信息" } ?? "选择城市后，首页、发现和热榜会围绕本地内容展开")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
@@ -883,7 +883,7 @@ private struct CityHotRankingView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: KXSpacing.sm) {
             DiscoverSectionTitle(
-                title: region.map { "\($0.cityName)热榜" } ?? "当前城市热榜",
+                title: region.map { "\(KaiXRegionDirectory.localizedMetroName(for: $0, language: language) ?? $0.cityName)热榜" } ?? "当前城市热榜",
                 trailing: "查看全部",
                 trailingAction: onSeeAll
             )
@@ -1195,7 +1195,7 @@ private struct DiscoverContentList: View {
     private var sectionTitle: String {
         switch segment {
         case .recommend:
-            return region.map { "\($0.cityName)正在发生" } ?? "正在发生"
+            return region.map { "\((KaiXRegionDirectory.localizedMetroName(for: $0, language: language) ?? $0.cityName))正在发生" } ?? "正在发生"
         case .ranking:
             return rankingTitle
         case .topics:
@@ -1211,7 +1211,7 @@ private struct DiscoverContentList: View {
         let visible = Array(items.prefix(12))
         return VStack(spacing: 0) {
             if visible.isEmpty {
-                DiscoverSoftEmptyRow(text: "这里还在等待新的本地内容")
+                DiscoverSoftEmptyRow(text: segment == .recommend ? "当前都市圈暂无新动态" : "当前都市圈暂无热榜内容")
             } else {
                 ForEach(Array(visible.enumerated()), id: \.element.id) { index, post in
                     let displayed = postStore.post(id: post.id) ?? post
@@ -1634,7 +1634,11 @@ private extension PostEntity {
 
     func matches(region: KaiXRegionDirectory.Region?) -> Bool {
         guard let region else { return true }
-        return regionCode == region.regionCode || (country == region.countryCode && city == region.cityCode)
+        let regionCodes = KaiXRegionDirectory.regionCodesForMetro(region: region)
+        let cityCodes = KaiXRegionDirectory.cityCodesForMetro(region: region)
+        return regionCodes.contains(regionCode)
+            || (country == region.countryCode && cityCodes.contains(city))
+            || (regionCode.isEmpty && country.isEmpty && city.isEmpty)
     }
 
     func discoverHighlights(language: AppLanguage) -> [DiscoverHighlight] {
@@ -1764,7 +1768,7 @@ struct DiscoverPulseCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: KXSpacing.md) {
-            Text(region.map { "\($0.cityName)正在发生" } ?? L("happeningNow", language))
+            Text(region.map { "\(KaiXRegionDirectory.localizedMetroName(for: $0, language: language) ?? $0.cityName)正在发生" } ?? L("happeningNow", language))
                 .font(.headline.weight(.bold))
             ForEach(items.prefix(3)) { item in
                 Button { onOpenItem(item) } label: {
