@@ -3212,6 +3212,93 @@ struct CityListingDetailView: View {
         .overlay(alignment: .bottom) { Divider().opacity(0.18) }
     }
 
+    /// 商家与服务详情：团购套餐(展示「暂不支持线上购买」) + 菜单 + 预约·到店。
+    @ViewBuilder
+    private func merchantDetailSections(_ listing: KaiXCityListingDTO) -> some View {
+        if listing.type == "local_service" {
+            let packages = listing.groupPackages
+            let dishes = listing.menuDishes
+            let openHours = KXListingCopy.attr(listing, "open_hours") ?? ""
+            let reservationNote = KXListingCopy.attr(listing, "reservation_note") ?? ""
+            let storePhone = KXListingCopy.attr(listing, "store_phone") ?? ""
+            let reservationRequired = listing.attributes?["reservation_required"]?.boolValue ?? false
+            let hasReservation = reservationRequired || !openHours.isEmpty || !reservationNote.isEmpty || !storePhone.isEmpty
+
+            if !packages.isEmpty {
+                KXListingSection(title: "团购套餐", icon: "ticket") {
+                    VStack(spacing: 10) {
+                        HStack {
+                            Spacer()
+                            Text("暂不支持线上购买")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 8).padding(.vertical, 4)
+                                .background(KXColor.livingSoft, in: Capsule())
+                        }
+                        ForEach(packages) { pkg in
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(alignment: .firstTextBaseline) {
+                                    Text(pkg.title ?? "").font(.subheadline.weight(.black)).foregroundStyle(.primary)
+                                    Spacer(minLength: 8)
+                                    if let price = pkg.price, !price.isEmpty {
+                                        Text(price).font(.subheadline.weight(.black)).foregroundStyle(KXColor.livingWarm)
+                                    }
+                                    if let orig = pkg.original_price, !orig.isEmpty {
+                                        Text(orig).font(.caption.weight(.semibold)).foregroundStyle(.secondary).strikethrough()
+                                    }
+                                }
+                                if let inc = pkg.includes, !inc.isEmpty {
+                                    Text(inc).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                                }
+                                if let note = pkg.note, !note.isEmpty {
+                                    Text(note).font(.caption2).foregroundStyle(.secondary)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(12)
+                            .background(KXColor.livingSoft.opacity(0.5), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        }
+                    }
+                }
+            }
+
+            if !dishes.isEmpty {
+                KXListingSection(title: "菜单", icon: "fork.knife") {
+                    VStack(spacing: 0) {
+                        ForEach(Array(dishes.enumerated()), id: \.offset) { idx, dish in
+                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(dish.name ?? "").font(.subheadline.weight(.bold)).foregroundStyle(.primary)
+                                    if let d = dish.desc, !d.isEmpty {
+                                        Text(d).font(.caption2).foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer(minLength: 8)
+                                if let price = dish.price, !price.isEmpty {
+                                    Text(price).font(.subheadline.weight(.black)).foregroundStyle(KXColor.livingWarm)
+                                }
+                            }
+                            .padding(.vertical, 9)
+                            if idx < dishes.count - 1 { Divider().opacity(0.5) }
+                        }
+                    }
+                }
+            }
+
+            if hasReservation {
+                KXListingSection(title: "预约 · 到店", icon: "calendar.badge.clock") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if !openHours.isEmpty { Label("营业时间 · \(openHours)", systemImage: "clock").font(.subheadline).foregroundStyle(.secondary) }
+                        if reservationRequired { Label("本店采用预约制，建议先预约再到店。", systemImage: "checkmark.seal").font(.subheadline).foregroundStyle(.secondary) }
+                        if !reservationNote.isEmpty { Text(reservationNote).font(.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+                        if !storePhone.isEmpty { Label("到店电话 · \(storePhone)", systemImage: "phone").font(.subheadline).foregroundStyle(.secondary) }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+    }
+
     private func detailContent(_ listing: KaiXCityListingDTO) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -3249,6 +3336,8 @@ struct CityListingDetailView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
+
+                merchantDetailSections(listing)
 
                 KXListingSection(title: "发布者", icon: "person.crop.circle") {
                     HStack(spacing: 12) {
@@ -3911,6 +4000,54 @@ struct EditCityListingRouteView: View {
     }
 }
 
+/// 菜单 / 团购套餐:发布页里「一行一项、| 分隔」<-> 结构化 JSON 字符串。
+/// 发布时编码成 JSON(后端 normalize_listing_attributes 解析回数组),
+/// 编辑时把已存数组还原成多行文本。
+enum KXMerchantInput {
+    static func encodeMenu(_ text: String) -> String {
+        let dishes: [[String: String]] = text.components(separatedBy: "\n").compactMap { rawLine in
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty else { return nil }
+            let p = line.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+            guard let name = p.first, !name.isEmpty else { return nil }
+            var d = ["name": name]
+            if p.count > 1, !p[1].isEmpty { d["price"] = p[1] }
+            if p.count > 2, !p[2].isEmpty { d["desc"] = p[2] }
+            return d
+        }
+        guard !dishes.isEmpty,
+              let data = try? JSONSerialization.data(withJSONObject: dishes),
+              let s = String(data: data, encoding: .utf8) else { return "" }
+        return s
+    }
+
+    static func encodePackages(_ text: String) -> String {
+        let pkgs: [[String: String]] = text.components(separatedBy: "\n").compactMap { rawLine in
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty else { return nil }
+            let p = line.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+            guard let title = p.first, !title.isEmpty else { return nil }
+            var d = ["title": title]
+            if p.count > 1, !p[1].isEmpty { d["price"] = p[1] }
+            if p.count > 2, !p[2].isEmpty { d["original_price"] = p[2] }
+            if p.count > 3, !p[3].isEmpty { d["includes"] = p[3] }
+            return d
+        }
+        guard !pkgs.isEmpty,
+              let data = try? JSONSerialization.data(withJSONObject: pkgs),
+              let s = String(data: data, encoding: .utf8) else { return "" }
+        return s
+    }
+
+    static func menuLines(_ listing: KaiXCityListingDTO) -> String {
+        listing.menuDishes.map { [$0.name, $0.price, $0.desc].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " | ") }.joined(separator: "\n")
+    }
+
+    static func packageLines(_ listing: KaiXCityListingDTO) -> String {
+        listing.groupPackages.map { [$0.title, $0.price, $0.original_price, $0.includes].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " | ") }.joined(separator: "\n")
+    }
+}
+
 struct CreateCityListingView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appLanguage) private var language
@@ -3975,6 +4112,14 @@ struct CreateCityListingView: View {
     @State private var certifiedProvider = false
     @State private var serviceProcess = ""
     @State private var cancellationRule = ""
+    // 餐厅/商家:营业时间、人均、电话、预约、菜单、团购套餐
+    @State private var openHours = ""
+    @State private var priceRange = ""
+    @State private var storePhone = ""
+    @State private var reservationRequired = false
+    @State private var reservationNote = ""
+    @State private var menuText = ""
+    @State private var packagesText = ""
     @State private var roomType = ""
     @State private var maxGuests = ""
     @State private var checkInTime = "15:00"
@@ -4459,6 +4604,17 @@ struct CreateCityListingView: View {
                     KXListingFormField(title: "价格单位", placeholder: "每小时 / 每次 / 预约咨询", icon: "yensign.circle", text: $priceUnit)
                     KXListingFormField(title: "可预约时间", placeholder: "平日晚上 / 周末 / 需提前 2 天", icon: "calendar.badge.clock", text: $availability)
                     KXListingToggleChip(title: "认证服务方", icon: "checkmark.seal", isOn: $certifiedProvider, tint: typeAccent)
+                    if !isStayService {
+                        HStack(spacing: 10) {
+                            KXListingFormField(title: "营业时间", placeholder: "11:00-22:00 / 周一休", icon: "clock", text: $openHours)
+                            KXListingFormField(title: "人均 / 价位", placeholder: "人均 ¥2,500-3,500", icon: "yensign.circle", text: $priceRange)
+                        }
+                        KXListingFormField(title: "到店电话", placeholder: "03-1234-5678", icon: "phone", text: $storePhone)
+                        KXListingToggleChip(title: "仅限预约制", icon: "calendar.badge.clock", isOn: $reservationRequired, tint: typeAccent)
+                        KXListingFormField(title: "预约说明", placeholder: "如何预约、可预约时段、几人起订、是否需要定金", icon: "text.bubble", text: $reservationNote, lineLimit: 2...4)
+                        KXListingFormField(title: "菜单（每行：菜名 | 价格 | 备注）", placeholder: "麻婆豆腐 | ¥980\n口水鸡 | ¥1,080 | 微辣", icon: "fork.knife", text: $menuText, lineLimit: 3...10)
+                        KXListingFormField(title: "团购套餐（每行：套餐名 | 现价 | 原价 | 包含；先展示不支持购买）", placeholder: "双人套餐 | ¥3,980 | ¥5,200 | 4菜1汤+2饮料", icon: "ticket", text: $packagesText, lineLimit: 3...8)
+                    }
                     if isStayService {
                         HStack(spacing: 10) {
                             KXListingFormField(title: "房型", placeholder: "大床房 / 双床房 / 整套民宿", icon: "bed.double", text: $roomType)
@@ -4562,6 +4718,13 @@ struct CreateCityListingView: View {
             certifiedProvider = bool("certified_provider")
             serviceProcess = raw("service_process")
             cancellationRule = raw("cancellation_rule")
+            openHours = raw("open_hours")
+            priceRange = raw("price_range")
+            storePhone = raw("store_phone")
+            reservationRequired = bool("reservation_required")
+            reservationNote = raw("reservation_note")
+            menuText = KXMerchantInput.menuLines(listing)
+            packagesText = KXMerchantInput.packageLines(listing)
             roomType = raw("room_type")
             maxGuests = raw("max_guests")
             checkInTime = raw("check_in_time").isEmpty ? checkInTime : raw("check_in_time")
@@ -4786,6 +4949,14 @@ struct CreateCityListingView: View {
                 "instant_confirmation": .init(bool: instantConfirmation),
                 "service_process": .init(string: serviceProcess),
                 "cancellation_rule": .init(string: cancellationRule),
+                "open_hours": .init(string: openHours),
+                "price_range": .init(string: priceRange),
+                "store_phone": .init(string: storePhone),
+                "reservation_required": .init(bool: reservationRequired),
+                "reservation_note": .init(string: reservationNote),
+                // 菜单 / 团购套餐:每行一项、| 分隔 → JSON 字符串,后端解析成数组。
+                "menu": .init(string: KXMerchantInput.encodeMenu(menuText)),
+                "packages": .init(string: KXMerchantInput.encodePackages(packagesText)),
             ]
         }
         if listingType == "discount" {
@@ -6391,6 +6562,8 @@ private extension KaiXAttributeValue {
             return value.rounded() == value ? "\(Int(value))" : String(format: "%.2f", value)
         case .bool(let value):
             return value ? "是" : "否"
+        case .json:
+            return ""   // 结构化属性(菜单/团购)由专门的视图渲染,不在通用属性行展示
         case .null:
             return ""
         }

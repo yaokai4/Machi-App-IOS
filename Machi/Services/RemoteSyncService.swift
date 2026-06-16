@@ -519,6 +519,7 @@ final class RemoteSyncService {
             case .string(let s): plain[k] = s
             case .double(let n): plain[k] = n
             case .bool(let b):   plain[k] = b
+            case .json(let j):   plain[k] = j.foundationObject
             case .null:          continue
             }
         }

@@ -156,8 +156,7 @@ struct EditProfileView: View {
             Divider().opacity(0.5)
             labeledField(title: L("bio", language), text: $bio, axis: .vertical)
             Divider().opacity(0.5)
-            labeledField(title: L("location", language), text: $location, axis: .horizontal)
-            Divider().opacity(0.5)
+            // 定位由「使用当前位置」自动获取,不在编辑资料里手动填,避免和自动定位冲突。
             avatarStylePicker
         }
         .padding(18)

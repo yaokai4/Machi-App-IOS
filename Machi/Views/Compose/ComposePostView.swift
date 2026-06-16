@@ -485,35 +485,38 @@ struct ComposePostView: View {
                 Text(L("mediaPreview", language))
                     .font(.headline.weight(.semibold))
 
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(viewModel.mediaDrafts) { draft in
-                            ZStack(alignment: .topTrailing) {
-                                CachedMediaImageView(url: draft.thumbnailURL)
-                                    .frame(width: 148, height: 148)
-                                    .clipShape(RoundedRectangle(cornerRadius: 18))
-                                    .overlay(alignment: .bottomLeading) {
-                                        if draft.type == .video {
-                                            Label(durationText(draft.duration), systemImage: "play.fill")
-                                                .font(.caption.weight(.semibold))
-                                                .foregroundStyle(.white)
-                                                .padding(.horizontal, 8)
-                                                .padding(.vertical, 5)
-                                                .background(.black.opacity(0.72))
-                                                .clipShape(Capsule())
-                                                .padding(8)
-                                        }
-                                    }
-
-                                Button {
-                                    viewModel.removeMedia(draft)
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.title3)
-                                        .foregroundStyle(.white, .black.opacity(0.7))
+                // 九宫格预览:三列方格,所选图片不再挤成一行小图。
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+                    ForEach(viewModel.mediaDrafts) { draft in
+                        ZStack(alignment: .topTrailing) {
+                            Color.clear
+                                .aspectRatio(1, contentMode: .fit)
+                                .overlay {
+                                    CachedMediaImageView(url: draft.thumbnailURL)
+                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                                 }
-                                .padding(8)
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                                .overlay(alignment: .bottomLeading) {
+                                    if draft.type == .video {
+                                        Label(durationText(draft.duration), systemImage: "play.fill")
+                                            .font(.caption2.weight(.semibold))
+                                            .foregroundStyle(.white)
+                                            .padding(.horizontal, 7)
+                                            .padding(.vertical, 4)
+                                            .background(.black.opacity(0.72))
+                                            .clipShape(Capsule())
+                                            .padding(6)
+                                    }
+                                }
+
+                            Button {
+                                viewModel.removeMedia(draft)
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.title3)
+                                    .foregroundStyle(.white, .black.opacity(0.7))
                             }
+                            .padding(6)
                         }
                     }
                 }

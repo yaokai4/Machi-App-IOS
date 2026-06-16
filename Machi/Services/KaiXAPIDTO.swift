@@ -15,11 +15,57 @@ import Foundation
 /// because the validators on `web/server.py` strip them. Keeping the
 /// shape narrow means JSONDecoder never crashes on an unexpected
 /// nested payload from a misbehaving client.
+/// Recursive JSON value — used for structured listing attributes that aren't
+/// scalars (餐厅菜单 / 团购套餐, which arrive as arrays of objects).
+indirect enum KXJSONValue: Codable, Equatable, Hashable {
+    case string(String)
+    case number(Double)
+    case bool(Bool)
+    case array([KXJSONValue])
+    case object([String: KXJSONValue])
+    case null
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if c.decodeNil() { self = .null; return }
+        if let v = try? c.decode(Bool.self)   { self = .bool(v); return }
+        if let v = try? c.decode(Double.self) { self = .number(v); return }
+        if let v = try? c.decode(String.self) { self = .string(v); return }
+        if let v = try? c.decode([KXJSONValue].self) { self = .array(v); return }
+        if let v = try? c.decode([String: KXJSONValue].self) { self = .object(v); return }
+        self = .null
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        switch self {
+        case .string(let s): try c.encode(s)
+        case .number(let n): try c.encode(n)
+        case .bool(let b):   try c.encode(b)
+        case .array(let a):  try c.encode(a)
+        case .object(let o): try c.encode(o)
+        case .null:          try c.encodeNil()
+        }
+    }
+
+    /// JSONSerialization-compatible Foundation object (for local persistence).
+    var foundationObject: Any {
+        switch self {
+        case .string(let s): return s
+        case .number(let n): return n
+        case .bool(let b):   return b
+        case .array(let a):  return a.map { $0.foundationObject }
+        case .object(let o): return o.mapValues { $0.foundationObject }
+        case .null:          return NSNull()
+        }
+    }
+}
+
 struct KaiXAttributeValue: Codable, Equatable, Hashable {
     enum Kind: Equatable, Hashable {
         case string(String)
         case double(Double)
         case bool(Bool)
+        case json(KXJSONValue)   // arrays / nested objects (menu, packages)
         case null
     }
     let kind: Kind
@@ -31,6 +77,7 @@ struct KaiXAttributeValue: Codable, Equatable, Hashable {
         if let v = try? c.decode(Int.self)    { self.kind = .double(Double(v)); return }
         if let v = try? c.decode(Double.self) { self.kind = .double(v); return }
         if let v = try? c.decode(String.self) { self.kind = .string(v); return }
+        if let v = try? c.decode(KXJSONValue.self) { self.kind = .json(v); return }
         self.kind = .null
     }
     func encode(to encoder: Encoder) throws {
@@ -39,6 +86,7 @@ struct KaiXAttributeValue: Codable, Equatable, Hashable {
         case .string(let s): try c.encode(s)
         case .double(let n): try c.encode(n)
         case .bool(let b):   try c.encode(b)
+        case .json(let j):   try c.encode(j)
         case .null:          try c.encodeNil()
         }
     }
@@ -46,10 +94,43 @@ struct KaiXAttributeValue: Codable, Equatable, Hashable {
     var stringValue: String? { if case .string(let s) = kind { return s } else { return nil } }
     var doubleValue: Double? { if case .double(let n) = kind { return n } else { return nil } }
     var boolValue:   Bool?   { if case .bool(let b)   = kind { return b } else { return nil } }
+    var jsonValue:   KXJSONValue? { if case .json(let j) = kind { return j } else { return nil } }
+
+    /// Decode a structured attribute (e.g. menu / packages array) into a typed
+    /// model by round-tripping the captured JSON through the standard decoder.
+    func decoded<T: Decodable>(_ type: T.Type) -> T? {
+        guard case .json(let j) = kind, let data = try? JSONEncoder().encode(j) else { return nil }
+        return try? JSONDecoder().decode(T.self, from: data)
+    }
 
     init(string: String) { self.kind = .string(string) }
     init(double: Double) { self.kind = .double(double) }
     init(bool: Bool)     { self.kind = .bool(bool)     }
+}
+
+/// 商家详情结构化数据。后端 attributes.menu / attributes.packages 返回。
+struct KXMenuDish: Codable, Equatable, Hashable, Identifiable {
+    let name: String?
+    let price: String?
+    let desc: String?
+    var id: String { (name ?? "") + (price ?? "") }
+}
+struct KXListingPackage: Codable, Equatable, Hashable, Identifiable {
+    let title: String?
+    let price: String?
+    let original_price: String?
+    let includes: String?
+    let note: String?
+    var id: String { (title ?? "") + (price ?? "") }
+}
+
+extension KaiXCityListingDTO {
+    var menuDishes: [KXMenuDish] {
+        (attributes?["menu"]?.decoded([KXMenuDish].self) ?? []).filter { !($0.name ?? "").trimmingCharacters(in: .whitespaces).isEmpty }
+    }
+    var groupPackages: [KXListingPackage] {
+        (attributes?["packages"]?.decoded([KXListingPackage].self) ?? []).filter { !($0.title ?? "").trimmingCharacters(in: .whitespaces).isEmpty }
+    }
 }
 
 struct KaiXAPIError: Codable, Error, LocalizedError {

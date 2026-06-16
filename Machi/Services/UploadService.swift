@@ -19,7 +19,9 @@ actor UploadService {
         let imageURL = directory.appendingPathComponent(fileName)
         let thumbnailURL = directory.appendingPathComponent("\(id)-thumb.jpg")
 
-        guard let compressed = encodedJPEG(from: data, maxPixel: 1600, quality: 0.78),
+        // 上传接近全分辨率(原来 1600px 偏糊):最长边 3072px、质量 0.9,九宫格与
+        // 大图都清晰;缩略图仍走 640 保证列表加载快。
+        guard let compressed = encodedJPEG(from: data, maxPixel: 3072, quality: 0.9),
               let thumbnail = encodedJPEG(from: data, maxPixel: 640, quality: 0.72)
         else {
             throw UploadError.invalidMedia
@@ -48,15 +50,24 @@ actor UploadService {
     func prepareVideo(data: Data, contentType: UTType? = nil) async throws -> MediaDraft {
         let id = UUID().uuidString
         let directory = try mediaDirectory()
-        let mime = normalizedVideoMIME(contentType?.preferredMIMEType, data: data)
-        let fileName = "\(id).\(videoExtension(for: mime))"
-        let videoURL = directory.appendingPathComponent(fileName)
+        var mime = normalizedVideoMIME(contentType?.preferredMIMEType, data: data)
+        var fileName = "\(id).\(videoExtension(for: mime))"
+        var videoURL = directory.appendingPathComponent(fileName)
         let thumbnailURL = directory.appendingPathComponent("\(id)-thumb.jpg")
 
         do {
             try data.write(to: videoURL, options: .atomic)
         } catch {
             throw UploadError.writeFailed
+        }
+
+        // 视频统一压到 ≤1080p(4K 也降到 1080p),控制上传体积与清晰度的平衡。
+        // 任何失败都回退用原片,绝不阻断发布。
+        if let capped = await transcodeTo1080pIfNeeded(sourceURL: videoURL, directory: directory, id: id) {
+            try? FileManager.default.removeItem(at: videoURL)
+            videoURL = capped
+            mime = "video/mp4"
+            fileName = capped.lastPathComponent
         }
 
         let asset = AVURLAsset(url: videoURL)
@@ -84,6 +95,31 @@ actor UploadService {
             height: thumbnail.size.height,
             duration: duration
         )
+    }
+
+    /// Re-encode a video to ≤1080p (mp4) when its longest side exceeds 1080.
+    /// Returns the new file URL, or nil when no transcode is needed/possible
+    /// (caller keeps the original — never blocks publishing).
+    private func transcodeTo1080pIfNeeded(sourceURL: URL, directory: URL, id: String) async -> URL? {
+        let asset = AVURLAsset(url: sourceURL)
+        guard let track = try? await asset.loadTracks(withMediaType: .video).first,
+              let size = try? await track.load(.naturalSize) else { return nil }
+        let longest = Swift.max(abs(size.width), abs(size.height))
+        guard longest > 1080 else { return nil }  // already ≤1080p
+        guard let export = AVAssetExportSession(asset: asset, presetName: AVAssetExportPreset1920x1080) else { return nil }
+        let outURL = directory.appendingPathComponent("\(id).mp4")
+        try? FileManager.default.removeItem(at: outURL)
+        export.outputURL = outURL
+        export.outputFileType = .mp4
+        export.shouldOptimizeForNetworkUse = true
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            export.exportAsynchronously { cont.resume() }
+        }
+        guard export.status == .completed, FileManager.default.fileExists(atPath: outURL.path) else {
+            try? FileManager.default.removeItem(at: outURL)
+            return nil
+        }
+        return outURL
     }
 
     func upload(

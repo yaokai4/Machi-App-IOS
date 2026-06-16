@@ -10,9 +10,11 @@ struct MediaGridView: View {
 
     var body: some View {
         if !mediaItems.isEmpty {
-            let columns = mediaItems.count == 1
-                ? [GridItem(.flexible())]
-                : [GridItem(.flexible(), spacing: 4), GridItem(.flexible(), spacing: 4)]
+            let count = mediaItems.count
+            // 九宫格:1 张单图大图;2/4 张两列;3 张及以上(5–9)三列方格。
+            let columnCount = count == 1 ? 1 : (count == 2 || count == 4 ? 2 : 3)
+            let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: columnCount)
+            let isGrid = count > 1
 
             LazyVGrid(columns: columns, spacing: 4) {
                 ForEach(mediaItems) { item in
@@ -22,11 +24,12 @@ struct MediaGridView: View {
                         let height = mediaHeight(for: item)
                         ZStack {
                             if let url = item.displayURL {
-                                MediaImageView(url: url, targetPixelSize: mediaItems.count == 1 ? 900 : 560)
-                                    .frame(height: height)
+                                // 单图用高清大图;九宫格方格用更高目标分辨率,避免被压糊。
+                                MediaImageView(url: url, targetPixelSize: count == 1 ? 1080 : 640)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                                     .clipped()
                             } else {
-                                MediaPlaceholderTile(item: item, height: height)
+                                MediaPlaceholderTile(item: item, height: isGrid ? nil : height)
                             }
 
                             if item.type == .video {
@@ -43,7 +46,8 @@ struct MediaGridView: View {
                             }
                         }
                         .frame(maxWidth: .infinity)
-                        .frame(height: height)
+                        // 九宫格:每格强制 1:1 正方形(不再压成长方形);单图保留自然比例。
+                        .modifier(MediaTileShape(square: isGrid, height: height))
                         .overlay(alignment: .bottomTrailing) {
                             if item.type == .video, item.duration > 0 {
                                 Text(durationText(item.duration))
@@ -93,9 +97,26 @@ struct MediaGridView: View {
     }
 }
 
+/// 九宫格的每格强制 1:1 正方形(用零固有尺寸的 Color.clear 卡出精确方框,图片
+/// 填充裁剪);单图保留自然高度。
+private struct MediaTileShape: ViewModifier {
+    let square: Bool
+    let height: CGFloat
+    func body(content: Content) -> some View {
+        if square {
+            Color.clear
+                .aspectRatio(1, contentMode: .fit)
+                .overlay { content }
+                .clipped()
+        } else {
+            content.frame(height: height)
+        }
+    }
+}
+
 private struct MediaPlaceholderTile: View {
     let item: MediaEntity
-    let height: CGFloat
+    let height: CGFloat?
 
     private var gradientColors: [Color] {
         if item.type == .video {
@@ -131,7 +152,7 @@ private struct MediaPlaceholderTile: View {
                     .padding(KXSpacing.md)
             }
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .frame(height: height)
     }
 }
