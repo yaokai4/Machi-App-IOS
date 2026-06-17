@@ -3083,6 +3083,7 @@ struct CityListingDetailView: View {
     @State private var actionMessage: String?
     @State private var isBusy = false
     @State private var intakeOpen = false
+    @State private var inquiryReceipt: ListingInquiryReceipt?
     @State private var similarItems: [KaiXCityListingDTO] = []
     @State private var sellerOtherItems: [KaiXCityListingDTO] = []
 
@@ -3120,6 +3121,26 @@ struct CityListingDetailView: View {
                 }
             }
             .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $inquiryReceipt) { receipt in
+            ListingInquirySuccessSheet(
+                receipt: receipt,
+                onOpenRecords: {
+                    inquiryReceipt = nil
+                    router.setActiveTab(.profile)
+                },
+                onOpenConversation: {
+                    guard !receipt.conversationId.isEmpty else { return }
+                    inquiryReceipt = nil
+                    router.setActiveTab(.messages)
+                    router.open(.conversation(conversationId: receipt.conversationId), in: .messages)
+                },
+                onClose: {
+                    inquiryReceipt = nil
+                }
+            )
+            .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
     }
@@ -3436,9 +3457,9 @@ struct CityListingDetailView: View {
                         .frame(width: 38, height: 38)
                         .background(ownListing ? Color.secondary.opacity(0.12) : KXColor.livingAccentSoft, in: Circle())
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(ownListing ? "这是你的发布" : "通过 Machi 私信联系发布者")
+                        Text(ownListing ? "这是你的发布" : "提交申请、预约或咨询")
                             .font(.subheadline.weight(.bold))
-                        Text(ownListing ? "自己的发布不能发起咨询，可以在我的发布中管理状态。" : "提交后会开启真实对话，发布者会收到商品和表单信息。")
+                        Text(ownListing ? "自己的发布不能发起咨询，可以在我的发布中管理状态。" : "提交后会进入工作台记录，同时开启私信用于补充沟通。")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -3613,18 +3634,19 @@ struct CityListingDetailView: View {
         defer { isBusy = false }
         do {
             let fallback = "我想\(ListingIntakeSpec.forType(listing.type, category: listing.category).actionWord)：\(KXListingCopy.displayTitle(listing))"
-            let conversationId = try await KaiXAPIClient.shared.contactListing(
+            let receiptDTO = try await KaiXAPIClient.shared.contactListing(
                 listing.id,
                 message: message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? fallback : message,
                 details: details
             )
             intakeOpen = false
-            if conversationId.isEmpty {
-                actionMessage = "已发送联系请求。请继续在私信或平台通知中沟通，避免提前转账。"
-            } else {
-                actionMessage = "已为你和发布者开启对话。"
-                router.open(.conversation(conversationId: conversationId))
-            }
+            actionMessage = receiptDTO.resolvedSuccessTitle
+            try? await Task.sleep(for: .milliseconds(220))
+            inquiryReceipt = ListingInquiryReceipt(
+                listingTitle: KXListingCopy.displayTitle(listing),
+                listingType: listing.type,
+                receipt: receiptDTO
+            )
         } catch {
             actionMessage = error.localizedDescription
         }
@@ -3648,6 +3670,201 @@ private struct ListingQuickInquiry: Identifiable {
     let title: String
     let message: String
     let details: [[String: String]]
+}
+
+private struct ListingInquiryReceipt: Identifiable {
+    let id: String
+    let listingTitle: String
+    let listingType: String
+    let inquiryType: String
+    let status: String
+    let successTitle: String
+    let conversationId: String
+    let details: [[String: String]]
+    let submittedAt: Date
+
+    init(listingTitle: String, listingType: String, receipt: KaiXListingInquiryReceiptDTO) {
+        self.id = receipt.resolvedInquiryId.isEmpty ? UUID().uuidString : receipt.resolvedInquiryId
+        self.listingTitle = listingTitle
+        self.listingType = listingType
+        self.inquiryType = receipt.type ?? "general_consult"
+        self.status = receipt.status ?? "submitted"
+        self.successTitle = receipt.resolvedSuccessTitle
+        self.conversationId = receipt.resolvedConversationId
+        self.details = receipt.details ?? []
+        self.submittedAt = Date()
+    }
+
+    var recordLabel: String {
+        if inquiryType == "job_apply" || inquiryType == "rental_application" { return "查看我的申请" }
+        if inquiryType.hasSuffix("_booking") || inquiryType == "rental_viewing" { return "查看我的预约" }
+        return "查看我的咨询"
+    }
+}
+
+private struct ListingInquirySuccessSheet: View {
+    let receipt: ListingInquiryReceipt
+    let onOpenRecords: () -> Void
+    let onOpenConversation: () -> Void
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.title.weight(.black))
+                    .foregroundStyle(KXColor.accent)
+                    .frame(width: 52, height: 52)
+                    .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(receipt.successTitle)
+                        .font(.title3.weight(.black))
+                    Text("记录已进入工作台，私信只作为后续沟通补充。")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, height: 32)
+                        .background(Color.secondary.opacity(0.10), in: Circle())
+                }
+                .buttonStyle(.plain)
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                receiptLine("信息", receipt.listingTitle)
+                receiptLine("类型", Self.typeLabel(receipt.inquiryType))
+                receiptLine("状态", Self.statusLabel(receipt.status))
+                receiptLine("时间", Self.timeLabel(receipt.submittedAt))
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(KXColor.softBackground.opacity(0.72), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+
+            if !receipt.details.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("提交摘要")
+                        .font(.subheadline.weight(.black))
+                    ForEach(Array(receipt.details.prefix(8).enumerated()), id: \.offset) { _, item in
+                        let label = item["label"] ?? ""
+                        let value = item["value"] ?? ""
+                        if !label.isEmpty || !value.isEmpty {
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text(label)
+                                    .font(.caption.weight(.black))
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 86, alignment: .leading)
+                                Text(value)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.primary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(KXColor.separator.opacity(0.5), lineWidth: 0.7)
+                }
+            }
+
+            VStack(spacing: 10) {
+                Button(action: onOpenRecords) {
+                    Label(receipt.recordLabel, systemImage: "tray.full")
+                        .font(.subheadline.weight(.black))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .background(KXColor.accent, in: Capsule())
+                        .foregroundStyle(Color.white)
+                }
+                .buttonStyle(.plain)
+
+                Button(action: onOpenConversation) {
+                    Label("继续私信补充", systemImage: "bubble.left.and.bubble.right")
+                        .font(.subheadline.weight(.black))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 46)
+                        .background(KXColor.softBackground, in: Capsule())
+                        .foregroundStyle(receipt.conversationId.isEmpty ? .secondary : KXColor.accent)
+                }
+                .buttonStyle(.plain)
+                .disabled(receipt.conversationId.isEmpty)
+
+                Button(action: onClose) {
+                    Text("返回详情")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 40)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(KaiXTheme.horizontalPadding)
+        .kxPageBackground()
+    }
+
+    private func receiptLine(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(label)
+                .font(.caption.weight(.black))
+                .foregroundStyle(.secondary)
+                .frame(width: 42, alignment: .leading)
+            Text(value)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private static func typeLabel(_ type: String) -> String {
+        switch type {
+        case "secondhand_trade_request", "secondhand_consult": "二手交易咨询"
+        case "rental_viewing": "看房预约"
+        case "rental_application": "租房申请"
+        case "job_apply": "职位申请"
+        case "restaurant_booking": "餐饮订座"
+        case "stay_booking": "住宿预订"
+        case "travel_ticket_booking": "旅行票务"
+        case "transfer_booking": "接送预约"
+        case "paperwork_booking": "手续协助"
+        case "moving_cleaning_booking": "搬家清洁"
+        case "life_setup_booking": "生活开通"
+        case "beauty_health_booking": "美容健康"
+        case "pet_family_booking": "宠物家庭"
+        case "discount_claim": "优惠咨询"
+        default: "城市咨询"
+        }
+    }
+
+    private static func statusLabel(_ status: String) -> String {
+        switch status {
+        case "submitted": "已提交"
+        case "reviewing": "处理中"
+        case "contacted": "已联系"
+        case "confirmed": "已确认"
+        case "rescheduled": "待改期"
+        case "rejected": "已拒绝"
+        case "withdrawn": "已撤回"
+        case "completed": "已完成"
+        case "closed": "已关闭"
+        default: "新提交"
+        }
+    }
+
+    private static func timeLabel(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        return formatter.string(from: date)
+    }
 }
 
 private struct ListingIntakeField: Identifiable, Equatable {
@@ -3705,9 +3922,9 @@ private struct ListingIntakeSpec {
                 )
             }
             switch category ?? "" {
-            case "景点门票", "一日游":
+            case "景点门票", "一日游", "本地向导", "体验活动", "包车行程":
                 return ListingIntakeSpec(
-                    title: category == "一日游" ? "预订行程" : "预订门票",
+                    title: category == "景点门票" ? "预订门票" : "预订行程",
                     actionWord: "预订",
                     noteLabel: "补充说明",
                     fields: [
@@ -3717,16 +3934,64 @@ private struct ListingIntakeSpec {
                         ListingIntakeField("contact", label: "联系方式", placeholder: "微信 / LINE / 电话", required: true),
                     ]
                 )
-            case "接送机":
+            case "接送机", "机场接送", "车站接送", "包车", "行李协助":
                 return ListingIntakeSpec(
-                    title: "预约接送机",
-                    actionWord: "预约接送机",
+                    title: "预约接送",
+                    actionWord: "预约接送",
                     noteLabel: "补充说明",
                     fields: [
                         ListingIntakeField("date", label: "用车日期", placeholder: "例如 7 月 1 日", required: true),
-                        ListingIntakeField("flight", label: "航班号", placeholder: "例如 NH878 / CA181"),
+                        ListingIntakeField("route", label: "路线", placeholder: "成田机场 -> 新宿 / 东京站 -> 住处", required: true),
+                        ListingIntakeField("flight", label: "航班/车次", placeholder: "例如 NH878 / 新干线到达时间"),
                         ListingIntakeField("passengers", label: "人数", options: ["1", "2", "3", "4", "5 及以上"], required: true),
                         ListingIntakeField("luggage", label: "行李数", options: ["1-2 件", "3-4 件", "5 件及以上"]),
+                        ListingIntakeField("contact", label: "联系方式", placeholder: "微信 / LINE / 电话", required: true),
+                    ]
+                )
+            case "材料翻译", "市役所陪同", "银行卡协助", "手机卡协助", "租房申请协助", "签证材料整理", "翻译手续", "签证/手续协助", "翻译":
+                return ListingIntakeSpec(
+                    title: "预约手续协助",
+                    actionWord: "预约手续协助",
+                    noteLabel: "具体需求",
+                    fields: [
+                        ListingIntakeField("service", label: "事项类型", placeholder: "住民票 / 银行卡 / 手机卡 / 材料翻译", required: true),
+                        ListingIntakeField("deadline", label: "希望完成时间", placeholder: "例如 本周内 / 3 个工作日"),
+                        ListingIntakeField("language", label: "希望语言", options: ["中文", "日本語", "English", "无要求"]),
+                        ListingIntakeField("contact", label: "联系方式", placeholder: "微信 / LINE / 电话", required: true),
+                    ]
+                )
+            case "搬家", "退房清洁", "粗大垃圾协助", "行李搬运", "家具家电配送协助", "搬家清洁", "清洁":
+                return ListingIntakeSpec(
+                    title: "预约搬家清洁",
+                    actionWord: "预约搬家清洁",
+                    noteLabel: "物品/房间说明",
+                    fields: [
+                        ListingIntakeField("date", label: "希望日期", placeholder: "例如 7 月 1 日", required: true),
+                        ListingIntakeField("address_area", label: "服务区域", placeholder: "新宿区 / 丰岛区", required: true),
+                        ListingIntakeField("volume", label: "物品量/房型", placeholder: "1K / 纸箱 20 个 / 大件 3 件"),
+                        ListingIntakeField("contact", label: "联系方式", placeholder: "微信 / LINE / 电话", required: true),
+                    ]
+                )
+            case "手机卡开通", "网络开通", "水电煤协助", "地址登记协助", "粗大垃圾预约", "生活跑腿":
+                return ListingIntakeSpec(
+                    title: "预约生活开通",
+                    actionWord: "预约生活开通",
+                    noteLabel: "具体需求",
+                    fields: [
+                        ListingIntakeField("service", label: "服务事项", placeholder: "手机卡 / 网络 / 水电煤 / 地址登记", required: true),
+                        ListingIntakeField("preferred_date", label: "希望日期", placeholder: "例如 到日当天 / 本周末"),
+                        ListingIntakeField("contact", label: "联系方式", placeholder: "微信 / LINE / 电话", required: true),
+                    ]
+                )
+            case "美容美发", "美甲", "按摩", "皮肤管理", "体检/牙科预约协助":
+                return ListingIntakeSpec(
+                    title: "预约服务",
+                    actionWord: "预约美容健康",
+                    noteLabel: "注意事项",
+                    fields: [
+                        ListingIntakeField("date", label: "预约日期", placeholder: "例如 6 月 20 日", required: true),
+                        ListingIntakeField("time", label: "预约时段", options: ["上午", "下午", "晚上", "周末"], required: true),
+                        ListingIntakeField("service", label: "服务项目", placeholder: "剪发 / 美甲 / 按摩 / 体检预约", required: true),
                         ListingIntakeField("contact", label: "联系方式", placeholder: "微信 / LINE / 电话", required: true),
                     ]
                 )
@@ -3744,6 +4009,9 @@ private struct ListingIntakeSpec {
                     ListingIntakeField("date", label: "希望看房日期", placeholder: "例如 6 月 12 日", required: true),
                     ListingIntakeField("time", label: "希望时段", options: ["上午", "下午", "晚上", "周末"], required: true),
                     ListingIntakeField("situation", label: "当前情况", options: ["在日本", "海外", "学生", "在职"]),
+                    ListingIntakeField("move_in", label: "入住时间", placeholder: "例如 7 月上旬 / 即可入住"),
+                    ListingIntakeField("people", label: "入住人数", options: ["1 人", "2 人", "3 人", "4 人及以上"]),
+                    ListingIntakeField("budget", label: "预算", placeholder: "例如 月租 8 万以内"),
                     ListingIntakeField("contact", label: "联系方式", placeholder: "微信 / LINE / 电话", required: true),
                 ]
             )
@@ -3758,6 +4026,7 @@ private struct ListingIntakeSpec {
                     ListingIntakeField("visa", label: "签证状态", options: ["留学", "工作签证", "永住", "家族滞在", "其他"]),
                     ListingIntakeField("japanese", label: "日语水平", options: ["N1", "N2", "N3", "日常会话", "暂不会"]),
                     ListingIntakeField("availability", label: "可工作时间", placeholder: "平日晚上 / 周末"),
+                    ListingIntakeField("start_date", label: "最快入职时间", placeholder: "例如 立即 / 7 月起"),
                 ]
             )
         case "local_service":
@@ -3767,7 +4036,7 @@ private struct ListingIntakeSpec {
                 noteLabel: "具体需求",
                 fields: [
                     ListingIntakeField("city", label: "服务城市", required: true),
-                    ListingIntakeField("service_scene", label: "服务场景", options: ["到店预约", "景点门票", "一日游", "接送机", "翻译手续", "维修安装"]),
+                    ListingIntakeField("service_scene", label: "服务场景", options: ["到店预约", "景点门票", "一日游", "机场接送", "翻译手续", "搬家清洁", "生活开通", "美容健康"]),
                     ListingIntakeField("date", label: "希望日期", placeholder: "例如 6 月 12 日"),
                     ListingIntakeField("time", label: "希望时段", options: ["上午", "下午", "晚上", "周末"]),
                     ListingIntakeField("people", label: "人数/件数", placeholder: "例如 2 人 / 3 件行李 / 1 套资料"),
@@ -4156,12 +4425,11 @@ struct CreateCityListingView: View {
     @State private var propertySize = ""
     @State private var itemVolume = ""
     @State private var vehicleStaff = ""
-    @State private var projectType = ""
-    @State private var deviceBrandModel = ""
-    @State private var onsiteFee = ""
-    @State private var partsFee = ""
-    @State private var warrantyNote = ""
-    @State private var unavailableScope = ""
+    @State private var setupType = ""
+    @State private var cannotGuarantee = ""
+    @State private var beautyService = ""
+    @State private var medicalDisclaimer = ""
+    @State private var serviceTarget = ""
     @State private var merchantName = ""
     @State private var discountInfo = ""
     @State private var validUntil = ""
@@ -4231,9 +4499,11 @@ struct CreateCityListingView: View {
                 return filled(serviceBusinessName) && filled(languages) && filled(documentType)
             case .movingCleaning:
                 return filled(serviceBusinessName) && filled(serviceArea)
-            case .repairInstallation:
-                return filled(serviceBusinessName) && filled(projectType) && filled(serviceArea)
-            case .beautyPetLife:
+            case .lifeSetup:
+                return filled(serviceBusinessName) && filled(serviceArea) && filled(setupType)
+            case .beautyHealth:
+                return filled(serviceBusinessName) && filled(serviceArea) && filled(beautyService)
+            case .petFamily:
                 return filled(serviceBusinessName) && filled(serviceArea)
             }
         }
@@ -4335,12 +4605,11 @@ struct CreateCityListingView: View {
         propertySize = ""
         itemVolume = ""
         vehicleStaff = ""
-        projectType = ""
-        deviceBrandModel = ""
-        onsiteFee = ""
-        partsFee = ""
-        warrantyNote = ""
-        unavailableScope = ""
+        setupType = ""
+        cannotGuarantee = ""
+        beautyService = ""
+        medicalDisclaimer = ""
+        serviceTarget = ""
     }
 
     private var typeAccent: Color {
@@ -4379,10 +4648,12 @@ struct CreateCityListingView: View {
                     values += [filled(serviceBusinessName), filled(airportRoute), filled(serviceArea)]
                 case .paperworkTranslation:
                     values += [filled(serviceBusinessName), filled(languages), filled(documentType)]
-                case .movingCleaning, .beautyPetLife:
+                case .movingCleaning, .petFamily:
                     values += [filled(serviceBusinessName), filled(serviceArea)]
-                case .repairInstallation:
-                    values += [filled(serviceBusinessName), filled(projectType), filled(serviceArea)]
+                case .lifeSetup:
+                    values += [filled(serviceBusinessName), filled(serviceArea), filled(setupType)]
+                case .beautyHealth:
+                    values += [filled(serviceBusinessName), filled(serviceArea), filled(beautyService)]
                 }
             } else {
                 values += [false]
@@ -4880,37 +5151,44 @@ struct CreateCityListingView: View {
                             KXListingFormField(title: "追加费用", placeholder: "楼梯、大件、远距离、夜间、停车费说明", icon: "plus.circle", text: $surchargeNote, lineLimit: 2...4)
                             KXListingFormField(title: "取消规则", placeholder: "预约前一天取消费、雨天改期等", icon: "arrow.uturn.left.circle", text: $cancellationRule, lineLimit: 2...5)
 
-                        case .repairInstallation:
-                            KXListingFormField(title: "设备/项目类型", placeholder: "空调 / 洗衣机 / 家具组装 / 网络设置", icon: "wrench.and.screwdriver", text: $projectType)
-                            KXListingFormField(title: "品牌/型号", placeholder: "Panasonic / IKEA / 型号或尺寸", icon: "tag", text: $deviceBrandModel)
-                            KXListingFormField(title: "上门区域", placeholder: "东京 23 区 / 千叶部分地区", icon: "map", text: $serviceArea)
-                            HStack(spacing: 10) {
-                                KXListingFormField(title: "上门费", placeholder: "¥3,000 起", icon: "house.and.flag", text: $onsiteFee)
-                                KXListingFormField(title: "配件费", placeholder: "按实收 / 另报价", icon: "shippingbox", text: $partsFee)
-                            }
-                            KXListingFormField(title: "保修说明", placeholder: "施工后 7 天 / 仅保安装不保设备", icon: "checkmark.shield", text: $warrantyNote, lineLimit: 2...4)
-                            KXListingFormField(title: "不可服务范围", placeholder: "高空作业、燃气、结构改造等不可接", icon: "xmark.shield", text: $unavailableScope, lineLimit: 2...4)
-                            KXListingFormField(title: "取消规则", placeholder: "上门前多久可取消、空跑费说明", icon: "arrow.uturn.left.circle", text: $cancellationRule, lineLimit: 2...5)
+                        case .lifeSetup:
+                            KXListingFormField(title: "服务区域", placeholder: "东京 23 区 / 横滨 / 线上协助", icon: "map", text: $serviceArea)
+                            KXListingFormField(title: "服务类型", placeholder: "手机卡 / 网络 / 水电煤 / 地址登记", icon: "slider.horizontal.3", text: $setupType)
+                            KXListingFormField(title: "所需材料", placeholder: "在留卡、护照、地址、银行卡、本人到场要求", icon: "folder.badge.plus", text: $requiredMaterials, lineLimit: 2...5)
+                            KXListingFormField(title: "预计耗时", placeholder: "当天 / 1-3 个工作日 / 需预约窗口", icon: "clock.badge.checkmark", text: $deliveryTime)
+                            KXListingFormField(title: "服务方式", placeholder: "线上确认材料、预约窗口、陪同办理或远程协助", icon: "list.bullet.clipboard", text: $serviceProcess, lineLimit: 3...6)
+                            KXListingFormField(title: "用户需准备", placeholder: "证件原件、印章、现金、可接电话时间等", icon: "person.crop.circle.badge.questionmark", text: $userPrepare, lineLimit: 2...5)
+                            KXListingFormField(title: "不可承诺事项", placeholder: "不能保证运营商审核、开户结果、政府窗口受理或第三方时效", icon: "exclamationmark.shield", text: $cannotGuarantee, lineLimit: 2...5)
+                            KXListingFormField(title: "价格说明", placeholder: "预约咨询 / ¥3,000 起 / 按事项报价", icon: "yensign.circle", text: $priceRange)
+                            KXListingFormField(title: "取消规则", placeholder: "材料确认后、预约日前后取消与改期规则", icon: "arrow.uturn.left.circle", text: $cancellationRule, lineLimit: 2...5)
 
-                        case .beautyPetLife:
-                            KXListingFormField(title: "服务范围", placeholder: "店内 / 上门 / 东京 23 区 / 线上咨询", icon: "map", text: $serviceArea)
+                        case .beautyHealth:
+                            KXListingFormField(title: "服务区域 / 店铺位置", placeholder: "新宿 / 原宿 / 线上预约协助", icon: "map", text: $serviceArea)
+                            KXListingFormField(title: "服务项目", placeholder: "剪发 / 美甲 / 按摩 / 体检预约协助", icon: "sparkles", text: $beautyService)
+                            KXListingFormField(title: "可预约时间", placeholder: "平日晚间 / 周末 / 需提前 2 天", icon: "calendar.badge.clock", text: $availability)
                             HStack(spacing: 10) {
-                                KXListingFormField(title: "营业时间", placeholder: "10:00-20:00 / 预约制", icon: "clock", text: $openHours)
-                                KXListingFormField(title: "价格区间", placeholder: "¥3,000 起 / 套餐另议", icon: "yensign.circle", text: $priceRange)
+                                KXListingFormField(title: "价格区间", placeholder: "¥4,000 起 / 按项目报价", icon: "yensign.circle", text: $priceRange)
+                                KXListingFormField(title: "服务时长", placeholder: "45 分钟 / 90 分钟", icon: "clock", text: $duration)
                             }
-                            KXListingFormField(title: "可预约时间", placeholder: "平日晚上 / 周末 / 需提前 2 天", icon: "calendar.badge.clock", text: $availability)
-                            KXListingFormField(title: "包含内容", placeholder: "洗剪吹、护理、上门陪诊、生活协助等", icon: "checklist", text: $includedItems, lineLimit: 2...5)
-                            KXListingFormField(title: "不包含内容", placeholder: "交通费、药品、特殊护理等", icon: "minus.circle", text: $notIncluded, lineLimit: 2...5)
-                            KXListingFormField(title: "用户需准备", placeholder: "宠物疫苗证明、照片、上门地址、预约偏好等", icon: "person.crop.circle.badge.questionmark", text: $userPrepare, lineLimit: 2...5)
-                            KXListingFormField(title: "取消规则", placeholder: "预约前一天可取消，临时取消费用", icon: "arrow.uturn.left.circle", text: $cancellationRule, lineLimit: 2...5)
-                            KXListingFormField(title: "资质/许可说明", placeholder: "美容师、宠物服务、护理相关资质或说明", icon: "checkmark.shield", text: $licenseNote, lineLimit: 2...4)
+                            KXListingFormField(title: "注意事项", placeholder: "迟到规则、过敏史、禁忌提醒、预约前准备", icon: "person.crop.circle.badge.questionmark", text: $userPrepare, lineLimit: 2...5)
+                            KXListingFormField(title: "医疗免责声明", placeholder: "医疗相关仅做预约协助，不提供诊断、治疗承诺或医疗建议", icon: "cross.case", text: $medicalDisclaimer, lineLimit: 2...5)
+                            KXListingFormField(title: "取消规则", placeholder: "24 小时内取消、迟到、改期等规则", icon: "arrow.uturn.left.circle", text: $cancellationRule, lineLimit: 2...5)
+
+                        case .petFamily:
+                            KXListingFormField(title: "服务区域", placeholder: "东京 23 区 / 到店 / 上门", icon: "map", text: $serviceArea)
+                            KXListingFormField(title: "服务对象", placeholder: "小型犬 / 猫 / 儿童用品 / 家庭协助", icon: "person.2", text: $serviceTarget)
+                            KXListingFormField(title: "可预约时间", placeholder: "平日晚上 / 周末 / 假期", icon: "calendar.badge.clock", text: $availability)
+                            KXListingFormField(title: "价格说明", placeholder: "按小时 / 按天 / 预约咨询", icon: "yensign.circle", text: $priceRange)
+                            KXListingFormField(title: "注意事项", placeholder: "宠物性格、疫苗、用品、紧急联系人、家庭规则", icon: "person.crop.circle.badge.questionmark", text: $userPrepare, lineLimit: 2...5)
+                            KXListingFormField(title: "安全/资质说明", placeholder: "经验、保险、照看范围、不可服务边界", icon: "checkmark.shield", text: $licenseNote, lineLimit: 2...4)
+                            KXListingFormField(title: "取消规则", placeholder: "预约前取消、临时变更、超时费用等", icon: "arrow.uturn.left.circle", text: $cancellationRule, lineLimit: 2...5)
                         }
                     }
                 }
             } else {
                 KXListingSection(title: "选择服务细分类", icon: "square.grid.2x2") {
                     KXListingHintRow(
-                        text: "请先在基本信息里选择一个标准服务分类，例如 餐厅美食、民宿、景点门票、一日游、接送机、翻译手续、搬家清洁或维修安装。",
+                        text: "请先在基本信息里选择一个标准服务分类，例如 餐厅美食、民宿、景点门票、一日游、机场接送、翻译手续、搬家清洁、生活开通或美容健康。",
                         icon: "hand.tap",
                         tint: typeAccent
                     )
@@ -5039,12 +5317,11 @@ struct CreateCityListingView: View {
             propertySize = raw("property_size")
             itemVolume = raw("item_volume")
             vehicleStaff = raw("vehicle_staff")
-            projectType = raw("project_type")
-            deviceBrandModel = raw("device_brand_model")
-            onsiteFee = raw("onsite_fee")
-            partsFee = raw("parts_fee")
-            warrantyNote = raw("warranty_note")
-            unavailableScope = raw("unavailable_scope")
+            setupType = raw("setup_type")
+            cannotGuarantee = raw("cannot_guarantee")
+            beautyService = raw("beauty_service")
+            medicalDisclaimer = raw("medical_disclaimer")
+            serviceTarget = raw("service_target")
         case "discount":
             merchantName = raw("merchant_name")
             discountInfo = raw("discount_info")
@@ -5339,22 +5616,30 @@ struct CreateCityListingView: View {
                 result["user_prepare"] = .init(string: userPrepare)
                 result["surcharge_note"] = .init(string: surchargeNote)
                 result["cancellation_rule"] = .init(string: cancellationRule)
-            case .repairInstallation:
-                result["project_type"] = .init(string: projectType)
-                result["device_brand_model"] = .init(string: deviceBrandModel)
+            case .lifeSetup:
                 result["service_area"] = .init(string: serviceArea.isEmpty ? location : serviceArea)
-                result["onsite_fee"] = .init(string: onsiteFee)
-                result["parts_fee"] = .init(string: partsFee)
-                result["warranty_note"] = .init(string: warrantyNote)
-                result["unavailable_scope"] = .init(string: unavailableScope)
+                result["setup_type"] = .init(string: setupType)
+                result["required_materials"] = .init(string: requiredMaterials)
+                result["delivery_time"] = .init(string: deliveryTime)
+                result["service_process"] = .init(string: serviceProcess)
+                result["user_prepare"] = .init(string: userPrepare)
+                result["cannot_guarantee"] = .init(string: cannotGuarantee)
+                result["price_range"] = .init(string: priceRange)
                 result["cancellation_rule"] = .init(string: cancellationRule)
-            case .beautyPetLife:
+            case .beautyHealth:
                 result["service_area"] = .init(string: serviceArea.isEmpty ? location : serviceArea)
-                result["open_hours"] = .init(string: openHours)
+                result["beauty_service"] = .init(string: beautyService)
                 result["price_range"] = .init(string: priceRange)
                 result["availability"] = .init(string: availability)
-                result["included_items"] = .init(string: includedItems)
-                result["not_included"] = .init(string: notIncluded)
+                result["duration"] = .init(string: duration)
+                result["user_prepare"] = .init(string: userPrepare)
+                result["medical_disclaimer"] = .init(string: medicalDisclaimer)
+                result["cancellation_rule"] = .init(string: cancellationRule)
+            case .petFamily:
+                result["service_area"] = .init(string: serviceArea.isEmpty ? location : serviceArea)
+                result["service_target"] = .init(string: serviceTarget)
+                result["availability"] = .init(string: availability)
+                result["price_range"] = .init(string: priceRange)
                 result["user_prepare"] = .init(string: userPrepare)
                 result["cancellation_rule"] = .init(string: cancellationRule)
                 result["license_note"] = .init(string: licenseNote)
@@ -5979,16 +6264,24 @@ enum KXListingCopy {
         case airportTransfer = "airport_transfer"
         case paperworkTranslation = "paperwork_translation"
         case movingCleaning = "moving_cleaning"
-        case repairInstallation = "repair_installation"
-        case beautyPetLife = "beauty_pet_life"
+        case lifeSetup = "life_setup"
+        case beautyHealth = "beauty_health"
+        case petFamily = "pet_family"
     }
 
     /// 餐厅美食：菜系类目（与 web ListingKit FOOD_CATEGORIES 同步）。
     static let foodCategories = ["中华料理", "日本料理", "居酒屋", "烧肉火锅", "拉面", "寿司海鲜", "咖啡甜品", "西餐", "韩国料理"]
     /// 餐厅美食分区还包含两个老类目（已有数据继续生效）。
     static let foodSectionCategories = ["餐厅美食"] + foodCategories + ["餐饮点评", "优惠预约"]
+    static let travelSectionCategories = ["景点门票", "一日游", "本地向导", "体验活动", "包车行程"]
+    static let transferSectionCategories = ["机场接送", "车站接送", "包车", "行李协助", "接送机"]
+    static let paperworkSectionCategories = ["材料翻译", "市役所陪同", "银行卡协助", "手机卡协助", "租房申请协助", "签证材料整理", "翻译手续", "签证/手续协助", "翻译"]
+    static let movingSectionCategories = ["搬家", "退房清洁", "粗大垃圾协助", "行李搬运", "家具家电配送协助", "搬家清洁", "清洁"]
+    static let lifeSetupSectionCategories = ["手机卡开通", "网络开通", "水电煤协助", "地址登记协助", "粗大垃圾预约", "生活跑腿", "生活支持"]
+    static let beautyHealthSectionCategories = ["美容美发", "美甲", "按摩", "皮肤管理", "体检/牙科预约协助"]
+    static let petFamilySectionCategories = ["宠物寄养", "遛狗", "临时照看", "儿童用品租赁", "家庭协助", "宠物服务"]
     /// 生活服务同时兼容新细分类与旧伞类目，避免筛选区漏掉真实服务。
-    static let lifeSectionCategories = ["翻译手续", "签证/手续协助", "翻译", "搬家清洁", "搬家", "清洁", "维修安装", "美容美发", "宠物服务", "生活支持", "租房申请协助", "认证服务"]
+    static let lifeSectionCategories = paperworkSectionCategories + movingSectionCategories + lifeSetupSectionCategories + beautyHealthSectionCategories + petFamilySectionCategories
     static let homestayCategories = ["民宿"]
     static let hotelCategories = ["酒店", "温泉旅馆", "公寓式酒店", "酒店民宿"]
     static let stayCategories = homestayCategories + hotelCategories
@@ -6032,19 +6325,48 @@ enum KXListingCopy {
         "景点门票": .attractionTicket,
         "一日游": .dayTour,
         "本地向导": .dayTour,
+        "体验活动": .dayTour,
+        "包车行程": .dayTour,
         "接送机": .airportTransfer,
+        "机场接送": .airportTransfer,
+        "车站接送": .airportTransfer,
+        "包车": .airportTransfer,
+        "行李协助": .airportTransfer,
+        "材料翻译": .paperworkTranslation,
+        "市役所陪同": .paperworkTranslation,
+        "银行卡协助": .paperworkTranslation,
+        "手机卡协助": .paperworkTranslation,
+        "签证材料整理": .paperworkTranslation,
         "翻译手续": .paperworkTranslation,
         "签证/手续协助": .paperworkTranslation,
         "翻译": .paperworkTranslation,
         "租房申请协助": .paperworkTranslation,
         "认证服务": .paperworkTranslation,
+        "退房清洁": .movingCleaning,
+        "粗大垃圾协助": .movingCleaning,
+        "行李搬运": .movingCleaning,
+        "家具家电配送协助": .movingCleaning,
         "搬家清洁": .movingCleaning,
         "搬家": .movingCleaning,
         "清洁": .movingCleaning,
-        "维修安装": .repairInstallation,
-        "美容美发": .beautyPetLife,
-        "宠物服务": .beautyPetLife,
-        "生活支持": .beautyPetLife,
+        "手机卡开通": .lifeSetup,
+        "网络开通": .lifeSetup,
+        "水电煤协助": .lifeSetup,
+        "地址登记协助": .lifeSetup,
+        "粗大垃圾预约": .lifeSetup,
+        "生活跑腿": .lifeSetup,
+        "生活支持": .lifeSetup,
+        "美容美发": .beautyHealth,
+        "美甲": .beautyHealth,
+        "按摩": .beautyHealth,
+        "皮肤管理": .beautyHealth,
+        "体检/牙科预约协助": .beautyHealth,
+        "宠物寄养": .petFamily,
+        "遛狗": .petFamily,
+        "临时照看": .petFamily,
+        "儿童用品租赁": .petFamily,
+        "家庭协助": .petFamily,
+        "宠物服务": .petFamily,
     ]
 
     static func serviceVertical(category: String?, serviceType: String?) -> ServiceVertical? {
@@ -6066,8 +6388,10 @@ enum KXListingCopy {
         if attrs["room_type"] != nil || attrs["max_guests"] != nil { return .lodging }
         if attrs["airport_route"] != nil || attrs["flight_info_note"] != nil { return .airportTransfer }
         if attrs["document_type"] != nil || attrs["required_materials"] != nil { return .paperworkTranslation }
-        if attrs["project_type"] != nil || attrs["device_brand_model"] != nil { return .repairInstallation }
         if attrs["property_size"] != nil || attrs["vehicle_staff"] != nil { return .movingCleaning }
+        if attrs["setup_type"] != nil || attrs["cannot_guarantee"] != nil { return .lifeSetup }
+        if attrs["beauty_service"] != nil || attrs["medical_disclaimer"] != nil { return .beautyHealth }
+        if attrs["service_target"] != nil { return .petFamily }
         if attrs["ticket_type"] != nil {
             if attrs["pickup_service"] != nil { return .dayTour }
             return .attractionTicket
@@ -6085,8 +6409,9 @@ enum KXListingCopy {
         case .airportTransfer: "接送机字段"
         case .paperworkTranslation: "翻译 / 手续字段"
         case .movingCleaning: "搬家 / 清洁字段"
-        case .repairInstallation: "维修安装字段"
-        case .beautyPetLife: "美容美发 / 宠物 / 生活支持字段"
+        case .lifeSetup: "生活开通 / 住后支持字段"
+        case .beautyHealth: "美容健康预约字段"
+        case .petFamily: "宠物与家庭支持字段"
         }
     }
 
@@ -6103,15 +6428,17 @@ enum KXListingCopy {
         case .dayTour:
             return ["一日游", "本地向导"]
         case .airportTransfer:
-            return ["接送机"]
+            return ["机场接送", "车站接送", "包车", "行李协助", "接送机"]
         case .paperworkTranslation:
-            return ["翻译手续", "签证/手续协助", "翻译", "租房申请协助", "认证服务"]
+            return paperworkSectionCategories
         case .movingCleaning:
-            return ["搬家清洁", "搬家", "清洁"]
-        case .repairInstallation:
-            return ["维修安装"]
-        case .beautyPetLife:
-            return ["美容美发", "宠物服务", "生活支持"]
+            return movingSectionCategories
+        case .lifeSetup:
+            return lifeSetupSectionCategories
+        case .beautyHealth:
+            return beautyHealthSectionCategories
+        case .petFamily:
+            return petFamilySectionCategories
         }
     }
 
@@ -6324,7 +6651,7 @@ enum KXListingCopy {
         case "stays": stayChips
         case "hotels": hotelChips
         case "work", "job", "hiring": ["全部", "兼职", "全职", "时给", "月给", "N3 可", "签证支持", "无经验可"]
-        case "local_service": ["全部"] + foodSectionCategories + ["民宿", "酒店", "温泉旅馆", "公寓式酒店", "酒店民宿", "景点门票", "一日游", "本地向导", "接送机"] + lifeSectionCategories
+        case "local_service": ["全部"] + foodSectionCategories + ["民宿", "酒店", "温泉旅馆", "公寓式酒店", "短住公寓", "酒店民宿"] + travelSectionCategories + transferSectionCategories + lifeSectionCategories
         case "discount": ["全部", "餐饮", "学校", "服务", "购物", "限时"]
         default: ["全部", "家具", "家电", "手机数码", "电脑办公", "电子产品", "教材", "书籍教材", "衣物", "生活用品", "母婴儿童", "运动户外", "票券卡券", "搬家出清", "免费送", "求购"]
         }
@@ -6396,12 +6723,43 @@ enum KXListingCopy {
         "酒店": ("ホテル", "Hotel"),
         "温泉旅馆": ("温泉旅館", "Onsen ryokan"),
         "公寓式酒店": ("アパートホテル", "Aparthotel"),
+        "短住公寓": ("短期アパート", "Short-stay apartment"),
         "景点门票": ("観光チケット", "Attraction tickets"),
         "一日游": ("日帰りツアー", "Day trips"),
+        "本地向导": ("ローカルガイド", "Local guide"),
+        "体验活动": ("体験アクティビティ", "Experiences"),
+        "包车行程": ("貸切ツアー", "Chartered tour"),
         "接送机": ("空港送迎", "Airport transfer"),
+        "机场接送": ("空港送迎", "Airport transfer"),
+        "车站接送": ("駅送迎", "Station transfer"),
+        "包车": ("貸切車", "Private car"),
+        "行李协助": ("荷物サポート", "Luggage help"),
         "翻译手续": ("翻訳・手続き", "Translation & paperwork"),
+        "材料翻译": ("書類翻訳", "Document translation"),
+        "市役所陪同": ("役所同行", "City-office accompaniment"),
+        "银行卡协助": ("銀行口座サポート", "Bank account help"),
+        "手机卡协助": ("SIMサポート", "SIM card help"),
+        "签证材料整理": ("ビザ書類整理", "Visa document prep"),
         "搬家清洁": ("引越し・清掃", "Moving & cleaning"),
-        "维修安装": ("修理・設置", "Repair & installation"),
+        "退房清洁": ("退去清掃", "Move-out cleaning"),
+        "粗大垃圾协助": ("粗大ごみサポート", "Oversized trash help"),
+        "行李搬运": ("荷物運搬", "Luggage moving"),
+        "家具家电配送协助": ("家具家電配送サポート", "Furniture delivery help"),
+        "手机卡开通": ("SIM開通", "SIM setup"),
+        "网络开通": ("ネット開通", "Internet setup"),
+        "水电煤协助": ("ライフライン手続き", "Utilities setup"),
+        "地址登记协助": ("住所登録サポート", "Address registration help"),
+        "粗大垃圾预约": ("粗大ごみ予約", "Oversized trash booking"),
+        "生活跑腿": ("生活代行", "Local errands"),
+        "美甲": ("ネイル", "Nails"),
+        "按摩": ("マッサージ", "Massage"),
+        "皮肤管理": ("肌ケア", "Skin care"),
+        "体检/牙科预约协助": ("健診・歯科予約サポート", "Checkup/dental booking help"),
+        "宠物寄养": ("ペット預かり", "Pet boarding"),
+        "遛狗": ("犬の散歩", "Dog walking"),
+        "临时照看": ("一時見守り", "Temporary care"),
+        "儿童用品租赁": ("子ども用品レンタル", "Kids item rental"),
+        "家庭协助": ("家庭サポート", "Family support"),
         "认证服务": ("認定サービス", "Verified services"),
         "餐饮": ("飲食", "Dining"),
         "学校": ("学校", "Schools"),
@@ -7013,35 +7371,49 @@ enum KXListingCopy {
                     ("取消规则", attr(listing, "cancellation_rule")),
                     ("审核状态", verificationLabel(listing.verification_status)),
                 ]
-            case .repairInstallation?:
-                base = [
-                    ("起步价格", priceLabel(listing)),
-                    ("服务方", attr(listing, "business_name")),
-                    ("服务类型", attr(listing, "service_type")),
-                    ("设备/项目类型", attr(listing, "project_type")),
-                    ("品牌/型号", attr(listing, "device_brand_model")),
-                    ("上门区域", attr(listing, "service_area") ?? cleanText(listing.location_text)),
-                    ("上门费", attr(listing, "onsite_fee")),
-                    ("配件费", attr(listing, "parts_fee")),
-                    ("保修说明", attr(listing, "warranty_note")),
-                    ("不可服务范围", attr(listing, "unavailable_scope")),
-                    ("取消规则", attr(listing, "cancellation_rule")),
-                    ("审核状态", verificationLabel(listing.verification_status)),
-                ]
-            case .beautyPetLife?:
+            case .lifeSetup?:
                 base = [
                     ("起步价格", priceLabel(listing)),
                     ("服务方", attr(listing, "business_name")),
                     ("服务类型", attr(listing, "service_type")),
                     ("服务范围", attr(listing, "service_area") ?? cleanText(listing.location_text)),
-                    ("营业时间", attr(listing, "open_hours")),
-                    ("价格区间", attr(listing, "price_range")),
-                    ("可预约时间", attr(listing, "availability")),
-                    ("包含内容", attr(listing, "included_items")),
-                    ("不包含内容", attr(listing, "not_included")),
+                    ("办理类型", attr(listing, "setup_type")),
+                    ("所需材料", attr(listing, "required_materials")),
+                    ("交付时间", attr(listing, "delivery_time")),
+                    ("服务流程", attr(listing, "service_process")),
                     ("用户需准备", attr(listing, "user_prepare")),
+                    ("结果说明", attr(listing, "cannot_guarantee")),
+                    ("价格区间", attr(listing, "price_range")),
                     ("取消规则", attr(listing, "cancellation_rule")),
+                    ("审核状态", verificationLabel(listing.verification_status)),
+                ]
+            case .beautyHealth?:
+                base = [
+                    ("起步价格", priceLabel(listing)),
+                    ("服务方", attr(listing, "business_name")),
+                    ("服务类型", attr(listing, "service_type")),
+                    ("服务范围", attr(listing, "service_area") ?? cleanText(listing.location_text)),
+                    ("服务项目", attr(listing, "beauty_service")),
+                    ("可预约时间", attr(listing, "availability")),
+                    ("价格区间", attr(listing, "price_range")),
+                    ("服务时长", attr(listing, "duration")),
+                    ("用户需准备", attr(listing, "user_prepare")),
+                    ("安全说明", attr(listing, "medical_disclaimer")),
+                    ("取消规则", attr(listing, "cancellation_rule")),
+                    ("审核状态", verificationLabel(listing.verification_status)),
+                ]
+            case .petFamily?:
+                base = [
+                    ("起步价格", priceLabel(listing)),
+                    ("服务方", attr(listing, "business_name")),
+                    ("服务类型", attr(listing, "service_type")),
+                    ("服务范围", attr(listing, "service_area") ?? cleanText(listing.location_text)),
+                    ("服务对象", attr(listing, "service_target")),
+                    ("可预约时间", attr(listing, "availability")),
+                    ("价格区间", attr(listing, "price_range")),
+                    ("用户需准备", attr(listing, "user_prepare")),
                     ("资质/许可说明", attr(listing, "license_note")),
+                    ("取消规则", attr(listing, "cancellation_rule")),
                     ("审核状态", verificationLabel(listing.verification_status)),
                 ]
             case .none:

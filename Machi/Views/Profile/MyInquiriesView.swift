@@ -2,8 +2,8 @@ import SwiftUI
 
 /// Workbench inquiries manager — mirrors the Web 工作台 咨询 screen.
 /// 收到: people contacting MY listings (buyer leads, job applications,
-/// bookings). 发出: inquiries I sent to others. Rows open the seeded
-/// conversation so the follow-up happens in chat.
+/// bookings). 发出: inquiries I sent to others. The record is the source of
+/// truth; chat is only a follow-up channel.
 struct MyInquiriesView: View {
     @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
@@ -68,12 +68,7 @@ struct MyInquiriesView: View {
         ScrollView {
             LazyVStack(spacing: 10) {
                 ForEach(items) { inquiry in
-                    Button {
-                        open(inquiry)
-                    } label: {
-                        row(inquiry)
-                    }
-                    .buttonStyle(.plain)
+                    row(inquiry)
                 }
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
@@ -85,51 +80,103 @@ struct MyInquiriesView: View {
 
     private func row(_ inquiry: KaiXListingInquiryDTO) -> some View {
         let counterpart = role == .received ? inquiry.from_user : inquiry.to_user
-        return HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 6) {
+        let details = normalizedDetails(inquiry)
+        let cleanMessage = clean(inquiry.message)
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .fill(statusColor(inquiry.status ?? "submitted").opacity(0.12))
+                    Image(systemName: typeIcon(inquiry.type ?? "general"))
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(statusColor(inquiry.status ?? "submitted"))
+                }
+                .frame(width: 38, height: 38)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        typeChip(inquiry.type ?? "general")
+                        statusChip(inquiry.status ?? "submitted")
+                    }
+
                     Text(inquiry.listing?.title ?? L("inquiryListingGone", language))
-                        .font(.subheadline.weight(.semibold))
+                        .font(.subheadline.weight(.bold))
                         .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    typeChip(inquiry.type ?? "general")
-                }
-                if let message = inquiry.message, !message.isEmpty {
-                    Text(message)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                         .lineLimit(2)
+
+                    HStack(spacing: 6) {
+                        if let name = counterpart?.display_name ?? counterpart?.displayName, !name.isEmpty {
+                            Text(role == .received ? "申请人 \(name)" : "对方 \(name)")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        if let created = inquiry.created_at, !created.isEmpty {
+                            Text(formattedDate(created))
+                                .font(.caption2.weight(.medium))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
                 }
-                HStack(spacing: 6) {
-                    if let name = counterpart?.display_name ?? counterpart?.displayName, !name.isEmpty {
-                        Text(name)
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+
+            if !details.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(details.prefix(4).enumerated()), id: \.offset) { _, line in
+                        HStack(alignment: .top, spacing: 6) {
+                            Text(line.label)
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 68, alignment: .leading)
+                            Text(line.value)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.primary.opacity(0.86))
+                                .lineLimit(2)
+                            Spacer(minLength: 0)
+                        }
                     }
-                    if let created = inquiry.created_at, !created.isEmpty {
-                        Text(String(created.prefix(10)))
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
+                }
+                .padding(10)
+                .background(KXColor.softBackground.opacity(0.7), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+
+            if !cleanMessage.isEmpty {
+                Text(cleanMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            HStack(spacing: 8) {
+                actionButton(title: "查看详情", icon: "doc.text.magnifyingglass", filled: false) {
+                    openListing(inquiry)
+                }
+                actionButton(title: role == .received ? "联系申请人" : "打开私信", icon: "bubble.left.and.bubble.right.fill", filled: true) {
+                    openConversation(inquiry)
                 }
             }
-            Spacer(minLength: 0)
-            Image(systemName: "bubble.left.and.bubble.right.fill")
-                .font(.subheadline)
-                .foregroundStyle(KXColor.accent.opacity(0.8))
         }
         .padding(14)
         .kxGlassSurface(radius: KXRadius.lg)
-        .contentShape(Rectangle())
     }
 
     private func typeChip(_ type: String) -> some View {
         let label: String = switch type {
-        case "secondhand_consult": "二手"
-        case "rental_consult": "租房"
+        case "secondhand_trade_request", "secondhand_consult": "二手交易"
+        case "rental_viewing", "rental_consult": "租房看房"
         case "job_apply": "应聘"
-        case "service_booking": "预约"
-        case "discount_consult": "优惠"
+        case "restaurant_booking": "餐厅预约"
+        case "stay_booking": "住宿预约"
+        case "travel_ticket_booking": "票务行程"
+        case "transfer_booking": "接送预约"
+        case "paperwork_booking": "手续翻译"
+        case "moving_cleaning_booking": "搬家清洁"
+        case "life_setup_booking": "生活开通"
+        case "beauty_health_booking": "美容健康"
+        case "pet_family_booking": "宠物家庭"
+        case "service_booking": "服务预约"
+        case "discount_claim", "discount_consult": "优惠领取"
         default: L("inquiryGeneral", language)
         }
         return Text(label)
@@ -140,11 +187,94 @@ struct MyInquiriesView: View {
             .background(KXColor.accentSoft, in: Capsule())
     }
 
-    private func open(_ inquiry: KaiXListingInquiryDTO) {
+    private func statusChip(_ status: String) -> some View {
+        Text(statusLabel(status))
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(statusColor(status))
+            .padding(.horizontal, 7)
+            .frame(height: 20)
+            .background(statusColor(status).opacity(0.12), in: Capsule())
+    }
+
+    private func actionButton(title: String, icon: String, filled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon)
+                .font(.caption.weight(.black))
+                .frame(maxWidth: .infinity)
+                .frame(height: 34)
+                .foregroundStyle(filled ? .white : KXColor.accent)
+                .background(filled ? KXColor.accent : KXColor.accent.opacity(0.08), in: Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func openConversation(_ inquiry: KaiXListingInquiryDTO) {
         if let conversationId = inquiry.conversation_id, !conversationId.isEmpty {
             router.open(.conversation(conversationId: conversationId))
-        } else if let listingId = inquiry.listing_id, !listingId.isEmpty {
+        } else {
+            openListing(inquiry)
+        }
+    }
+
+    private func openListing(_ inquiry: KaiXListingInquiryDTO) {
+        if let listingId = inquiry.listing_id, !listingId.isEmpty {
             router.open(.cityListingDetail(listingId: listingId))
+        }
+    }
+
+    private func normalizedDetails(_ inquiry: KaiXListingInquiryDTO) -> [(label: String, value: String)] {
+        (inquiry.details ?? []).compactMap { item in
+            let label = clean(item["label"] ?? item["name"])
+            let value = clean(item["value"] ?? item["text"])
+            guard !label.isEmpty, !value.isEmpty else { return nil }
+            return (label, value)
+        }
+    }
+
+    private func clean(_ value: String?) -> String {
+        (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func formattedDate(_ raw: String) -> String {
+        String(raw.prefix(10))
+    }
+
+    private func statusLabel(_ status: String) -> String {
+        switch status {
+        case "submitted", "new": "新提交"
+        case "reviewing": "处理中"
+        case "contacted": "已联系"
+        case "confirmed": "已确认"
+        case "rescheduled": "待改期"
+        case "rejected": "已拒绝"
+        case "withdrawn": "已撤回"
+        case "completed": "已完成"
+        case "closed": "已关闭"
+        case "spam": "已屏蔽"
+        case "reported": "已举报"
+        default: status.isEmpty ? "已提交" : status
+        }
+    }
+
+    private func statusColor(_ status: String) -> Color {
+        switch status {
+        case "submitted", "new": return KXColor.accent
+        case "reviewing", "contacted", "rescheduled": return .orange
+        case "confirmed", "completed": return .green
+        case "rejected", "withdrawn", "closed", "spam", "reported": return .secondary
+        default: return .secondary
+        }
+    }
+
+    private func typeIcon(_ type: String) -> String {
+        switch type {
+        case "job_apply": return "briefcase.fill"
+        case "rental_viewing", "rental_consult": return "house.fill"
+        case "secondhand_trade_request", "secondhand_consult": return "bag.fill"
+        case "restaurant_booking", "stay_booking", "travel_ticket_booking", "transfer_booking", "paperwork_booking", "moving_cleaning_booking", "life_setup_booking", "beauty_health_booking", "pet_family_booking", "service_booking":
+            return "calendar.badge.clock"
+        case "discount_claim", "discount_consult": return "ticket.fill"
+        default: return "doc.text.fill"
         }
     }
 

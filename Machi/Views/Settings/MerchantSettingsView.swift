@@ -33,8 +33,8 @@ struct MerchantSettingsView: View {
     @State private var applicationNote = ""
     @State private var selectedCategories: Set<String> = ["生活服务"]
 
-    private let businessTypes = ["餐厅美食", "咖啡甜品", "生活服务", "民宿 / 酒店", "景点票务", "教育培训", "房产服务", "招聘雇主", "搬家清洁", "翻译手续", "维修安装"]
-    private let serviceCategories = ["餐厅美食", "在线订座", "优惠团购", "民宿", "酒店", "温泉旅馆", "公寓式酒店", "景点门票", "一日游", "接送机", "翻译手续", "搬家清洁", "维修安装", "本地向导", "认证服务"]
+    private let businessTypes = ["餐厅美食", "咖啡甜品", "生活服务", "民宿 / 酒店", "景点票务", "旅行玩乐", "接送交通", "翻译手续", "搬家清洁", "生活开通", "美容健康", "宠物家庭", "房产服务", "招聘雇主"]
+    private let serviceCategories = ["餐厅美食", "在线订座", "优惠预约", "民宿", "酒店", "温泉旅馆", "公寓式酒店", "短住公寓", "景点门票", "一日游", "本地向导", "机场接送", "车站接送", "包车", "行李协助", "材料翻译", "市役所陪同", "银行卡协助", "手机卡协助", "租房申请协助", "签证材料整理", "搬家", "退房清洁", "粗大垃圾协助", "行李搬运", "家具家电配送协助", "手机卡开通", "网络开通", "水电煤协助", "地址登记协助", "粗大垃圾预约", "生活跑腿", "美容美发", "美甲", "按摩", "皮肤管理", "体检/牙科预约协助", "宠物照看", "亲子摄影", "家政陪同"]
 
     var body: some View {
         ScrollView {
@@ -90,7 +90,7 @@ struct MerchantSettingsView: View {
                 }
                 Spacer()
             }
-            Text("覆盖餐厅美食、在线订座、优惠、民宿酒店、景点票务、一日游、接送机和生活支持。提交后进入人工审核，Web 与 iOS 同步显示认证状态。")
+            Text("覆盖餐饮预约、住宿旅行、票务行程、接送交通、手续翻译、搬家清洁、生活开通和美容健康等高频本地服务。提交后进入人工审核，Web 与 iOS 同步显示认证状态。")
                 .font(.footnote.weight(.medium))
                 .foregroundStyle(.secondary)
                 .lineSpacing(3)

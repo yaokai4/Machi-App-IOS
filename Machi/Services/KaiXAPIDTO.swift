@@ -482,10 +482,36 @@ struct KaiXListingInquiryDTO: Codable, Identifiable, Equatable {
     let message: String?
     let status: String?
     let conversation_id: String?
+    let details: [[String: String]]?
+    let metadata: [String: KaiXAttributeValue]?
     let created_at: String?
     let listing: KaiXCityListingDTO?
     let from_user: KaiXUserDTO?
     let to_user: KaiXUserDTO?
+}
+
+struct KaiXListingInquiryReceiptDTO: Codable, Equatable {
+    let conversation_id: String?
+    let conversationId: String?
+    let inquiry_id: String?
+    let inquiryId: String?
+    let type: String?
+    let status: String?
+    let details: [[String: String]]?
+    let success_title: String?
+    let successTitle: String?
+
+    var resolvedConversationId: String {
+        conversation_id ?? conversationId ?? ""
+    }
+
+    var resolvedInquiryId: String {
+        inquiry_id ?? inquiryId ?? ""
+    }
+
+    var resolvedSuccessTitle: String {
+        success_title ?? successTitle ?? "已提交"
+    }
 }
 
 struct KaiXBusinessDocumentDTO: Codable, Identifiable, Equatable {

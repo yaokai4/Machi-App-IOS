@@ -398,7 +398,7 @@ struct MerchantDirectoryView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
 
-    private let categories = ["全部", "餐厅美食", "在线订座", "优惠团购", "民宿", "酒店", "景点门票", "一日游", "接送机", "翻译手续", "搬家清洁", "维修安装", "本地向导"]
+    private let categories = ["全部", "餐厅美食", "在线订座", "优惠预约", "民宿", "酒店", "景点门票", "一日游", "本地向导", "机场接送", "车站接送", "包车", "翻译手续", "租房申请协助", "搬家清洁", "生活开通", "美容健康"]
 
     private var cityName: String {
         KaiXRegionDirectory.resolve(regionCode: citySlug)?.cityName ?? citySlug

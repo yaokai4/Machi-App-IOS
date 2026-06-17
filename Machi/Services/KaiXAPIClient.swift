@@ -842,11 +842,10 @@ final class KaiXAPIClient {
         _ = try await request("POST", "/api/listings/\(id.encodedPathSegment)/report", body: ["reason": reason, "note": note])
     }
 
-    /// Contacting a listing opens (or reuses) a real DM thread server-side and
-    /// returns its conversation id so the caller can land the buyer in the chat
-    /// instead of a write-only confirmation. Empty string == no thread returned.
+    /// Contacting a listing creates a structured inquiry/booking/application
+    /// record and also opens (or reuses) a DM thread for follow-up.
     @discardableResult
-    func contactListing(_ id: String, message: String, details: [[String: String]] = []) async throws -> String {
+    func contactListing(_ id: String, message: String, details: [[String: String]] = []) async throws -> KaiXListingInquiryReceiptDTO {
         struct InquiryBody: Encodable { let message: String; let details: [[String: String]] }
         let data = try await request(
             "POST",
@@ -857,21 +856,39 @@ final class KaiXAPIClient {
         struct InquiryResponse: Decodable {
             let conversation_id: String?
             let conversationId: String?
-            let conversation: KaiXConversationDTO?
+            let inquiry_id: String?
+            let inquiryId: String?
+            let type: String?
+            let status: String?
+            let details: [[String: String]]?
+            let success_title: String?
+            let successTitle: String?
             let data: Nested?
 
             struct Nested: Decodable {
                 let conversation_id: String?
                 let conversationId: String?
+                let inquiry_id: String?
+                let inquiryId: String?
+                let type: String?
+                let status: String?
+                let details: [[String: String]]?
+                let success_title: String?
+                let successTitle: String?
             }
         }
-        let resp: InquiryResponse? = try? decode(data)
-        return resp?.conversation_id
-            ?? resp?.conversationId
-            ?? resp?.conversation?.id
-            ?? resp?.data?.conversation_id
-            ?? resp?.data?.conversationId
-            ?? ""
+        let resp: InquiryResponse = try decode(data)
+        return KaiXListingInquiryReceiptDTO(
+            conversation_id: resp.conversation_id ?? resp.data?.conversation_id,
+            conversationId: resp.conversationId ?? resp.data?.conversationId,
+            inquiry_id: resp.inquiry_id ?? resp.data?.inquiry_id,
+            inquiryId: resp.inquiryId ?? resp.data?.inquiryId,
+            type: resp.type ?? resp.data?.type,
+            status: resp.status ?? resp.data?.status,
+            details: resp.details ?? resp.data?.details,
+            success_title: resp.success_title ?? resp.data?.success_title,
+            successTitle: resp.successTitle ?? resp.data?.successTitle
+        )
     }
 
     // MARK: - Listing reviews（星级点评）+ 认证商家目录
