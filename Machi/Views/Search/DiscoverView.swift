@@ -3219,7 +3219,7 @@ struct CityListingDetailView: View {
     /// 商家与服务详情：团购套餐(展示「暂不支持线上购买」) + 菜单 + 预约·到店。
     @ViewBuilder
     private func merchantDetailSections(_ listing: KaiXCityListingDTO) -> some View {
-        if listing.type == "local_service" {
+        if listing.type == "local_service", KXListingCopy.serviceVertical(for: listing) == .foodRestaurant {
             let packages = listing.groupPackages
             let dishes = listing.menuDishes
             let openHours = KXListingCopy.attr(listing, "open_hours") ?? ""
@@ -4109,21 +4109,22 @@ struct CreateCityListingView: View {
     @State private var jobHolidays = ""
     @State private var jobBenefits = ""
     @State private var serviceBusinessName = ""
-    @State private var serviceType = "翻译手续"
+    @State private var serviceType = ""
     @State private var serviceArea = ""
     @State private var priceUnit = "预约咨询"
     @State private var availability = ""
     @State private var certifiedProvider = false
     @State private var serviceProcess = ""
     @State private var cancellationRule = ""
-    // 餐厅/商家:营业时间、人均、电话、预约、菜单、团购套餐
     @State private var openHours = ""
     @State private var priceRange = ""
+    @State private var nearStation = ""
     @State private var storePhone = ""
     @State private var reservationRequired = false
     @State private var reservationNote = ""
     @State private var menuText = ""
     @State private var packagesText = ""
+    @State private var languages = ""
     @State private var roomType = ""
     @State private var maxGuests = ""
     @State private var checkInTime = "15:00"
@@ -4133,6 +4134,34 @@ struct CreateCityListingView: View {
     @State private var inventoryNote = ""
     @State private var breakfastIncluded = false
     @State private var instantConfirmation = false
+    @State private var ticketType = ""
+    @State private var duration = ""
+    @State private var meetingPoint = ""
+    @State private var pickupService = false
+    @State private var includedItems = ""
+    @State private var notIncluded = ""
+    @State private var userPrepare = ""
+    @State private var licenseNote = ""
+    @State private var airportRoute = ""
+    @State private var vehicleType = ""
+    @State private var passengerCount = ""
+    @State private var luggageCount = ""
+    @State private var flightInfoNote = ""
+    @State private var waitingRule = ""
+    @State private var surchargeNote = ""
+    @State private var documentType = ""
+    @State private var requiredMaterials = ""
+    @State private var deliveryTime = ""
+    @State private var noResultGuarantee = false
+    @State private var propertySize = ""
+    @State private var itemVolume = ""
+    @State private var vehicleStaff = ""
+    @State private var projectType = ""
+    @State private var deviceBrandModel = ""
+    @State private var onsiteFee = ""
+    @State private var partsFee = ""
+    @State private var warrantyNote = ""
+    @State private var unavailableScope = ""
     @State private var merchantName = ""
     @State private var discountInfo = ""
     @State private var validUntil = ""
@@ -4188,7 +4217,25 @@ struct CreateCityListingView: View {
             return filled(companyName) && filled(workingHours)
         }
         if listingType == "local_service" {
-            return filled(serviceBusinessName) && filled(serviceArea) && filled(availability)
+            guard let vertical = serviceVertical, filled(category) else { return false }
+            switch vertical {
+            case .foodRestaurant, .diningBooking:
+                return filled(serviceBusinessName) && filled(serviceArea)
+            case .lodging:
+                return filled(serviceBusinessName) && filled(roomType) && filled(maxGuests)
+            case .attractionTicket, .dayTour:
+                return filled(serviceBusinessName) && filled(ticketType) && filled(availability)
+            case .airportTransfer:
+                return filled(serviceBusinessName) && filled(airportRoute) && filled(serviceArea)
+            case .paperworkTranslation:
+                return filled(serviceBusinessName) && filled(languages) && filled(documentType)
+            case .movingCleaning:
+                return filled(serviceBusinessName) && filled(serviceArea)
+            case .repairInstallation:
+                return filled(serviceBusinessName) && filled(projectType) && filled(serviceArea)
+            case .beautyPetLife:
+                return filled(serviceBusinessName) && filled(serviceArea)
+            }
         }
         if listingType == "discount" {
             return filled(merchantName) && filled(discountInfo) && filled(validUntil)
@@ -4200,7 +4247,86 @@ struct CreateCityListingView: View {
     }
 
     private var isStayService: Bool {
-        listingType == "local_service" && KXListingCopy.isStayCategory(serviceType)
+        serviceVertical == .lodging
+    }
+
+    private var serviceVertical: KXListingCopy.ServiceVertical? {
+        guard listingType == "local_service" else { return nil }
+        return KXListingCopy.serviceVertical(category: category, serviceType: serviceType)
+    }
+
+    private func applyServiceCategory(_ nextCategory: String) {
+        let previousVertical = serviceVertical
+        let nextVertical = KXListingCopy.serviceVertical(category: nextCategory, serviceType: nextCategory)
+        category = nextCategory
+        serviceType = nextCategory
+        if previousVertical != nextVertical {
+            clearServiceSpecificFields()
+        }
+    }
+
+    private func applyServiceType(_ nextType: String) {
+        let previousVertical = serviceVertical
+        let nextVertical = KXListingCopy.serviceVertical(category: nextType, serviceType: nextType)
+        serviceType = nextType
+        category = nextType
+        if previousVertical != nextVertical {
+            clearServiceSpecificFields()
+        }
+    }
+
+    private func clearServiceSpecificFields() {
+        serviceArea = ""
+        priceUnit = "预约咨询"
+        availability = ""
+        serviceProcess = ""
+        cancellationRule = ""
+        openHours = ""
+        priceRange = ""
+        nearStation = ""
+        storePhone = ""
+        reservationRequired = false
+        reservationNote = ""
+        menuText = ""
+        packagesText = ""
+        languages = ""
+        roomType = ""
+        maxGuests = ""
+        checkInTime = "15:00"
+        checkOutTime = "10:00"
+        minimumStay = "1 晚"
+        amenities = ""
+        inventoryNote = ""
+        breakfastIncluded = false
+        instantConfirmation = false
+        ticketType = ""
+        duration = ""
+        meetingPoint = ""
+        pickupService = false
+        includedItems = ""
+        notIncluded = ""
+        userPrepare = ""
+        licenseNote = ""
+        airportRoute = ""
+        vehicleType = ""
+        passengerCount = ""
+        luggageCount = ""
+        flightInfoNote = ""
+        waitingRule = ""
+        surchargeNote = ""
+        documentType = ""
+        requiredMaterials = ""
+        deliveryTime = ""
+        noResultGuarantee = false
+        propertySize = ""
+        itemVolume = ""
+        vehicleStaff = ""
+        projectType = ""
+        deviceBrandModel = ""
+        onsiteFee = ""
+        partsFee = ""
+        warrantyNote = ""
+        unavailableScope = ""
     }
 
     private var typeAccent: Color {
@@ -4226,7 +4352,27 @@ struct CreateCityListingView: View {
         } else if listingType == "work" || listingType == "job" || listingType == "hiring" {
             values += [filled(companyName), filled(workingHours)]
         } else if listingType == "local_service" {
-            values += [filled(serviceBusinessName), filled(serviceArea), filled(availability)]
+            values += [filled(category)]
+            if let vertical = serviceVertical {
+                switch vertical {
+                case .foodRestaurant, .diningBooking:
+                    values += [filled(serviceBusinessName), filled(serviceArea)]
+                case .lodging:
+                    values += [filled(serviceBusinessName), filled(roomType), filled(maxGuests)]
+                case .attractionTicket, .dayTour:
+                    values += [filled(serviceBusinessName), filled(ticketType), filled(availability)]
+                case .airportTransfer:
+                    values += [filled(serviceBusinessName), filled(airportRoute), filled(serviceArea)]
+                case .paperworkTranslation:
+                    values += [filled(serviceBusinessName), filled(languages), filled(documentType)]
+                case .movingCleaning, .beautyPetLife:
+                    values += [filled(serviceBusinessName), filled(serviceArea)]
+                case .repairInstallation:
+                    values += [filled(serviceBusinessName), filled(projectType), filled(serviceArea)]
+                }
+            } else {
+                values += [false]
+            }
         } else if listingType == "discount" {
             values += [filled(merchantName), filled(discountInfo), filled(validUntil)]
         } else if listingType == "secondhand" {
@@ -4242,7 +4388,8 @@ struct CreateCityListingView: View {
         if region == nil { return "请先选择可发布的城市" }
         if listingType == "rental" && !typeRequiredFieldsReady { return "请补充户型、面积、最近车站和入住时间" }
         if (listingType == "work" || listingType == "job" || listingType == "hiring") && !typeRequiredFieldsReady { return "请补充公司/店铺名和工作时间" }
-        if listingType == "local_service" && !typeRequiredFieldsReady { return "请补充服务方、服务范围和可预约时间" }
+        if listingType == "local_service" && serviceVertical == nil { return "请先选择商家与服务细分类" }
+        if listingType == "local_service" && !typeRequiredFieldsReady { return "请补齐当前服务分类的必填字段" }
         if listingType == "discount" && !typeRequiredFieldsReady { return "请补充商家、优惠内容和有效期" }
         if listingType == "secondhand" && !typeRequiredFieldsReady { return "请补充分类、价格和新旧程度，免费送可填 0" }
         return "信息完整后即可提交"
@@ -4494,7 +4641,11 @@ struct CreateCityListingView: View {
                     HStack(spacing: 6) {
                         ForEach(KXListingCopy.categories(for: listingType).filter { $0 != "全部" }, id: \.self) { chip in
                             Button {
-                                category = chip
+                                if listingType == "local_service" {
+                                    applyServiceCategory(chip)
+                                } else {
+                                    category = chip
+                                }
                             } label: {
                                 Text(chip)
                                     .font(.caption.weight(.bold))
@@ -4600,44 +4751,155 @@ struct CreateCityListingView: View {
                 }
             }
         } else if listingType == "local_service" {
-            KXListingSection(title: "服务预约字段", icon: "calendar.badge.clock") {
-                VStack(spacing: 12) {
-                    KXListingFormField(title: "服务方名称", placeholder: "个人 / 店铺 / 公司名称", icon: "person.crop.square", text: $serviceBusinessName)
-                    KXListingChoiceRow(title: "服务类型", icon: "wrench.and.screwdriver", options: ["餐厅美食", "餐饮点评", "优惠预约", "民宿", "酒店", "温泉旅馆", "公寓式酒店", "景点门票", "一日游", "接送机", "翻译手续", "搬家清洁", "维修安装", "租房申请协助", "本地向导"], selection: $serviceType, tint: typeAccent)
-                    KXListingFormField(title: "服务范围", placeholder: "东京 23 区 / 成田机场 / 富士山一日游 / 线上", icon: "map", text: $serviceArea)
-                    KXListingFormField(title: "价格单位", placeholder: "每小时 / 每次 / 预约咨询", icon: "yensign.circle", text: $priceUnit)
-                    KXListingFormField(title: "可预约时间", placeholder: "平日晚上 / 周末 / 需提前 2 天", icon: "calendar.badge.clock", text: $availability)
-                    KXListingToggleChip(title: "认证服务方", icon: "checkmark.seal", isOn: $certifiedProvider, tint: typeAccent)
-                    if !isStayService {
-                        HStack(spacing: 10) {
-                            KXListingFormField(title: "营业时间", placeholder: "11:00-22:00 / 周一休", icon: "clock", text: $openHours)
-                            KXListingFormField(title: "人均 / 价位", placeholder: "人均 ¥2,500-3,500", icon: "yensign.circle", text: $priceRange)
+            if let vertical = serviceVertical {
+                KXListingSection(title: KXListingCopy.serviceVerticalLabel(vertical), icon: "calendar.badge.clock") {
+                    VStack(spacing: 12) {
+                        KXListingFormField(title: "服务方名称", placeholder: "个人 / 店铺 / 公司名称", icon: "person.crop.square", text: $serviceBusinessName)
+                        KXListingChoiceRow(
+                            title: "细分类 / 服务类型",
+                            icon: "wrench.and.screwdriver",
+                            options: KXListingCopy.serviceTypeOptions(for: vertical),
+                            selection: Binding(get: { serviceType }, set: { applyServiceType($0) }),
+                            tint: typeAccent
+                        )
+
+                        switch vertical {
+                        case .foodRestaurant:
+                            KXListingFormField(title: "服务范围", placeholder: "东京 23 区 / 店内用餐 / 外带自取", icon: "map", text: $serviceArea)
+                            HStack(spacing: 10) {
+                                KXListingFormField(title: "营业时间", placeholder: "11:00-22:00 / 周一休", icon: "clock", text: $openHours)
+                                KXListingFormField(title: "人均 / 价位", placeholder: "人均 ¥2,500-3,500", icon: "yensign.circle", text: $priceRange)
+                            }
+                            KXListingFormField(title: "最近车站", placeholder: "新宿站东口步行 5 分钟", icon: "tram", text: $nearStation)
+                            KXListingFormField(title: "到店电话", placeholder: "03-1234-5678", icon: "phone", text: $storePhone)
+                            KXListingToggleChip(title: "仅限预约制", icon: "calendar.badge.clock", isOn: $reservationRequired, tint: typeAccent)
+                            KXListingFormField(title: "预约说明", placeholder: "如何预约、可预约时段、几人起订、是否需要定金", icon: "text.bubble", text: $reservationNote, lineLimit: 2...4)
+                            KXListingFormField(title: "菜单（每行：菜名 | 价格 | 备注）", placeholder: "麻婆豆腐 | ¥980\n口水鸡 | ¥1,080 | 微辣", icon: "fork.knife", text: $menuText, lineLimit: 3...10)
+                            KXListingFormField(title: "团购套餐（每行：套餐名 | 现价 | 原价 | 包含）", placeholder: "双人套餐 | ¥3,980 | ¥5,200 | 4菜1汤+2饮料", icon: "ticket", text: $packagesText, lineLimit: 3...8)
+                            KXListingFormField(title: "服务语言", placeholder: "中文 / 日文 / 英文", icon: "character.bubble", text: $languages)
+                            KXListingToggleChip(title: "认证商家", icon: "checkmark.seal", isOn: $certifiedProvider, tint: typeAccent)
+
+                        case .diningBooking:
+                            KXListingFormField(title: "服务范围", placeholder: "东京 23 区 / 线上预约 / 到店点评", icon: "map", text: $serviceArea)
+                            HStack(spacing: 10) {
+                                KXListingFormField(title: "营业时间", placeholder: "11:00-22:00 / 周一休", icon: "clock", text: $openHours)
+                                KXListingFormField(title: "价格区间", placeholder: "人均 ¥2,500-3,500", icon: "yensign.circle", text: $priceRange)
+                            }
+                            KXListingFormField(title: "最近车站", placeholder: "新宿站东口步行 5 分钟", icon: "tram", text: $nearStation)
+                            KXListingFormField(title: "到店电话", placeholder: "03-1234-5678", icon: "phone", text: $storePhone)
+                            KXListingFormField(title: "可预约时间", placeholder: "平日晚上 / 周末 / 需提前 2 天", icon: "calendar.badge.clock", text: $availability)
+                            KXListingToggleChip(title: "仅限预约制", icon: "calendar.badge.clock", isOn: $reservationRequired, tint: typeAccent)
+                            KXListingFormField(title: "预约说明", placeholder: "如何预约、可预约时段、几人起订、是否需要定金", icon: "text.bubble", text: $reservationNote, lineLimit: 2...4)
+                            KXListingFormField(title: "服务流程", placeholder: "预约确认、到店、点评或优惠使用流程", icon: "list.bullet.clipboard", text: $serviceProcess, lineLimit: 3...6)
+                            KXListingFormField(title: "取消/退款规则", placeholder: "例如 前一天可取消，定金不可退请写清", icon: "arrow.uturn.left.circle", text: $cancellationRule, lineLimit: 2...5)
+                            KXListingFormField(title: "服务语言", placeholder: "中文 / 日文 / 英文", icon: "character.bubble", text: $languages)
+                            KXListingToggleChip(title: "认证服务方", icon: "checkmark.seal", isOn: $certifiedProvider, tint: typeAccent)
+
+                        case .lodging:
+                            HStack(spacing: 10) {
+                                KXListingFormField(title: "房型", placeholder: "大床房 / 双床房 / 整套民宿", icon: "bed.double", text: $roomType)
+                                KXListingFormField(title: "可住人数", placeholder: "2", icon: "person.2", text: $maxGuests, keyboard: .numberPad)
+                            }
+                            KXListingFormField(title: "每晚/起步价格", placeholder: "每晚 / 每人 / 预约咨询", icon: "yensign.circle", text: $priceUnit)
+                            HStack(spacing: 10) {
+                                KXListingFormField(title: "入住时间", placeholder: "15:00", icon: "arrow.right.to.line", text: $checkInTime)
+                                KXListingFormField(title: "退房时间", placeholder: "10:00", icon: "arrow.left.to.line", text: $checkOutTime)
+                            }
+                            KXListingFormField(title: "最少入住晚数", placeholder: "1 晚 / 2 晚起", icon: "moon.stars", text: $minimumStay)
+                            KXListingFormField(title: "设施服务", placeholder: "Wi-Fi、厨房、洗衣机、停车场、温泉、行李寄存", icon: "sparkles", text: $amenities, lineLimit: 2...4)
+                            KXListingFormField(title: "房量与日期说明", placeholder: "可订日期、剩余房量、旺季限制、儿童入住规则", icon: "calendar", text: $inventoryNote, lineLimit: 2...5)
+                            HStack(spacing: 10) {
+                                KXListingToggleChip(title: "含早餐", icon: "cup.and.saucer", isOn: $breakfastIncluded, tint: typeAccent)
+                                KXListingToggleChip(title: "即时确认", icon: "bolt", isOn: $instantConfirmation, tint: typeAccent)
+                            }
+                            KXListingFormField(title: "取消规则", placeholder: "入住前几天可取消、旺季不可退等", icon: "arrow.uturn.left.circle", text: $cancellationRule, lineLimit: 2...5)
+                            KXListingFormField(title: "资质/许可说明", placeholder: "旅馆业许可 / 民泊备案 / 可接待范围", icon: "checkmark.shield", text: $licenseNote, lineLimit: 2...4)
+
+                        case .attractionTicket, .dayTour:
+                            KXListingFormField(title: "票种", placeholder: vertical == .dayTour ? "成人 / 儿童 / 私人团 / 拼团" : "成人票 / 儿童票 / 套票 / 电子票", icon: "ticket", text: $ticketType)
+                            KXListingFormField(title: "日期 / 有效期", placeholder: "指定日期 / 购买后 30 天有效 / 每周六出发", icon: "calendar.badge.clock", text: $availability)
+                            KXListingFormField(title: "时长", placeholder: vertical == .dayTour ? "约 8 小时" : "约 2 小时 / 当日有效", icon: "clock", text: $duration)
+                            KXListingFormField(title: "集合地点", placeholder: "新宿站西口 / 景区入口 / 酒店接送范围", icon: "mappin.and.ellipse", text: $meetingPoint)
+                            KXListingFormField(title: "包含内容", placeholder: "门票、导览、交通、餐食等", icon: "checklist", text: $includedItems, lineLimit: 2...5)
+                            KXListingFormField(title: "不包含内容", placeholder: "个人消费、餐饮、保险等", icon: "minus.circle", text: $notIncluded, lineLimit: 2...5)
+                            KXListingFormField(title: "用户需准备", placeholder: "护照、证件、舒适鞋、雨具等", icon: "person.crop.circle.badge.questionmark", text: $userPrepare, lineLimit: 2...5)
+                            if vertical == .dayTour {
+                                KXListingToggleChip(title: "含酒店接送", icon: "bus", isOn: $pickupService, tint: typeAccent)
+                            }
+                            KXListingFormField(title: "取消规则", placeholder: "票务不可退 / 出发前 3 天可取消", icon: "arrow.uturn.left.circle", text: $cancellationRule, lineLimit: 2...5)
+                            KXListingFormField(title: "资质/许可说明", placeholder: "票务来源、旅行资质、保险或导游说明", icon: "checkmark.shield", text: $licenseNote, lineLimit: 2...4)
+
+                        case .airportTransfer:
+                            KXListingFormField(title: "机场/路线", placeholder: "成田机场 - 东京 23 区 / 羽田 - 横滨", icon: "airplane", text: $airportRoute)
+                            KXListingFormField(title: "服务范围", placeholder: "可接送区域、是否支持跨县、夜间范围", icon: "map", text: $serviceArea)
+                            HStack(spacing: 10) {
+                                KXListingFormField(title: "车型", placeholder: "轿车 / Alphard / Hiace", icon: "car", text: $vehicleType)
+                                KXListingFormField(title: "人数", placeholder: "4", icon: "person.2", text: $passengerCount, keyboard: .numberPad)
+                            }
+                            KXListingFormField(title: "行李数", placeholder: "2 个 28 寸 + 2 个随身", icon: "suitcase", text: $luggageCount)
+                            KXListingFormField(title: "航班号说明", placeholder: "是否需要航班号、延误如何处理", icon: "airplane.arrival", text: $flightInfoNote, lineLimit: 2...4)
+                            KXListingFormField(title: "等待规则", placeholder: "免费等待 60 分钟，超时每 30 分钟加收", icon: "timer", text: $waitingRule, lineLimit: 2...4)
+                            KXListingFormField(title: "夜间/追加费用", placeholder: "夜间、儿童座椅、大件行李、高速费说明", icon: "moon.stars", text: $surchargeNote, lineLimit: 2...4)
+                            KXListingFormField(title: "取消规则", placeholder: "出发前多久可取消，临时取消费用", icon: "arrow.uturn.left.circle", text: $cancellationRule, lineLimit: 2...5)
+
+                        case .paperworkTranslation:
+                            KXListingFormField(title: "服务语言", placeholder: "中日 / 中英 / 日英 / 多语言", icon: "character.bubble", text: $languages)
+                            KXListingFormField(title: "文件/手续类型", placeholder: "住民票翻译 / 签证材料 / 租房申请 / 电话代沟通", icon: "doc.text", text: $documentType)
+                            KXListingFormField(title: "所需材料", placeholder: "护照、在留卡、原文件、申请表等", icon: "folder.badge.plus", text: $requiredMaterials, lineLimit: 2...5)
+                            KXListingFormField(title: "交付时间", placeholder: "最快当天 / 2-3 个工作日 / 加急另议", icon: "clock.badge.checkmark", text: $deliveryTime)
+                            KXListingFormField(title: "服务流程", placeholder: "资料确认、报价、翻译/代办、交付方式", icon: "list.bullet.clipboard", text: $serviceProcess, lineLimit: 3...6)
+                            KXListingFormField(title: "用户需准备", placeholder: "需本人确认、签字、原件邮寄或线上提交的信息", icon: "person.crop.circle.badge.questionmark", text: $userPrepare, lineLimit: 2...5)
+                            KXListingToggleChip(title: "不保证结果", icon: "exclamationmark.shield", isOn: $noResultGuarantee, tint: typeAccent)
+                            KXListingFormField(title: "资质/许可说明", placeholder: "行政书士、翻译资质、合作机构或免责声明", icon: "checkmark.shield", text: $licenseNote, lineLimit: 2...4)
+                            KXListingFormField(title: "取消规则", placeholder: "开始处理后是否可退、材料错误如何处理", icon: "arrow.uturn.left.circle", text: $cancellationRule, lineLimit: 2...5)
+
+                        case .movingCleaning:
+                            KXListingFormField(title: "服务范围", placeholder: "东京 23 区 / 横滨 / 清洁可线上估价", icon: "map", text: $serviceArea)
+                            HStack(spacing: 10) {
+                                KXListingFormField(title: "房型/面积", placeholder: "1K / 45 平 / 店铺 20 平", icon: "square.split.2x2", text: $propertySize)
+                                KXListingFormField(title: "物品量", placeholder: "纸箱 20 个 / 大件 3 件", icon: "shippingbox", text: $itemVolume)
+                            }
+                            KXListingFormField(title: "车辆/人员", placeholder: "2 吨车 + 2 人 / 1 人上门", icon: "truck.box", text: $vehicleStaff)
+                            KXListingFormField(title: "包含内容", placeholder: "搬运、拆装、基础清洁、垃圾袋等", icon: "checklist", text: $includedItems, lineLimit: 2...5)
+                            KXListingFormField(title: "不包含内容", placeholder: "空调拆装、粗大垃圾处理、停车费等", icon: "minus.circle", text: $notIncluded, lineLimit: 2...5)
+                            KXListingFormField(title: "用户需准备", placeholder: "提前打包、预约电梯、停车位、垃圾券等", icon: "person.crop.circle.badge.questionmark", text: $userPrepare, lineLimit: 2...5)
+                            KXListingFormField(title: "追加费用", placeholder: "楼梯、大件、远距离、夜间、停车费说明", icon: "plus.circle", text: $surchargeNote, lineLimit: 2...4)
+                            KXListingFormField(title: "取消规则", placeholder: "预约前一天取消费、雨天改期等", icon: "arrow.uturn.left.circle", text: $cancellationRule, lineLimit: 2...5)
+
+                        case .repairInstallation:
+                            KXListingFormField(title: "设备/项目类型", placeholder: "空调 / 洗衣机 / 家具组装 / 网络设置", icon: "wrench.and.screwdriver", text: $projectType)
+                            KXListingFormField(title: "品牌/型号", placeholder: "Panasonic / IKEA / 型号或尺寸", icon: "tag", text: $deviceBrandModel)
+                            KXListingFormField(title: "上门区域", placeholder: "东京 23 区 / 千叶部分地区", icon: "map", text: $serviceArea)
+                            HStack(spacing: 10) {
+                                KXListingFormField(title: "上门费", placeholder: "¥3,000 起", icon: "house.and.flag", text: $onsiteFee)
+                                KXListingFormField(title: "配件费", placeholder: "按实收 / 另报价", icon: "shippingbox", text: $partsFee)
+                            }
+                            KXListingFormField(title: "保修说明", placeholder: "施工后 7 天 / 仅保安装不保设备", icon: "checkmark.shield", text: $warrantyNote, lineLimit: 2...4)
+                            KXListingFormField(title: "不可服务范围", placeholder: "高空作业、燃气、结构改造等不可接", icon: "xmark.shield", text: $unavailableScope, lineLimit: 2...4)
+                            KXListingFormField(title: "取消规则", placeholder: "上门前多久可取消、空跑费说明", icon: "arrow.uturn.left.circle", text: $cancellationRule, lineLimit: 2...5)
+
+                        case .beautyPetLife:
+                            KXListingFormField(title: "服务范围", placeholder: "店内 / 上门 / 东京 23 区 / 线上咨询", icon: "map", text: $serviceArea)
+                            HStack(spacing: 10) {
+                                KXListingFormField(title: "营业时间", placeholder: "10:00-20:00 / 预约制", icon: "clock", text: $openHours)
+                                KXListingFormField(title: "价格区间", placeholder: "¥3,000 起 / 套餐另议", icon: "yensign.circle", text: $priceRange)
+                            }
+                            KXListingFormField(title: "可预约时间", placeholder: "平日晚上 / 周末 / 需提前 2 天", icon: "calendar.badge.clock", text: $availability)
+                            KXListingFormField(title: "包含内容", placeholder: "洗剪吹、护理、上门陪诊、生活协助等", icon: "checklist", text: $includedItems, lineLimit: 2...5)
+                            KXListingFormField(title: "不包含内容", placeholder: "交通费、药品、特殊护理等", icon: "minus.circle", text: $notIncluded, lineLimit: 2...5)
+                            KXListingFormField(title: "用户需准备", placeholder: "宠物疫苗证明、照片、上门地址、预约偏好等", icon: "person.crop.circle.badge.questionmark", text: $userPrepare, lineLimit: 2...5)
+                            KXListingFormField(title: "取消规则", placeholder: "预约前一天可取消，临时取消费用", icon: "arrow.uturn.left.circle", text: $cancellationRule, lineLimit: 2...5)
+                            KXListingFormField(title: "资质/许可说明", placeholder: "美容师、宠物服务、护理相关资质或说明", icon: "checkmark.shield", text: $licenseNote, lineLimit: 2...4)
                         }
-                        KXListingFormField(title: "到店电话", placeholder: "03-1234-5678", icon: "phone", text: $storePhone)
-                        KXListingToggleChip(title: "仅限预约制", icon: "calendar.badge.clock", isOn: $reservationRequired, tint: typeAccent)
-                        KXListingFormField(title: "预约说明", placeholder: "如何预约、可预约时段、几人起订、是否需要定金", icon: "text.bubble", text: $reservationNote, lineLimit: 2...4)
-                        KXListingFormField(title: "菜单（每行：菜名 | 价格 | 备注）", placeholder: "麻婆豆腐 | ¥980\n口水鸡 | ¥1,080 | 微辣", icon: "fork.knife", text: $menuText, lineLimit: 3...10)
-                        KXListingFormField(title: "团购套餐（每行：套餐名 | 现价 | 原价 | 包含；先展示不支持购买）", placeholder: "双人套餐 | ¥3,980 | ¥5,200 | 4菜1汤+2饮料", icon: "ticket", text: $packagesText, lineLimit: 3...8)
                     }
-                    if isStayService {
-                        HStack(spacing: 10) {
-                            KXListingFormField(title: "房型", placeholder: "大床房 / 双床房 / 整套民宿", icon: "bed.double", text: $roomType)
-                            KXListingFormField(title: "可住人数", placeholder: "2", icon: "person.2", text: $maxGuests, keyboard: .numberPad)
-                        }
-                        HStack(spacing: 10) {
-                            KXListingFormField(title: "入住时间", placeholder: "15:00", icon: "arrow.right.to.line", text: $checkInTime)
-                            KXListingFormField(title: "退房时间", placeholder: "10:00", icon: "arrow.left.to.line", text: $checkOutTime)
-                        }
-                        KXListingFormField(title: "最少入住", placeholder: "1 晚 / 2 晚起", icon: "moon.stars", text: $minimumStay)
-                        KXListingFormField(title: "设施服务", placeholder: "Wi-Fi、厨房、洗衣机、停车场、温泉、行李寄存", icon: "sparkles", text: $amenities, lineLimit: 2...4)
-                        KXListingFormField(title: "房量与日期说明", placeholder: "可订日期、剩余房量、旺季限制、儿童入住规则", icon: "calendar", text: $inventoryNote, lineLimit: 2...5)
-                        HStack(spacing: 10) {
-                            KXListingToggleChip(title: "含早餐", icon: "cup.and.saucer", isOn: $breakfastIncluded, tint: typeAccent)
-                            KXListingToggleChip(title: "即时确认", icon: "bolt", isOn: $instantConfirmation, tint: typeAccent)
-                        }
-                    }
-                    KXListingFormField(title: "服务流程", placeholder: "写清预约、准备材料、到场、旅行/景点集合或线上服务步骤", icon: "list.bullet.clipboard", text: $serviceProcess, lineLimit: 3...6)
-                    KXListingFormField(title: "取消/退款规则", placeholder: "例如 前一天可取消，票务/酒店/一日游请写清不可退规则", icon: "arrow.uturn.left.circle", text: $cancellationRule, lineLimit: 2...5)
+                }
+            } else {
+                KXListingSection(title: "选择服务细分类", icon: "square.grid.2x2") {
+                    KXListingHintRow(
+                        text: "请先在基本信息里选择一个标准服务分类，例如 餐厅美食、民宿、景点门票、一日游、接送机、翻译手续、搬家清洁或维修安装。",
+                        icon: "hand.tap",
+                        tint: typeAccent
+                    )
                 }
             }
         } else if listingType == "discount" {
@@ -4715,7 +4977,8 @@ struct CreateCityListingView: View {
             jobBenefits = raw("benefits")
         case "local_service":
             serviceBusinessName = raw("business_name")
-            serviceType = raw("service_type").isEmpty ? (listing.category ?? serviceType) : raw("service_type")
+            serviceType = raw("service_type").isEmpty ? (listing.category ?? "") : raw("service_type")
+            if category.isEmpty { category = serviceType }
             serviceArea = raw("service_area")
             priceUnit = raw("price_unit").isEmpty ? priceUnit : raw("price_unit")
             availability = raw("availability")
@@ -4724,11 +4987,13 @@ struct CreateCityListingView: View {
             cancellationRule = raw("cancellation_rule")
             openHours = raw("open_hours")
             priceRange = raw("price_range")
+            nearStation = raw("near_station")
             storePhone = raw("store_phone")
             reservationRequired = bool("reservation_required")
             reservationNote = raw("reservation_note")
             menuText = KXMerchantInput.menuLines(listing)
             packagesText = KXMerchantInput.packageLines(listing)
+            languages = raw("languages")
             roomType = raw("room_type")
             maxGuests = raw("max_guests")
             checkInTime = raw("check_in_time").isEmpty ? checkInTime : raw("check_in_time")
@@ -4738,6 +5003,34 @@ struct CreateCityListingView: View {
             inventoryNote = raw("inventory_note")
             breakfastIncluded = bool("breakfast_included")
             instantConfirmation = bool("instant_confirmation")
+            ticketType = raw("ticket_type")
+            duration = raw("duration")
+            meetingPoint = raw("meeting_point")
+            pickupService = bool("pickup_service")
+            includedItems = raw("included_items")
+            notIncluded = raw("not_included")
+            userPrepare = raw("user_prepare")
+            licenseNote = raw("license_note")
+            airportRoute = raw("airport_route")
+            vehicleType = raw("vehicle_type")
+            passengerCount = raw("passenger_count")
+            luggageCount = raw("luggage_count")
+            flightInfoNote = raw("flight_info_note")
+            waitingRule = raw("waiting_rule")
+            surchargeNote = raw("surcharge_note")
+            documentType = raw("document_type")
+            requiredMaterials = raw("required_materials")
+            deliveryTime = raw("delivery_time")
+            noResultGuarantee = bool("no_result_guarantee")
+            propertySize = raw("property_size")
+            itemVolume = raw("item_volume")
+            vehicleStaff = raw("vehicle_staff")
+            projectType = raw("project_type")
+            deviceBrandModel = raw("device_brand_model")
+            onsiteFee = raw("onsite_fee")
+            partsFee = raw("parts_fee")
+            warrantyNote = raw("warranty_note")
+            unavailableScope = raw("unavailable_scope")
         case "discount":
             merchantName = raw("merchant_name")
             discountInfo = raw("discount_info")
@@ -4935,33 +5228,124 @@ struct CreateCityListingView: View {
             ]
         }
         if listingType == "local_service" {
-            return [
+            var result: [String: KaiXAttributeValue] = [
                 "business_name": .init(string: serviceBusinessName),
-                "service_type": .init(string: serviceType),
-                "service_area": .init(string: serviceArea.isEmpty ? location : serviceArea),
-                "price_unit": .init(string: priceUnit),
-                "availability": .init(string: availability),
+                "service_type": .init(string: serviceType.isEmpty ? category : serviceType),
                 "certified_provider": .init(bool: certifiedProvider),
-                "room_type": .init(string: roomType),
-                "max_guests": .init(string: maxGuests),
-                "check_in_time": .init(string: checkInTime),
-                "check_out_time": .init(string: checkOutTime),
-                "minimum_stay": .init(string: minimumStay),
-                "amenities": .init(string: amenities),
-                "inventory_note": .init(string: inventoryNote),
-                "breakfast_included": .init(bool: breakfastIncluded),
-                "instant_confirmation": .init(bool: instantConfirmation),
-                "service_process": .init(string: serviceProcess),
-                "cancellation_rule": .init(string: cancellationRule),
-                "open_hours": .init(string: openHours),
-                "price_range": .init(string: priceRange),
-                "store_phone": .init(string: storePhone),
-                "reservation_required": .init(bool: reservationRequired),
-                "reservation_note": .init(string: reservationNote),
-                // 菜单 / 团购套餐:每行一项、| 分隔 → JSON 字符串,后端解析成数组。
-                "menu": .init(string: KXMerchantInput.encodeMenu(menuText)),
-                "packages": .init(string: KXMerchantInput.encodePackages(packagesText)),
             ]
+            guard let vertical = serviceVertical else { return result }
+            result["service_vertical"] = .init(string: vertical.rawValue)
+
+            switch vertical {
+            case .foodRestaurant:
+                result["service_area"] = .init(string: serviceArea.isEmpty ? location : serviceArea)
+                result["open_hours"] = .init(string: openHours)
+                result["price_range"] = .init(string: priceRange)
+                result["near_station"] = .init(string: nearStation)
+                result["store_phone"] = .init(string: storePhone)
+                result["reservation_required"] = .init(bool: reservationRequired)
+                result["reservation_note"] = .init(string: reservationNote)
+                result["languages"] = .init(string: languages)
+                result["menu"] = .init(string: KXMerchantInput.encodeMenu(menuText))
+                result["packages"] = .init(string: KXMerchantInput.encodePackages(packagesText))
+            case .diningBooking:
+                result["service_area"] = .init(string: serviceArea.isEmpty ? location : serviceArea)
+                result["open_hours"] = .init(string: openHours)
+                result["price_range"] = .init(string: priceRange)
+                result["near_station"] = .init(string: nearStation)
+                result["store_phone"] = .init(string: storePhone)
+                result["availability"] = .init(string: availability)
+                result["booking_required"] = .init(bool: reservationRequired)
+                result["reservation_required"] = .init(bool: reservationRequired)
+                result["reservation_note"] = .init(string: reservationNote)
+                result["service_process"] = .init(string: serviceProcess)
+                result["cancellation_rule"] = .init(string: cancellationRule)
+                result["languages"] = .init(string: languages)
+            case .lodging:
+                result["room_type"] = .init(string: roomType)
+                result["max_guests"] = .init(string: maxGuests)
+                result["price_unit"] = .init(string: priceUnit)
+                result["check_in_time"] = .init(string: checkInTime)
+                result["check_out_time"] = .init(string: checkOutTime)
+                result["minimum_stay"] = .init(string: minimumStay)
+                result["amenities"] = .init(string: amenities)
+                result["inventory_note"] = .init(string: inventoryNote)
+                result["breakfast_included"] = .init(bool: breakfastIncluded)
+                result["instant_confirmation"] = .init(bool: instantConfirmation)
+                result["cancellation_rule"] = .init(string: cancellationRule)
+                result["license_note"] = .init(string: licenseNote)
+            case .attractionTicket:
+                result["ticket_type"] = .init(string: ticketType)
+                result["availability"] = .init(string: availability)
+                result["duration"] = .init(string: duration)
+                result["meeting_point"] = .init(string: meetingPoint)
+                result["included_items"] = .init(string: includedItems)
+                result["not_included"] = .init(string: notIncluded)
+                result["user_prepare"] = .init(string: userPrepare)
+                result["cancellation_rule"] = .init(string: cancellationRule)
+                result["license_note"] = .init(string: licenseNote)
+            case .dayTour:
+                result["ticket_type"] = .init(string: ticketType)
+                result["availability"] = .init(string: availability)
+                result["duration"] = .init(string: duration)
+                result["meeting_point"] = .init(string: meetingPoint)
+                result["included_items"] = .init(string: includedItems)
+                result["not_included"] = .init(string: notIncluded)
+                result["user_prepare"] = .init(string: userPrepare)
+                result["pickup_service"] = .init(bool: pickupService)
+                result["cancellation_rule"] = .init(string: cancellationRule)
+                result["license_note"] = .init(string: licenseNote)
+            case .airportTransfer:
+                result["airport_route"] = .init(string: airportRoute)
+                result["service_area"] = .init(string: serviceArea.isEmpty ? location : serviceArea)
+                result["vehicle_type"] = .init(string: vehicleType)
+                result["passenger_count"] = .init(string: passengerCount)
+                result["luggage_count"] = .init(string: luggageCount)
+                result["flight_info_note"] = .init(string: flightInfoNote)
+                result["waiting_rule"] = .init(string: waitingRule)
+                result["surcharge_note"] = .init(string: surchargeNote)
+                result["cancellation_rule"] = .init(string: cancellationRule)
+            case .paperworkTranslation:
+                result["languages"] = .init(string: languages)
+                result["document_type"] = .init(string: documentType)
+                result["required_materials"] = .init(string: requiredMaterials)
+                result["delivery_time"] = .init(string: deliveryTime)
+                result["service_process"] = .init(string: serviceProcess)
+                result["user_prepare"] = .init(string: userPrepare)
+                result["no_result_guarantee"] = .init(bool: noResultGuarantee)
+                result["license_note"] = .init(string: licenseNote)
+                result["cancellation_rule"] = .init(string: cancellationRule)
+            case .movingCleaning:
+                result["service_area"] = .init(string: serviceArea.isEmpty ? location : serviceArea)
+                result["property_size"] = .init(string: propertySize)
+                result["item_volume"] = .init(string: itemVolume)
+                result["vehicle_staff"] = .init(string: vehicleStaff)
+                result["included_items"] = .init(string: includedItems)
+                result["not_included"] = .init(string: notIncluded)
+                result["user_prepare"] = .init(string: userPrepare)
+                result["surcharge_note"] = .init(string: surchargeNote)
+                result["cancellation_rule"] = .init(string: cancellationRule)
+            case .repairInstallation:
+                result["project_type"] = .init(string: projectType)
+                result["device_brand_model"] = .init(string: deviceBrandModel)
+                result["service_area"] = .init(string: serviceArea.isEmpty ? location : serviceArea)
+                result["onsite_fee"] = .init(string: onsiteFee)
+                result["parts_fee"] = .init(string: partsFee)
+                result["warranty_note"] = .init(string: warrantyNote)
+                result["unavailable_scope"] = .init(string: unavailableScope)
+                result["cancellation_rule"] = .init(string: cancellationRule)
+            case .beautyPetLife:
+                result["service_area"] = .init(string: serviceArea.isEmpty ? location : serviceArea)
+                result["open_hours"] = .init(string: openHours)
+                result["price_range"] = .init(string: priceRange)
+                result["availability"] = .init(string: availability)
+                result["included_items"] = .init(string: includedItems)
+                result["not_included"] = .init(string: notIncluded)
+                result["user_prepare"] = .init(string: userPrepare)
+                result["cancellation_rule"] = .init(string: cancellationRule)
+                result["license_note"] = .init(string: licenseNote)
+            }
+            return result
         }
         if listingType == "discount" {
             return [
@@ -5572,10 +5956,23 @@ private struct KXListingBadge: View {
 }
 
 enum KXListingCopy {
+    enum ServiceVertical: String, CaseIterable {
+        case foodRestaurant = "food_restaurant"
+        case diningBooking = "dining_booking"
+        case lodging = "lodging"
+        case attractionTicket = "attraction_ticket"
+        case dayTour = "day_tour"
+        case airportTransfer = "airport_transfer"
+        case paperworkTranslation = "paperwork_translation"
+        case movingCleaning = "moving_cleaning"
+        case repairInstallation = "repair_installation"
+        case beautyPetLife = "beauty_pet_life"
+    }
+
     /// 餐厅美食：菜系类目（与 web ListingKit FOOD_CATEGORIES 同步）。
     static let foodCategories = ["中华料理", "日本料理", "居酒屋", "烧肉火锅", "拉面", "寿司海鲜", "咖啡甜品", "西餐", "韩国料理"]
     /// 餐厅美食分区还包含两个老类目（已有数据继续生效）。
-    static let foodSectionCategories = foodCategories + ["餐饮点评", "优惠预约"]
+    static let foodSectionCategories = ["餐厅美食"] + foodCategories + ["餐饮点评", "优惠预约"]
     /// 生活服务同时兼容新细分类与旧伞类目，避免筛选区漏掉真实服务。
     static let lifeSectionCategories = ["翻译手续", "签证/手续协助", "翻译", "搬家清洁", "搬家", "清洁", "维修安装", "美容美发", "宠物服务", "生活支持", "租房申请协助", "认证服务"]
     static let homestayCategories = ["民宿"]
@@ -5598,6 +5995,110 @@ enum KXListingCopy {
 
     static func isFoodCategory(_ category: String?) -> Bool {
         foodSectionCategories.contains(category ?? "")
+    }
+
+    private static let serviceVerticalByCategory: [String: ServiceVertical] = [
+        "餐厅美食": .foodRestaurant,
+        "中华料理": .foodRestaurant,
+        "日本料理": .foodRestaurant,
+        "居酒屋": .foodRestaurant,
+        "烧肉火锅": .foodRestaurant,
+        "拉面": .foodRestaurant,
+        "寿司海鲜": .foodRestaurant,
+        "咖啡甜品": .foodRestaurant,
+        "西餐": .foodRestaurant,
+        "韩国料理": .foodRestaurant,
+        "餐饮点评": .diningBooking,
+        "优惠预约": .diningBooking,
+        "民宿": .lodging,
+        "酒店": .lodging,
+        "温泉旅馆": .lodging,
+        "公寓式酒店": .lodging,
+        "酒店民宿": .lodging,
+        "景点门票": .attractionTicket,
+        "一日游": .dayTour,
+        "本地向导": .dayTour,
+        "接送机": .airportTransfer,
+        "翻译手续": .paperworkTranslation,
+        "签证/手续协助": .paperworkTranslation,
+        "翻译": .paperworkTranslation,
+        "租房申请协助": .paperworkTranslation,
+        "认证服务": .paperworkTranslation,
+        "搬家清洁": .movingCleaning,
+        "搬家": .movingCleaning,
+        "清洁": .movingCleaning,
+        "维修安装": .repairInstallation,
+        "美容美发": .beautyPetLife,
+        "宠物服务": .beautyPetLife,
+        "生活支持": .beautyPetLife,
+    ]
+
+    static func serviceVertical(category: String?, serviceType: String?) -> ServiceVertical? {
+        let categoryKey = category?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let serviceKey = serviceType?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if let vertical = ServiceVertical(rawValue: serviceKey) { return vertical }
+        if let vertical = serviceVerticalByCategory[categoryKey] { return vertical }
+        if let vertical = serviceVerticalByCategory[serviceKey] { return vertical }
+        return nil
+    }
+
+    static func serviceVertical(for listing: KaiXCityListingDTO) -> ServiceVertical? {
+        let explicit = listing.attributes?["service_vertical"]?.listingDisplayValue.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if let vertical = ServiceVertical(rawValue: explicit) { return vertical }
+        let serviceType = listing.attributes?["service_type"]?.listingDisplayValue
+        if let vertical = serviceVertical(category: listing.category, serviceType: serviceType) { return vertical }
+        let attrs = listing.attributes ?? [:]
+        if attrs["menu"] != nil || attrs["packages"] != nil { return .foodRestaurant }
+        if attrs["room_type"] != nil || attrs["max_guests"] != nil { return .lodging }
+        if attrs["airport_route"] != nil || attrs["flight_info_note"] != nil { return .airportTransfer }
+        if attrs["document_type"] != nil || attrs["required_materials"] != nil { return .paperworkTranslation }
+        if attrs["project_type"] != nil || attrs["device_brand_model"] != nil { return .repairInstallation }
+        if attrs["property_size"] != nil || attrs["vehicle_staff"] != nil { return .movingCleaning }
+        if attrs["ticket_type"] != nil {
+            if attrs["pickup_service"] != nil { return .dayTour }
+            return .attractionTicket
+        }
+        return nil
+    }
+
+    static func serviceVerticalLabel(_ vertical: ServiceVertical) -> String {
+        switch vertical {
+        case .foodRestaurant: "餐厅美食字段"
+        case .diningBooking: "餐饮点评 / 优惠预约字段"
+        case .lodging: "住宿字段"
+        case .attractionTicket: "景点门票字段"
+        case .dayTour: "一日游字段"
+        case .airportTransfer: "接送机字段"
+        case .paperworkTranslation: "翻译 / 手续字段"
+        case .movingCleaning: "搬家 / 清洁字段"
+        case .repairInstallation: "维修安装字段"
+        case .beautyPetLife: "美容美发 / 宠物 / 生活支持字段"
+        }
+    }
+
+    static func serviceTypeOptions(for vertical: ServiceVertical) -> [String] {
+        switch vertical {
+        case .foodRestaurant:
+            return ["餐厅美食"] + foodCategories
+        case .diningBooking:
+            return ["餐饮点评", "优惠预约"]
+        case .lodging:
+            return ["民宿", "酒店", "温泉旅馆", "公寓式酒店"]
+        case .attractionTicket:
+            return ["景点门票"]
+        case .dayTour:
+            return ["一日游", "本地向导"]
+        case .airportTransfer:
+            return ["接送机"]
+        case .paperworkTranslation:
+            return ["翻译手续", "签证/手续协助", "翻译", "租房申请协助", "认证服务"]
+        case .movingCleaning:
+            return ["搬家清洁", "搬家", "清洁"]
+        case .repairInstallation:
+            return ["维修安装"]
+        case .beautyPetLife:
+            return ["美容美发", "宠物服务", "生活支持"]
+        }
     }
 
     /// Header copy in the viewer's app language. zh remains the source of
@@ -5688,6 +6189,13 @@ enum KXListingCopy {
         "起步价格": ("開始価格", "Starting price"),
         "价格单位": ("料金単位", "Price unit"),
         "可预约时间": ("予約可能時間", "Availability"),
+        "营业时间": ("営業時間", "Business hours"),
+        "价格区间": ("価格帯", "Price range"),
+        "到店电话": ("店舗電話", "Store phone"),
+        "预约制": ("予約制", "Reservation required"),
+        "预约说明": ("予約について", "Reservation notes"),
+        "服务语言": ("対応言語", "Service languages"),
+        "认证服务方": ("認証済み提供者", "Verified provider"),
         "房型": ("客室タイプ", "Room type"),
         "可住人数": ("定員", "Guests"),
         "入住办理": ("チェックイン", "Check-in"),
@@ -5697,7 +6205,36 @@ enum KXListingCopy {
         "房量与日期": ("空室・日程", "Availability notes"),
         "含早餐": ("朝食付き", "Breakfast included"),
         "即时确认": ("即時確定", "Instant confirmation"),
+        "资质/许可说明": ("資格・許認可", "License notes"),
+        "票种": ("チケット種別", "Ticket type"),
+        "日期/有效期": ("日付・有効期限", "Date / validity"),
+        "时长": ("所要時間", "Duration"),
+        "集合地点": ("集合場所", "Meeting point"),
+        "包含内容": ("含まれるもの", "Included"),
         "不包含内容": ("含まれないもの", "Not included"),
+        "含酒店接送": ("ホテル送迎付き", "Hotel pickup"),
+        "机场/路线": ("空港・ルート", "Airport / route"),
+        "车型": ("車種", "Vehicle type"),
+        "人数": ("人数", "Passengers"),
+        "行李数": ("荷物数", "Luggage"),
+        "航班号说明": ("便名について", "Flight info"),
+        "等待规则": ("待機ルール", "Waiting rule"),
+        "夜间/追加费用": ("深夜・追加料金", "Surcharges"),
+        "文件/手续类型": ("書類・手続き種別", "Document / procedure type"),
+        "所需材料": ("必要書類", "Required materials"),
+        "交付时间": ("納期", "Delivery time"),
+        "结果说明": ("結果について", "Result note"),
+        "房型/面积": ("間取り・面積", "Room / size"),
+        "物品量": ("荷物量", "Item volume"),
+        "车辆/人员": ("車両・スタッフ", "Vehicle / staff"),
+        "追加费用": ("追加料金", "Extra fees"),
+        "设备/项目类型": ("設備・作業種別", "Device / project"),
+        "品牌/型号": ("ブランド・型番", "Brand / model"),
+        "上门区域": ("出張エリア", "On-site area"),
+        "上门费": ("出張費", "On-site fee"),
+        "配件费": ("部品代", "Parts fee"),
+        "保修说明": ("保証について", "Warranty"),
+        "不可服务范围": ("対応不可範囲", "Unavailable scope"),
         "服务流程": ("サービスの流れ", "Process"),
         "用户需准备": ("ご準備いただくもの", "You prepare"),
         "取消规则": ("キャンセル規定", "Cancellation"),
@@ -5773,7 +6310,7 @@ enum KXListingCopy {
         case "stays": stayChips
         case "hotels": hotelChips
         case "work", "job", "hiring": ["全部", "兼职", "全职", "时给", "月给", "N3 可", "签证支持", "无经验可"]
-        case "local_service": ["全部"] + foodSectionCategories + ["民宿", "酒店", "温泉旅馆", "公寓式酒店", "酒店民宿", "景点门票", "一日游", "接送机"] + lifeSectionCategories
+        case "local_service": ["全部"] + foodSectionCategories + ["民宿", "酒店", "温泉旅馆", "公寓式酒店", "酒店民宿", "景点门票", "一日游", "本地向导", "接送机"] + lifeSectionCategories
         case "discount": ["全部", "餐饮", "学校", "服务", "购物", "限时"]
         default: ["全部", "家具", "家电", "手机数码", "电脑办公", "电子产品", "教材", "书籍教材", "衣物", "生活用品", "母婴儿童", "运动户外", "票券卡券", "搬家出清", "免费送", "求购"]
         }
@@ -6343,26 +6880,169 @@ enum KXListingCopy {
                 ("审核状态", verificationLabel(listing.verification_status)),
             ]
         case "local_service":
-            base = [
-                ("起步价格", priceLabel(listing)),
-                ("服务方", attr(listing, "business_name")),
-                ("服务类型", attr(listing, "service_type")),
-                ("服务范围", attr(listing, "service_area") ?? cleanText(listing.location_text)),
-                ("价格单位", attr(listing, "price_unit")),
-                ("可预约时间", attr(listing, "availability")),
-                ("房型", attr(listing, "room_type")),
-                ("可住人数", attr(listing, "max_guests")),
-                ("入住办理", attr(listing, "check_in_time")),
-                ("退房时间", attr(listing, "check_out_time")),
-                ("最少入住", attr(listing, "minimum_stay")),
-                ("设施服务", attr(listing, "amenities")),
-                ("房量与日期", attr(listing, "inventory_note")),
-                ("含早餐", boolAttr(listing, "breakfast_included") ? "包含" : nil),
-                ("即时确认", boolAttr(listing, "instant_confirmation") ? "支持" : nil),
-                ("服务流程", attr(listing, "service_process")),
-                ("取消规则", attr(listing, "cancellation_rule")),
-                ("审核状态", verificationLabel(listing.verification_status)),
-            ]
+            switch serviceVertical(for: listing) {
+            case .foodRestaurant?:
+                base = [
+                    ("起步价格", priceLabel(listing)),
+                    ("服务方", attr(listing, "business_name")),
+                    ("服务类型", attr(listing, "service_type")),
+                    ("服务范围", attr(listing, "service_area") ?? cleanText(listing.location_text)),
+                    ("营业时间", attr(listing, "open_hours")),
+                    ("价格区间", attr(listing, "price_range")),
+                    ("最近车站", attr(listing, "near_station")),
+                    ("到店电话", attr(listing, "store_phone")),
+                    ("预约制", boolAttr(listing, "reservation_required") ? "需要预约" : nil),
+                    ("预约说明", attr(listing, "reservation_note")),
+                    ("服务语言", attr(listing, "languages")),
+                    ("认证服务方", boolAttr(listing, "certified_provider") || listing.verification_status == "verified" ? "已认证" : nil),
+                    ("审核状态", verificationLabel(listing.verification_status)),
+                ]
+            case .diningBooking?:
+                base = [
+                    ("起步价格", priceLabel(listing)),
+                    ("服务方", attr(listing, "business_name")),
+                    ("服务类型", attr(listing, "service_type")),
+                    ("服务范围", attr(listing, "service_area") ?? cleanText(listing.location_text)),
+                    ("营业时间", attr(listing, "open_hours")),
+                    ("价格区间", attr(listing, "price_range")),
+                    ("最近车站", attr(listing, "near_station")),
+                    ("到店电话", attr(listing, "store_phone")),
+                    ("可预约时间", attr(listing, "availability")),
+                    ("预约制", boolAttr(listing, "booking_required") || boolAttr(listing, "reservation_required") ? "需要预约" : nil),
+                    ("预约说明", attr(listing, "reservation_note")),
+                    ("服务流程", attr(listing, "service_process")),
+                    ("取消规则", attr(listing, "cancellation_rule")),
+                    ("服务语言", attr(listing, "languages")),
+                    ("审核状态", verificationLabel(listing.verification_status)),
+                ]
+            case .lodging?:
+                base = [
+                    ("起步价格", priceLabel(listing)),
+                    ("服务方", attr(listing, "business_name")),
+                    ("服务类型", attr(listing, "service_type")),
+                    ("房型", attr(listing, "room_type")),
+                    ("可住人数", attr(listing, "max_guests")),
+                    ("价格单位", attr(listing, "price_unit")),
+                    ("入住办理", attr(listing, "check_in_time")),
+                    ("退房时间", attr(listing, "check_out_time")),
+                    ("最少入住", attr(listing, "minimum_stay")),
+                    ("设施服务", attr(listing, "amenities")),
+                    ("房量与日期", attr(listing, "inventory_note")),
+                    ("含早餐", boolAttr(listing, "breakfast_included") ? "包含" : nil),
+                    ("即时确认", boolAttr(listing, "instant_confirmation") ? "支持" : nil),
+                    ("取消规则", attr(listing, "cancellation_rule")),
+                    ("资质/许可说明", attr(listing, "license_note")),
+                    ("审核状态", verificationLabel(listing.verification_status)),
+                ]
+            case .attractionTicket?, .dayTour?:
+                base = [
+                    ("起步价格", priceLabel(listing)),
+                    ("服务方", attr(listing, "business_name")),
+                    ("服务类型", attr(listing, "service_type")),
+                    ("票种", attr(listing, "ticket_type")),
+                    ("日期/有效期", attr(listing, "availability")),
+                    ("时长", attr(listing, "duration")),
+                    ("集合地点", attr(listing, "meeting_point")),
+                    ("包含内容", attr(listing, "included_items")),
+                    ("不包含内容", attr(listing, "not_included")),
+                    ("用户需准备", attr(listing, "user_prepare")),
+                    ("含酒店接送", boolAttr(listing, "pickup_service") ? "包含" : nil),
+                    ("取消规则", attr(listing, "cancellation_rule")),
+                    ("资质/许可说明", attr(listing, "license_note")),
+                    ("审核状态", verificationLabel(listing.verification_status)),
+                ]
+            case .airportTransfer?:
+                base = [
+                    ("起步价格", priceLabel(listing)),
+                    ("服务方", attr(listing, "business_name")),
+                    ("服务类型", attr(listing, "service_type")),
+                    ("机场/路线", attr(listing, "airport_route")),
+                    ("服务范围", attr(listing, "service_area") ?? cleanText(listing.location_text)),
+                    ("车型", attr(listing, "vehicle_type")),
+                    ("人数", attr(listing, "passenger_count")),
+                    ("行李数", attr(listing, "luggage_count")),
+                    ("航班号说明", attr(listing, "flight_info_note")),
+                    ("等待规则", attr(listing, "waiting_rule")),
+                    ("夜间/追加费用", attr(listing, "surcharge_note")),
+                    ("取消规则", attr(listing, "cancellation_rule")),
+                    ("审核状态", verificationLabel(listing.verification_status)),
+                ]
+            case .paperworkTranslation?:
+                base = [
+                    ("起步价格", priceLabel(listing)),
+                    ("服务方", attr(listing, "business_name")),
+                    ("服务类型", attr(listing, "service_type")),
+                    ("服务语言", attr(listing, "languages")),
+                    ("文件/手续类型", attr(listing, "document_type")),
+                    ("所需材料", attr(listing, "required_materials")),
+                    ("交付时间", attr(listing, "delivery_time")),
+                    ("服务流程", attr(listing, "service_process")),
+                    ("用户需准备", attr(listing, "user_prepare")),
+                    ("结果说明", boolAttr(listing, "no_result_guarantee") ? "不保证结果" : nil),
+                    ("资质/许可说明", attr(listing, "license_note")),
+                    ("取消规则", attr(listing, "cancellation_rule")),
+                    ("审核状态", verificationLabel(listing.verification_status)),
+                ]
+            case .movingCleaning?:
+                base = [
+                    ("起步价格", priceLabel(listing)),
+                    ("服务方", attr(listing, "business_name")),
+                    ("服务类型", attr(listing, "service_type")),
+                    ("服务范围", attr(listing, "service_area") ?? cleanText(listing.location_text)),
+                    ("房型/面积", attr(listing, "property_size")),
+                    ("物品量", attr(listing, "item_volume")),
+                    ("车辆/人员", attr(listing, "vehicle_staff")),
+                    ("包含内容", attr(listing, "included_items")),
+                    ("不包含内容", attr(listing, "not_included")),
+                    ("用户需准备", attr(listing, "user_prepare")),
+                    ("追加费用", attr(listing, "surcharge_note")),
+                    ("取消规则", attr(listing, "cancellation_rule")),
+                    ("审核状态", verificationLabel(listing.verification_status)),
+                ]
+            case .repairInstallation?:
+                base = [
+                    ("起步价格", priceLabel(listing)),
+                    ("服务方", attr(listing, "business_name")),
+                    ("服务类型", attr(listing, "service_type")),
+                    ("设备/项目类型", attr(listing, "project_type")),
+                    ("品牌/型号", attr(listing, "device_brand_model")),
+                    ("上门区域", attr(listing, "service_area") ?? cleanText(listing.location_text)),
+                    ("上门费", attr(listing, "onsite_fee")),
+                    ("配件费", attr(listing, "parts_fee")),
+                    ("保修说明", attr(listing, "warranty_note")),
+                    ("不可服务范围", attr(listing, "unavailable_scope")),
+                    ("取消规则", attr(listing, "cancellation_rule")),
+                    ("审核状态", verificationLabel(listing.verification_status)),
+                ]
+            case .beautyPetLife?:
+                base = [
+                    ("起步价格", priceLabel(listing)),
+                    ("服务方", attr(listing, "business_name")),
+                    ("服务类型", attr(listing, "service_type")),
+                    ("服务范围", attr(listing, "service_area") ?? cleanText(listing.location_text)),
+                    ("营业时间", attr(listing, "open_hours")),
+                    ("价格区间", attr(listing, "price_range")),
+                    ("可预约时间", attr(listing, "availability")),
+                    ("包含内容", attr(listing, "included_items")),
+                    ("不包含内容", attr(listing, "not_included")),
+                    ("用户需准备", attr(listing, "user_prepare")),
+                    ("取消规则", attr(listing, "cancellation_rule")),
+                    ("资质/许可说明", attr(listing, "license_note")),
+                    ("审核状态", verificationLabel(listing.verification_status)),
+                ]
+            case .none:
+                base = [
+                    ("起步价格", priceLabel(listing)),
+                    ("服务方", attr(listing, "business_name")),
+                    ("服务类型", attr(listing, "service_type")),
+                    ("服务范围", attr(listing, "service_area") ?? cleanText(listing.location_text)),
+                    ("价格单位", attr(listing, "price_unit")),
+                    ("可预约时间", attr(listing, "availability")),
+                    ("服务流程", attr(listing, "service_process")),
+                    ("取消规则", attr(listing, "cancellation_rule")),
+                    ("审核状态", verificationLabel(listing.verification_status)),
+                ]
+            }
         case "discount":
             base = [
                 ("优惠", priceLabel(listing)),

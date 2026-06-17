@@ -57,11 +57,9 @@ final class GuideViewModel: ObservableObject {
         isSearching = true
         errorMessage = nil
         defer { isSearching = false }
-        // Schools + companies are best-effort and run concurrently with the
-        // article query: a failure there must never blank the article results.
+        // Schools + companies are best-effort after the article query: a
+        // failure there must never blank the article results.
         let normalizedCountry = country.isEmpty ? "jp" : country
-        async let schoolsResp = KaiXAPIClient.shared.guideSchools(country: normalizedCountry, keyword: q, pageSize: 8)
-        async let companiesResp = KaiXAPIClient.shared.guideCompanies(country: normalizedCountry, keyword: q, pageSize: 8)
         do {
             let response = try await KaiXAPIClient.shared.guideArticles(country: country, language: currentGuideLanguage(), keyword: q, pageSize: 20)
             searchResults = response.items
@@ -75,8 +73,10 @@ final class GuideViewModel: ObservableObject {
             }
             errorMessage = searchResults.isEmpty ? "搜索暂时无法连接服务器，换个关键词或下拉刷新试试。" : "搜索暂时无法连接服务器，先显示内置指南结果。"
         }
-        schoolResults = (try? await schoolsResp)?.items ?? []
-        companyResults = (try? await companiesResp)?.items ?? []
+        let schoolsResponse = try? await KaiXAPIClient.shared.guideSchools(country: normalizedCountry, keyword: q, pageSize: 8)
+        let companiesResponse = try? await KaiXAPIClient.shared.guideCompanies(country: normalizedCountry, keyword: q, pageSize: 8)
+        schoolResults = schoolsResponse?.items ?? []
+        companyResults = companiesResponse?.items ?? []
     }
 
     func clearSearch() {

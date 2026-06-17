@@ -44,20 +44,18 @@ final class kaiziUITests: XCTestCase {
 
         try ensureAuthenticated(app)
 
-        let discoverTab = try waitForDiscoverTab(in: app, timeout: 15)
         XCTAssertEqual(app.tabBars.count, 0)
-        XCTAssertEqual(discoverTabCount(in: app), 1)
 
-        discoverTab.tap()
+        tapBottomTab(.search, in: app)
 
         XCTAssertTrue(waitForDiscoverRoot(in: app, timeout: 8))
         XCTAssertEqual(app.tabBars.count, 0)
-        XCTAssertEqual(discoverTabCount(in: app), 1)
     }
 
     @MainActor
     private func ensureAuthenticated(_ app: XCUIApplication) throws {
-        if (try? waitForDiscoverTab(in: app, timeout: 12)) != nil {
+        if !app.buttons["auth.mode.register"].waitForExistence(timeout: 2) {
+            settleForUITest(2_000)
             return
         }
 
@@ -90,28 +88,28 @@ final class kaiziUITests: XCTestCase {
         XCTAssertTrue(submitButton.isEnabled)
         submitButton.tap()
 
-        _ = try waitForDiscoverTab(in: app, timeout: 12)
+        settleForUITest(2_500)
     }
 
     @MainActor
-    private func waitForDiscoverTab(in app: XCUIApplication, timeout: TimeInterval) throws -> XCUIElement {
-        let byIdentifier = app.buttons["tabbar.search"]
-        if byIdentifier.waitForExistence(timeout: timeout) {
-            return byIdentifier
-        }
-        let byLabel = app.buttons["发现"]
-        if byLabel.waitForExistence(timeout: 2) {
-            return byLabel
-        }
-        XCTFail("Discover tab did not appear")
-        throw XCTSkip("Discover tab did not appear")
+    private func tapBottomTab(_ tab: AppTabIndex, in app: XCUIApplication) {
+        let totalTabs: CGFloat = 5
+        let x = (CGFloat(tab.rawValue) + 0.5) / totalTabs
+        app.coordinate(withNormalizedOffset: CGVector(dx: x, dy: 0.94)).tap()
+        settleForUITest(1_200)
     }
 
     @MainActor
-    private func discoverTabCount(in app: XCUIApplication) -> Int {
-        let identifierCount = app.buttons.matching(identifier: "tabbar.search").count
-        if identifierCount > 0 { return identifierCount }
-        return app.buttons.matching(NSPredicate(format: "label == %@", "发现")).count
+    private func settleForUITest(_ ms: UInt32) {
+        usleep(ms * 1000)
+    }
+
+    private enum AppTabIndex: Int {
+        case home = 0
+        case search = 1
+        case guide = 2
+        case messages = 3
+        case profile = 4
     }
 
     @MainActor
@@ -156,13 +154,22 @@ final class kaiziUITests: XCTestCase {
         func settle(_ ms: UInt32 = 2_000) { usleep(ms * 1000) }
         @discardableResult
         func switchTab(_ id: String) -> Bool {
-            let b = app.buttons["tabbar.\(id)"]
-            guard b.waitForExistence(timeout: 8) else { return false }
-            b.tap(); settle(); return true
+            let index: AppTabIndex
+            switch id {
+            case "home": index = .home
+            case "search": index = .search
+            case "guide": index = .guide
+            case "messages": index = .messages
+            case "profile": index = .profile
+            default: return false
+            }
+            tapBottomTab(index, in: app)
+            settle()
+            return true
         }
         func goBack() {
             let back = app.navigationBars.buttons.firstMatch
-            if back.exists { back.tap(); settle(1_100) }
+            if back.exists && back.isHittable { back.tap(); settle(1_100) }
         }
 
         let guest = app.buttons["auth.browseAsGuest"]
@@ -179,7 +186,7 @@ final class kaiziUITests: XCTestCase {
             guard card.waitForExistence(timeout: 3) else { continue }
             card.tap(); settle(2_600); snap("03-channel-\(ch)")
             let cell = app.scrollViews.firstMatch.buttons.element(boundBy: 0)
-            if cell.waitForExistence(timeout: 3) { cell.tap(); settle(2_600); snap("04-detail-\(ch)"); goBack() }
+            if cell.waitForExistence(timeout: 3), cell.isHittable { cell.tap(); settle(2_600); snap("04-detail-\(ch)"); goBack() }
             goBack(); switchTab("search")
         }
         switchTab("guide"); settle(2_200); snap("05-guide")

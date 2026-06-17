@@ -63,6 +63,7 @@ struct BottomTabBarView: View {
         .shadow(color: Color.white.opacity(0.42), radius: 1, y: -0.5)
         .padding(.horizontal, 22)
         .sensoryFeedback(.selection, trigger: selection)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("main.bottomTabBar")
     }
 

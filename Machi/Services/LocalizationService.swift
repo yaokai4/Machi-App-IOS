@@ -438,6 +438,7 @@ struct LocalizationService {
         "markAllRead": [.zh: "全部已读", .ja: "すべて既読", .en: "Mark all read"],
         "markRead": [.zh: "标记已读", .ja: "既読にする", .en: "Mark read"],
         "markUnread": [.zh: "标记未读", .ja: "未読にする", .en: "Mark unread"],
+        "markViewed": [.zh: "已查看", .ja: "確認済み", .en: "Viewed"],
         "notifLiked": [.zh: "喜欢了你的帖子", .ja: "があなたの投稿にいいねしました", .en: "liked your post"],
         "notifReposted": [.zh: "转发了你的帖子", .ja: "があなたの投稿をリポストしました", .en: "reposted your post"],
         "notifCommented": [.zh: "评论了你的帖子", .ja: "があなたの投稿にコメントしました", .en: "commented on your post"],

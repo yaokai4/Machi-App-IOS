@@ -70,8 +70,8 @@ final class MachiWalkthroughUITests: XCTestCase {
         pause(2.5)
         snap("08_discover_cards")
 
-        // ── 5. 商家与本地服务列表页（紧凑筛选卡 + 渐隐 chips）
-        let serviceCard = app.staticTexts["商家与本地服务"].firstMatch
+        // ── 5. 商家与服务列表页（紧凑筛选卡 + 渐隐 chips）
+        let serviceCard = app.staticTexts["商家与服务"].firstMatch
         if serviceCard.waitForExistence(timeout: 6) {
             forceTap(serviceCard)
             pause(3)

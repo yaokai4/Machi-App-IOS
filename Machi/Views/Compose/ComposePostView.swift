@@ -40,16 +40,16 @@ struct ComposePostView: View {
                         uploadState
                         typeRow
                         if needsMembership { membershipGate }
+                        missingFieldsHint
                         composer
                         typedForm
-                        missingFieldsHint
                         regionLanguageRow
                         topicComposer
                         mediaPreview
                     }
                     .padding(.horizontal, KaiXTheme.horizontalPadding)
                     .padding(.top, 16)
-                    .padding(.bottom, 20)
+                    .padding(.bottom, 96)
                 }
 
                 bottomToolbar
@@ -364,7 +364,7 @@ struct ComposePostView: View {
                     Text(L("composeMissingHeader", language))
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.primary)
-                    Text(missing.map { L($0, language) }.joined(separator: " · "))
+                    Text(missing.map { missingFieldLabel($0) }.joined(separator: " · "))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .lineLimit(3)
@@ -379,6 +379,45 @@ struct ComposePostView: View {
                     .stroke(KXColor.heat.opacity(0.25), lineWidth: 0.7)
             )
         }
+    }
+
+    private func missingFieldLabel(_ key: String) -> String {
+        let labelKey: String
+        switch key {
+        case PostAttributeKeys.title: labelKey = "fld_title"
+        case PostAttributeKeys.price: labelKey = "fld_price"
+        case PostAttributeKeys.area: labelKey = "fld_area"
+        case PostAttributeKeys.category: labelKey = "fld_category"
+        case PostAttributeKeys.rent: labelKey = "fld_rent"
+        case PostAttributeKeys.rentRange: labelKey = "fld_rent_range"
+        case PostAttributeKeys.contactMethod: labelKey = "fld_contact_method"
+        case PostAttributeKeys.desiredJob: labelKey = "fld_desired_job"
+        case PostAttributeKeys.skills: labelKey = "fld_skills"
+        case PostAttributeKeys.jobTitle: labelKey = "fld_job_title"
+        case PostAttributeKeys.companyName: labelKey = "fld_company_name"
+        case PostAttributeKeys.salary: labelKey = "fld_salary"
+        case PostAttributeKeys.workLocation: labelKey = "fld_work_location"
+        case PostAttributeKeys.meetupType: labelKey = "fld_meetup_type"
+        case PostAttributeKeys.meetupTime: labelKey = "fld_meetup_time"
+        case PostAttributeKeys.location: labelKey = "fld_location"
+        case PostAttributeKeys.peopleLimit: labelKey = "fld_people_limit"
+        case PostAttributeKeys.budget: labelKey = "fld_budget"
+        case PostAttributeKeys.description: labelKey = "fld_description"
+        case PostAttributeKeys.eventTime: labelKey = "fld_event_time"
+        case PostAttributeKeys.restaurantOrArea: labelKey = "fld_restaurant_or_area"
+        case PostAttributeKeys.summary: labelKey = "fld_summary"
+        case PostAttributeKeys.serviceType: labelKey = "fld_service_type"
+        case PostAttributeKeys.priceRange: labelKey = "fld_price_range"
+        case PostAttributeKeys.merchantName: labelKey = "fld_merchant_name"
+        case PostAttributeKeys.merchantType: labelKey = "fld_merchant_type"
+        case PostAttributeKeys.address: labelKey = "fld_address"
+        case PostAttributeKeys.discountInfo: labelKey = "fld_discount_info"
+        case PostAttributeKeys.validUntil: labelKey = "fld_valid_until"
+        case PostAttributeKeys.question: labelKey = "fld_question"
+        case PostAttributeKeys.options: labelKey = "fld_poll_options"
+        default: return L(key, language)
+        }
+        return L(labelKey, language)
     }
 
     private var composer: some View {

@@ -1,6 +1,10 @@
 # macOS
 .DS_Store
 
+# Local OAuth / provider credential exports
+client_secret*.json
+*client_secret*.json
+
 # Xcode — build output & user-specific state
 build/
 DerivedData/

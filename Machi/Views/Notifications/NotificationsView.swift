@@ -116,6 +116,9 @@ struct NotificationsView: View {
                             } else {
                                 router.routeErrorMessage = L("postDeletedHelp", language)
                             }
+                        },
+                        onMarkRead: {
+                            Task { await viewModel.markRead(context: modelContext, aggregate: item, notificationStore: notificationStore) }
                         }
                     )
                     .listRowInsets(EdgeInsets(top: 4, leading: KXSpacing.screen, bottom: 4, trailing: KXSpacing.screen))
@@ -200,6 +203,7 @@ private struct NotificationCard: View {
     let actors: [String: UserEntity]
     let onOpenProfile: (String) -> Void
     let onOpenTarget: () -> Void
+    let onMarkRead: () -> Void
 
     private var primaryActor: UserEntity? {
         notification.actorIds.compactMap { actors[$0] }.first
@@ -250,9 +254,36 @@ private struct NotificationCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
+
+            markReadControl
         }
         .padding(KXSpacing.md)
         .kxGlassSurface(radius: KXRadius.md)
+    }
+
+    @ViewBuilder
+    private var markReadControl: some View {
+        if notification.isRead {
+            Label(L("markViewed", language), systemImage: "checkmark.circle.fill")
+                .font(.caption2.weight(.bold))
+                .labelStyle(.titleAndIcon)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 9)
+                .frame(height: 30)
+                .background(.thinMaterial, in: Capsule())
+        } else {
+            Button(action: onMarkRead) {
+                Label(L("markViewed", language), systemImage: "checkmark.circle")
+                    .font(.caption2.weight(.bold))
+                    .labelStyle(.titleAndIcon)
+                    .foregroundStyle(KXColor.accent)
+                    .padding(.horizontal, 9)
+                    .frame(height: 30)
+                    .background(KXColor.accent.opacity(0.10), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L("markViewed", language))
+        }
     }
 
     private var title: String {

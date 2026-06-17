@@ -152,13 +152,91 @@ struct MainTabView: View {
         .fullScreenCover(item: $debugPushScreen) { screen in
             NavigationStack {
                 Group {
-                    switch screen.name {
+                    if let type = screen.payload(after: "compose:").flatMap(ContentType.init(rawValue:)) {
+                        ComposePostView(currentUser: currentUser, initialContentType: type)
+                    } else if let type = screen.payload(after: "create:") {
+                        CreateCityListingView(listingType: type, citySlug: debugRegionCode, currentUser: currentUser)
+                    } else if let type = screen.payload(after: "listing:") {
+                        CityListingChannelView(regionCode: debugRegionCode, listingType: type, currentUser: currentUser)
+                    } else if let listingId = screen.payload(after: "listing-detail:") {
+                        CityListingDetailView(listingId: listingId, currentUser: currentUser)
+                    } else if let postId = screen.payload(after: "post-detail:") {
+                        PostDetailView(postId: postId, currentUser: currentUser)
+                    } else if let tag = screen.payload(after: "topic:") {
+                        TopicDetailView(tag: tag, currentUser: currentUser)
+                    } else if let category = screen.payload(after: "guide-category:") {
+                        GuideCategoryView(categoryKey: category)
+                    } else if let slug = screen.payload(after: "guide-article:") {
+                        GuideArticleDetailView(slug: slug)
+                    } else if let slug = screen.payload(after: "guide-product:") {
+                        GuideProductDetailView(slug: slug)
+                    } else if let id = screen.payload(after: "guide-school:") {
+                        GuideSchoolDetailView(schoolId: id)
+                    } else if let id = screen.payload(after: "guide-company-reviews:") {
+                        GuideCompanyReviewsView(companyId: id)
+                    } else if let id = screen.payload(after: "guide-company:") {
+                        GuideCompanyDetailView(companyId: id)
+                    } else {
+                        switch screen.name {
                     case "workbench":
                         MyWorkbenchView(currentUser: currentUser)
                     case "merchant":
                         MerchantSettingsView(currentUser: currentUser)
+                    case "settings":
+                        SettingsView(currentUser: currentUser, onLogout: onLogout, onSwitchAccount: onSwitchAccount)
+                    case "security":
+                        AccountSecuritySettingsView(currentUser: currentUser) { onLogout() }
+                    case "region-language":
+                        RegionLanguageSettingsView(currentUser: currentUser)
+                    case "notification-preferences":
+                        NotificationPreferencesView(currentUser: currentUser)
+                    case "notifications":
+                        NotificationsView(currentUser: currentUser)
+                    case "privacy":
+                        PrivacySettingsView()
+                    case "membership":
+                        MembershipView(currentUser: currentUser)
+                    case "bookmarks":
+                        BookmarkView(currentUser: currentUser)
+                    case "drafts":
+                        DraftsSettingsView(currentUser: currentUser)
+                    case "media-library":
+                        MediaLibraryView(currentUser: currentUser)
+                    case "help":
+                        HelpCenterView()
+                    case "feedback":
+                        FeedbackView()
+                    case "about":
+                        AboutKaiXView()
+                    case "orders":
+                        MyOrdersView()
+                    case "inquiries":
+                        MyInquiriesView(currentUser: currentUser)
+                    case "my-listings":
+                        MyCityListingsView(currentUser: currentUser)
+                    case "merchant-reviews":
+                        MerchantReviewsManageView(currentUser: currentUser)
+                    case "business-directory":
+                        MerchantDirectoryView(citySlug: debugRegionCode, currentUser: currentUser)
+                    case "guide-services":
+                        GuideServicesView()
+                    case "guide-member":
+                        GuideMemberResourcesView()
+                    case "guide-schools":
+                        GuideSchoolListView()
+                    case "guide-companies":
+                        GuideCompanyListView()
+                    case "guide-interviews":
+                        GuideInterviewReviewListView()
+                    case "search-screen":
+                        SearchScreen(currentUser: currentUser, initialQuery: "tokyo")
+                    case "profile-self":
+                        ProfileView(currentUser: currentUser, tracksChrome: false, showsBackButton: false)
+                    case "city":
+                        CityChannelView(regionCode: debugRegionCode, currentUser: currentUser)
                     default:
                         EmptyView()
+                        }
                     }
                 }
                 .kxRouteDestinations(currentUser: currentUser)
@@ -220,7 +298,14 @@ struct MainTabView: View {
 struct KXDebugScreen: Identifiable {
     let name: String
     var id: String { name }
+
+    func payload(after prefix: String) -> String? {
+        guard name.hasPrefix(prefix) else { return nil }
+        return String(name.dropFirst(prefix.count))
+    }
 }
+
+private let debugRegionCode = "jp.tokyo.tokyo"
 #endif
 
 enum AppTab: String, CaseIterable, Identifiable, Hashable {
