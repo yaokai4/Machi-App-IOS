@@ -13,9 +13,10 @@ struct MediaGridView: View {
             let count = mediaItems.count
             // 朋友圈式预览:所有卡片都用固定正方形裁切,点开后再看完整比例。
             let columnCount = count == 1 ? 1 : (count == 2 || count == 4 ? 2 : 3)
-            let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: columnCount)
+            let tileSpacing: CGFloat = 4
+            let columns = Array(repeating: GridItem(.flexible(), spacing: tileSpacing), count: columnCount)
 
-            LazyVGrid(columns: columns, spacing: 4) {
+            LazyVGrid(columns: columns, spacing: tileSpacing) {
                 ForEach(mediaItems) { item in
                     Button {
                         selectedMedia = item
@@ -48,6 +49,7 @@ struct MediaGridView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .modifier(MediaTileShape())
+                        .contentShape(Rectangle())
                         .overlay(alignment: .bottomTrailing) {
                             if item.type == .video, item.duration > 0 {
                                 Text(durationText(item.duration))
@@ -59,12 +61,12 @@ struct MediaGridView: View {
                                     .padding(KXSpacing.sm)
                             }
                         }
-                        .clipShape(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .kxMatchedTransitionSource(id: item.id, in: mediaZoomNamespace)
                 }
             }
+            .clipShape(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             .fullScreenCover(item: $selectedMedia) { media in
                 MediaPreviewView(mediaItems: mediaItems, initialMediaID: media.id)
                     .kxZoomTransition(sourceID: media.id, in: mediaZoomNamespace)
