@@ -4255,11 +4255,25 @@ struct CreateCityListingView: View {
         return KXListingCopy.serviceVertical(category: category, serviceType: serviceType)
     }
 
+    private var categoryBinding: Binding<String> {
+        Binding(
+            get: { category },
+            set: { nextValue in
+                if listingType == "local_service" {
+                    applyServiceCategory(nextValue)
+                } else {
+                    category = nextValue
+                }
+            }
+        )
+    }
+
     private func applyServiceCategory(_ nextCategory: String) {
         let previousVertical = serviceVertical
-        let nextVertical = KXListingCopy.serviceVertical(category: nextCategory, serviceType: nextCategory)
-        category = nextCategory
-        serviceType = nextCategory
+        let cleanCategory = nextCategory.trimmingCharacters(in: .whitespacesAndNewlines)
+        let nextVertical = KXListingCopy.serviceVertical(category: cleanCategory, serviceType: cleanCategory)
+        category = cleanCategory
+        serviceType = cleanCategory
         if previousVertical != nextVertical {
             clearServiceSpecificFields()
         }
@@ -4635,7 +4649,7 @@ struct CreateCityListingView: View {
         KXListingSection(title: "基本信息", icon: "square.and.pencil") {
             VStack(spacing: 12) {
                 KXListingFormField(title: "标题", placeholder: KXListingCopy.titlePlaceholder(for: listingType), icon: "text.cursor", text: $title)
-                KXListingFormField(title: "分类", placeholder: KXListingCopy.categoryPlaceholder(for: listingType), icon: "square.grid.2x2", text: $category)
+                KXListingFormField(title: "分类", placeholder: KXListingCopy.categoryPlaceholder(for: listingType), icon: "square.grid.2x2", text: categoryBinding)
                 // 规范类目快捷选择 —— 分区/筛选按精确类目匹配，鼓励选标准值
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
@@ -6036,17 +6050,17 @@ enum KXListingCopy {
     static func serviceVertical(category: String?, serviceType: String?) -> ServiceVertical? {
         let categoryKey = category?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let serviceKey = serviceType?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if let vertical = ServiceVertical(rawValue: serviceKey) { return vertical }
         if let vertical = serviceVerticalByCategory[categoryKey] { return vertical }
         if let vertical = serviceVerticalByCategory[serviceKey] { return vertical }
+        if let vertical = ServiceVertical(rawValue: serviceKey) { return vertical }
         return nil
     }
 
     static func serviceVertical(for listing: KaiXCityListingDTO) -> ServiceVertical? {
-        let explicit = listing.attributes?["service_vertical"]?.listingDisplayValue.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if let vertical = ServiceVertical(rawValue: explicit) { return vertical }
         let serviceType = listing.attributes?["service_type"]?.listingDisplayValue
         if let vertical = serviceVertical(category: listing.category, serviceType: serviceType) { return vertical }
+        let explicit = listing.attributes?["service_vertical"]?.listingDisplayValue.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if let vertical = ServiceVertical(rawValue: explicit) { return vertical }
         let attrs = listing.attributes ?? [:]
         if attrs["menu"] != nil || attrs["packages"] != nil { return .foodRestaurant }
         if attrs["room_type"] != nil || attrs["max_guests"] != nil { return .lodging }
