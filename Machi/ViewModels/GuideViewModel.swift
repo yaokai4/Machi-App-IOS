@@ -211,7 +211,13 @@ private enum GuideFallbackContent {
             icon: icon,
             color: color,
             country: "jp",
+            language: "zh-CN",
             sortOrder: order,
+            articleCount: nil,
+            productCount: nil,
+            seoTitle: nil,
+            seoDescription: nil,
+            isActive: true,
             subCategories: []
         )
     }

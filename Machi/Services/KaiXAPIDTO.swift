@@ -1158,7 +1158,13 @@ struct KaiXGuideCategoryDTO: Codable, Equatable, Identifiable, Hashable {
     let icon: String
     let color: String
     let country: String
+    let language: String?
     let sortOrder: Int
+    let articleCount: Int?
+    let productCount: Int?
+    let seoTitle: String?
+    let seoDescription: String?
+    let isActive: Bool?
     let subCategories: [KaiXGuideCategoryDTO]?
 }
 

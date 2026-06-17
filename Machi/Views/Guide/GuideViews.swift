@@ -122,6 +122,20 @@ struct GuideCategoryView: View {
 
     private var country: String { (regionStore.current?.countryCode ?? "jp").lowercased() }
     private var category: KaiXGuideCategoryDTO? { categories.first { $0.key == categoryKey } }
+    private var selectedScope: KaiXGuideCategoryDTO? {
+        guard !selectedSubCategory.isEmpty else { return category }
+        return category?.subCategories?.first { $0.key == selectedSubCategory } ?? category
+    }
+    private var scopeCountLabels: [String] {
+        var labels: [String] = []
+        if let count = selectedScope?.articleCount {
+            labels.append("\(count) 篇指南")
+        }
+        if let count = selectedScope?.productCount {
+            labels.append("\(count) 个资料/服务")
+        }
+        return labels
+    }
 
     var body: some View {
         ZStack {
@@ -204,6 +218,26 @@ struct GuideCategoryView: View {
                     .foregroundStyle(KXColor.livingMuted)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if !scopeCountLabels.isEmpty {
+                FlowLayout(spacing: 6) {
+                    ForEach(scopeCountLabels, id: \.self) { label in
+                        Text(label)
+                            .font(.caption2.weight(.black))
+                            .foregroundStyle(KXColor.livingMuted)
+                            .padding(.horizontal, 9)
+                            .frame(height: 24)
+                            .background(KXColor.livingSurface.opacity(0.86), in: Capsule())
+                    }
+                }
+            }
+            if let selectedScope, selectedScope.key != category?.key, !selectedScope.description.isEmpty {
+                Text(selectedScope.description)
+                    .font(.caption)
+                    .foregroundStyle(KXColor.livingMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(12)
+                    .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
         }
         .padding(18)
         .kxLivingSurface(radius: 24, elevated: true)
@@ -253,6 +287,7 @@ struct GuideCategoryView: View {
             let productData = try await KaiXAPIClient.shared.guideProducts(
                 country: country,
                 categoryKey: categoryKey,
+                subCategoryKey: selectedSubCategory.isEmpty ? nil : selectedSubCategory,
                 pageSize: 20
             )
             categories = categoryData.categories
@@ -2750,6 +2785,16 @@ private struct GuideFAQSection: View {
 private struct GuideCategoryCard: View {
     @EnvironmentObject private var router: AppRouter
     let category: KaiXGuideCategoryDTO
+    private var countLabels: [String] {
+        var labels: [String] = []
+        if let count = category.articleCount {
+            labels.append("\(count) 篇")
+        }
+        if let count = category.productCount {
+            labels.append("\(count) 个资料")
+        }
+        return labels
+    }
 
     var body: some View {
         Button {
@@ -2766,6 +2811,18 @@ private struct GuideCategoryCard: View {
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                 Spacer(minLength: 0)
+                if !countLabels.isEmpty {
+                    FlowLayout(spacing: 5) {
+                        ForEach(countLabels, id: \.self) { label in
+                            Text(label)
+                                .font(.caption2.weight(.black))
+                                .foregroundStyle(KXColor.livingMuted)
+                                .padding(.horizontal, 7)
+                                .frame(height: 20)
+                                .background(KXColor.softBackground.opacity(0.85), in: Capsule())
+                        }
+                    }
+                }
             }
             .frame(maxWidth: .infinity, minHeight: 122, alignment: .topLeading)
             .padding(13)
