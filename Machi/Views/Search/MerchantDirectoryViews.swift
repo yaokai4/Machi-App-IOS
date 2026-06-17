@@ -250,12 +250,14 @@ private struct ListingCoverArtwork: View {
     private var placeholderIcon: String {
         if KXListingCopy.isFoodCategory(category) { return "fork.knife" }
         switch category {
-        case "景点门票", "一日游": return "ticket.fill"
-        case "接送机": return "car.fill"
-        case "翻译", "翻译手续", "签证/手续协助": return "character.bubble.fill"
-        case "搬家", "搬家清洁", "清洁": return "sparkles"
-        case "美容美发": return "scissors"
-        case "宠物服务": return "heart.fill"
+        case "民宿", "酒店", "温泉旅馆", "公寓式酒店", "短住公寓": return "bed.double.fill"
+        case "景点门票", "一日游", "本地向导", "体验活动", "包车行程": return "ticket.fill"
+        case "接送机", "机场接送", "车站接送", "包车", "行李协助": return "car.fill"
+        case "材料翻译", "市役所陪同", "银行卡协助", "手机卡协助", "租房申请协助", "签证材料整理", "翻译", "翻译手续", "签证/手续协助": return "character.bubble.fill"
+        case "搬家", "退房清洁", "粗大垃圾协助", "行李搬运", "家具家电配送协助", "搬家清洁", "清洁": return "sparkles"
+        case "手机卡开通", "网络开通", "水电煤协助", "地址登记协助", "粗大垃圾预约", "生活跑腿": return "house.fill"
+        case "美容美发", "美甲", "按摩", "皮肤管理", "体检/牙科预约协助": return "scissors"
+        case "宠物寄养", "遛狗", "临时照看", "儿童用品租赁", "家庭协助", "宠物服务": return "heart.fill"
         default: return "storefront.fill"
         }
     }
@@ -398,7 +400,7 @@ struct MerchantDirectoryView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
 
-    private let categories = ["全部", "餐厅美食", "在线订座", "优惠预约", "民宿", "酒店", "景点门票", "一日游", "本地向导", "机场接送", "车站接送", "包车", "翻译手续", "租房申请协助", "搬家清洁", "生活开通", "美容健康"]
+    private let categories = ["全部"] + KXListingCopy.serviceCreateCategories
 
     private var cityName: String {
         KaiXRegionDirectory.resolve(regionCode: citySlug)?.cityName ?? citySlug

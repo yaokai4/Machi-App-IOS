@@ -145,7 +145,7 @@ struct MyWorkbenchView: View {
                 CreateCityListingView(listingType: "rental", citySlug: currentRegionCode, currentUser: currentUser)
             }
             SettingsDivider()
-            SettingsRowLink(icon: "wrench.and.screwdriver.fill", tint: .brown, title: "商家与服务发布", subtitle: "餐厅美食、在线订座、民宿酒店、景点票务、接送机和生活服务", revealsNavBar: false) {
+            SettingsRowLink(icon: "storefront.fill", tint: .brown, title: "商家与服务发布", subtitle: "餐饮预约、住宿短住、旅行票务、接送交通、翻译手续和生活服务", revealsNavBar: false) {
                 CreateCityListingView(listingType: "local_service", citySlug: currentRegionCode, currentUser: currentUser)
             }
             SettingsDivider()

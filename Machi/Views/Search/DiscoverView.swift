@@ -1991,13 +1991,17 @@ struct CityListingChannelView: View {
         KaiXRegionDirectory.resolve(regionCode: regionCode)
     }
 
-    /// 服务频道分区：餐厅美食 / 景点玩乐 / 生活服务。
+    /// 服务频道分区与发布页第一阶段正式类目保持一致。
     /// 住宿类目已整体搬去租房页「民宿·短住」，这里不再展示。
     static let serviceSections: [(key: String, title: String, categories: [String])] = [
         ("all", "全部", []),
-        ("food", "餐厅美食", KXListingCopy.foodSectionCategories),
-        ("fun", "景点玩乐", ["景点门票", "一日游", "接送机"]),
-        ("life", "生活服务", KXListingCopy.lifeSectionCategories),
+        ("food", "餐饮预约", KXListingCopy.foodSectionCategories),
+        ("travel", "旅行票务", KXListingCopy.travelSectionCategories),
+        ("transfer", "接送交通", KXListingCopy.transferSectionCategories),
+        ("paperwork", "翻译手续", KXListingCopy.paperworkSectionCategories),
+        ("moving", "搬家清洁", KXListingCopy.movingSectionCategories),
+        ("life", "生活开通", KXListingCopy.lifeSetupSectionCategories),
+        ("beauty", "美容健康", KXListingCopy.beautyHealthSectionCategories),
     ]
 
     /// 「stays / hotels」是住房频道伪类型，数据实际来自住宿类 local_service。
@@ -2468,12 +2472,20 @@ struct CityListingChannelView: View {
             switch serviceSection {
             case "food":
                 quick = ["全部", "中华料理", "日本料理", "居酒屋", "烧肉火锅", "咖啡甜品"]
-            case "fun":
-                quick = ["全部", "景点门票", "一日游", "接送机"]
+            case "travel":
+                quick = ["全部", "景点门票", "一日游", "本地向导", "体验活动", "包车行程"]
+            case "transfer":
+                quick = ["全部", "机场接送", "车站接送", "包车", "行李协助"]
+            case "paperwork":
+                quick = ["全部", "材料翻译", "市役所陪同", "银行卡协助", "手机卡协助", "租房申请协助"]
+            case "moving":
+                quick = ["全部", "搬家", "退房清洁", "粗大垃圾协助", "行李搬运", "家具家电配送协助"]
             case "life":
-                quick = ["全部", "翻译", "搬家", "清洁", "美容美发", "宠物服务"]
+                quick = ["全部", "手机卡开通", "网络开通", "水电煤协助", "地址登记协助", "粗大垃圾预约"]
+            case "beauty":
+                quick = ["全部", "美容美发", "美甲", "按摩", "皮肤管理", "体检/牙科预约协助"]
             default:
-                quick = ["全部", "中华料理", "日本料理", "居酒屋", "咖啡甜品", "景点门票", "翻译", "搬家"]
+                quick = ["全部", "中华料理", "日本料理", "景点门票", "机场接送", "材料翻译", "搬家", "美容美发"]
             }
             return selectedCategory == "全部" || quick.contains(selectedCategory) ? quick : quick + [selectedCategory]
         }
@@ -2668,12 +2680,20 @@ struct CityListingChannelView: View {
         switch serviceSection {
         case "food":
             categories = KXListingCopy.foodSectionCategories
-        case "fun":
-            categories = ["景点门票", "一日游", "接送机"]
+        case "travel":
+            categories = KXListingCopy.travelSectionCategories
+        case "transfer":
+            categories = KXListingCopy.transferSectionCategories
+        case "paperwork":
+            categories = KXListingCopy.paperworkSectionCategories
+        case "moving":
+            categories = KXListingCopy.movingSectionCategories
         case "life":
-            categories = KXListingCopy.lifeSectionCategories
+            categories = KXListingCopy.lifeSetupSectionCategories
+        case "beauty":
+            categories = KXListingCopy.beautyHealthSectionCategories
         default:
-            categories = KXListingCopy.foodSectionCategories + ["景点门票", "一日游", "接送机"] + KXListingCopy.lifeSectionCategories
+            categories = KXListingCopy.foodSectionCategories + KXListingCopy.travelSectionCategories + KXListingCopy.transferSectionCategories + KXListingCopy.lifeSectionCategories
         }
         let unique = categories.reduce(into: [String]()) { result, item in
             if !result.contains(item) { result.append(item) }
@@ -4496,6 +4516,7 @@ struct CreateCityListingView: View {
     @State private var jobBenefits = ""
     @State private var serviceBusinessName = ""
     @State private var serviceType = ""
+    @State private var serviceCategorySection = KXListingCopy.serviceCreateSections.first?.id ?? "food"
     @State private var serviceArea = ""
     @State private var priceUnit = "预约咨询"
     @State private var availability = ""
@@ -4658,7 +4679,13 @@ struct CreateCityListingView: View {
     private func applyServiceCategory(_ nextCategory: String) {
         let previousVertical = serviceVertical
         let cleanCategory = nextCategory.trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleanCategory.isEmpty {
+            category = ""
+            serviceType = ""
+            return
+        }
         let nextVertical = KXListingCopy.serviceVertical(category: cleanCategory, serviceType: cleanCategory)
+        serviceCategorySection = KXListingCopy.serviceCreateSectionKey(for: cleanCategory) ?? serviceCategorySection
         category = cleanCategory
         serviceType = cleanCategory
         if previousVertical != nextVertical {
@@ -4669,11 +4696,28 @@ struct CreateCityListingView: View {
     private func applyServiceType(_ nextType: String) {
         let previousVertical = serviceVertical
         let nextVertical = KXListingCopy.serviceVertical(category: nextType, serviceType: nextType)
+        serviceCategorySection = KXListingCopy.serviceCreateSectionKey(for: nextType) ?? serviceCategorySection
         serviceType = nextType
         category = nextType
         if previousVertical != nextVertical {
             clearServiceSpecificFields()
         }
+    }
+
+    private var activeServiceCreateSection: KXListingCopy.ServiceCreateSection {
+        if let fromCategory = KXListingCopy.serviceCreateSection(for: category) {
+            return fromCategory
+        }
+        if let fromState = KXListingCopy.serviceCreateSections.first(where: { $0.id == serviceCategorySection }) {
+            return fromState
+        }
+        return KXListingCopy.serviceCreateSections[0]
+    }
+
+    private func selectServiceCreateSection(_ section: KXListingCopy.ServiceCreateSection) {
+        serviceCategorySection = section.id
+        guard !section.categories.contains(category), let first = section.categories.first else { return }
+        applyServiceCategory(first)
     }
 
     private func clearServiceSpecificFields() {
@@ -5038,32 +5082,107 @@ struct CreateCityListingView: View {
             VStack(spacing: 12) {
                 KXListingFormField(title: "标题", placeholder: KXListingCopy.titlePlaceholder(for: listingType), icon: "text.cursor", text: $title)
                 KXListingFormField(title: "分类", placeholder: KXListingCopy.categoryPlaceholder(for: listingType), icon: "square.grid.2x2", text: categoryBinding)
-                // 规范类目快捷选择 —— 分区/筛选按精确类目匹配，鼓励选标准值
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(KXListingCopy.categories(for: listingType).filter { $0 != "全部" }, id: \.self) { chip in
-                            Button {
-                                if listingType == "local_service" {
-                                    applyServiceCategory(chip)
-                                } else {
-                                    category = chip
-                                }
-                            } label: {
-                                Text(chip)
-                                    .font(.caption.weight(.bold))
-                                    .foregroundStyle(category == chip ? Color.white : .primary)
-                                    .padding(.horizontal, 11)
-                                    .frame(height: 28)
-                                    .background(category == chip ? KXColor.accent : KXColor.softBackground.opacity(0.88), in: Capsule())
-                                    .overlay(Capsule().stroke(category == chip ? Color.clear : KXColor.separator.opacity(0.6), lineWidth: 0.7))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
+                listingCategorySelector
                 KXListingFormField(title: listingType == "rental" ? "租金" : "价格", placeholder: KXListingCopy.pricePlaceholder(for: listingType), icon: "yensign.circle", text: $price, keyboard: .decimalPad)
                 KXListingFormField(title: "地区 / 车站 / 交易地点", placeholder: "例如 新宿站附近、池袋、线上咨询", icon: "location", text: $location)
                 KXListingFormField(title: "描述", placeholder: KXListingCopy.descriptionPlaceholder(for: listingType), icon: "text.alignleft", text: $description, lineLimit: 4...8)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var listingCategorySelector: some View {
+        if listingType == "local_service" {
+            serviceCreateCategorySelector
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(KXListingCopy.categories(for: listingType).filter { $0 != "全部" }, id: \.self) { chip in
+                        Button {
+                            category = chip
+                        } label: {
+                            Text(KXListingCopy.categoryLabel(chip, language))
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(category == chip ? Color.white : .primary)
+                                .padding(.horizontal, 11)
+                                .frame(height: 28)
+                                .background(category == chip ? KXColor.accent : KXColor.softBackground.opacity(0.88), in: Capsule())
+                                .overlay(Capsule().stroke(category == chip ? Color.clear : KXColor.separator.opacity(0.6), lineWidth: 0.7))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    private var serviceCreateCategorySelector: some View {
+        let activeSection = activeServiceCreateSection
+        return VStack(alignment: .leading, spacing: 10) {
+            Label("一级分类", systemImage: "square.grid.3x3")
+                .font(.caption.weight(.black))
+                .foregroundStyle(.secondary)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(KXListingCopy.serviceCreateSections) { section in
+                        let isSelected = activeSection.id == section.id
+                        Button {
+                            withAnimation(.easeOut(duration: 0.18)) {
+                                selectServiceCreateSection(section)
+                            }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: section.icon)
+                                    .font(.caption.weight(.black))
+                                Text(section.label(language))
+                                    .font(.caption.weight(.black))
+                                    .lineLimit(1)
+                            }
+                            .foregroundStyle(isSelected ? Color.white : KXColor.livingInk)
+                            .padding(.horizontal, 13)
+                            .frame(height: 38)
+                            .background(isSelected ? KXColor.livingInk : KXColor.softBackground.opacity(0.88), in: Capsule())
+                            .overlay(Capsule().stroke(isSelected ? Color.clear : KXColor.separator.opacity(0.65), lineWidth: 0.75))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "sparkles")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(typeAccent)
+                    .frame(width: 18, height: 18)
+                Text(activeSection.subtitle(language))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(typeAccent.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            Label("二级分类", systemImage: "line.3.horizontal.decrease.circle")
+                .font(.caption.weight(.black))
+                .foregroundStyle(.secondary)
+            FlowLayout(spacing: 8) {
+                ForEach(activeSection.categories, id: \.self) { chip in
+                    Button {
+                        withAnimation(.easeOut(duration: 0.18)) {
+                            applyServiceCategory(chip)
+                        }
+                    } label: {
+                        Text(KXListingCopy.categoryLabel(chip, language))
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(category == chip ? Color.white : .primary)
+                            .padding(.horizontal, 12)
+                            .frame(height: 34)
+                            .background(category == chip ? typeAccent : KXColor.softBackground.opacity(0.82), in: Capsule())
+                            .overlay(Capsule().stroke(category == chip ? Color.clear : KXColor.separator.opacity(0.58), lineWidth: 0.65))
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
     }
@@ -5159,7 +5278,7 @@ struct CreateCityListingView: View {
                         KXListingFormField(title: "服务方名称", placeholder: "个人 / 店铺 / 公司名称", icon: "person.crop.square", text: $serviceBusinessName)
                         KXListingChoiceRow(
                             title: "细分类 / 服务类型",
-                            icon: "wrench.and.screwdriver",
+                            icon: "line.3.horizontal.decrease.circle",
                             options: KXListingCopy.serviceTypeOptions(for: vertical),
                             selection: Binding(get: { serviceType }, set: { applyServiceType($0) }),
                             tint: typeAccent
@@ -6386,24 +6505,141 @@ enum KXListingCopy {
         case petFamily = "pet_family"
     }
 
+    struct ServiceCreateSection: Identifiable {
+        let id: String
+        let icon: String
+        let zh: String
+        let ja: String
+        let en: String
+        let subtitleZh: String
+        let subtitleJa: String
+        let subtitleEn: String
+        let categories: [String]
+
+        func label(_ language: AppLanguage) -> String {
+            KXListingCopy.pickText(language, zh, ja, en)
+        }
+
+        func subtitle(_ language: AppLanguage) -> String {
+            KXListingCopy.pickText(language, subtitleZh, subtitleJa, subtitleEn)
+        }
+    }
+
     /// 餐厅美食：菜系类目（与 web ListingKit FOOD_CATEGORIES 同步）。
     static let foodCategories = ["中华料理", "日本料理", "居酒屋", "烧肉火锅", "拉面", "寿司海鲜", "咖啡甜品", "西餐", "韩国料理"]
-    /// 餐厅美食分区还包含两个老类目（已有数据继续生效）。
-    static let foodSectionCategories = ["餐厅美食"] + foodCategories + ["餐饮点评", "优惠预约"]
+    static let foodSectionCategories = ["餐厅美食"] + foodCategories + ["优惠预约"]
+    static let lodgingSectionCategories = ["民宿", "酒店", "温泉旅馆", "公寓式酒店", "短住公寓"]
     static let travelSectionCategories = ["景点门票", "一日游", "本地向导", "体验活动", "包车行程"]
-    static let transferSectionCategories = ["机场接送", "车站接送", "包车", "行李协助", "接送机"]
-    static let paperworkSectionCategories = ["材料翻译", "市役所陪同", "银行卡协助", "手机卡协助", "租房申请协助", "签证材料整理", "翻译手续", "签证/手续协助", "翻译"]
-    static let movingSectionCategories = ["搬家", "退房清洁", "粗大垃圾协助", "行李搬运", "家具家电配送协助", "搬家清洁", "清洁"]
+    static let transferSectionCategories = ["机场接送", "车站接送", "包车", "行李协助"]
+    static let paperworkSectionCategories = ["材料翻译", "市役所陪同", "银行卡协助", "手机卡协助", "租房申请协助", "签证材料整理"]
+    static let movingSectionCategories = ["搬家", "退房清洁", "粗大垃圾协助", "行李搬运", "家具家电配送协助"]
     static let lifeSetupSectionCategories = ["手机卡开通", "网络开通", "水电煤协助", "地址登记协助", "粗大垃圾预约", "生活跑腿", "生活支持"]
     static let beautyHealthSectionCategories = ["美容美发", "美甲", "按摩", "皮肤管理", "体检/牙科预约协助"]
     static let petFamilySectionCategories = ["宠物寄养", "遛狗", "临时照看", "儿童用品租赁", "家庭协助", "宠物服务"]
-    /// 生活服务同时兼容新细分类与旧伞类目，避免筛选区漏掉真实服务。
-    static let lifeSectionCategories = paperworkSectionCategories + movingSectionCategories + lifeSetupSectionCategories + beautyHealthSectionCategories + petFamilySectionCategories
+    static let serviceCreateSections: [ServiceCreateSection] = [
+        .init(
+            id: "food",
+            icon: "fork.knife",
+            zh: "餐饮预约",
+            ja: "飲食予約",
+            en: "Dining",
+            subtitleZh: "餐厅、居酒屋、咖啡甜品和优惠预约只填写到店、菜单、套餐和取消规则。",
+            subtitleJa: "飲食店、居酒屋、カフェ、予約特典は来店予約・メニュー・セット・取消規定を入力します。",
+            subtitleEn: "Restaurants, cafes and booking deals use dining, menu, set and cancellation fields.",
+            categories: foodSectionCategories
+        ),
+        .init(
+            id: "lodging",
+            icon: "bed.double",
+            zh: "住宿短住",
+            ja: "宿泊・短期滞在",
+            en: "Stays",
+            subtitleZh: "民宿、酒店和短住公寓只填写房型、人数、入住退房、设施、房量与许可说明。",
+            subtitleJa: "民泊、ホテル、短期アパートは部屋タイプ、人数、チェックイン、設備、在庫、許可情報を入力します。",
+            subtitleEn: "Stays use room, guest, check-in, amenity, availability and permit fields.",
+            categories: lodgingSectionCategories
+        ),
+        .init(
+            id: "travel",
+            icon: "map",
+            zh: "旅行票务",
+            ja: "旅行・チケット",
+            en: "Travel",
+            subtitleZh: "景点门票、一日游、向导和体验活动填写日期、人数、时长、集合地点和包含内容。",
+            subtitleJa: "チケット、日帰り、ガイド、体験は日付、人数、所要時間、集合場所、含まれる内容を入力します。",
+            subtitleEn: "Tickets, tours and experiences use date, guests, duration, meeting point and inclusion fields.",
+            categories: travelSectionCategories
+        ),
+        .init(
+            id: "transfer",
+            icon: "car",
+            zh: "接送交通",
+            ja: "送迎・交通",
+            en: "Transfers",
+            subtitleZh: "机场、车站、包车和行李协助填写路线、车型、人数、行李、等待与追加费用规则。",
+            subtitleJa: "空港・駅送迎、貸切、荷物サポートはルート、車種、人数、荷物、待機・追加料金を入力します。",
+            subtitleEn: "Transfers use route, vehicle, passenger, luggage, waiting and surcharge fields.",
+            categories: transferSectionCategories
+        ),
+        .init(
+            id: "paperwork",
+            icon: "doc.text",
+            zh: "翻译手续",
+            ja: "翻訳・手続き",
+            en: "Paperwork",
+            subtitleZh: "材料翻译、市役所、银行卡、手机卡和租房/签证材料整理必须写清材料、流程与不可承诺事项。",
+            subtitleJa: "翻訳、役所、銀行、SIM、賃貸・ビザ書類は必要書類、流れ、保証できない事項を明記します。",
+            subtitleEn: "Paperwork help must state required materials, workflow and no-result-guarantee boundaries.",
+            categories: paperworkSectionCategories
+        ),
+        .init(
+            id: "moving",
+            icon: "shippingbox",
+            zh: "搬家清洁",
+            ja: "引越し・清掃",
+            en: "Moving",
+            subtitleZh: "搬家、退房清洁、粗大垃圾和配送协助填写面积、物品量、车辆人员、包含内容和追加费用。",
+            subtitleJa: "引越し、退去清掃、粗大ごみ、配送補助は広さ、物量、車両人員、含まれる内容、追加料金を入力します。",
+            subtitleEn: "Moving and cleaning use size, volume, vehicle/staff, inclusions and surcharge fields.",
+            categories: movingSectionCategories
+        ),
+        .init(
+            id: "life",
+            icon: "house",
+            zh: "生活开通",
+            ja: "生活手続き",
+            en: "Life setup",
+            subtitleZh: "手机卡、网络、水电煤、地址登记、粗大垃圾预约和生活跑腿填写材料、耗时、方式与不可承诺事项。",
+            subtitleJa: "SIM、ネット、ライフライン、住所登録、粗大ごみ予約、生活代行は書類、所要時間、方法、保証できない事項を入力します。",
+            subtitleEn: "Life setup uses required materials, timeline, method and no-guarantee fields.",
+            categories: lifeSetupSectionCategories
+        ),
+        .init(
+            id: "beauty",
+            icon: "sparkles",
+            zh: "美容健康",
+            ja: "美容・健康予約",
+            en: "Beauty",
+            subtitleZh: "美容美发、美甲、按摩、皮肤管理和体检/牙科预约协助填写项目、时间、价格、注意事项和医疗边界。",
+            subtitleJa: "美容、ネイル、マッサージ、肌ケア、健診・歯科予約は項目、時間、料金、注意事項、医療境界を入力します。",
+            subtitleEn: "Beauty and health booking uses service, time, price, notes and medical-boundary fields.",
+            categories: beautyHealthSectionCategories
+        ),
+    ]
+    static let serviceCreateCategories = uniqueCategories(serviceCreateSections.flatMap(\.categories))
+    /// 生活服务只展示第一阶段正式入口；旧伞类目仍在映射中兼容已有数据。
+    static let lifeSectionCategories = paperworkSectionCategories + movingSectionCategories + lifeSetupSectionCategories + beautyHealthSectionCategories
     static let homestayCategories = ["民宿"]
-    static let hotelCategories = ["酒店", "温泉旅馆", "公寓式酒店", "酒店民宿"]
+    static let hotelCategories = ["酒店", "温泉旅馆", "公寓式酒店", "短住公寓", "酒店民宿"]
     static let stayCategories = homestayCategories + hotelCategories
     static let stayChips = ["全部", "民宿"]
-    static let hotelChips = ["全部", "酒店", "温泉旅馆", "公寓式酒店"]
+    static let hotelChips = ["全部", "酒店", "温泉旅馆", "公寓式酒店", "短住公寓"]
+
+    private static func uniqueCategories(_ values: [String]) -> [String] {
+        values.reduce(into: [String]()) { result, item in
+            if !result.contains(item) { result.append(item) }
+        }
+    }
 
     static func isStayCategory(_ category: String?) -> Bool {
         stayCategories.contains(category ?? "")
@@ -6438,6 +6674,7 @@ enum KXListingCopy {
         "酒店": .lodging,
         "温泉旅馆": .lodging,
         "公寓式酒店": .lodging,
+        "短住公寓": .lodging,
         "酒店民宿": .lodging,
         "景点门票": .attractionTicket,
         "一日游": .dayTour,
@@ -6495,6 +6732,41 @@ enum KXListingCopy {
         return nil
     }
 
+    static func serviceCreateSection(for category: String?) -> ServiceCreateSection? {
+        guard let key = serviceCreateSectionKey(for: category) else { return nil }
+        return serviceCreateSections.first { $0.id == key }
+    }
+
+    static func serviceCreateSectionKey(for category: String?) -> String? {
+        let value = category?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if value.isEmpty { return nil }
+        if let section = serviceCreateSections.first(where: { $0.categories.contains(value) }) {
+            return section.id
+        }
+        switch serviceVertical(category: value, serviceType: value) {
+        case .foodRestaurant, .diningBooking:
+            return "food"
+        case .lodging:
+            return "lodging"
+        case .attractionTicket, .dayTour:
+            return "travel"
+        case .airportTransfer:
+            return "transfer"
+        case .paperworkTranslation:
+            return "paperwork"
+        case .movingCleaning:
+            return "moving"
+        case .lifeSetup:
+            return "life"
+        case .beautyHealth:
+            return "beauty"
+        case .petFamily:
+            return nil
+        case .none:
+            return nil
+        }
+    }
+
     static func serviceVertical(for listing: KaiXCityListingDTO) -> ServiceVertical? {
         let serviceType = listing.attributes?["service_type"]?.listingDisplayValue
         if let vertical = serviceVertical(category: listing.category, serviceType: serviceType) { return vertical }
@@ -6519,11 +6791,11 @@ enum KXListingCopy {
     static func serviceVerticalLabel(_ vertical: ServiceVertical) -> String {
         switch vertical {
         case .foodRestaurant: "餐厅美食字段"
-        case .diningBooking: "餐饮点评 / 优惠预约字段"
+        case .diningBooking: "餐饮预约优惠字段"
         case .lodging: "住宿字段"
         case .attractionTicket: "景点门票字段"
         case .dayTour: "一日游字段"
-        case .airportTransfer: "接送机字段"
+        case .airportTransfer: "接送与交通字段"
         case .paperworkTranslation: "翻译 / 手续字段"
         case .movingCleaning: "搬家 / 清洁字段"
         case .lifeSetup: "生活开通 / 住后支持字段"
@@ -6537,15 +6809,15 @@ enum KXListingCopy {
         case .foodRestaurant:
             return ["餐厅美食"] + foodCategories
         case .diningBooking:
-            return ["餐饮点评", "优惠预约"]
+            return ["优惠预约"]
         case .lodging:
-            return ["民宿", "酒店", "温泉旅馆", "公寓式酒店"]
+            return lodgingSectionCategories
         case .attractionTicket:
             return ["景点门票"]
         case .dayTour:
-            return ["一日游", "本地向导"]
+            return ["一日游", "本地向导", "体验活动", "包车行程"]
         case .airportTransfer:
-            return ["机场接送", "车站接送", "包车", "行李协助", "接送机"]
+            return transferSectionCategories
         case .paperworkTranslation:
             return paperworkSectionCategories
         case .movingCleaning:
@@ -6732,7 +7004,7 @@ enum KXListingCopy {
         switch type {
         case "rental": "house"
         case "work", "job", "hiring": "briefcase"
-        case "local_service": "wrench.and.screwdriver"
+        case "local_service": "storefront"
         case "discount": "tag"
         case "event": "calendar"
         default: "bag"
@@ -6753,7 +7025,7 @@ enum KXListingCopy {
         case "work", "job", "hiring":
             (zh, ja, en) = ("搜索职位、公司、地点、日语要求", "職種・会社・場所・日本語レベルを検索", "Search roles, companies, locations")
         case "local_service":
-            (zh, ja, en) = ("搜索餐厅美食、景点门票、一日游、接送机、翻译手续", "グルメ、観光チケット、ツアー、送迎、翻訳・手続きを検索", "Search restaurants, attraction tickets, tours, transfers, paperwork")
+            (zh, ja, en) = ("搜索餐饮预约、旅行票务、机场接送、翻译手续、生活服务", "飲食予約、旅行チケット、空港送迎、翻訳・手続き、生活サポートを検索", "Search dining, travel tickets, transfers, paperwork and local support")
         case "discount":
             (zh, ja, en) = ("搜索优惠、商家、地区", "特典・店舗・エリアを検索", "Search deals, merchants, areas")
         default:
@@ -6768,7 +7040,7 @@ enum KXListingCopy {
         case "stays": stayChips
         case "hotels": hotelChips
         case "work", "job", "hiring": ["全部", "兼职", "全职", "时给", "月给", "N3 可", "签证支持", "无经验可"]
-        case "local_service": ["全部"] + foodSectionCategories + ["民宿", "酒店", "温泉旅馆", "公寓式酒店", "短住公寓", "酒店民宿"] + travelSectionCategories + transferSectionCategories + lifeSectionCategories
+        case "local_service": ["全部"] + serviceCreateCategories
         case "discount": ["全部", "餐饮", "学校", "服务", "购物", "限时"]
         default: ["全部", "家具", "家电", "手机数码", "电脑办公", "电子产品", "教材", "书籍教材", "衣物", "生活用品", "母婴儿童", "运动户外", "票券卡券", "搬家出清", "免费送", "求购"]
         }
@@ -6930,7 +7202,7 @@ enum KXListingCopy {
         case "work", "job", "hiring":
             (zh, ja, en) = ("稍后查看新的同城工作机会。", "新しい求人をまた後でチェックしてください。", "Check back soon for new local jobs.")
         case "local_service":
-            (zh, ja, en) = ("认证商家的餐厅美食、景点票务、一日游、接送机和生活服务审核后会展示在这里。", "認証店舗のグルメ、観光チケット、日帰りツアー、送迎、生活サポートが審査後に表示されます。", "Verified restaurants, tickets, day trips, transfers and local support appear here after review.")
+            (zh, ja, en) = ("认证商家的餐饮预约、旅行票务、接送交通、翻译手续、搬家清洁和生活服务审核后会展示在这里。", "認証店舗の飲食予約、旅行チケット、送迎、翻訳・手続き、引越し清掃、生活サポートが審査後に表示されます。", "Verified dining, travel, transfers, paperwork, moving and local support appear here after review.")
         case "discount":
             (zh, ja, en) = ("商家优惠审核后会展示在这里。", "店舗特典が審査後にここに表示されます。", "Merchant deals appear here after review.")
         default:
@@ -6957,7 +7229,7 @@ enum KXListingCopy {
         case "work", "job", "hiring":
             return "岗位、工作时间、日语要求和签证说明越清楚，越能减少无效沟通。"
         case "local_service":
-            return "服务范围、预约时间、价格单位、资质许可和取消规则会影响审核与用户信任。酒店、票务、旅行与景点服务请写清包含/不包含内容。"
+            return "先选择一级服务，再选细分类。系统只展示该服务真正需要的字段，资质、价格、服务边界和取消规则会直接影响审核与用户信任。"
         case "discount":
             return "优惠内容、有效期和使用规则需要明确，避免用户到店后产生误解。"
         default:
@@ -6977,7 +7249,7 @@ enum KXListingCopy {
         switch type {
         case "rental": "类型，例如 单人 / 合租 / 短租"
         case "work", "job", "hiring": "行业或岗位分类"
-        case "local_service": "服务分类，例如 日本料理 / 民宿 / 景点门票 / 接送机"
+        case "local_service": "服务分类，例如 日本料理 / 民宿 / 景点门票 / 机场接送"
         case "discount": "优惠分类"
         default: "分类，例如 家具 / 家电 / 教材"
         }
@@ -6987,7 +7259,7 @@ enum KXListingCopy {
         switch type {
         case "rental": "例如 池袋 1K 公寓，可预约看房"
         case "work", "job", "hiring": "例如 新宿咖啡店周末兼职"
-        case "local_service": "例如 东京周末一日游 / 机场接送 / 认证翻译服务"
+        case "local_service": "例如 东京周末一日游 / 机场接送 / 材料翻译协助"
         case "discount": "例如 留学生套餐 9 折"
         default: "例如 日文配列键盘 / 搬家出清书桌"
         }
@@ -7589,7 +7861,7 @@ enum KXListingCopy {
             return ["招聘不允许押金、保证金或培训费骗局", "核实招聘方身份、工作地点和签证支持说明", "警惕虚假高薪、违法兼职和灰产招聘", "遇到可疑内容立即举报"]
         }
         if type == "local_service" {
-            return ["商家与服务默认进入审核，服务方认证状态会展示", "酒店、票务、旅行、接送机等服务需写清资质、包含/不包含内容和取消规则", "暂不开放外卖配送；禁止成人服务、高风险线下服务和违法服务", "不要提前转账给未核验服务方，预约前确认服务范围、取消规则和所需材料"]
+            return ["商家与服务默认进入审核，服务方认证状态会展示", "餐饮、住宿、票务、旅行、接送交通和手续协助需写清资质、包含/不包含内容和取消规则", "暂不开放外卖配送、维修安装、学习咨询；禁止成人服务、高风险线下服务和违法服务", "不要提前转账给未核验服务方，预约前确认服务范围、取消规则和所需材料"]
         }
         if type == "discount" {
             return ["确认优惠有效期、适用门店和使用规则", "不要把个人敏感信息发给未核验商家", "遇到虚假折扣、诱导转账或强制消费立即举报"]
