@@ -14,6 +14,7 @@ enum KXRoute: Hashable {
     case cityListingDetail(listingId: String)
     case createCityListing(type: String, citySlug: String?)
     case editCityListing(listingId: String)
+    case myInquiries
     case businessDirectory(citySlug: String)
     case businessProfile(businessId: String)
     case guideCategory(categoryKey: String)
@@ -141,7 +142,7 @@ extension KXRoute {
             return .none
         case .postDetailComment(_, let commentId):
             return commentId.map { .comment($0) } ?? .comments
-        case .profile, .topic, .city, .cityChannel, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .businessDirectory, .businessProfile, .guideCategory, .guideServices, .guideMemberResources, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .conversation, .search:
+        case .profile, .topic, .city, .cityChannel, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .myInquiries, .businessDirectory, .businessProfile, .guideCategory, .guideServices, .guideMemberResources, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .conversation, .search:
             return .none
         }
     }
@@ -150,7 +151,7 @@ extension KXRoute {
         switch self {
         case .postDetail, .postDetailComment, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .businessProfile, .guideArticle, .guideProduct, .guideSchool, .guideCompany, .guideCompanyReviews, .conversation:
             true
-        case .profile, .topic, .city, .cityChannel, .businessDirectory, .guideCategory, .guideServices, .guideMemberResources, .guideSchools, .guideCompanies, .guideInterviewReviews, .search:
+        case .profile, .topic, .city, .cityChannel, .myInquiries, .businessDirectory, .guideCategory, .guideServices, .guideMemberResources, .guideSchools, .guideCompanies, .guideInterviewReviews, .search:
             false
         }
     }
@@ -163,7 +164,7 @@ extension KXRoute {
             L("unknownUser", language)
         case .topic:
             L("noTopicPosts", language)
-        case .city, .cityChannel, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .businessDirectory, .businessProfile:
+        case .city, .cityChannel, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .myInquiries, .businessDirectory, .businessProfile:
             L("emptyFeed", language)
         case .guideCategory, .guideServices, .guideMemberResources, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews:
             L("guideOpenFailed", language)
@@ -211,6 +212,8 @@ private struct KXRouteDestinations: ViewModifier {
                     CreateCityListingView(listingType: type, citySlug: citySlug, currentUser: currentUser)
                 case .editCityListing(let listingId):
                     EditCityListingRouteView(listingId: listingId, currentUser: currentUser)
+                case .myInquiries:
+                    MyInquiriesView(currentUser: currentUser)
                 case .businessDirectory(let citySlug):
                     MerchantDirectoryView(citySlug: citySlug, currentUser: currentUser)
                 case .businessProfile(let businessId):
@@ -328,6 +331,8 @@ private extension KXRoute {
         case .editCityListing(let listingId):
             let id = listingId.trimmingCharacters(in: .whitespacesAndNewlines)
             return id.isEmpty ? nil : .editCityListing(listingId: id)
+        case .myInquiries:
+            return .myInquiries
         case .guideCategory(let categoryKey):
             let key = categoryKey.trimmingCharacters(in: .whitespacesAndNewlines)
             return key.isEmpty ? nil : .guideCategory(categoryKey: key)

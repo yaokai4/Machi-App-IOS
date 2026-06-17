@@ -845,12 +845,17 @@ final class KaiXAPIClient {
     /// Contacting a listing creates a structured inquiry/booking/application
     /// record and also opens (or reuses) a DM thread for follow-up.
     @discardableResult
-    func contactListing(_ id: String, message: String, details: [[String: String]] = []) async throws -> KaiXListingInquiryReceiptDTO {
-        struct InquiryBody: Encodable { let message: String; let details: [[String: String]] }
+    func contactListing(_ id: String, message: String, details: [[String: String]] = [], locale: String? = nil) async throws -> KaiXListingInquiryReceiptDTO {
+        struct InquiryBody: Encodable {
+            let message: String
+            let details: [[String: String]]
+            let source_platform: String
+            let locale: String?
+        }
         let data = try await request(
             "POST",
             "/api/listings/\(id.encodedPathSegment)/inquiry",
-            body: InquiryBody(message: message, details: details),
+            body: InquiryBody(message: message, details: details, source_platform: "ios", locale: locale),
             idempotencyKey: "listing-inquiry-\(UUID().uuidString)"
         )
         struct InquiryResponse: Decodable {
@@ -889,6 +894,19 @@ final class KaiXAPIClient {
             success_title: resp.success_title ?? resp.data?.success_title,
             successTitle: resp.successTitle ?? resp.data?.successTitle
         )
+    }
+
+    @discardableResult
+    func updateListingInquiry(_ id: String, status: String) async throws -> KaiXListingInquiryDTO {
+        struct Body: Encodable { let status: String }
+        struct Response: Decodable { let inquiry: KaiXListingInquiryDTO }
+        let data = try await request(
+            "PATCH",
+            "/api/listing-inquiries/\(id.encodedPathSegment)",
+            body: Body(status: status)
+        )
+        let response: Response = try decode(data)
+        return response.inquiry
     }
 
     // MARK: - Listing reviews（星级点评）+ 认证商家目录

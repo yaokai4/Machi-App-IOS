@@ -24,6 +24,7 @@ struct MyInquiriesView: View {
     @State private var role: Role = .received
     @State private var itemsByRole: [Role: [KaiXListingInquiryDTO]] = [:]
     @State private var state: ScreenState = .idle
+    @State private var updatingInquiryId: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -106,7 +107,7 @@ struct MyInquiriesView: View {
 
                     HStack(spacing: 6) {
                         if let name = counterpart?.display_name ?? counterpart?.displayName, !name.isEmpty {
-                            Text(role == .received ? "申请人 \(name)" : "对方 \(name)")
+                            Text(role == .received ? LabeledCopy.applicant(name, language) : LabeledCopy.counterpart(name, language))
                                 .font(.caption2.weight(.semibold))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
@@ -149,11 +150,25 @@ struct MyInquiriesView: View {
             }
 
             HStack(spacing: 8) {
-                actionButton(title: "查看详情", icon: "doc.text.magnifyingglass", filled: false) {
+                actionButton(title: LabeledCopy.viewDetail(language), icon: "doc.text.magnifyingglass", filled: false) {
                     openListing(inquiry)
                 }
-                actionButton(title: role == .received ? "联系申请人" : "打开私信", icon: "bubble.left.and.bubble.right.fill", filled: true) {
+                actionButton(title: role == .received ? LabeledCopy.followUpApplicant(language) : LabeledCopy.followUpMessage(language), icon: "bubble.left.and.bubble.right.fill", filled: true) {
                     openConversation(inquiry)
+                }
+            }
+
+            if role == .received {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 7) {
+                        statusAction(inquiry, status: "reviewing", title: LabeledCopy.reviewing(language), icon: "clock.badge.checkmark")
+                        statusAction(inquiry, status: "contacted", title: LabeledCopy.contacted(language), icon: "paperplane.fill")
+                        statusAction(inquiry, status: "confirmed", title: LabeledCopy.confirm(language), icon: "checkmark.seal.fill")
+                        statusAction(inquiry, status: "rescheduled", title: LabeledCopy.reschedule(language), icon: "calendar.badge.clock")
+                        statusAction(inquiry, status: "rejected", title: LabeledCopy.reject(language), icon: "xmark.seal.fill")
+                        statusAction(inquiry, status: "completed", title: LabeledCopy.complete(language), icon: "flag.checkered")
+                    }
+                    .padding(.vertical, 1)
                 }
             }
         }
@@ -162,24 +177,7 @@ struct MyInquiriesView: View {
     }
 
     private func typeChip(_ type: String) -> some View {
-        let label: String = switch type {
-        case "secondhand_trade_request", "secondhand_consult": "二手交易"
-        case "rental_viewing", "rental_consult": "租房看房"
-        case "job_apply": "应聘"
-        case "restaurant_booking": "餐厅预约"
-        case "stay_booking": "住宿预约"
-        case "travel_ticket_booking": "票务行程"
-        case "transfer_booking": "接送预约"
-        case "paperwork_booking": "手续翻译"
-        case "moving_cleaning_booking": "搬家清洁"
-        case "life_setup_booking": "生活开通"
-        case "beauty_health_booking": "美容健康"
-        case "pet_family_booking": "宠物家庭"
-        case "service_booking": "服务预约"
-        case "discount_claim", "discount_consult": "优惠领取"
-        default: L("inquiryGeneral", language)
-        }
-        return Text(label)
+        Text(LabeledCopy.typeLabel(type, language))
             .font(.caption2.weight(.bold))
             .foregroundStyle(KXColor.accent)
             .padding(.horizontal, 6)
@@ -188,7 +186,7 @@ struct MyInquiriesView: View {
     }
 
     private func statusChip(_ status: String) -> some View {
-        Text(statusLabel(status))
+        Text(LabeledCopy.statusLabel(status, language))
             .font(.caption2.weight(.bold))
             .foregroundStyle(statusColor(status))
             .padding(.horizontal, 7)
@@ -206,6 +204,50 @@ struct MyInquiriesView: View {
                 .background(filled ? KXColor.accent : KXColor.accent.opacity(0.08), in: Capsule())
         }
         .buttonStyle(.plain)
+    }
+
+    private func statusAction(_ inquiry: KaiXListingInquiryDTO, status: String, title: String, icon: String) -> some View {
+        let current = inquiry.status ?? "submitted"
+        let disabled = updatingInquiryId != nil || current == status || ["rejected", "completed", "closed"].contains(current)
+        return Button {
+            Task { await updateInquiry(inquiry, status: status) }
+        } label: {
+            HStack(spacing: 5) {
+                if updatingInquiryId == inquiry.id {
+                    KXSpinner(size: 12, lineWidth: 1.7, tint: statusColor(status))
+                } else {
+                    Image(systemName: icon)
+                        .font(.caption2.weight(.black))
+                }
+                Text(title)
+                    .font(.caption2.weight(.black))
+            }
+            .foregroundStyle(current == status ? .white : statusColor(status))
+            .padding(.horizontal, 10)
+            .frame(height: 30)
+            .background(current == status ? statusColor(status) : statusColor(status).opacity(0.10), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .opacity(disabled && current != status ? 0.5 : 1)
+    }
+
+    @MainActor
+    private func updateInquiry(_ inquiry: KaiXListingInquiryDTO, status: String) async {
+        guard updatingInquiryId == nil else { return }
+        updatingInquiryId = inquiry.id
+        defer { updatingInquiryId = nil }
+        do {
+            let updated = try await KaiXAPIClient.shared.updateListingInquiry(inquiry.id, status: status)
+            var items = itemsByRole[role] ?? []
+            if let index = items.firstIndex(where: { $0.id == updated.id }) {
+                items[index] = updated
+            }
+            itemsByRole[role] = items
+            state = items.isEmpty ? .empty : .loaded
+        } catch {
+            state = .error(error.kaixUserMessage)
+        }
     }
 
     private func openConversation(_ inquiry: KaiXListingInquiryDTO) {
@@ -227,7 +269,7 @@ struct MyInquiriesView: View {
             let label = clean(item["label"] ?? item["name"])
             let value = clean(item["value"] ?? item["text"])
             guard !label.isEmpty, !value.isEmpty else { return nil }
-            return (label, value)
+            return (LabeledCopy.fieldLabel(label, language), LabeledCopy.fieldLabel(value, language))
         }
     }
 
@@ -237,23 +279,6 @@ struct MyInquiriesView: View {
 
     private func formattedDate(_ raw: String) -> String {
         String(raw.prefix(10))
-    }
-
-    private func statusLabel(_ status: String) -> String {
-        switch status {
-        case "submitted", "new": "新提交"
-        case "reviewing": "处理中"
-        case "contacted": "已联系"
-        case "confirmed": "已确认"
-        case "rescheduled": "待改期"
-        case "rejected": "已拒绝"
-        case "withdrawn": "已撤回"
-        case "completed": "已完成"
-        case "closed": "已关闭"
-        case "spam": "已屏蔽"
-        case "reported": "已举报"
-        default: status.isEmpty ? "已提交" : status
-        }
     }
 
     private func statusColor(_ status: String) -> Color {
@@ -296,6 +321,191 @@ struct MyInquiriesView: View {
             state = (itemsByRole[role] ?? []).isEmpty ? .error(error.kaixUserMessage) : .loaded
         }
     }
+}
+
+private enum LabeledCopy {
+    static func viewDetail(_ language: AppLanguage) -> String {
+        pick(language, "查看详情", "詳細を見る", "View details")
+    }
+
+    static func followUpApplicant(_ language: AppLanguage) -> String {
+        pick(language, "联系申请人", "応募者に連絡", "Message applicant")
+    }
+
+    static func followUpMessage(_ language: AppLanguage) -> String {
+        pick(language, "补充沟通", "補足メッセージ", "Follow up")
+    }
+
+    static func reviewing(_ language: AppLanguage) -> String {
+        pick(language, "处理中", "対応中", "Reviewing")
+    }
+
+    static func contacted(_ language: AppLanguage) -> String {
+        pick(language, "已联系", "連絡済み", "Contacted")
+    }
+
+    static func confirm(_ language: AppLanguage) -> String {
+        pick(language, "确认", "確定", "Confirm")
+    }
+
+    static func reschedule(_ language: AppLanguage) -> String {
+        pick(language, "改期", "日程調整", "Reschedule")
+    }
+
+    static func reject(_ language: AppLanguage) -> String {
+        pick(language, "拒绝", "却下", "Reject")
+    }
+
+    static func complete(_ language: AppLanguage) -> String {
+        pick(language, "完成", "完了", "Complete")
+    }
+
+    static func applicant(_ name: String, _ language: AppLanguage) -> String {
+        switch language {
+        case .ja: return "応募者 \(name)"
+        case .en: return "Applicant \(name)"
+        default: return "申请人 \(name)"
+        }
+    }
+
+    static func counterpart(_ name: String, _ language: AppLanguage) -> String {
+        switch language {
+        case .ja: return "相手 \(name)"
+        case .en: return "Contact \(name)"
+        default: return "对方 \(name)"
+        }
+    }
+
+    static func typeLabel(_ type: String, _ language: AppLanguage) -> String {
+        switch type {
+        case "secondhand_trade_request", "secondhand_consult":
+            pick(language, "二手交易", "フリマ取引", "Marketplace")
+        case "rental_viewing", "rental_consult":
+            pick(language, "租房看房", "内見・賃貸", "Rental viewing")
+        case "rental_application":
+            pick(language, "租房申请", "賃貸申込", "Rental application")
+        case "job_apply":
+            pick(language, "应聘", "求人応募", "Job application")
+        case "restaurant_booking":
+            pick(language, "餐厅预约", "飲食予約", "Restaurant booking")
+        case "stay_booking":
+            pick(language, "住宿预约", "宿泊予約", "Stay booking")
+        case "travel_ticket_booking":
+            pick(language, "票务行程", "旅行・チケット", "Travel/tickets")
+        case "transfer_booking":
+            pick(language, "接送预约", "送迎予約", "Transfer")
+        case "paperwork_booking":
+            pick(language, "手续协助", "手続きサポート", "Paperwork")
+        case "moving_cleaning_booking":
+            pick(language, "搬家清洁", "引越し・清掃", "Moving/cleaning")
+        case "life_setup_booking":
+            pick(language, "生活开通", "生活セットアップ", "Life setup")
+        case "beauty_health_booking":
+            pick(language, "美容健康", "美容・健康", "Beauty/health")
+        case "pet_family_booking":
+            pick(language, "宠物家庭", "ペット・家庭", "Pet/family")
+        case "service_booking":
+            pick(language, "服务预约", "サービス予約", "Service booking")
+        case "discount_claim", "discount_consult":
+            pick(language, "优惠领取", "特典問い合わせ", "Deal inquiry")
+        default:
+            L("inquiryGeneral", language)
+        }
+    }
+
+    static func statusLabel(_ status: String, _ language: AppLanguage) -> String {
+        switch status {
+        case "submitted", "new":
+            pick(language, "新提交", "新規送信", "New")
+        case "reviewing":
+            pick(language, "处理中", "対応中", "Reviewing")
+        case "contacted":
+            pick(language, "已联系", "連絡済み", "Contacted")
+        case "confirmed":
+            pick(language, "已确认", "確定済み", "Confirmed")
+        case "rescheduled":
+            pick(language, "待改期", "日程調整中", "Rescheduling")
+        case "rejected":
+            pick(language, "已拒绝", "却下", "Rejected")
+        case "withdrawn":
+            pick(language, "已撤回", "取り下げ", "Withdrawn")
+        case "completed":
+            pick(language, "已完成", "完了", "Completed")
+        case "closed":
+            pick(language, "已关闭", "終了", "Closed")
+        case "spam":
+            pick(language, "已屏蔽", "ブロック済み", "Blocked")
+        case "reported":
+            pick(language, "已举报", "報告済み", "Reported")
+        default:
+            status.isEmpty ? pick(language, "已提交", "送信済み", "Submitted") : status
+        }
+    }
+
+    static func fieldLabel(_ value: String, _ language: AppLanguage) -> String {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return value }
+        if let entry = fieldTable[normalized] {
+            return pick(language, normalized, entry.ja, entry.en)
+        }
+        return KXListingCopy.attributeLabel(normalized, language)
+    }
+
+    private static func pick(_ language: AppLanguage, _ zh: String, _ ja: String, _ en: String) -> String {
+        switch language {
+        case .ja: return ja
+        case .en: return en
+        default: return zh
+        }
+    }
+
+    private static let fieldTable: [String: (ja: String, en: String)] = [
+        "希望看房日期": ("希望内見日", "Preferred viewing date"),
+        "希望时段": ("希望時間帯", "Preferred time"),
+        "当前情况": ("現在の状況", "Current situation"),
+        "入住人数": ("入居人数", "Residents"),
+        "预算": ("予算", "Budget"),
+        "联系方式": ("連絡先", "Contact"),
+        "姓名": ("氏名", "Name"),
+        "签证状态": ("在留資格", "Visa status"),
+        "日语水平": ("日本語レベル", "Japanese level"),
+        "可工作时间": ("勤務可能時間", "Availability"),
+        "最快入职时间": ("最短開始日", "Earliest start"),
+        "自我介绍": ("自己紹介", "Self introduction"),
+        "咨询意向": ("相談内容", "Intent"),
+        "希望交易地点": ("希望受け渡し場所", "Preferred meetup"),
+        "可交易时间": ("取引可能時間", "Available time"),
+        "交易方式": ("取引方法", "Trade method"),
+        "补充留言": ("追加メッセージ", "Additional message"),
+        "用餐日期": ("来店日", "Dining date"),
+        "到店时间": ("来店時間", "Arrival time"),
+        "用餐人数": ("人数", "Party size"),
+        "预订姓名": ("予約名", "Booking name"),
+        "特殊需求": ("特別リクエスト", "Special requests"),
+        "入住日期": ("チェックイン", "Check-in"),
+        "退房日期": ("チェックアウト", "Check-out"),
+        "房间数": ("部屋数", "Rooms"),
+        "补充说明": ("補足", "Notes"),
+        "出行日期": ("利用日", "Travel date"),
+        "人数 / 票数": ("人数 / 枚数", "People / tickets"),
+        "希望语言": ("希望言語", "Preferred language"),
+        "用车日期": ("利用日", "Ride date"),
+        "路线": ("ルート", "Route"),
+        "航班/车次": ("便名 / 到着時間", "Flight / train"),
+        "行李数": ("荷物数", "Luggage"),
+        "具体需求": ("具体的な依頼内容", "Request details"),
+        "事项类型": ("手続き種別", "Procedure type"),
+        "希望完成时间": ("希望納期", "Preferred deadline"),
+        "物品/房间说明": ("荷物・部屋について", "Items / room notes"),
+        "希望日期": ("希望日", "Preferred date"),
+        "服务区域": ("対応エリア", "Service area"),
+        "物品量/房型": ("荷物量・間取り", "Item volume / room type"),
+        "服务事项": ("サービス内容", "Service item"),
+        "注意事项": ("注意事項", "Notes"),
+        "预约日期": ("予約日", "Appointment date"),
+        "预约时段": ("予約時間帯", "Appointment time"),
+        "服务项目": ("サービス項目", "Service item")
+    ]
 }
 
 /// Membership payment history — mirrors the Web 工作台 订单 screen.

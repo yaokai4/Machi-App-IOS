@@ -3129,6 +3129,8 @@ struct CityListingDetailView: View {
                 onOpenRecords: {
                     inquiryReceipt = nil
                     router.setActiveTab(.profile)
+                    router.popToRoot(.profile)
+                    router.open(.myInquiries, in: .profile)
                 },
                 onOpenConversation: {
                     guard !receipt.conversationId.isEmpty else { return }
@@ -3177,7 +3179,7 @@ struct CityListingDetailView: View {
                 if ownListing { router.open(.editCityListing(listingId: listing.id)) }
                 else { intakeOpen = true }
             } label: {
-                Text(ownListing ? "编辑发布" : spec.title)
+                Text(ownListing ? KXListingCopy.pickText(language, "编辑发布", "投稿を編集", "Edit listing") : ListingIntakeLocalizer.text(spec.title, language))
                     .font(.subheadline.weight(.black))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 28)
@@ -3448,18 +3450,22 @@ struct CityListingDetailView: View {
     private func contactPanel(_ listing: KaiXCityListingDTO) -> some View {
         let spec = ListingIntakeSpec.forType(listing.type, category: listing.category)
         let ownListing = isOwnListing(listing)
-        return KXListingSection(title: "联系与交易", icon: "message.badge") {
+        return KXListingSection(title: KXListingCopy.pickText(language, "申请/预约/咨询", "応募・予約・問い合わせ", "Apply, book or inquire"), icon: "tray.full") {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: ownListing ? "person.crop.circle.badge.checkmark" : "bubble.left.and.bubble.right.fill")
+                    Image(systemName: ownListing ? "person.crop.circle.badge.checkmark" : "doc.badge.clock")
                         .font(.headline.weight(.bold))
                         .foregroundStyle(ownListing ? .secondary : KXColor.livingAccent)
                         .frame(width: 38, height: 38)
                         .background(ownListing ? Color.secondary.opacity(0.12) : KXColor.livingAccentSoft, in: Circle())
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(ownListing ? "这是你的发布" : "提交申请、预约或咨询")
+                        Text(ownListing
+                             ? KXListingCopy.pickText(language, "这是你的发布", "これはあなたの投稿です", "This is your listing")
+                             : KXListingCopy.pickText(language, "提交申请、预约或咨询", "応募・予約・問い合わせを送信", "Submit an application, booking or inquiry"))
                             .font(.subheadline.weight(.bold))
-                        Text(ownListing ? "自己的发布不能发起咨询，可以在我的发布中管理状态。" : "提交后会进入工作台记录，同时开启私信用于补充沟通。")
+                        Text(ownListing
+                             ? KXListingCopy.pickText(language, "自己的发布不能发起咨询，可以在我的发布中管理状态。", "自分の投稿には問い合わせできません。投稿管理から状態を変更できます。", "You cannot inquire about your own listing. Manage it from My listings.")
+                             : KXListingCopy.pickText(language, "提交后会生成正式记录，私信只用于后续补充沟通。", "送信後は正式な記録が作成され、メッセージは補足連絡用です。", "Submitting creates an official record; messages are only for follow-up."))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -3472,7 +3478,7 @@ struct CityListingDetailView: View {
                     Button {
                         router.open(.editCityListing(listingId: listing.id))
                     } label: {
-                        Label("编辑这条发布", systemImage: "square.and.pencil")
+                        Label(KXListingCopy.pickText(language, "编辑这条发布", "この投稿を編集", "Edit this listing"), systemImage: "square.and.pencil")
                             .font(.subheadline.weight(.black))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 13)
@@ -3483,7 +3489,7 @@ struct CityListingDetailView: View {
                     .disabled(isBusy)
                 } else {
                     Button { intakeOpen = true } label: {
-                        Label(isBusy ? "处理中" : spec.title, systemImage: "message.fill")
+                        Label(isBusy ? KXListingCopy.pickText(language, "处理中", "処理中", "Processing") : ListingIntakeLocalizer.text(spec.title, language), systemImage: "doc.badge.plus")
                             .font(.subheadline.weight(.black))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 13)
@@ -3515,14 +3521,14 @@ struct CityListingDetailView: View {
 
                 HStack(spacing: 8) {
                     Button { Task { await report() } } label: {
-                        Label("举报异常", systemImage: "flag")
+                        Label(KXListingCopy.pickText(language, "举报异常", "問題を報告", "Report issue"), systemImage: "flag")
                             .font(.caption.weight(.bold))
                             .frame(maxWidth: .infinity)
                             .frame(height: 36)
                     }
                     .buttonStyle(.bordered)
                     .disabled(isBusy)
-                    Text("不要提前转账，建议公共场所交易。")
+                    Text(KXListingCopy.pickText(language, "不要提前转账，建议公共场所交易。", "前払いは避け、公共の場所での取引をおすすめします。", "Avoid paying in advance; meet in public when trading."))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -3633,11 +3639,20 @@ struct CityListingDetailView: View {
         isBusy = true
         defer { isBusy = false }
         do {
-            let fallback = "我想\(ListingIntakeSpec.forType(listing.type, category: listing.category).actionWord)：\(KXListingCopy.displayTitle(listing))"
+            let spec = ListingIntakeSpec.forType(listing.type, category: listing.category)
+            let actionWord = ListingIntakeLocalizer.text(spec.actionWord, language)
+            let fallback = KXListingCopy.pickText(
+                language,
+                "我想\(actionWord)：\(KXListingCopy.displayTitle(listing))",
+                "\(actionWord)：\(KXListingCopy.displayTitle(listing))",
+                "\(actionWord): \(KXListingCopy.displayTitle(listing))"
+            )
+            let locale = language == .zh ? "zh-Hans" : language.rawValue
             let receiptDTO = try await KaiXAPIClient.shared.contactListing(
                 listing.id,
                 message: message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? fallback : message,
-                details: details
+                details: details,
+                locale: locale
             )
             intakeOpen = false
             actionMessage = receiptDTO.resolvedSuccessTitle
@@ -3695,14 +3710,19 @@ private struct ListingInquiryReceipt: Identifiable {
         self.submittedAt = Date()
     }
 
-    var recordLabel: String {
-        if inquiryType == "job_apply" || inquiryType == "rental_application" { return "查看我的申请" }
-        if inquiryType.hasSuffix("_booking") || inquiryType == "rental_viewing" { return "查看我的预约" }
-        return "查看我的咨询"
+    func recordLabel(_ language: AppLanguage) -> String {
+        if inquiryType == "job_apply" || inquiryType == "rental_application" {
+            return KXListingCopy.pickText(language, "查看我的申请", "自分の応募を見る", "View my applications")
+        }
+        if inquiryType.hasSuffix("_booking") || inquiryType == "rental_viewing" {
+            return KXListingCopy.pickText(language, "查看我的预约", "自分の予約を見る", "View my bookings")
+        }
+        return KXListingCopy.pickText(language, "查看我的咨询", "自分の問い合わせを見る", "View my inquiries")
     }
 }
 
 private struct ListingInquirySuccessSheet: View {
+    @Environment(\.appLanguage) private var language
     let receipt: ListingInquiryReceipt
     let onOpenRecords: () -> Void
     let onOpenConversation: () -> Void
@@ -3719,7 +3739,12 @@ private struct ListingInquirySuccessSheet: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(receipt.successTitle)
                         .font(.title3.weight(.black))
-                    Text("记录已进入工作台，私信只作为后续沟通补充。")
+                    Text(KXListingCopy.pickText(
+                        language,
+                        "记录已进入工作台，私信只作为后续沟通补充。",
+                        "記録はワークベンチに保存されました。メッセージは補足連絡用です。",
+                        "The record is saved to your workbench; messages are only for follow-up."
+                    ))
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -3736,10 +3761,10 @@ private struct ListingInquirySuccessSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                receiptLine("信息", receipt.listingTitle)
-                receiptLine("类型", Self.typeLabel(receipt.inquiryType))
-                receiptLine("状态", Self.statusLabel(receipt.status))
-                receiptLine("时间", Self.timeLabel(receipt.submittedAt))
+                receiptLine(KXListingCopy.pickText(language, "信息", "投稿", "Listing"), receipt.listingTitle)
+                receiptLine(KXListingCopy.pickText(language, "类型", "種類", "Type"), Self.typeLabel(receipt.inquiryType, language))
+                receiptLine(KXListingCopy.pickText(language, "状态", "ステータス", "Status"), Self.statusLabel(receipt.status, language))
+                receiptLine(KXListingCopy.pickText(language, "时间", "日時", "Time"), Self.timeLabel(receipt.submittedAt, language))
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -3747,10 +3772,10 @@ private struct ListingInquirySuccessSheet: View {
 
             if !receipt.details.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("提交摘要")
+                    Text(KXListingCopy.pickText(language, "提交摘要", "送信内容", "Submission summary"))
                         .font(.subheadline.weight(.black))
                     ForEach(Array(receipt.details.prefix(8).enumerated()), id: \.offset) { _, item in
-                        let label = item["label"] ?? ""
+                        let label = ListingIntakeLocalizer.text(item["label"] ?? "", language)
                         let value = item["value"] ?? ""
                         if !label.isEmpty || !value.isEmpty {
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -3777,7 +3802,7 @@ private struct ListingInquirySuccessSheet: View {
 
             VStack(spacing: 10) {
                 Button(action: onOpenRecords) {
-                    Label(receipt.recordLabel, systemImage: "tray.full")
+                    Label(receipt.recordLabel(language), systemImage: "tray.full")
                         .font(.subheadline.weight(.black))
                         .frame(maxWidth: .infinity)
                         .frame(height: 48)
@@ -3787,7 +3812,10 @@ private struct ListingInquirySuccessSheet: View {
                 .buttonStyle(.plain)
 
                 Button(action: onOpenConversation) {
-                    Label("继续私信补充", systemImage: "bubble.left.and.bubble.right")
+                    Label(
+                        KXListingCopy.pickText(language, "继续私信补充", "補足メッセージを送る", "Continue follow-up message"),
+                        systemImage: "bubble.left.and.bubble.right"
+                    )
                         .font(.subheadline.weight(.black))
                         .frame(maxWidth: .infinity)
                         .frame(height: 46)
@@ -3798,7 +3826,7 @@ private struct ListingInquirySuccessSheet: View {
                 .disabled(receipt.conversationId.isEmpty)
 
                 Button(action: onClose) {
-                    Text("返回详情")
+                    Text(KXListingCopy.pickText(language, "返回详情", "詳細へ戻る", "Back to detail"))
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
@@ -3824,47 +3852,135 @@ private struct ListingInquirySuccessSheet: View {
         }
     }
 
-    private static func typeLabel(_ type: String) -> String {
+    private static func typeLabel(_ type: String, _ language: AppLanguage) -> String {
         switch type {
-        case "secondhand_trade_request", "secondhand_consult": "二手交易咨询"
-        case "rental_viewing": "看房预约"
-        case "rental_application": "租房申请"
-        case "job_apply": "职位申请"
-        case "restaurant_booking": "餐饮订座"
-        case "stay_booking": "住宿预订"
-        case "travel_ticket_booking": "旅行票务"
-        case "transfer_booking": "接送预约"
-        case "paperwork_booking": "手续协助"
-        case "moving_cleaning_booking": "搬家清洁"
-        case "life_setup_booking": "生活开通"
-        case "beauty_health_booking": "美容健康"
-        case "pet_family_booking": "宠物家庭"
-        case "discount_claim": "优惠咨询"
-        default: "城市咨询"
+        case "secondhand_trade_request", "secondhand_consult": KXListingCopy.pickText(language, "二手交易咨询", "フリマ取引相談", "Marketplace inquiry")
+        case "rental_viewing": KXListingCopy.pickText(language, "看房预约", "内見予約", "Viewing request")
+        case "rental_application": KXListingCopy.pickText(language, "租房申请", "賃貸申込", "Rental application")
+        case "job_apply": KXListingCopy.pickText(language, "职位申请", "求人応募", "Job application")
+        case "restaurant_booking": KXListingCopy.pickText(language, "餐饮订座", "飲食予約", "Restaurant booking")
+        case "stay_booking": KXListingCopy.pickText(language, "住宿预订", "宿泊予約", "Stay booking")
+        case "travel_ticket_booking": KXListingCopy.pickText(language, "旅行票务", "旅行・チケット予約", "Travel/ticket booking")
+        case "transfer_booking": KXListingCopy.pickText(language, "接送预约", "送迎予約", "Transfer booking")
+        case "paperwork_booking": KXListingCopy.pickText(language, "手续协助", "手続きサポート", "Paperwork help")
+        case "moving_cleaning_booking": KXListingCopy.pickText(language, "搬家清洁", "引越し・清掃", "Moving/cleaning")
+        case "life_setup_booking": KXListingCopy.pickText(language, "生活开通", "生活セットアップ", "Life setup")
+        case "beauty_health_booking": KXListingCopy.pickText(language, "美容健康", "美容・健康", "Beauty/health")
+        case "pet_family_booking": KXListingCopy.pickText(language, "宠物家庭", "ペット・家庭", "Pet/family")
+        case "discount_claim": KXListingCopy.pickText(language, "优惠咨询", "特典問い合わせ", "Deal inquiry")
+        default: KXListingCopy.pickText(language, "城市咨询", "街の問い合わせ", "City inquiry")
         }
     }
 
-    private static func statusLabel(_ status: String) -> String {
+    private static func statusLabel(_ status: String, _ language: AppLanguage) -> String {
         switch status {
-        case "submitted": "已提交"
-        case "reviewing": "处理中"
-        case "contacted": "已联系"
-        case "confirmed": "已确认"
-        case "rescheduled": "待改期"
-        case "rejected": "已拒绝"
-        case "withdrawn": "已撤回"
-        case "completed": "已完成"
-        case "closed": "已关闭"
-        default: "新提交"
+        case "submitted": KXListingCopy.pickText(language, "已提交", "送信済み", "Submitted")
+        case "reviewing": KXListingCopy.pickText(language, "处理中", "対応中", "Reviewing")
+        case "contacted": KXListingCopy.pickText(language, "已联系", "連絡済み", "Contacted")
+        case "confirmed": KXListingCopy.pickText(language, "已确认", "確定済み", "Confirmed")
+        case "rescheduled": KXListingCopy.pickText(language, "待改期", "日程調整中", "Rescheduling")
+        case "rejected": KXListingCopy.pickText(language, "已拒绝", "却下", "Rejected")
+        case "withdrawn": KXListingCopy.pickText(language, "已撤回", "取り下げ", "Withdrawn")
+        case "completed": KXListingCopy.pickText(language, "已完成", "完了", "Completed")
+        case "closed": KXListingCopy.pickText(language, "已关闭", "終了", "Closed")
+        default: KXListingCopy.pickText(language, "新提交", "新規送信", "New")
         }
     }
 
-    private static func timeLabel(_ date: Date) -> String {
+    private static func timeLabel(_ date: Date, _ language: AppLanguage) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.locale = Locale(identifier: language == .ja ? "ja_JP" : language == .en ? "en_US" : "zh_CN")
         formatter.dateFormat = "yyyy-MM-dd HH:mm"
         return formatter.string(from: date)
     }
+}
+
+private enum ListingIntakeLocalizer {
+    static func text(_ value: String, _ language: AppLanguage) -> String {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return value }
+        if let entry = table[normalized] {
+            return KXListingCopy.pickText(language, normalized, entry.ja, entry.en)
+        }
+        return KXListingCopy.attributeLabel(normalized, language)
+    }
+
+    static func requiredMessage(_ fieldLabel: String, _ language: AppLanguage) -> String {
+        let label = text(fieldLabel, language)
+        return KXListingCopy.pickText(language, "请填写「\(label)」", "「\(label)」を入力してください", "Please fill in \"\(label)\"")
+    }
+
+    private static let table: [String: (ja: String, en: String)] = [
+        "预订住宿": ("宿泊を予約", "Book stay"),
+        "在线订座": ("席を予約", "Reserve table"),
+        "订座": ("席を予約", "reserve a table"),
+        "预订门票": ("チケットを予約", "Book tickets"),
+        "预订行程": ("ツアーを予約", "Book tour"),
+        "预订": ("予約", "Book"),
+        "预约接送": ("送迎を予約", "Book transfer"),
+        "预约手续协助": ("手続きサポートを予約", "Book paperwork help"),
+        "预约搬家清洁": ("引越し・清掃を予約", "Book moving/cleaning"),
+        "预约生活开通": ("生活セットアップを予約", "Book life setup"),
+        "预约服务": ("サービスを予約", "Book service"),
+        "预约美容健康": ("美容・健康を予約", "book beauty/health"),
+        "预约看房": ("内見を予約", "Request viewing"),
+        "申请职位": ("求人に応募", "Apply for job"),
+        "申请": ("応募", "Apply"),
+        "联系商家": ("店舗に問い合わせ", "Contact merchant"),
+        "报名 / 咨询": ("申込 / 問い合わせ", "Join / inquire"),
+        "联系卖家": ("出品者に問い合わせ", "Contact seller"),
+        "咨询": ("問い合わせ", "inquire"),
+        "补充说明（选填）": ("補足（任意）", "Additional details (optional)"),
+        "提交后会生成正式记录，私信只用于后续补充沟通。Machi 不代收交易款、押金、保证金或第三方服务款，请勿提前转账。": ("送信後は正式な記録が作成され、メッセージは補足連絡用です。Machi は代金・保証金・第三者サービス費を預かりません。前払いは避けてください。", "Submitting creates an official record; messages are only for follow-up. Machi does not hold trade payments, deposits, guarantees, or third-party service fees. Avoid paying in advance."),
+        "提交中": ("送信中", "Submitting"),
+        "关闭": ("閉じる", "Close"),
+        "请选择": ("選択してください", "Select"),
+        "希望看房日期": ("希望内見日", "Preferred viewing date"),
+        "希望时段": ("希望時間帯", "Preferred time"),
+        "当前情况": ("現在の状況", "Current situation"),
+        "入住人数": ("宿泊・入居人数", "People"),
+        "预算": ("予算", "Budget"),
+        "联系方式": ("連絡先", "Contact"),
+        "姓名": ("氏名", "Name"),
+        "签证状态": ("在留資格", "Visa status"),
+        "日语水平": ("日本語レベル", "Japanese level"),
+        "可工作时间": ("勤務可能時間", "Availability"),
+        "最快入职时间": ("最短開始日", "Earliest start"),
+        "自我介绍": ("自己紹介", "Self introduction"),
+        "咨询意向": ("相談内容", "Intent"),
+        "希望交易地点": ("希望受け渡し場所", "Preferred meetup"),
+        "可交易时间": ("取引可能時間", "Available time"),
+        "交易方式": ("取引方法", "Trade method"),
+        "补充留言": ("追加メッセージ", "Additional message"),
+        "用餐日期": ("来店日", "Dining date"),
+        "到店时间": ("来店時間", "Arrival time"),
+        "用餐人数": ("人数", "Party size"),
+        "预订姓名": ("予約名", "Booking name"),
+        "特殊需求": ("特別リクエスト", "Special requests"),
+        "入住日期": ("チェックイン", "Check-in"),
+        "退房日期": ("チェックアウト", "Check-out"),
+        "房间数": ("部屋数", "Rooms"),
+        "补充说明": ("補足", "Notes"),
+        "出行日期": ("利用日", "Travel date"),
+        "人数 / 票数": ("人数 / 枚数", "People / tickets"),
+        "希望语言": ("希望言語", "Preferred language"),
+        "用车日期": ("利用日", "Ride date"),
+        "路线": ("ルート", "Route"),
+        "航班/车次": ("便名 / 到着時間", "Flight / train"),
+        "行李数": ("荷物数", "Luggage"),
+        "具体需求": ("具体的な依頼内容", "Request details"),
+        "事项类型": ("手続き種別", "Procedure type"),
+        "希望完成时间": ("希望納期", "Preferred deadline"),
+        "物品/房间说明": ("荷物・部屋について", "Items / room notes"),
+        "希望日期": ("希望日", "Preferred date"),
+        "服务区域": ("対応エリア", "Service area"),
+        "物品量/房型": ("荷物量・間取り", "Item volume / room type"),
+        "服务事项": ("サービス内容", "Service item"),
+        "注意事项": ("注意事項", "Notes"),
+        "预约日期": ("予約日", "Appointment date"),
+        "预约时段": ("予約時間帯", "Appointment time"),
+        "服务项目": ("サービス項目", "Service item")
+    ]
 }
 
 private struct ListingIntakeField: Identifiable, Equatable {
@@ -4070,6 +4186,7 @@ private struct ListingIntakeSpec {
 
 private struct ListingIntakeSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appLanguage) private var language
     let listingTitle: String
     let listingType: String
     var listingCategory: String? = nil
@@ -4089,7 +4206,7 @@ private struct ListingIntakeSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(spec.title)
+                        Text(ListingIntakeLocalizer.text(spec.title, language))
                             .font(.title3.weight(.black))
                         Text(listingTitle)
                             .font(.subheadline.weight(.semibold))
@@ -4105,10 +4222,10 @@ private struct ListingIntakeSheet: View {
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(spec.noteLabel)
+                        Text(ListingIntakeLocalizer.text(spec.noteLabel, language))
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.secondary)
-                        TextField("补充说明（选填）", text: $note, axis: .vertical)
+                        TextField(ListingIntakeLocalizer.text("补充说明（选填）", language), text: $note, axis: .vertical)
                             .lineLimit(3...6)
                             .font(.subheadline.weight(.semibold))
                             .padding(12)
@@ -4123,7 +4240,7 @@ private struct ListingIntakeSheet: View {
                             .foregroundStyle(KXColor.heat)
                     }
 
-                    Text("提交后会与发布者开启对话。Machi 不代收交易款、押金、保证金或第三方服务款，请勿提前转账。")
+                    Text(ListingIntakeLocalizer.text("提交后会生成正式记录，私信只用于后续补充沟通。Machi 不代收交易款、押金、保证金或第三方服务款，请勿提前转账。", language))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(KXColor.heat)
                         .fixedSize(horizontal: false, vertical: true)
@@ -4133,7 +4250,7 @@ private struct ListingIntakeSheet: View {
                     Button(action: submit) {
                         HStack {
                             if submitting { KXSpinner(size: 18, lineWidth: 2.2, tint: .white) }
-                            Text(submitting ? "提交中" : spec.title)
+                            Text(submitting ? ListingIntakeLocalizer.text("提交中", language) : ListingIntakeLocalizer.text(spec.title, language))
                                 .font(.headline.weight(.bold))
                         }
                         .frame(maxWidth: .infinity)
@@ -4149,7 +4266,7 @@ private struct ListingIntakeSheet: View {
             .kxPageBackground()
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("关闭") { dismiss() }
+                    Button(ListingIntakeLocalizer.text("关闭", language)) { dismiss() }
                 }
             }
         }
@@ -4158,20 +4275,20 @@ private struct ListingIntakeSheet: View {
     @ViewBuilder
     private func intakeField(_ field: ListingIntakeField) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(field.required ? "\(field.label) *" : field.label)
+            Text(field.required ? "\(ListingIntakeLocalizer.text(field.label, language)) *" : ListingIntakeLocalizer.text(field.label, language))
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.secondary)
             if field.options.isEmpty {
-                TextField(field.placeholder.isEmpty ? field.label : field.placeholder, text: binding(for: field))
+                TextField(ListingIntakeLocalizer.text(field.placeholder.isEmpty ? field.label : field.placeholder, language), text: binding(for: field))
                     .font(.subheadline.weight(.semibold))
                     .padding(.horizontal, 12)
                     .frame(minHeight: 42)
                     .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             } else {
-                Picker(field.label, selection: binding(for: field)) {
-                    Text("请选择").tag("")
+                Picker(ListingIntakeLocalizer.text(field.label, language), selection: binding(for: field)) {
+                    Text(ListingIntakeLocalizer.text("请选择", language)).tag("")
                     ForEach(field.options, id: \.self) { option in
-                        Text(option).tag(option)
+                        Text(ListingIntakeLocalizer.text(option, language)).tag(option)
                     }
                 }
                 .pickerStyle(.menu)
@@ -4195,7 +4312,7 @@ private struct ListingIntakeSheet: View {
     private func submit() {
         for field in spec.fields where field.required {
             if values[field.id, default: ""].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                errorMessage = "请填写「\(field.label)」"
+                errorMessage = ListingIntakeLocalizer.requiredMessage(field.label, language)
                 return
             }
         }
@@ -4203,7 +4320,7 @@ private struct ListingIntakeSheet: View {
         let details = spec.fields.compactMap { field -> [String: String]? in
             let value = values[field.id, default: ""].trimmingCharacters(in: .whitespacesAndNewlines)
             guard !value.isEmpty else { return nil }
-            return ["label": field.label, "value": value]
+            return ["label": ListingIntakeLocalizer.text(field.label, language), "value": ListingIntakeLocalizer.text(value, language)]
         }
         onSubmit(note, details)
     }
