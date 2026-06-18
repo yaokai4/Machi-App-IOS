@@ -11,6 +11,7 @@ struct KXSpinner: View {
     var size: CGFloat = 34
     var lineWidth: CGFloat = 3.4
     var tint: Color = KXColor.accent
+    @Environment(\.appLanguage) private var language
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isSpinning = false
 
@@ -38,7 +39,7 @@ struct KXSpinner: View {
                 isSpinning = true
             }
         }
-        .accessibilityLabel(Text("Loading"))
+        .accessibilityLabel(Text(L("loading", language)))
     }
 }
 
@@ -66,6 +67,7 @@ struct LoadingView: View {
 /// with parallel `repeatForever` animations on devices that
 /// explicitly opted out.
 struct KXSplashView: View {
+    @Environment(\.appLanguage) private var language
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pulse = false
     @State private var shimmer: CGFloat = -1
@@ -126,7 +128,7 @@ struct KXSplashView: View {
                 Text("Machi")
                     .font(.system(size: 28, weight: .black, design: .rounded))
                     .foregroundStyle(.primary)
-                Text("一个城市,一个生活广场")
+                Text(L("splashTagline", language))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
             }

@@ -28,8 +28,8 @@ struct MyCityListingsView: View {
                 ErrorStateView(message: message) { Task { await load() } }
             case .empty:
                 EmptyStateView(
-                    title: "还没有发布过城市信息",
-                    subtitle: "二手、租房、招聘和本地服务的发布都会出现在这里。",
+                    title: L("workbenchCityListingsEmpty", language),
+                    subtitle: L("workbenchCityListingsEmptyHelp", language),
                     systemImage: "tray"
                 )
             case .loaded:
@@ -46,19 +46,19 @@ struct MyCityListingsView: View {
                                 Button {
                                     router.open(.editCityListing(listingId: listing.id))
                                 } label: {
-                                    Label("编辑", systemImage: "pencil")
+                                    Label(L("edit", language), systemImage: "pencil")
                                 }
                                 if listing.status == "hidden" || listing.status == "draft" {
                                     Button {
                                         Task { await updateStatus(listing, status: "published") }
                                     } label: {
-                                        Label("重新发布", systemImage: "arrow.up.circle")
+                                        Label(L("listingRepublish", language), systemImage: "arrow.up.circle")
                                     }
                                 } else if listing.status == "published" || listing.status == "reserved" {
                                     Button {
                                         Task { await updateStatus(listing, status: "hidden") }
                                     } label: {
-                                        Label("暂时下架", systemImage: "eye.slash")
+                                        Label(L("listingHideTemporarily", language), systemImage: "eye.slash")
                                     }
                                     Button {
                                         Task { await updateStatus(listing, status: completionStatus(for: listing)) }
@@ -69,19 +69,19 @@ struct MyCityListingsView: View {
                                 Button(role: .destructive) {
                                     pendingDelete = listing
                                 } label: {
-                                    Label("删除", systemImage: "trash")
+                                    Label(L("delete", language), systemImage: "trash")
                                 }
                             }
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button(role: .destructive) {
                                     pendingDelete = listing
                                 } label: {
-                                    Label("删除", systemImage: "trash")
+                                    Label(L("delete", language), systemImage: "trash")
                                 }
                                 Button {
                                     router.open(.editCityListing(listingId: listing.id))
                                 } label: {
-                                    Label("编辑", systemImage: "pencil")
+                                    Label(L("edit", language), systemImage: "pencil")
                                 }
                                 .tint(KXColor.accent)
                             }
@@ -94,7 +94,7 @@ struct MyCityListingsView: View {
                 .refreshable { await load() }
             }
         }
-        .navigationTitle("我的城市发布")
+        .navigationTitle(L("workbenchCityListingsTitle", language))
         .navigationBarTitleDisplayMode(.inline)
         .kxPageBackground()
         .task { await load() }
@@ -110,18 +110,18 @@ struct MyCityListingsView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .alert("删除这条发布？", isPresented: Binding(
+        .alert(L("listingDeleteConfirmTitle", language), isPresented: Binding(
             get: { pendingDelete != nil },
             set: { if !$0 { pendingDelete = nil } }
         )) {
-            Button("取消", role: .cancel) { pendingDelete = nil }
-            Button("删除", role: .destructive) {
+            Button(L("cancel", language), role: .cancel) { pendingDelete = nil }
+            Button(L("delete", language), role: .destructive) {
                 guard let listing = pendingDelete else { return }
                 pendingDelete = nil
                 Task { await delete(listing) }
             }
         } message: {
-            Text("删除后将从 Web 与 iOS 同步移除，且无法恢复。")
+            Text(L("listingDeleteConfirmMessage", language))
         }
         .disabled(isActing)
     }
@@ -157,14 +157,14 @@ struct MyCityListingsView: View {
 
     private func statusChip(_ status: String) -> some View {
         let (label, color): (String, Color) = switch status {
-        case "published": ("已发布", .green)
-        case "reserved": ("已预订", .orange)
-        case "hidden": ("已下架", .secondary)
-        case "rented": ("已出租", .secondary)
-        case "sold", "closed": ("已结束", .secondary)
-        case "pending_review", "reviewing": ("审核中", .blue)
-        case "rejected": ("未通过", .red)
-        case "draft": ("草稿", .secondary)
+        case "published": (L("status_active", language), .green)
+        case "reserved": (L("status_reserved", language), .orange)
+        case "hidden": (L("listingStatusHidden", language), .secondary)
+        case "rented": (L("status_rented", language), .secondary)
+        case "sold", "closed": (L("listingStatusClosed", language), .secondary)
+        case "pending_review", "reviewing": (L("status_under_review", language), .blue)
+        case "rejected": (L("listingStatusRejected", language), .red)
+        case "draft": (L("listingStatusDraft", language), .secondary)
         default: (status, .secondary)
         }
         return Text(label)
@@ -177,12 +177,12 @@ struct MyCityListingsView: View {
 
     private func typeLabel(_ type: String) -> String {
         switch type {
-        case "secondhand": "二手"
-        case "rental": "租房"
-        case "job": "招聘"
-        case "hiring": "招聘"
-        case "local_service": "本地服务"
-        case "discount": "优惠"
+        case "secondhand": L("secondhand", language)
+        case "rental": L("housing", language)
+        case "job": L("ct_jobpost", language)
+        case "hiring": L("ct_jobpost", language)
+        case "local_service": L("ct_service", language)
+        case "discount": L("ct_coupon", language)
         default: type
         }
     }
@@ -217,7 +217,7 @@ struct MyCityListingsView: View {
     }
 
     private func completionLabel(for listing: KaiXCityListingDTO) -> String {
-        listing.type == "rental" ? "标记已出租" : listing.type == "secondhand" ? "标记已售" : "标记已结束"
+        listing.type == "rental" ? L("listingMarkRented", language) : listing.type == "secondhand" ? L("listingMarkSold", language) : L("listingMarkClosed", language)
     }
 
     private func updateStatus(_ listing: KaiXCityListingDTO, status: String) async {
@@ -229,7 +229,7 @@ struct MyCityListingsView: View {
             if let index = listings.firstIndex(where: { $0.id == listing.id }) {
                 listings[index] = updated
             }
-            showActionMessage(status == "hidden" ? "已下架" : status == "published" ? "已重新提交发布" : "状态已更新")
+            showActionMessage(status == "hidden" ? L("listingHiddenDone", language) : status == "published" ? L("listingRepublishedDone", language) : L("listingStatusUpdated", language))
         } catch {
             showActionMessage(error.kaixUserMessage)
         }
@@ -245,7 +245,7 @@ struct MyCityListingsView: View {
                 listings.removeAll { $0.id == listing.id }
                 if listings.isEmpty { state = .empty }
             }
-            showActionMessage("已删除")
+            showActionMessage(L("listingDeletedDone", language))
         } catch {
             showActionMessage(error.kaixUserMessage)
         }

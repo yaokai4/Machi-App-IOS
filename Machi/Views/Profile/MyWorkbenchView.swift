@@ -33,7 +33,7 @@ struct MyWorkbenchView: View {
             .padding(.top, 12)
             .kxTabBarSafeBottomPadding()
         }
-        .navigationTitle("我的工作台")
+        .navigationTitle(L("workbenchTitle", language))
         .navigationBarTitleDisplayMode(.inline)
         .kxPageBackground()
         .task {
@@ -60,7 +60,7 @@ struct MyWorkbenchView: View {
                     .lineLimit(1)
                 HStack(spacing: 6) {
                     WorkbenchPill("\(viewModel.postCount) \(L("posts", language))")
-                    WorkbenchPill(currentUser.isVerifiedMember ? L("membershipStatusActive", language) : "普通成员")
+                    WorkbenchPill(currentUser.isVerifiedMember ? L("membershipStatusActive", language) : L("workbenchMemberStandard", language))
                     WorkbenchPill(currentRegionDisplay)
                 }
             }
@@ -71,12 +71,12 @@ struct MyWorkbenchView: View {
     }
 
     private var publishSection: some View {
-        SettingsSectionCard(title: "发布与交易") {
-            SettingsRowLink(icon: "plus.circle.fill", tint: KXColor.accent, title: "发布城市信息", subtitle: "二手、租房、工作、商家与服务", revealsNavBar: false) {
+        SettingsSectionCard(title: L("workbenchPublishTrading", language)) {
+            SettingsRowLink(icon: "plus.circle.fill", tint: KXColor.accent, title: L("workbenchPublishCity", language), subtitle: L("workbenchPublishCitySubtitle", language), revealsNavBar: false) {
                 CreateCityListingView(listingType: "secondhand", citySlug: currentRegionCode, currentUser: currentUser)
             }
             SettingsDivider()
-            SettingsRowLink(icon: "shippingbox.fill", tint: .teal, title: "我的城市发布", subtitle: "管理二手、租房、工作、商家服务和优惠") {
+            SettingsRowLink(icon: "shippingbox.fill", tint: .teal, title: L("workbenchCityListingsTitle", language), subtitle: L("workbenchCityListingsSubtitle", language)) {
                 MyCityListingsView(currentUser: currentUser)
             }
             SettingsDivider()
@@ -84,16 +84,16 @@ struct MyWorkbenchView: View {
                 MyInquiriesView(currentUser: currentUser)
             }
             SettingsDivider()
-            SettingsRowLink(icon: "doc.text.image.fill", tint: .blue, title: "我的发布", value: "\(viewModel.postCount)", subtitle: "查看已发布内容和互动数据") {
+            SettingsRowLink(icon: "doc.text.image.fill", tint: .blue, title: L("workbenchMyPostsTitle", language), value: "\(viewModel.postCount)", subtitle: L("workbenchMyPostsSubtitle", language)) {
                 ProfileCollectionView(
-                    title: "我的发布",
+                    title: L("workbenchMyPostsTitle", language),
                     posts: viewModel.authoredPosts,
                     mediaByPostId: viewModel.mediaByPostId,
                     currentUser: currentUser
                 )
             }
             SettingsDivider()
-            SettingsRowLink(icon: "tray.full", tint: .purple, title: "我的草稿", value: "\(viewModel.draftCount)", subtitle: L("navigationReady", language)) {
+            SettingsRowLink(icon: "tray.full", tint: .purple, title: L("drafts", language), value: "\(viewModel.draftCount)", subtitle: L("navigationReady", language)) {
                 DraftsSettingsView(currentUser: currentUser)
             }
         }
@@ -112,7 +112,7 @@ struct MyWorkbenchView: View {
     }
 
     private var membershipSection: some View {
-        SettingsSectionCard(title: "会员与权益") {
+        SettingsSectionCard(title: L("workbenchMembershipSection", language)) {
             SettingsRowLink(icon: "checkmark.seal.fill", tint: .blue, title: L("membershipSettingsTitle", language), value: currentUser.isVerifiedMember ? L("membershipStatusActive", language) : nil, subtitle: L("membershipSettingsSubtitle", language)) {
                 MembershipView(currentUser: currentUser)
             }
@@ -128,28 +128,28 @@ struct MyWorkbenchView: View {
     }
 
     private var serviceSection: some View {
-        SettingsSectionCard(title: "商家服务后台") {
-            SettingsRowLink(icon: "storefront", tint: .teal, title: "认证商家服务", value: currentUser.merchantVerified ? L("merchantVerified", language) : (currentUser.isMerchant ? L("merchantPending", language) : ""), subtitle: "申请认证、上传资质、查看经营数据和审核状态") {
+        SettingsSectionCard(title: L("workbenchMerchantSection", language)) {
+            SettingsRowLink(icon: "storefront", tint: .teal, title: L("workbenchMerchantVerifyTitle", language), value: currentUser.merchantVerified ? L("merchantVerified", language) : (currentUser.isMerchant ? L("merchantPending", language) : ""), subtitle: L("workbenchMerchantVerifySubtitle", language)) {
                 MerchantSettingsView(currentUser: currentUser)
             }
             SettingsDivider()
-            SettingsRowLink(icon: "star.bubble.fill", tint: .orange, title: "点评管理", subtitle: "查看并回复用户对你服务的点评") {
+            SettingsRowLink(icon: "star.bubble.fill", tint: .orange, title: L("workbenchReviewsTitle", language), subtitle: L("workbenchReviewsSubtitle", language)) {
                 MerchantReviewsManageView(currentUser: currentUser)
             }
             SettingsDivider()
-            SettingsRowLink(icon: "briefcase.fill", tint: .indigo, title: "招聘发布", subtitle: "发布招聘或求职相关信息", revealsNavBar: false) {
+            SettingsRowLink(icon: "briefcase.fill", tint: .indigo, title: L("workbenchJobPublishTitle", language), subtitle: L("workbenchJobPublishSubtitle", language), revealsNavBar: false) {
                 CreateCityListingView(listingType: "job", citySlug: currentRegionCode, currentUser: currentUser)
             }
             SettingsDivider()
-            SettingsRowLink(icon: "house.fill", tint: .blue, title: "房源发布", subtitle: "发布合租、整租和短租信息", revealsNavBar: false) {
+            SettingsRowLink(icon: "house.fill", tint: .blue, title: L("workbenchRentalPublishTitle", language), subtitle: L("workbenchRentalPublishSubtitle", language), revealsNavBar: false) {
                 CreateCityListingView(listingType: "rental", citySlug: currentRegionCode, currentUser: currentUser)
             }
             SettingsDivider()
-            SettingsRowLink(icon: "storefront.fill", tint: .brown, title: "商家与服务发布", subtitle: "餐饮预约、住宿短住、旅行票务、接送交通、翻译手续和生活服务", revealsNavBar: false) {
+            SettingsRowLink(icon: "storefront.fill", tint: .brown, title: L("workbenchServicePublishTitle", language), subtitle: L("workbenchServicePublishSubtitle", language), revealsNavBar: false) {
                 CreateCityListingView(listingType: "local_service", citySlug: currentRegionCode, currentUser: currentUser)
             }
             SettingsDivider()
-            SettingsRowLink(icon: "tag.fill", tint: .pink, title: "优惠发布", subtitle: "发布商家优惠和本地活动", revealsNavBar: false) {
+            SettingsRowLink(icon: "tag.fill", tint: .pink, title: L("workbenchDiscountPublishTitle", language), subtitle: L("workbenchDiscountPublishSubtitle", language), revealsNavBar: false) {
                 CreateCityListingView(listingType: "discount", citySlug: currentRegionCode, currentUser: currentUser)
             }
         }

@@ -6,6 +6,7 @@ actor ImageCacheService {
     static let shared = ImageCacheService()
 
     private let cache = NSCache<NSString, UIImage>()
+    private var inFlight: [NSString: Task<UIImage?, Never>] = [:]
 
     private init() {
         cache.countLimit = 220
@@ -17,13 +18,20 @@ actor ImageCacheService {
         if let cached = cache.object(forKey: key) {
             return cached
         }
-
-        let image: UIImage?
-        if url.isFileURL {
-            image = downsampleImage(at: url, maxPixelSize: targetPixelSize)
-        } else {
-            image = await downsampleRemoteImage(at: url, maxPixelSize: targetPixelSize)
+        if let task = inFlight[key] {
+            return await task.value
         }
+
+        let task = Task(priority: .utility) {
+            if url.isFileURL {
+                return Self.downsampleImage(at: url, maxPixelSize: targetPixelSize)
+            }
+            return await Self.downsampleRemoteImage(at: url, maxPixelSize: targetPixelSize)
+        }
+        inFlight[key] = task
+        let image = await task.value
+        inFlight[key] = nil
+
         if let image {
             let cost = image.cgImage.map { $0.bytesPerRow * $0.height } ?? 0
             cache.setObject(image, forKey: key, cost: cost)
@@ -33,15 +41,16 @@ actor ImageCacheService {
 
     func clear() {
         cache.removeAllObjects()
+        inFlight.removeAll()
     }
 
-    private func downsampleImage(at url: URL, maxPixelSize: CGFloat) -> UIImage? {
+    private static func downsampleImage(at url: URL, maxPixelSize: CGFloat) -> UIImage? {
         let options = [kCGImageSourceShouldCache: false] as CFDictionary
         guard let source = CGImageSourceCreateWithURL(url as CFURL, options) else { return nil }
         return downsampleImage(source: source, maxPixelSize: maxPixelSize)
     }
 
-    private func downsampleRemoteImage(at url: URL, maxPixelSize: CGFloat) async -> UIImage? {
+    private static func downsampleRemoteImage(at url: URL, maxPixelSize: CGFloat) async -> UIImage? {
         do {
             let (data, response) = try await URLSession.shared.data(from: url)
             if let httpResponse = response as? HTTPURLResponse,
@@ -54,13 +63,13 @@ actor ImageCacheService {
         }
     }
 
-    private func downsampleImage(data: Data, maxPixelSize: CGFloat) -> UIImage? {
+    private static func downsampleImage(data: Data, maxPixelSize: CGFloat) -> UIImage? {
         let options = [kCGImageSourceShouldCache: false] as CFDictionary
         guard let source = CGImageSourceCreateWithData(data as CFData, options) else { return nil }
         return downsampleImage(source: source, maxPixelSize: maxPixelSize)
     }
 
-    private func downsampleImage(source: CGImageSource, maxPixelSize: CGFloat) -> UIImage? {
+    private static func downsampleImage(source: CGImageSource, maxPixelSize: CGFloat) -> UIImage? {
         let downsampleOptions = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceShouldCacheImmediately: true,

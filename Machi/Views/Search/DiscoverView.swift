@@ -4850,6 +4850,7 @@ struct CreateCityListingView: View {
                     photoSection
                     basicInfoSection
                     typeFields
+                    validationInlineHint
                     safetySection
                     if let message {
                         Text(message)
@@ -4862,7 +4863,10 @@ struct CreateCityListingView: View {
                 }
                 .padding(.horizontal, KaiXTheme.horizontalPadding)
                 .padding(.top, 14)
-                .padding(.bottom, chrome.bottomContentPadding + 128)
+                .padding(.bottom, canSubmit || isSubmitting ? 22 : chrome.bottomContentPadding + 22)
+            }
+            if canSubmit || isSubmitting {
+                submitBar
             }
         }
         .kxPageBackground()
@@ -4870,9 +4874,6 @@ struct CreateCityListingView: View {
         // 工作台等入口用 NavigationLink 直推本页(不走 router 的
         // requiresHiddenTabBar),不收起悬浮 TabBar 会压住底部提交栏。
         .kxHidesTabBar(reason: .custom("focus-form"))
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            submitBar
-        }
         .onChange(of: pickerItems) { _, newItems in
             Task { await loadImages(newItems) }
         }
@@ -5202,6 +5203,34 @@ struct CreateCityListingView: View {
         }
     }
 
+    @ViewBuilder
+    private var validationInlineHint: some View {
+        if !canSubmit {
+            HStack(alignment: .top, spacing: 9) {
+                Image(systemName: hasBlockingMediaUpload ? "exclamationmark.triangle.fill" : "info.circle.fill")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(hasBlockingMediaUpload ? KXColor.heat : typeAccent)
+                    .frame(width: 22, height: 22)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("还差一步")
+                        .font(.subheadline.weight(.black))
+                        .foregroundStyle(.primary)
+                    Text(hasBlockingMediaUpload ? "有媒体上传失败，请删除后重新选择。" : missingRequiredCopy)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(KXSpacing.md)
+            .background(typeAccent.opacity(0.08), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(typeAccent.opacity(0.16), lineWidth: 0.8)
+            }
+        }
+    }
+
     private var submitBar: some View {
         VStack(spacing: 8) {
             if !canSubmit {
@@ -5227,7 +5256,7 @@ struct CreateCityListingView: View {
         .padding(.horizontal, KaiXTheme.horizontalPadding)
         .padding(.top, 10)
         .padding(.bottom, 10)
-        .background(.ultraThinMaterial)
+        .background(KXColor.pageBackground.opacity(0.98))
         .overlay(alignment: .top) { Divider().opacity(0.16) }
     }
 

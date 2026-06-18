@@ -53,9 +53,19 @@ struct SettingsView: View {
                 }
                 .padding(.horizontal, KaiXTheme.horizontalPadding)
                 .padding(.top, 12)
-                .padding(.bottom, 42)
+                .padding(.bottom, 96)
             }
             .kxPageBackground()
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                KXColor.pageBackground
+                    .frame(height: 24)
+            }
+            .overlay(alignment: .bottom) {
+                KXColor.pageBackground
+                    .frame(height: 92)
+                    .ignoresSafeArea(edges: .bottom)
+                    .allowsHitTesting(false)
+            }
             .toolbar(.hidden, for: .navigationBar)
         }
         .task {
@@ -99,7 +109,7 @@ struct SettingsView: View {
 
     private var accountSection: some View {
         SettingsSectionCard(title: L("accountGroup", language)) {
-            SettingsRowLink(icon: "rectangle.grid.2x2.fill", tint: KXColor.accent, title: "我的工作台", subtitle: "发布、收藏、会员和资料入口") {
+            SettingsRowLink(icon: "rectangle.grid.2x2.fill", tint: KXColor.accent, title: L("workbenchTitle", language), subtitle: L("workbenchSettingsSubtitle", language)) {
                 MyWorkbenchView(currentUser: currentUser)
             }
             SettingsDivider()

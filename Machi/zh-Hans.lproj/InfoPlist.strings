@@ -1,5 +1,6 @@
 /* 系统权限弹窗文案（中文） */
 "NSCameraUsageDescription" = "Machi 仅在你选择拍摄照片或视频用于发帖、私信时使用相机。";
+"NSLocationWhenInUseUsageDescription" = "Machi 会在你允许时使用当前位置自动设置当前城市，用于同城内容、城市频道和发布时的地区默认值。";
 "NSMicrophoneUsageDescription" = "Machi 仅在你选择录制视频用于发帖、私信时使用麦克风。";
 "NSPhotoLibraryUsageDescription" = "Machi 仅在你选择图片或视频用于发帖、私信时访问相册。";
 "NSPhotoLibraryAddUsageDescription" = "仅当你主动选择导出或保存时，Machi 才会把媒体存入相册。";

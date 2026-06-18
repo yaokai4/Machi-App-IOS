@@ -1,5 +1,6 @@
 /* システム権限ダイアログ（日本語） */
 "NSCameraUsageDescription" = "Machi は投稿やメッセージ用に撮影を選択したときのみカメラを使用します。";
+"NSLocationWhenInUseUsageDescription" = "Machi は許可された場合のみ現在地を使い、ローカルフィード、都市チャンネル、投稿時の地域初期値を自動設定します。";
 "NSMicrophoneUsageDescription" = "Machi は投稿やメッセージ用の動画録画を選択したときのみマイクを使用します。";
 "NSPhotoLibraryUsageDescription" = "Machi は投稿やメッセージ用に写真・動画を選択したときのみフォトライブラリにアクセスします。";
 "NSPhotoLibraryAddUsageDescription" = "書き出しや保存を選択した場合のみ、Machi はメディアを保存します。";

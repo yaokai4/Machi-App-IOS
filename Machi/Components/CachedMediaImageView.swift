@@ -109,18 +109,16 @@ enum CachedMediaImageFailureMode {
 /// instead of the old light-sweep, which flashed white on every refresh.
 /// Reads well at any size, from a tiny grid thumbnail to a full-bleed cover.
 private struct MediaLoadingSkeleton: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var dimmed = false
-
     var body: some View {
-        KXColor.softBackground
-            .opacity(reduceMotion ? 1 : (dimmed ? 0.6 : 1))
-            .onAppear {
-                guard !reduceMotion else { return }
-                withAnimation(.easeInOut(duration: 1.05).repeatForever(autoreverses: true)) {
-                    dimmed = true
-                }
-            }
+        LinearGradient(
+            colors: [
+                KXColor.softBackground.opacity(0.96),
+                KXColor.elevatedBackground.opacity(0.74),
+                KXColor.softBackground.opacity(0.9)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 }
 

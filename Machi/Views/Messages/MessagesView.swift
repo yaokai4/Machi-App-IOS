@@ -202,7 +202,7 @@ private struct NewConversationView: View {
                 case .loading, .idle:
                     LoadingView()
                 case .empty:
-                    EmptyStateView(title: "还没有互关好友", subtitle: L("mutualFriendsOnly", language), systemImage: "person.2")
+                    EmptyStateView(title: L("mutualFriendsEmptyTitle", language), subtitle: L("mutualFriendsOnly", language), systemImage: "person.2")
                 case .error(let message):
                     ErrorStateView(message: message) {
                         Task { await load() }
@@ -222,7 +222,7 @@ private struct NewConversationView: View {
                             .kxGlassCapsule()
 
                             if filteredUsers.isEmpty {
-                                EmptyStateView(title: "还没有互关好友", subtitle: L("mutualFriendsOnly", language), systemImage: "person.2")
+                                EmptyStateView(title: L("mutualFriendsEmptyTitle", language), subtitle: L("mutualFriendsOnly", language), systemImage: "person.2")
                             }
 
                             ForEach(filteredUsers) { user in
