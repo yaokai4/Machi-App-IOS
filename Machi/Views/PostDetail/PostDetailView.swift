@@ -712,11 +712,7 @@ private struct CommentRowView: View {
                         Text(author?.displayName ?? L("unknownUser", language))
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.primary)
-                        if author?.displaysVerifiedBadge == true {
-                            Image(systemName: "checkmark.seal.fill")
-                                .font(.caption2)
-                                .foregroundStyle(.blue)
-                        }
+                        KXUserBadge(user: author)
                         Text(DateFormatterUtils.relativeText(from: comment.createdAt, language: language))
                             .font(.caption)
                             .foregroundStyle(.secondary)

@@ -240,6 +240,18 @@ struct KXOfficialBadge: View {
     }
 }
 
+struct KXUserBadge: View {
+    let user: UserEntity?
+
+    var body: some View {
+        if user?.displaysOfficialBadge == true {
+            KXOfficialBadge()
+        } else if user?.displaysVerifiedBadge == true {
+            KXVerifiedBadge()
+        }
+    }
+}
+
 struct KXSectionHeader: View {
     let title: String
 

@@ -19,7 +19,7 @@ struct AvatarView: View {
 
     @ViewBuilder
     private var fallbackAvatar: some View {
-        if user?.isMachiOfficialAccount == true {
+        if user?.displaysOfficialBadge == true {
             MachiOfficialAvatarView(size: size)
         } else {
             Circle()
@@ -62,17 +62,7 @@ struct MachiOfficialAvatarView: View {
 
 extension UserEntity {
     var isMachiOfficialAccount: Bool {
-        let handle = username.lowercased()
-        let name = displayName.lowercased()
-        return handle.hasPrefix("machi_")
-            || handle.contains("machi")
-            || name.contains("machi 城市助手")
-            || name.contains("machi 编辑部")
-            || name.contains("machi 东京编辑部")
-            || name.contains("machi 日本生活编辑部")
-            || name.contains("machi 本地生活编辑部")
-            || name.contains("machi local")
-            || name.contains("machi assistant")
+        displaysOfficialBadge
     }
 
     var fallbackAvatarInitial: String {

@@ -226,11 +226,7 @@ private struct SettingsAccountCard: View {
                             .foregroundStyle(.primary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
-                        if user.isMachiOfficialAccount {
-                            KXOfficialBadge()
-                        } else if user.displaysVerifiedBadge {
-                            KXVerifiedBadge()
-                        }
+                        KXUserBadge(user: user)
                     }
                     Text("@\(user.username)")
                         .font(.subheadline.weight(.semibold))

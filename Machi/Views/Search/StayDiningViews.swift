@@ -117,7 +117,7 @@ struct KXStayListingCard: View {
                             }
                             .foregroundStyle(.primary)
                         } else if variant == .stay {
-                            Text("新上线")
+                            Text(L("newlyListed", language))
                                 .font(.caption2.weight(.black))
                                 .foregroundStyle(KXColor.heat)
                                 .padding(.horizontal, 7)
@@ -142,7 +142,7 @@ struct KXStayListingCard: View {
                             .font(.subheadline.weight(.black))
                             .foregroundStyle(.primary)
                         if variant == .home, let fee = KXListingCopy.attr(listing, "management_fee"), !fee.isEmpty {
-                            Text("管理费 \(fee)")
+                            Text(String(format: L("managementFeeInline", language), fee))
                                 .font(.caption2.weight(.bold))
                                 .foregroundStyle(.secondary)
                         }

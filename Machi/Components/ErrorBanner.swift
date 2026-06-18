@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ErrorBanner: View {
+    @Environment(\.appLanguage) private var language
     let item: ToastItem
     let onDismiss: () -> Void
     @State private var isExpanded = false
@@ -49,7 +50,7 @@ struct ErrorBanner: View {
                         .frame(width: 28, height: 28)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("关闭提示")
+                .accessibilityLabel(L("dismissBanner", language))
             }
 
             if shouldShowDebugDetails {

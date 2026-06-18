@@ -484,9 +484,9 @@ struct PostCardView: View, Equatable {
                 .disabled(isPostMutationInFlight)
 
                 Button {
-                    cardMessage = "推广暂由后台运营开通，不会在 App 内假提交。"
+                    cardMessage = L("promoBackendOnlyMessage", language)
                 } label: {
-                    Label("推广由后台开通", systemImage: "flame")
+                    Label(L("promoBackendOnly", language), systemImage: "flame")
                 }
                 .disabled(true)
 
@@ -705,9 +705,7 @@ private struct QuotedPostPreview: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
-                        if author?.displaysVerifiedBadge == true {
-                            KXVerifiedBadge()
-                        }
+                        KXUserBadge(user: author)
                         Text("@\(author?.username ?? L("unknownUser", language))")
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(.secondary)

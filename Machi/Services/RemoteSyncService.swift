@@ -288,6 +288,9 @@ final class RemoteSyncService {
             existing.avatarURL = dto.avatar_url ?? existing.avatarURL
             existing.coverURL = dto.cover_url ?? existing.coverURL
             existing.isVerified = dto.is_verified ?? existing.isVerified
+            if let role = dto.role, let userRole = UserRole(rawValue: role) {
+                existing.role = userRole
+            }
             existing.followerCount = dto.follower_count ?? existing.followerCount
             existing.followingCount = dto.following_count ?? existing.followingCount
             existing.updatedAt = date(dto.updated_at ?? dto.created_at)
@@ -312,6 +315,8 @@ final class RemoteSyncService {
             if let v = dto.membership_tier { existing.membershipLevel = v }
             if let v = dto.total_heat { existing.totalHeat = v }
             if let v = dto.creator_badge { existing.creatorBadge = v }
+            if let v = dto.is_official ?? dto.isOfficial { existing.isOfficial = v }
+            if let v = dto.official_role ?? dto.officialRole { existing.officialRole = v }
             if let v = dto.custom_tags { existing.customTagsRaw = v.joined(separator: "|") }
             if let v = dto.listing_counts { existing.listingCountsRaw = encodeListingCounts(v) }
             if let v = dto.is_merchant { existing.isMerchant = v }
@@ -342,7 +347,7 @@ final class RemoteSyncService {
             location: dto.location ?? "",
             joinDate: joinDate,
             isVerified: dto.is_verified ?? false,
-            role: .member,
+            role: UserRole(rawValue: dto.role ?? "") ?? .member,
             followerCount: dto.follower_count ?? 0,
             followingCount: dto.following_count ?? 0,
             createdAt: date(dto.created_at),
@@ -360,6 +365,8 @@ final class RemoteSyncService {
             membershipLevel: dto.membership_tier ?? "free",
             totalHeat: dto.total_heat ?? 0,
             creatorBadge: dto.creator_badge ?? "",
+            isOfficial: dto.is_official ?? dto.isOfficial ?? false,
+            officialRole: dto.official_role ?? dto.officialRole ?? "",
             customTagsRaw: (dto.custom_tags ?? []).joined(separator: "|"),
             listingCountsRaw: dto.listing_counts.map(encodeListingCounts) ?? "",
             isMerchant: dto.is_merchant ?? false,

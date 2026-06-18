@@ -111,7 +111,7 @@ struct MembershipView: View {
                                 .lineLimit(2)
                             Spacer()
                             if plan.recommended {
-                                Text("推荐")
+                                Text(L("recommendedBadge", language))
                                     .font(.caption2.weight(.bold))
                                     .foregroundStyle(.white)
                                     .padding(.horizontal, 6)

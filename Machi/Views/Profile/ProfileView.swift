@@ -456,11 +456,8 @@ struct ProfileView: View {
                             .font(.title3.weight(.semibold))
                             .lineLimit(1)
                             .minimumScaleFactor(0.82)
-                        if profileUser.displaysVerifiedBadge {
-                            Image(systemName: "checkmark.seal.fill")
-                                .font(.title3)
-                                .foregroundStyle(.blue)
-                        }
+                        KXUserBadge(user: profileUser)
+                            .font(.title3)
                     }
                     Text("@\(profileUser.username)")
                         .font(.subheadline)
@@ -629,7 +626,7 @@ struct ProfileView: View {
                     Image(systemName: "trophy.fill")
                         .foregroundStyle(KXColor.heat)
                         .font(.subheadline.weight(.bold))
-                    Text("成就")
+                    Text(L("profileAchievements", language))
                         .font(.subheadline.weight(.bold))
                     Spacer()
                 }
@@ -664,7 +661,7 @@ struct ProfileView: View {
                     Image(systemName: "map")
                         .foregroundStyle(KXColor.accent)
                         .font(.subheadline.weight(.bold))
-                    Text("活跃城市")
+                    Text(L("profileActiveCities", language))
                         .font(.subheadline.weight(.bold))
                     Spacer()
                 }
@@ -702,7 +699,7 @@ struct ProfileView: View {
                     Image(systemName: "number")
                         .foregroundStyle(KXColor.accent)
                         .font(.subheadline.weight(.bold))
-                    Text("常发话题")
+                    Text(L("profileFrequentTopics", language))
                         .font(.subheadline.weight(.bold))
                     Spacer()
                 }
@@ -1039,9 +1036,7 @@ private struct FollowListView: View {
                                         .font(.subheadline.weight(.semibold))
                                         .foregroundStyle(.primary)
                                         .lineLimit(1)
-                                    if user.displaysVerifiedBadge {
-                                        KXVerifiedBadge()
-                                    }
+                                    KXUserBadge(user: user)
                                 }
                                 Text("@\(user.username)")
                                     .font(KXTypography.meta)

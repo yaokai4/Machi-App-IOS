@@ -37,6 +37,8 @@ final class UserEntity {
     var membershipLevel: String = "free"
     var totalHeat: Double = 0
     var creatorBadge: String = ""
+    var isOfficial: Bool = false
+    var officialRole: String = ""
     // Admin-assigned custom tags, stored "|"-joined (SwiftData-safe default).
     var customTagsRaw: String = ""
     // Published listing counts per type as JSON {type:count}; only populated by
@@ -98,6 +100,8 @@ final class UserEntity {
         membershipLevel: String = "free",
         totalHeat: Double = 0,
         creatorBadge: String = "",
+        isOfficial: Bool = false,
+        officialRole: String = "",
         customTagsRaw: String = "",
         listingCountsRaw: String = "",
         isMerchant: Bool = false,
@@ -141,6 +145,8 @@ final class UserEntity {
         self.membershipLevel = membershipLevel
         self.totalHeat = totalHeat
         self.creatorBadge = creatorBadge
+        self.isOfficial = isOfficial
+        self.officialRole = officialRole
         self.customTagsRaw = customTagsRaw
         self.listingCountsRaw = listingCountsRaw
         self.isMerchant = isMerchant
@@ -162,9 +168,36 @@ extension UserEntity {
     /// existing badge behaviour is preserved while membership lights it up.
     var displaysVerifiedBadge: Bool { isVerified || isVerifiedMember }
 
+    /// True for production-visible Machi Official identity. Admins always
+    /// carry it; other accounts only when the backend grants is_official.
+    var displaysOfficialBadge: Bool {
+        role == .admin || isOfficial || isKnownMachiSeedAccount
+    }
+
     /// Admin-assigned tags shown as bordered chips on the profile.
     var customTags: [String] {
         customTagsRaw.split(separator: "|").map(String.init).filter { !$0.isEmpty }
+    }
+
+    private var isKnownMachiSeedAccount: Bool {
+        let handle = username.lowercased()
+        return [
+            "machi_assistant_zh",
+            "machi_assistant_en",
+            "machi_assistant_ja",
+            "machi_editorial_zh",
+            "machi_editorial_en",
+            "machi_editorial_ja",
+            "machi_tokyo_editorial",
+            "machi_tokyo_editorial_en",
+            "machi_tokyo_editorial_ja",
+            "machi_japan_life_editorial",
+            "machi_japan_life_editorial_en",
+            "machi_japan_life_editorial_ja",
+            "machi_local_life_editorial",
+            "machi_local_life_editorial_en",
+            "machi_local_life_editorial_ja"
+        ].contains(handle)
     }
 
     /// Published listing counts per type (二手/租房/招聘/服务…) for tappable tags.

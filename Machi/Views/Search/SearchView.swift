@@ -1306,10 +1306,7 @@ private struct SearchUserRow: View {
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.primary)
                                 .lineLimit(1)
-                            if user.displaysVerifiedBadge {
-                                Image(systemName: "checkmark.seal.fill")
-                                    .foregroundStyle(.blue)
-                            }
+                            KXUserBadge(user: user)
                         }
                         Text("@\(user.username)")
                             .font(.caption)

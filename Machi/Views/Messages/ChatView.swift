@@ -199,11 +199,7 @@ struct ChatView: View {
                 HStack(spacing: 4) {
                     Text(peer?.displayName ?? L("messages", language))
                         .font(.headline.weight(.semibold))
-                    if peer?.displaysVerifiedBadge == true {
-                        Image(systemName: "checkmark.seal.fill")
-                            .font(.caption)
-                            .foregroundStyle(.blue)
-                    }
+                    KXUserBadge(user: peer)
                 }
                 Text("@\(peer?.username ?? L("unknownUser", language))")
                     .font(.caption.weight(.semibold))

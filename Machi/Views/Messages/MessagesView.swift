@@ -237,9 +237,7 @@ private struct NewConversationView: View {
                                                     .font(.subheadline.weight(.semibold))
                                                     .foregroundStyle(.primary)
                                                     .lineLimit(1)
-                                                if user.displaysVerifiedBadge {
-                                                    KXVerifiedBadge()
-                                                }
+                                                KXUserBadge(user: user)
                                             }
                                             Text("@\(user.username)")
                                                 .font(.caption)
@@ -333,11 +331,7 @@ private struct MessageConversationCard: View {
                     Text(peer?.displayName ?? L("unknownUser", language))
                         .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
-                    if peer?.displaysVerifiedBadge == true {
-                        Image(systemName: "checkmark.seal.fill")
-                            .font(.caption)
-                            .foregroundStyle(.blue)
-                    }
+                    KXUserBadge(user: peer)
                     Spacer()
                     Text(DateFormatterUtils.relativeText(from: thread.lastMessageAt, language: language))
                         .font(.caption.weight(.semibold))

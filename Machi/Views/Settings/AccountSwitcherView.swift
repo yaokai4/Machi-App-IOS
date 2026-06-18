@@ -38,10 +38,7 @@ struct AccountSwitcherView: View {
                                     HStack(spacing: 5) {
                                         Text(user.displayName)
                                             .font(.headline.weight(.semibold))
-                                        if user.displaysVerifiedBadge {
-                                            Image(systemName: "checkmark.seal.fill")
-                                                .foregroundStyle(.blue)
-                                        }
+                                        KXUserBadge(user: user)
                                     }
                                     Text("@\(user.username)")
                                         .font(.subheadline)

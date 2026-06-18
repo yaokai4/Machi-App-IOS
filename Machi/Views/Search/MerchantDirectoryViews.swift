@@ -49,11 +49,11 @@ struct KXServiceListingCard: View {
     private var category: String { listing.category ?? "" }
 
     private var ctaTitle: String {
-        if KXListingCopy.isStayCategory(category) { return "查房价" }
-        if KXListingCopy.isFoodCategory(category) { return "在线订座" }
+        if KXListingCopy.isStayCategory(category) { return KXListingCopy.pickText(language, "查房价", "料金を見る", "View price") }
+        if KXListingCopy.isFoodCategory(category) { return KXListingCopy.pickText(language, "在线订座", "予約する", "Book table") }
         switch category {
-        case "景点门票", "一日游": return "订门票"
-        default: return "预约"
+        case "景点门票", "一日游": return KXListingCopy.pickText(language, "订门票", "チケット予約", "Book tickets")
+        default: return KXListingCopy.pickText(language, "预约", "予約", "Book")
         }
     }
 
@@ -89,7 +89,7 @@ struct KXServiceListingCard: View {
                         if listing.verification_status == "verified" {
                             HStack(spacing: 4) {
                                 Image(systemName: "checkmark.seal.fill").foregroundStyle(KXColor.accent)
-                                Text("认证商家").foregroundStyle(.primary)
+                                Text(L("verifiedMerchant", language)).foregroundStyle(.primary)
                             }
                             .font(.caption2.weight(.black))
                             .padding(.horizontal, 10)
@@ -118,7 +118,7 @@ struct KXServiceListingCard: View {
                                 Text("(\(ratingCount))").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                             }
                         } else {
-                            Text("暂无点评")
+                            Text(L("noReviews", language))
                                 .font(.caption2.weight(.black))
                                 .foregroundStyle(KXColor.livingWarm)
                                 .padding(.horizontal, 7)
@@ -266,6 +266,7 @@ private struct ListingCoverArtwork: View {
 // MARK: - 认证商家横滑条（服务频道内）
 
 struct MerchantDirectoryStripView: View {
+    @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     let citySlug: String
 
@@ -279,7 +280,7 @@ struct MerchantDirectoryStripView: View {
             } else {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
-                        Label("认证商家", systemImage: "checkmark.seal.fill")
+                        Label(L("verifiedMerchant", language), systemImage: "checkmark.seal.fill")
                             .font(.subheadline.weight(.black))
                             .foregroundStyle(.primary)
                         Spacer()
@@ -287,7 +288,7 @@ struct MerchantDirectoryStripView: View {
                             router.open(.businessDirectory(citySlug: citySlug))
                         } label: {
                             HStack(spacing: 3) {
-                                Text("全部商家")
+                                Text(L("allMerchants", language))
                                 Image(systemName: "chevron.right")
                             }
                             .font(.caption.weight(.black))
@@ -323,6 +324,7 @@ struct MerchantDirectoryStripView: View {
 }
 
 private struct MerchantStripCard: View {
+    @Environment(\.appLanguage) private var language
     let business: KaiXBusinessPublicDTO
 
     var body: some View {
@@ -331,7 +333,7 @@ private struct MerchantStripCard: View {
                 MerchantLogoView(business: business, size: 38)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 3) {
-                        Text(business.business_name ?? "商家")
+                        Text(business.business_name ?? L("merchantFallbackName", language))
                             .font(.caption.weight(.black))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
@@ -339,7 +341,7 @@ private struct MerchantStripCard: View {
                             .font(.caption2)
                             .foregroundStyle(Color.green)
                     }
-                    Text(business.business_type ?? business.service_categories?.first ?? "本地商家")
+                    Text(business.business_type ?? business.service_categories?.first ?? L("localMerchant", language))
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -349,12 +351,12 @@ private struct MerchantStripCard: View {
                 if (business.rating_count ?? 0) > 0 {
                     KXRatingStarsView(value: business.rating_avg ?? 0, count: business.rating_count, starSize: 10)
                 } else {
-                    Text("暂无点评")
+                    Text(L("noReviews", language))
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text("\(business.published_listing_count ?? 0) 服务")
+                Text(String(format: L("servicesCount", language), business.published_listing_count ?? 0))
                     .font(.caption2.weight(.black))
                     .foregroundStyle(.secondary)
             }
@@ -390,6 +392,7 @@ private struct MerchantLogoView: View {
 
 struct MerchantDirectoryView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     let citySlug: String
     let currentUser: UserEntity
@@ -419,8 +422,8 @@ struct MerchantDirectoryView: View {
                         ErrorStateView(message: errorMessage) { Task { await load() } }
                     } else if items.isEmpty {
                         EmptyStateView(
-                            title: "暂无认证商家",
-                            subtitle: "商家可以在「工作台 → 商家服务后台」提交认证申请，审核通过后展示在这里。",
+                            title: KXListingCopy.pickText(language, "暂无认证商家", "認証済み店舗はまだありません", "No verified merchants yet"),
+                            subtitle: KXListingCopy.pickText(language, "商家可以在「工作台 → 商家服务后台」提交认证申请，审核通过后展示在这里。", "店舗は「ワークベンチ → 店舗サービス管理」から認証申請できます。審査後ここに表示されます。", "Merchants can apply in Workbench → Merchant service console. Approved profiles appear here."),
                             systemImage: "storefront"
                         )
                         .frame(maxWidth: .infinity, minHeight: 240)
@@ -458,10 +461,10 @@ struct MerchantDirectoryView: View {
                 }
                 .buttonStyle(.plain)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(cityName) · 认证商家")
+                    Text("\(cityName) · \(L("verifiedMerchant", language))")
                         .font(.headline.weight(.semibold))
                         .lineLimit(1)
-                    Text("资质审核通过的本地商家与服务方")
+                    Text(L("verifiedMerchantSubtitle", language))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
@@ -471,7 +474,7 @@ struct MerchantDirectoryView: View {
                 Image(systemName: "magnifyingglass")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.green)
-                TextField("搜索商家名称、服务类型…", text: $query)
+                TextField(KXListingCopy.pickText(language, "搜索商家名称、服务类型…", "店舗名・サービス種類を検索…", "Search merchant name or service type..."), text: $query)
                     .font(.subheadline.weight(.semibold))
                     .submitLabel(.search)
                     .onSubmit { Task { await load() } }
@@ -495,7 +498,7 @@ struct MerchantDirectoryView: View {
                         category = item
                         Task { await load() }
                     } label: {
-                        Text(item)
+                        Text(KXListingCopy.categoryLabel(item, language))
                             .font(.caption.weight(.bold))
                             .foregroundStyle(category == item ? Color.white : .primary)
                             .padding(.horizontal, 13)
@@ -527,6 +530,7 @@ struct MerchantDirectoryView: View {
 }
 
 private struct MerchantDirectoryRow: View {
+    @Environment(\.appLanguage) private var language
     let business: KaiXBusinessPublicDTO
 
     var body: some View {
@@ -535,7 +539,7 @@ private struct MerchantDirectoryRow: View {
                 MerchantLogoView(business: business, size: 46)
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 4) {
-                        Text(business.business_name ?? "商家")
+                        Text(business.business_name ?? L("merchantFallbackName", language))
                             .font(.subheadline.weight(.black))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
@@ -543,7 +547,7 @@ private struct MerchantDirectoryRow: View {
                             .font(.caption)
                             .foregroundStyle(Color.green)
                     }
-                    Text(business.business_type ?? "本地商家")
+                    Text(business.business_type ?? L("localMerchant", language))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
@@ -552,7 +556,7 @@ private struct MerchantDirectoryRow: View {
                     if (business.rating_count ?? 0) > 0 {
                         KXRatingStarsView(value: business.rating_avg ?? 0, starSize: 11)
                     }
-                    Text("\(business.published_listing_count ?? 0) 个在线服务")
+                    Text(String(format: L("onlineServicesCount", language), business.published_listing_count ?? 0))
                         .font(.caption2.weight(.black))
                         .foregroundStyle(.secondary)
                 }
@@ -586,6 +590,7 @@ private struct MerchantDirectoryRow: View {
 
 struct BusinessPublicProfileView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     let businessId: String
     let currentUser: UserEntity
@@ -606,10 +611,10 @@ struct BusinessPublicProfileView: View {
                 }
                 .buttonStyle(.plain)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(response?.business.business_name ?? "商家主页")
+                    Text(response?.business.business_name ?? L("merchantProfileTitle", language))
                         .font(.headline.weight(.semibold))
                         .lineLimit(1)
-                    Text("认证商家")
+                    Text(L("verifiedMerchant", language))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
@@ -629,7 +634,7 @@ struct BusinessPublicProfileView: View {
                 } else if let response {
                     content(response)
                 } else {
-                    EmptyStateView(title: "商家不存在", subtitle: "它可能未通过认证或已下线。", systemImage: "storefront")
+                    EmptyStateView(title: L("merchantNotFoundTitle", language), subtitle: L("merchantNotFoundHelp", language), systemImage: "storefront")
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -651,7 +656,7 @@ struct BusinessPublicProfileView: View {
                         MerchantLogoView(business: business, size: 60)
                         VStack(alignment: .leading, spacing: 5) {
                             HStack(spacing: 5) {
-                                Text(business.business_name ?? "商家")
+                                Text(business.business_name ?? L("merchantFallbackName", language))
                                     .font(.title3.weight(.black))
                                     .lineLimit(1)
                                 Image(systemName: "checkmark.seal.fill")
@@ -660,11 +665,11 @@ struct BusinessPublicProfileView: View {
                             if (business.rating_count ?? 0) > 0 {
                                 KXRatingStarsView(value: business.rating_avg ?? 0, count: business.rating_count, starSize: 13)
                             } else {
-                                Text("暂无点评")
+                                Text(L("noReviews", language))
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(.secondary)
                             }
-                            Text("\(business.published_listing_count ?? 0) 个在线服务")
+                            Text(String(format: L("onlineServicesCount", language), business.published_listing_count ?? 0))
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
                         }
@@ -707,7 +712,7 @@ struct BusinessPublicProfileView: View {
 
                 // 在线服务
                 if !listings.isEmpty {
-                    Text("在线服务 (\(listings.count))")
+                    Text(KXListingCopy.pickText(language, "在线服务 (\(listings.count))", "公開サービス (\(listings.count))", "Online services (\(listings.count))"))
                         .font(.headline.weight(.black))
                         .padding(.horizontal, 2)
                     LazyVStack(spacing: 12) {
@@ -721,7 +726,7 @@ struct BusinessPublicProfileView: View {
 
                 // 最新点评
                 if !reviews.isEmpty {
-                    Text("最新点评")
+                    Text(L("latestReviews", language))
                         .font(.headline.weight(.black))
                         .padding(.horizontal, 2)
                     LazyVStack(spacing: 10) {
@@ -753,6 +758,7 @@ struct BusinessPublicProfileView: View {
 // MARK: - 点评行
 
 struct KXReviewRow: View {
+    @Environment(\.appLanguage) private var language
     let review: KaiXListingReviewDTO
     var showsListingTitle = false
 
@@ -788,7 +794,7 @@ struct KXReviewRow: View {
             }
             if let reply = review.owner_reply, !reply.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
-                    Label("商家回复", systemImage: "storefront")
+                    Label(L("merchantReply", language), systemImage: "storefront")
                         .font(.caption2.weight(.black))
                         .foregroundStyle(.secondary)
                     Text(reply)
@@ -829,6 +835,7 @@ private struct ReviewAuthorAvatar: View {
 // MARK: - 详情页点评区
 
 struct ListingReviewsSectionView: View {
+    @Environment(\.appLanguage) private var language
     let listing: KaiXCityListingDTO
     let currentUser: UserEntity
 
@@ -849,7 +856,7 @@ struct ListingReviewsSectionView: View {
     var body: some View {
         Group {
             if Self.reviewableTypes.contains(listing.type) {
-                KXListingSection(title: "用户点评", icon: "star.fill") {
+                KXListingSection(title: L("userReviews", language), icon: "star.fill") {
                     VStack(alignment: .leading, spacing: 12) {
                         summaryHeader
                         if let items = response?.items, !items.isEmpty {
@@ -857,7 +864,7 @@ struct ListingReviewsSectionView: View {
                                 KXReviewRow(review: review)
                             }
                         } else if response != nil {
-                            Text("还没有人点评，体验过的话写下第一条点评帮助大家做决定。")
+                            Text(L("noReviewPrompt", language))
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
                         }
@@ -934,27 +941,27 @@ struct ListingReviewsSectionView: View {
                             }
                             .buttonStyle(.plain)
                         }
-                        Text(["很差", "较差", "一般", "不错", "超赞"][max(0, min(4, draftRating - 1))])
+                        Text([L("poorRating", language), L("lowRating", language), L("averageRating", language), L("goodRating", language), L("excellentRating", language)][max(0, min(4, draftRating - 1))])
                             .font(.subheadline.weight(.black))
                             .foregroundStyle(.orange)
                     }
                 }
-                Section("点评内容") {
-                    TextField("服务体验、环境、价格、是否推荐…", text: $draftContent, axis: .vertical)
+                Section(L("reviewContent", language)) {
+                    TextField(L("reviewPlaceholder", language), text: $draftContent, axis: .vertical)
                         .lineLimit(4...8)
                 }
                 Section {
-                    Button(isSubmitting ? "发布中…" : "发布点评") {
+                    Button(isSubmitting ? L("publishingReview", language) : L("publishReview", language)) {
                         Task { await submit() }
                     }
                     .disabled(isSubmitting)
                 }
             }
-            .navigationTitle("写点评")
+            .navigationTitle(L("writeReviewTitle", language))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { writeOpen = false }
+                    Button(L("cancel", language)) { writeOpen = false }
                 }
             }
         }
@@ -974,7 +981,7 @@ struct ListingReviewsSectionView: View {
                 content: draftContent.trimmingCharacters(in: .whitespacesAndNewlines)
             )
             writeOpen = false
-            message = "点评已发布，感谢分享体验！"
+            message = L("reviewPublishedMessage", language)
             await load()
         } catch {
             message = error.localizedDescription
@@ -985,6 +992,7 @@ struct ListingReviewsSectionView: View {
 // MARK: - 工作台 · 点评管理
 
 struct MerchantReviewsManageView: View {
+    @Environment(\.appLanguage) private var language
     let currentUser: UserEntity
 
     @State private var response: KaiXMyBusinessReviewsResponse?
@@ -1003,15 +1011,15 @@ struct MerchantReviewsManageView: View {
                             Text(String(format: "%.1f", summary.rating_avg ?? 0))
                                 .font(.title.weight(.black))
                                 .foregroundStyle(.orange)
-                            Text("综合评分")
+                            Text(KXListingCopy.pickText(language, "综合评分", "総合評価", "Overall rating"))
                                 .font(.caption2.weight(.semibold))
                                 .foregroundStyle(.secondary)
                         }
                         Divider().frame(height: 34)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("\(summary.count ?? 0) 条点评")
+                            Text(KXListingCopy.pickText(language, "\(summary.count ?? 0) 条点评", "\(summary.count ?? 0)件のレビュー", "\(summary.count ?? 0) reviews"))
                                 .font(.subheadline.weight(.black))
-                            Text("\(summary.unreplied ?? 0) 条待回复 — 认真回复能显著提升转化")
+                            Text(KXListingCopy.pickText(language, "\(summary.unreplied ?? 0) 条待回复 - 认真回复能显著提升转化", "\(summary.unreplied ?? 0)件が未返信 - 丁寧な返信は予約率を高めます", "\(summary.unreplied ?? 0) waiting for reply - thoughtful replies improve conversion"))
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
                         }
@@ -1027,8 +1035,8 @@ struct MerchantReviewsManageView: View {
                     ErrorStateView(message: errorMessage) { Task { await load() } }
                 } else if (response?.items ?? []).isEmpty {
                     EmptyStateView(
-                        title: "还没有收到点评",
-                        subtitle: "服务成交后引导用户在详情页留下体验点评。",
+                        title: KXListingCopy.pickText(language, "还没有收到点评", "レビューはまだありません", "No reviews yet"),
+                        subtitle: KXListingCopy.pickText(language, "服务完成后，引导用户在详情页留下真实体验。", "サービス完了後、詳細ページから体験レビューを書いてもらいましょう。", "After a service is completed, invite customers to leave a real review on the detail page."),
                         systemImage: "star.bubble"
                     )
                     .frame(maxWidth: .infinity, minHeight: 240)
@@ -1041,7 +1049,7 @@ struct MerchantReviewsManageView: View {
                                     replyTarget = review
                                     replyText = ""
                                 } label: {
-                                    Label("回复点评", systemImage: "arrowshape.turn.up.left")
+                                    Label(KXListingCopy.pickText(language, "回复点评", "レビューに返信", "Reply to review"), systemImage: "arrowshape.turn.up.left")
                                         .font(.caption.weight(.black))
                                         .foregroundStyle(KXColor.accent)
                                 }
@@ -1056,20 +1064,20 @@ struct MerchantReviewsManageView: View {
             .padding(.top, 12)
             .kxTabBarSafeBottomPadding()
         }
-        .navigationTitle("点评管理")
+        .navigationTitle(KXListingCopy.pickText(language, "点评管理", "レビュー管理", "Review management"))
         .navigationBarTitleDisplayMode(.inline)
         .kxPageBackground()
         .task { await load() }
         .refreshable { await load() }
-        .alert("回复点评", isPresented: Binding(get: { replyTarget != nil }, set: { if !$0 { replyTarget = nil } })) {
-            TextField("感谢点评 / 说明改进…", text: $replyText)
-            Button(isReplying ? "回复中…" : "回复") {
+        .alert(KXListingCopy.pickText(language, "回复点评", "レビューに返信", "Reply to review"), isPresented: Binding(get: { replyTarget != nil }, set: { if !$0 { replyTarget = nil } })) {
+            TextField(KXListingCopy.pickText(language, "感谢点评 / 说明改进...", "レビューへのお礼 / 改善点...", "Thanks or improvement notes..."), text: $replyText)
+            Button(isReplying ? KXListingCopy.pickText(language, "回复中...", "返信中...", "Replying...") : KXListingCopy.pickText(language, "回复", "返信", "Reply")) {
                 Task { await submitReply() }
             }
             .disabled(isReplying)
-            Button("取消", role: .cancel) { replyTarget = nil }
+            Button(L("cancel", language), role: .cancel) { replyTarget = nil }
         } message: {
-            Text("回复会公开展示在点评下方，用户会收到通知。")
+            Text(KXListingCopy.pickText(language, "回复会公开展示在点评下方，用户会收到通知。", "返信はレビューの下に公開表示され、ユーザーに通知されます。", "Your reply appears publicly below the review and notifies the customer."))
         }
     }
 

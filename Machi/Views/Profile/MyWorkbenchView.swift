@@ -49,10 +49,7 @@ struct MyWorkbenchView: View {
                     Text(currentUser.displayName)
                         .font(.title3.weight(.bold))
                         .lineLimit(1)
-                    if currentUser.isVerifiedMember || currentUser.isVerified {
-                        Image(systemName: "checkmark.seal.fill")
-                            .foregroundStyle(KXColor.accent)
-                    }
+                    KXUserBadge(user: currentUser)
                 }
                 Text("@\(currentUser.username)")
                     .font(.subheadline.weight(.semibold))
