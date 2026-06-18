@@ -33,7 +33,7 @@ struct MerchantSettingsView: View {
     @State private var applicationNote = ""
     @State private var selectedCategories: Set<String> = ["生活开通"]
 
-    private let businessTypes = ["餐饮预约", "住宿短住", "旅行票务", "接送交通", "翻译手续", "搬家清洁", "生活开通", "美容健康"]
+    private let businessTypes = ["餐厅", "旅行票务", "接送交通", "翻译手续", "搬家清洁", "生活开通", "美容健康"]
     private let serviceCategories = KXListingCopy.serviceCreateCategories
 
     var body: some View {

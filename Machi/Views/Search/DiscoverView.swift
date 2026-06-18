@@ -407,7 +407,7 @@ struct DiscoverView: View {
         .init(id: "food", title: "Food meetup", subtitle: "餐厅、咖啡和小型饭局", icon: "fork.knife", types: [.dining], channel: .dining, tint: KXColor.rankCoral),
         .init(id: "localgroup", title: "本地小组", subtitle: "运动、周末活动、城市散步", icon: "calendar", types: [.event, .meetup], channel: .event, tint: Color.purple),
         .init(id: "merchant", title: "商家", subtitle: "本地店铺和服务商资料", icon: "storefront", types: [.merchant], channel: .service, tint: Color.teal),
-        .init(id: "travel_stays", title: "民宿 · 短住", subtitle: "民宿、酒店、温泉旅馆（租房 · 住宿内）", icon: "bed.double", types: [.service, .merchant], channel: .housing, tint: Color.cyan),
+        .init(id: "travel_stays", title: "民宿 · 短住", subtitle: "民宿短住（租房 · 住宿内）", icon: "bed.double", types: [.service, .merchant], channel: .housing, tint: Color.cyan),
         .init(id: "attractions", title: "景点票务", subtitle: "门票、一日游和本地向导", icon: "ticket", types: [.service, .merchant], channel: .service, tint: Color.mint),
         .init(id: "verified_merchant", title: "认证商家", subtitle: "已提交认证资料的商家", icon: "checkmark.seal", types: [.merchant], channel: .service, tint: Color.teal),
         .init(id: "poll", title: "投票", subtitle: "选项投票", icon: "chart.bar", types: [.poll], channel: .dynamic, tint: Color.blue),
@@ -566,7 +566,7 @@ private struct DiscoverCategory: Identifiable, Hashable {
         case "food": KXListingCopy.pickText(language, "餐厅、咖啡和小型饭局", "飲食店・カフェ・食事会", "Restaurants, cafes, meals")
         case "localgroup": KXListingCopy.pickText(language, "运动、周末活动、城市散步", "運動・週末活動・街歩き", "Sports, weekends, walks")
         case "merchant": KXListingCopy.pickText(language, "本地店铺和服务商资料", "地域店舗とサービス提供者", "Local merchant profiles")
-        case "travel_stays": KXListingCopy.pickText(language, "民宿、酒店、温泉旅馆", "民泊・ホテル・温泉旅館", "Homestays, hotels, ryokan")
+        case "travel_stays": KXListingCopy.pickText(language, "民宿短住", "民泊・短期滞在", "Homestays")
         case "attractions": KXListingCopy.pickText(language, "门票、一日游和本地向导", "チケット・日帰り・ガイド", "Tickets, day trips, guides")
         case "verified_merchant": KXListingCopy.pickText(language, "已提交认证资料的商家", "認証済みの店舗", "Approved merchant profiles")
         case "poll": KXListingCopy.pickText(language, "选项投票", "選択式の投票", "Option polls")
@@ -626,8 +626,7 @@ private struct DiscoverCategory: Identifiable, Hashable {
         ]
         case "travel_stays": return [
             KXListingCopy.categoryLabel("民宿", language),
-            KXListingCopy.categoryLabel("酒店", language),
-            KXListingCopy.categoryLabel("温泉旅馆", language)
+            KXListingCopy.pickText(language, "短住", "短期滞在", "Short stays")
         ]
         case "attractions": return [
             KXListingCopy.pickText(language, "门票", "チケット", "Tickets"),
@@ -925,7 +924,7 @@ private struct MoreChannelSheet: View {
             ("交易生活", ["secondhand", "housing", "coupon"]),
             ("机会工作", ["jobseek", "jobpost", "referral"]),
             ("本地连接", ["groups", "language", "food", "localgroup"]),
-            ("服务商家", ["service", "merchant", "travel_stays", "attractions", "verified_merchant"]),
+            ("服务商家", ["service", "merchant", "attractions", "verified_merchant"]),
             ("内容工具", ["poll", "longpost", "anonymous"]),
         ]
     }
@@ -2136,7 +2135,7 @@ struct CityListingChannelView: View {
     /// 住宿类目已整体搬去租房页「民宿·短住」，这里不再展示。
     static let serviceSections: [(key: String, title: String, categories: [String])] = [
         ("all", "全部", []),
-        ("food", "餐饮预约", KXListingCopy.foodSectionCategories),
+        ("food", "餐厅", KXListingCopy.foodSectionCategories),
         ("travel", "旅行票务", KXListingCopy.travelSectionCategories),
         ("transfer", "接送交通", KXListingCopy.transferSectionCategories),
         ("paperwork", "翻译手续", KXListingCopy.paperworkSectionCategories),
@@ -2145,7 +2144,7 @@ struct CityListingChannelView: View {
         ("beauty", "美容健康", KXListingCopy.beautyHealthSectionCategories),
     ]
 
-    /// 「stays / hotels」是住房频道伪类型，数据实际来自住宿类 local_service。
+    /// 「stays / hotels」是住房频道伪类型；旧 hotels 深链统一归并到民宿短住。
     /// 工作频道兼容 work/job/hiring 三种入口，避免外部深链只展示半条招聘流。
     private var baseType: String {
         let raw = listingType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -2163,27 +2162,24 @@ struct CityListingChannelView: View {
     private var isWorkChannel: Bool { baseType == "work" }
 
     private var staysActive: Bool { baseType == "rental" && activeRentalTab == .stays }
-    private var hotelsActive: Bool { baseType == "rental" && activeRentalTab == .hotels }
-    private var lodgingActive: Bool { staysActive || hotelsActive }
+    private var lodgingActive: Bool { staysActive }
 
     /// 真正发给 API 的 listing type。
     private var queryType: String { lodgingActive ? "local_service" : baseType }
 
-    enum RentalTab: String { case homes, stays, hotels }
+    enum RentalTab: String { case homes, stays }
     @State private var rentalTab: RentalTab?
 
     private var activeRentalTab: RentalTab {
-        rentalTab ?? (listingType == "hotels" ? .hotels : listingType == "stays" ? .stays : .homes)
+        rentalTab ?? (listingType == "hotels" || listingType == "stays" ? .stays : .homes)
     }
 
     private var visibleItems: [KaiXCityListingDTO] {
         let sectionCategories = Self.serviceSections.first { $0.key == serviceSection }?.categories ?? []
         let filtered = items.filter { item in
-            // 民宿与酒店独立筛选；服务频道不再重复展示住宿类目。
+            // 住宿新入口只展示民宿；服务频道隐藏全部住宿历史类目。
             if staysActive {
                 guard KXListingCopy.isHomestayCategory(item.category) else { return false }
-            } else if hotelsActive {
-                guard KXListingCopy.isHotelCategory(item.category) else { return false }
             } else if baseType == "local_service", KXListingCopy.isStayCategory(item.category) {
                 return false
             }
@@ -2290,7 +2286,6 @@ struct CityListingChannelView: View {
 
     private var lodgingCategories: [String] {
         if staysActive { return KXListingCopy.homestayCategories }
-        if hotelsActive { return KXListingCopy.hotelCategories }
         return []
     }
 
@@ -2384,12 +2379,11 @@ struct CityListingChannelView: View {
         .overlay(alignment: .bottom) { Divider().opacity(0.18) }
     }
 
-    /// 住房频道三标签：长租房源 / 民宿短住 / 酒店住宿。
+    /// 住房频道双标签：长租房源 / 民宿短住。
     private var rentalTabSwitcher: some View {
         HStack(spacing: 4) {
             rentalTabButton(.homes, title: KXListingCopy.pickText(language, "长租房源", "長期賃貸", "Rentals"), icon: "house")
             rentalTabButton(.stays, title: KXListingCopy.pickText(language, "民宿短住", "民泊短期", "Short stays"), icon: "bed.double")
-            rentalTabButton(.hotels, title: KXListingCopy.pickText(language, "酒店", "ホテル", "Hotels"), icon: "building.2")
         }
         .padding(4)
         .background(KXColor.softBackground.opacity(0.82), in: Capsule())
@@ -2575,7 +2569,7 @@ struct CityListingChannelView: View {
             Image(systemName: "magnifyingglass")
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(KXColor.livingAccent)
-            TextField(KXListingCopy.searchPlaceholder(for: hotelsActive ? "hotels" : staysActive ? "stays" : baseType, language), text: $query)
+            TextField(KXListingCopy.searchPlaceholder(for: staysActive ? "stays" : baseType, language), text: $query)
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
                 .submitLabel(.search)
@@ -2640,7 +2634,7 @@ struct CityListingChannelView: View {
             }
             return selectedCategory == "全部" || quick.contains(selectedCategory) ? quick : quick + [selectedCategory]
         }
-        return KXListingCopy.categories(for: hotelsActive ? "hotels" : staysActive ? "stays" : baseType)
+        return KXListingCopy.categories(for: staysActive ? "stays" : baseType)
     }
 
     private func categoryChip(_ category: String) -> some View {
@@ -2934,8 +2928,8 @@ struct CityListingChannelView: View {
                 .frame(maxWidth: .infinity, minHeight: 260)
         } else if visibleItems.isEmpty {
             EmptyStateView(
-                title: KXListingCopy.emptyTitle(for: hotelsActive ? "hotels" : staysActive ? "stays" : baseType, language),
-                subtitle: KXListingCopy.emptySubtitle(for: hotelsActive ? "hotels" : staysActive ? "stays" : baseType, language),
+                title: KXListingCopy.emptyTitle(for: staysActive ? "stays" : baseType, language),
+                subtitle: KXListingCopy.emptySubtitle(for: staysActive ? "stays" : baseType, language),
                 systemImage: KXListingCopy.icon(for: baseType)
             )
             .frame(maxWidth: .infinity, minHeight: 260)
@@ -4247,7 +4241,8 @@ private enum ListingFilterLocalizer {
         "可咨询": ("相談可", "Ask"),
         "可远程": ("リモート可", "Remote OK"),
         "服务细分类": ("サービス細分類", "Service subcategory"),
-        "餐饮预约": ("飲食予約", "Dining"),
+        "餐饮预约": ("飲食店", "Restaurants"),
+        "餐厅": ("飲食店", "Restaurants"),
         "旅行票务": ("旅行・チケット", "Travel"),
         "接送交通": ("送迎・交通", "Transfers"),
         "美容健康": ("美容・健康", "Beauty & health"),
@@ -4609,13 +4604,14 @@ private enum ListingMediaUploadPhase: Equatable {
     case ready
     case failed(String)
 
-    var label: String {
+    func label(_ language: AppLanguage) -> String {
         switch self {
-        case .idle: return "待上传"
-        case .preparing: return "准备中"
-        case .uploading(let progress): return "上传中 \(Int(progress * 100))%"
-        case .completing: return "确认中"
-        case .ready: return "已上传"
+        case .idle: return KXListingCopy.pickText(language, "待上传", "アップロード待ち", "Waiting")
+        case .preparing: return KXListingCopy.pickText(language, "准备中", "準備中", "Preparing")
+        case .uploading(let progress):
+            return "\(KXListingCopy.pickText(language, "上传中", "アップロード中", "Uploading")) \(Int(progress * 100))%"
+        case .completing: return KXListingCopy.pickText(language, "确认中", "確認中", "Finalizing")
+        case .ready: return KXListingCopy.pickText(language, "已上传", "アップロード済み", "Uploaded")
         case .failed(let message): return message
         }
     }
@@ -5327,7 +5323,7 @@ struct CreateCityListingView: View {
                                 }
                                 .overlay(alignment: .bottom) {
                                     if let phase = mediaUploadPhases[draft.id], phase != .idle {
-                                        Text(phase.label)
+                                        Text(phase.label(language))
                                             .font(.caption2.weight(.bold))
                                             .foregroundStyle(phase.isFailure ? KXColor.heat : .white)
                                             .lineLimit(1)
@@ -6206,6 +6202,7 @@ struct CreateCityListingView: View {
 }
 
 private struct KXListingFormField: View {
+    @Environment(\.appLanguage) private var language
     let title: String
     let placeholder: String
     let icon: String
@@ -6215,15 +6212,15 @@ private struct KXListingFormField: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Label(title, systemImage: icon)
+            Label(KXListingCopy.formText(title, language), systemImage: icon)
                 .font(.caption.weight(.black))
                 .foregroundStyle(.secondary)
             Group {
                 if let lineLimit {
-                    TextField(placeholder, text: $text, axis: .vertical)
+                    TextField(KXListingCopy.formText(placeholder, language), text: $text, axis: .vertical)
                         .lineLimit(lineLimit)
                 } else {
-                    TextField(placeholder, text: $text)
+                    TextField(KXListingCopy.formText(placeholder, language), text: $text)
                         .keyboardType(keyboard)
                 }
             }
@@ -6243,6 +6240,7 @@ private struct KXListingFormField: View {
 }
 
 private struct KXListingChoiceRow: View {
+    @Environment(\.appLanguage) private var language
     let title: String
     let icon: String
     let options: [String]
@@ -6251,7 +6249,7 @@ private struct KXListingChoiceRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Label(title, systemImage: icon)
+            Label(KXListingCopy.formText(title, language), systemImage: icon)
                 .font(.caption.weight(.black))
                 .foregroundStyle(.secondary)
             FlowLayout(spacing: 8) {
@@ -6259,7 +6257,7 @@ private struct KXListingChoiceRow: View {
                     Button {
                         selection = option
                     } label: {
-                        Text(option)
+                        Text(KXListingCopy.formText(option, language))
                             .font(.caption.weight(.bold))
                             .foregroundStyle(selection == option ? Color.white : .primary)
                             .padding(.horizontal, 12)
@@ -6276,6 +6274,7 @@ private struct KXListingChoiceRow: View {
 }
 
 private struct KXListingToggleChip: View {
+    @Environment(\.appLanguage) private var language
     let title: String
     let icon: String
     @Binding var isOn: Bool
@@ -6288,7 +6287,7 @@ private struct KXListingToggleChip: View {
             HStack(spacing: 8) {
                 Image(systemName: isOn ? "checkmark.circle.fill" : icon)
                     .font(.subheadline.weight(.bold))
-                Text(title)
+                Text(KXListingCopy.formText(title, language))
                     .font(.caption.weight(.bold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
@@ -6308,6 +6307,7 @@ private struct KXListingToggleChip: View {
 }
 
 private struct KXListingHintRow: View {
+    @Environment(\.appLanguage) private var language
     let text: String
     let icon: String
     let tint: Color
@@ -6318,7 +6318,7 @@ private struct KXListingHintRow: View {
                 .font(.caption.weight(.bold))
                 .foregroundStyle(tint)
                 .frame(width: 18, height: 18)
-            Text(text)
+            Text(KXListingCopy.formText(text, language))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -6763,13 +6763,14 @@ private struct KXListingAttributeSection: View {
 }
 
 struct KXListingSection<Content: View>: View {
+    @Environment(\.appLanguage) private var language
     let title: String
     let icon: String
     @ViewBuilder var content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label(title, systemImage: icon)
+            Label(KXListingCopy.formText(title, language), systemImage: icon)
                 .font(.headline.weight(.bold))
             content
         }
@@ -6836,7 +6837,7 @@ enum KXListingCopy {
     /// 餐厅美食：菜系类目（与 web ListingKit FOOD_CATEGORIES 同步）。
     static let foodCategories = ["中华料理", "日本料理", "居酒屋", "烧肉火锅", "拉面", "寿司海鲜", "咖啡甜品", "西餐", "韩国料理"]
     static let foodSectionCategories = ["餐厅美食"] + foodCategories + ["优惠预约"]
-    static let lodgingSectionCategories = ["民宿", "酒店", "温泉旅馆", "公寓式酒店", "短住公寓"]
+    static let lodgingSectionCategories = ["民宿"]
     static let travelSectionCategories = ["景点门票", "一日游", "本地向导", "体验活动", "包车行程"]
     static let transferSectionCategories = ["机场接送", "车站接送", "包车", "行李协助"]
     static let paperworkSectionCategories = ["材料翻译", "市役所陪同", "银行卡协助", "手机卡协助", "租房申请协助", "签证材料整理"]
@@ -6848,24 +6849,13 @@ enum KXListingCopy {
         .init(
             id: "food",
             icon: "fork.knife",
-            zh: "餐饮预约",
-            ja: "飲食予約",
-            en: "Dining",
+            zh: "餐厅",
+            ja: "飲食店",
+            en: "Restaurants",
             subtitleZh: "餐厅、居酒屋、咖啡甜品和优惠预约只填写到店、菜单、套餐和取消规则。",
             subtitleJa: "飲食店、居酒屋、カフェ、予約特典は来店予約・メニュー・セット・取消規定を入力します。",
             subtitleEn: "Restaurants, cafes and booking deals use dining, menu, set and cancellation fields.",
             categories: foodSectionCategories
-        ),
-        .init(
-            id: "lodging",
-            icon: "bed.double",
-            zh: "住宿短住",
-            ja: "宿泊・短期滞在",
-            en: "Stays",
-            subtitleZh: "民宿、酒店和短住公寓只填写房型、人数、入住退房、设施、房量与许可说明。",
-            subtitleJa: "民泊、ホテル、短期アパートは部屋タイプ、人数、チェックイン、設備、在庫、許可情報を入力します。",
-            subtitleEn: "Stays use room, guest, check-in, amenity, availability and permit fields.",
-            categories: lodgingSectionCategories
         ),
         .init(
             id: "travel",
@@ -6941,7 +6931,6 @@ enum KXListingCopy {
     static let hotelCategories = ["酒店", "温泉旅馆", "公寓式酒店", "短住公寓", "酒店民宿"]
     static let stayCategories = homestayCategories + hotelCategories
     static let stayChips = ["全部", "民宿"]
-    static let hotelChips = ["全部", "酒店", "温泉旅馆", "公寓式酒店", "短住公寓"]
 
     private static func uniqueCategories(_ values: [String]) -> [String] {
         values.reduce(into: [String]()) { result, item in
@@ -6955,10 +6944,6 @@ enum KXListingCopy {
 
     static func isHomestayCategory(_ category: String?) -> Bool {
         homestayCategories.contains(category ?? "")
-    }
-
-    static func isHotelCategory(_ category: String?) -> Bool {
-        hotelCategories.contains(category ?? "")
     }
 
     static func isFoodCategory(_ category: String?) -> Bool {
@@ -7102,7 +7087,7 @@ enum KXListingCopy {
         let en: String
         switch vertical {
         case .foodRestaurant: (zh, ja, en) = ("餐厅美食字段", "飲食店フィールド", "Dining fields")
-        case .diningBooking: (zh, ja, en) = ("餐饮预约优惠字段", "飲食予約特典フィールド", "Dining booking fields")
+        case .diningBooking: (zh, ja, en) = ("餐厅优惠字段", "飲食店特典フィールド", "Restaurant deal fields")
         case .lodging: (zh, ja, en) = ("住宿字段", "宿泊フィールド", "Stay fields")
         case .attractionTicket: (zh, ja, en) = ("景点门票字段", "観光チケットフィールド", "Attraction ticket fields")
         case .dayTour: (zh, ja, en) = ("一日游字段", "日帰りツアーフィールド", "Day tour fields")
@@ -7169,7 +7154,7 @@ enum KXListingCopy {
         let en: String
         switch type {
         case "rental", "stays", "hotels":
-            (zh, ja, en) = ("长租房源、民宿短住与酒店住宿", "賃貸・民泊・ホテルをまとめて探せる", "Long-term rentals, homestays and hotels")
+            (zh, ja, en) = ("长租房源与民宿短住", "賃貸・民泊をまとめて探せる", "Long-term rentals and homestays")
         case "work", "job", "hiring":
             (zh, ja, en) = ("职位库、薪资、日语要求和签证支持", "求人・給与・日本語レベル・ビザサポート", "Jobs, salary, Japanese level, visa support")
         case "local_service":
@@ -7312,6 +7297,162 @@ enum KXListingCopy {
         }
     }
 
+    /// Display-only localization for the city-listing compose form. The
+    /// stored payload values remain the canonical zh strings where the API
+    /// expects them; only the visible label/placeholder/chip text changes.
+    static func formText(_ value: String, _ language: AppLanguage) -> String {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return value }
+        if let entry = formTexts[normalized] {
+            return pickText(language, normalized, entry.ja, entry.en)
+        }
+        let category = categoryLabel(normalized, language)
+        if category != normalized { return category }
+        let attribute = attributeLabel(normalized, language)
+        if attribute != normalized { return attribute }
+        let intake = ListingIntakeLocalizer.text(normalized, language)
+        if intake != normalized { return intake }
+        return value
+    }
+
+    private static let formTexts: [String: (ja: String, en: String)] = [
+        "房源信息": ("物件情報", "Home details"),
+        "职位信息": ("求人情報", "Job details"),
+        "选择服务细分类": ("サービス細分類を選択", "Choose service subcategory"),
+        "商家优惠字段": ("店舗特典の項目", "Deal details"),
+        "交易字段": ("取引項目", "Marketplace details"),
+        "服务方名称": ("提供者名", "Provider name"),
+        "细分类 / 服务类型": ("細分類 / サービス種別", "Subcategory / service type"),
+        "公司 / 店铺名": ("会社 / 店舗名", "Company / store name"),
+        "商家名称": ("店舗名", "Merchant name"),
+        "商家已认证": ("店舗認証済み", "Merchant verified"),
+        "认证商家": ("認証済み店舗", "Verified merchant"),
+        "仅限预约制": ("予約制のみ", "Reservation only"),
+        "取消/退款规则": ("キャンセル / 返金規定", "Cancellation / refund rules"),
+        "人均 / 价位": ("一人あたり / 価格帯", "Per person / price range"),
+        "每晚/起步价格": ("1泊 / 開始価格", "Nightly / starting price"),
+        "日期 / 有效期": ("日付 / 有効期限", "Date / validity"),
+        "服务区域 / 店铺位置": ("対応エリア / 店舗所在地", "Service area / store location"),
+        "安全/资质说明": ("安全 / 資格説明", "Safety / credentials"),
+        "医疗免责声明": ("医療免責事項", "Medical disclaimer"),
+        "不可承诺事项": ("保証できない事項", "What cannot be guaranteed"),
+        "价格说明": ("料金説明", "Price notes"),
+        "预计耗时": ("目安時間", "Estimated time"),
+        "服务方式": ("サービス方法", "Service method"),
+        "服务区域": ("対応エリア", "Service area"),
+        "服务对象": ("対象", "Service target"),
+        "菜单（每行：菜名 | 价格 | 备注）": ("メニュー（1行：料理名 | 価格 | メモ）", "Menu (one line: item | price | note)"),
+        "团购套餐（每行：套餐名 | 现价 | 原价 | 包含）": ("セット（1行：名称 | 現価格 | 通常価格 | 内容）", "Packages (one line: name | deal price | original | includes)"),
+        "品牌 / 型号": ("ブランド / 型番", "Brand / model"),
+        "原价 / 参考价": ("元値 / 参考価格", "Original / reference price"),
+        "配件 / 包装": ("付属品 / 箱", "Accessories / packaging"),
+        "瑕疵 / 使用痕迹": ("傷 / 使用感", "Defects / wear"),
+        "取货 / 邮寄说明": ("受け渡し / 配送メモ", "Pickup / shipping notes"),
+        "自取 / 面交": ("引き取り / 対面", "Pickup / meetup"),
+        "可邮寄": ("配送可", "Shipping OK"),
+        "价格可商量": ("価格相談可", "Negotiable"),
+        "可合租": ("シェア可", "Share OK"),
+        "可短租": ("短期可", "Short-term OK"),
+        "休日休假": ("休日・休暇", "Holidays"),
+        "完全周休二日 / 轮班制": ("完全週休2日 / シフト制", "Two days off / shift schedule"),
+        "社保完备、员工餐、交通费支给": ("社会保険完備、まかない、交通費支給", "Insurance, staff meals, transport covered"),
+        "留学生可": ("留学生OK", "Students OK"),
+        "可远程": ("リモート可", "Remote OK"),
+        "发布类型": ("出品タイプ", "Listing mode"),
+        "免费送": ("無料譲渡", "Free giveaway"),
+        "可用": ("使用可", "Fair"),
+        "可选，例如 28000": ("任意：例 28000", "Optional, e.g. 28000"),
+        "可选，例如 2025 年春": ("任意：例 2025年春", "Optional, e.g. spring 2025"),
+        "个人 / 店铺 / 公司名称": ("個人 / 店舗 / 会社名", "Individual / store / company name"),
+        "店铺 / 品牌 / 公司名称": ("店舗 / ブランド / 会社名", "Store / brand / company name"),
+        "东京 23 区 / 店内用餐 / 外带自取": ("東京23区 / 店内飲食 / テイクアウト", "Tokyo 23 wards / dine-in / pickup"),
+        "东京 23 区 / 线上预约 / 到店点评": ("東京23区 / オンライン予約 / 来店レビュー", "Tokyo 23 wards / online booking / visit review"),
+        "东京 23 区 / 横滨 / 线上协助": ("東京23区 / 横浜 / オンライン対応", "Tokyo 23 wards / Yokohama / online help"),
+        "东京 23 区 / 横滨 / 清洁可线上估价": ("東京23区 / 横浜 / 清掃はオンライン見積可", "Tokyo 23 wards / Yokohama / online cleaning quote"),
+        "东京 23 区 / 到店 / 上门": ("東京23区 / 来店 / 出張", "Tokyo 23 wards / in-store / home visit"),
+        "新宿站东口步行 5 分钟": ("新宿駅東口から徒歩5分", "5 min walk from Shinjuku East Exit"),
+        "如何预约、可预约时段、几人起订、是否需要定金": ("予約方法、可能時間、最低人数、予約金の有無", "How to book, times, minimum party, deposit"),
+        "麻婆豆腐 | ¥980\n口水鸡 | ¥1,080 | 微辣": ("麻婆豆腐 | ¥980\nよだれ鶏 | ¥1,080 | ピリ辛", "Mapo tofu | ¥980\nSpicy chicken | ¥1,080 | mild spicy"),
+        "双人套餐 | ¥3,980 | ¥5,200 | 4菜1汤+2饮料": ("2名セット | ¥3,980 | ¥5,200 | 4品1スープ+2ドリンク", "Set for 2 | ¥3,980 | ¥5,200 | 4 dishes + soup + 2 drinks"),
+        "中文 / 日文 / 英文": ("中国語 / 日本語 / 英語", "Chinese / Japanese / English"),
+        "中日 / 中英 / 日英 / 多语言": ("中日 / 中英 / 日英 / 多言語", "CN-JP / CN-EN / JP-EN / multilingual"),
+        "预约确认、到店、点评或优惠使用流程": ("予約確認、来店、レビューまたは特典利用の流れ", "Booking confirmation, visit, review or deal flow"),
+        "例如 前一天可取消，定金不可退请写清": ("例：前日キャンセル可、予約金返金不可など", "e.g. cancel by previous day; note non-refundable deposits"),
+        "大床房 / 双床房 / 整套民宿": ("ダブル / ツイン / 一棟貸し", "Double / twin / entire stay"),
+        "每晚 / 每人 / 预约咨询": ("1泊 / 1名 / 予約相談", "Per night / per person / inquire"),
+        "1 晚 / 2 晚起": ("1泊 / 2泊から", "1 night / 2 nights minimum"),
+        "Wi-Fi、厨房、洗衣机、停车场、温泉、行李寄存": ("Wi-Fi、キッチン、洗濯機、駐車場、温泉、荷物預かり", "Wi-Fi, kitchen, washer, parking, onsen, luggage storage"),
+        "可订日期、剩余房量、旺季限制、儿童入住规则": ("予約可能日、残室、繁忙期制限、子ども利用条件", "Available dates, rooms left, peak limits, child policy"),
+        "入住前几天可取消、旺季不可退等": ("宿泊何日前まで取消可、繁忙期返金不可など", "Cancellation window, peak non-refundable rules"),
+        "旅馆业许可 / 民泊备案 / 可接待范围": ("旅館業許可 / 民泊届出 / 受入範囲", "Hotel license / minpaku registration / guest scope"),
+        "成人 / 儿童 / 私人团 / 拼团": ("大人 / 子ども / プライベート / 混載", "Adult / child / private / shared"),
+        "成人票 / 儿童票 / 套票 / 电子票": ("大人券 / 子ども券 / セット券 / 電子券", "Adult / child / bundle / e-ticket"),
+        "指定日期 / 购买后 30 天有效 / 每周六出发": ("指定日 / 購入後30日有効 / 毎週土曜出発", "Fixed date / valid 30 days / Saturdays"),
+        "约 8 小时": ("約8時間", "About 8 hours"),
+        "约 2 小时 / 当日有效": ("約2時間 / 当日有効", "About 2 hours / same-day valid"),
+        "新宿站西口 / 景区入口 / 酒店接送范围": ("新宿駅西口 / 施設入口 / ホテル送迎範囲", "Shinjuku West Exit / attraction entrance / hotel pickup area"),
+        "门票、导览、交通、餐食等": ("チケット、ガイド、交通、食事など", "Tickets, guide, transport, meals"),
+        "个人消费、餐饮、保险等": ("個人消費、食事、保険など", "Personal spending, meals, insurance"),
+        "护照、证件、舒适鞋、雨具等": ("パスポート、身分証、歩きやすい靴、雨具など", "Passport, ID, comfortable shoes, rain gear"),
+        "票务不可退 / 出发前 3 天可取消": ("チケット返金不可 / 出発3日前まで取消可", "Tickets non-refundable / cancel 3 days before"),
+        "票务来源、旅行资质、保险或导游说明": ("チケット入手元、旅行資格、保険またはガイド説明", "Ticket source, travel credentials, insurance or guide notes"),
+        "成田机场 - 东京 23 区 / 羽田 - 横滨": ("成田空港 - 東京23区 / 羽田 - 横浜", "Narita - Tokyo 23 wards / Haneda - Yokohama"),
+        "可接送区域、是否支持跨县、夜间范围": ("送迎エリア、県外対応、深夜対応範囲", "Pickup area, cross-prefecture, night scope"),
+        "轿车 / Alphard / Hiace": ("セダン / アルファード / ハイエース", "Sedan / Alphard / Hiace"),
+        "2 个 28 寸 + 2 个随身": ("28インチ2個 + 手荷物2個", "Two 28-inch bags + two carry-ons"),
+        "是否需要航班号、延误如何处理": ("便名の要否、遅延時の対応", "Flight number needed, delay handling"),
+        "免费等待 60 分钟，超时每 30 分钟加收": ("60分無料待機、以降30分ごとに追加料金", "60 min free waiting, extra per 30 min"),
+        "夜间、儿童座椅、大件行李、高速费说明": ("深夜、チャイルドシート、大型荷物、高速料金", "Night, child seat, large luggage, toll notes"),
+        "出发前多久可取消，临时取消费用": ("出発何日前まで取消可、直前取消料", "Cancellation window and late fees"),
+        "住民票翻译 / 签证材料 / 租房申请 / 电话代沟通": ("住民票翻訳 / ビザ書類 / 賃貸申込 / 電話代行", "Residence record translation / visa docs / rental application / phone help"),
+        "护照、在留卡、原文件、申请表等": ("パスポート、在留カード、原本、申請書など", "Passport, residence card, originals, forms"),
+        "最快当天 / 2-3 个工作日 / 加急另议": ("最短当日 / 2-3営業日 / 特急相談", "Same day / 2-3 business days / rush on request"),
+        "资料确认、报价、翻译/代办、交付方式": ("資料確認、見積、翻訳/代行、納品方法", "Document check, quote, translation/help, delivery"),
+        "需本人确认、签字、原件邮寄或线上提交的信息": ("本人確認、署名、原本郵送、オンライン提出情報", "Identity check, signature, originals by mail, online info"),
+        "行政书士、翻译资质、合作机构或免责声明": ("行政書士、翻訳資格、提携先または免責事項", "Scrivener, translation credentials, partners or disclaimer"),
+        "开始处理后是否可退、材料错误如何处理": ("着手後の返金可否、資料不備時の対応", "Refund after work starts, document error handling"),
+        "1K / 45 平 / 店铺 20 平": ("1K / 45平米 / 店舗20平米", "1K / 45 sqm / 20 sqm store"),
+        "纸箱 20 个 / 大件 3 件": ("段ボール20箱 / 大型3点", "20 boxes / 3 large items"),
+        "2 吨车 + 2 人 / 1 人上门": ("2t車 + 2名 / 1名出張", "2-ton truck + 2 staff / 1 staff visit"),
+        "搬运、拆装、基础清洁、垃圾袋等": ("運搬、分解組立、簡易清掃、ごみ袋など", "Moving, assembly, basic cleaning, trash bags"),
+        "空调拆装、粗大垃圾处理、停车费等": ("エアコン脱着、粗大ごみ処理、駐車料金など", "AC removal/install, oversized trash, parking"),
+        "提前打包、预约电梯、停车位、垃圾券等": ("事前梱包、エレベーター予約、駐車場所、ごみ券など", "Pack ahead, reserve elevator, parking, disposal tickets"),
+        "楼梯、大件、远距离、夜间、停车费说明": ("階段、大型物、長距離、深夜、駐車料金", "Stairs, large items, distance, night, parking"),
+        "预约前一天取消费、雨天改期等": ("前日キャンセル料、雨天変更など", "Previous-day cancellation fee, weather reschedule"),
+        "手机卡 / 网络 / 水电煤 / 地址登记": ("SIM / ネット / ライフライン / 住所登録", "SIM / internet / utilities / address registration"),
+        "在留卡、护照、地址、银行卡、本人到场要求": ("在留カード、パスポート、住所、銀行カード、本人来店要否", "Residence card, passport, address, bank card, in-person requirement"),
+        "当天 / 1-3 个工作日 / 需预约窗口": ("当日 / 1-3営業日 / 窓口予約必要", "Same day / 1-3 business days / appointment needed"),
+        "线上确认材料、预约窗口、陪同办理或远程协助": ("オンライン資料確認、窓口予約、同行または遠隔サポート", "Online document check, appointment, accompaniment or remote help"),
+        "证件原件、印章、现金、可接电话时间等": ("原本書類、印鑑、現金、電話可能時間など", "Original IDs, seal, cash, reachable times"),
+        "不能保证运营商审核、开户结果、政府窗口受理或第三方时效": ("キャリア審査、口座開設結果、役所受付、第三者の所要時間は保証不可", "Cannot guarantee carrier review, account approval, government acceptance, or third-party timing"),
+        "预约咨询 / ¥3,000 起 / 按事项报价": ("予約相談 / ¥3,000から / 内容別見積", "Inquire / from ¥3,000 / by request"),
+        "材料确认后、预约日前后取消与改期规则": ("資料確認後、予約日前後の取消・変更規定", "Cancellation/reschedule rules after document check or booking"),
+        "新宿 / 原宿 / 线上预约协助": ("新宿 / 原宿 / オンライン予約支援", "Shinjuku / Harajuku / online booking help"),
+        "剪发 / 美甲 / 按摩 / 体检预约协助": ("ヘアカット / ネイル / マッサージ / 健診予約支援", "Haircut / nails / massage / checkup booking"),
+        "平日晚间 / 周末 / 需提前 2 天": ("平日夜 / 週末 / 2日前まで", "Weekday evenings / weekends / 2 days ahead"),
+        "¥4,000 起 / 按项目报价": ("¥4,000から / メニュー別", "From ¥4,000 / by service"),
+        "45 分钟 / 90 分钟": ("45分 / 90分", "45 min / 90 min"),
+        "迟到规则、过敏史、禁忌提醒、预约前准备": ("遅刻規定、アレルギー、禁忌、事前準備", "Late rules, allergies, contraindications, prep"),
+        "医疗相关仅做预约协助，不提供诊断、治疗承诺或医疗建议": ("医療関連は予約支援のみで、診断・治療保証・医療助言は提供しません", "Medical items are booking help only, not diagnosis, treatment promise, or medical advice"),
+        "24 小时内取消、迟到、改期等规则": ("24時間以内の取消、遅刻、変更規定", "Rules for cancellation within 24h, lateness, rescheduling"),
+        "小型犬 / 猫 / 儿童用品 / 家庭协助": ("小型犬 / 猫 / 子ども用品 / 家庭支援", "Small dogs / cats / kids items / family help"),
+        "平日晚上 / 周末 / 假期": ("平日夜 / 週末 / 祝日", "Weekday evenings / weekends / holidays"),
+        "按小时 / 按天 / 预约咨询": ("時間単位 / 日単位 / 予約相談", "Hourly / daily / inquire"),
+        "宠物性格、疫苗、用品、紧急联系人、家庭规则": ("性格、ワクチン、用品、緊急連絡先、家庭ルール", "Temperament, vaccines, supplies, emergency contact, home rules"),
+        "经验、保险、照看范围、不可服务边界": ("経験、保険、ケア範囲、対応不可範囲", "Experience, insurance, care scope, exclusions"),
+        "预约前取消、临时变更、超时费用等": ("予約前取消、直前変更、延長料金など", "Cancellation, last-minute changes, overtime fees"),
+        "例如 学生出示证件 9 折，套餐减 500 日元": ("例：学生証提示で10%オフ、セット500円引き", "e.g. 10% off with student ID, ¥500 off set"),
+        "适用门店、不可叠加、预约说明等": ("対象店舗、併用不可、予約説明など", "Eligible stores, no stacking, booking notes"),
+        "可选，例如 日文配列键盘 / 白色书桌 / 13 寸笔记本": ("任意：例 日本語配列キーボード / 白い机 / 13インチノートPC", "Optional, e.g. Japanese keyboard / white desk / 13-inch laptop"),
+        "例如 原盒、充电器、说明书、保修卡": ("例：箱、充電器、説明書、保証書", "e.g. box, charger, manual, warranty card"),
+        "如有划痕、缺件、维修史请提前说明；没有可写“无明显瑕疵”": ("傷、欠品、修理歴があれば記載。なければ「目立つ傷なし」", "Note scratches, missing parts, repairs; otherwise write no obvious defects"),
+        "例如 平日 19:00 后 / 周末下午": ("例：平日19:00以降 / 週末午後", "e.g. weekdays after 19:00 / weekend afternoons"),
+        "例如 新宿站面交，邮寄需买家承担运费": ("例：新宿駅で手渡し、配送は購入者送料負担", "e.g. meetup at Shinjuku Station, buyer pays shipping"),
+        "完整填写车站、面积和入住时间，能明显减少重复私信询问。": ("駅、面積、入居時期を具体的に書くと、重複問い合わせを減らせます。", "Clear station, size, and move-in timing reduce repeated messages."),
+        "请先在基本信息里选择一个标准服务分类，例如 餐厅美食、民宿、景点门票、一日游、机场接送、翻译手续、搬家清洁、生活开通或美容健康。": ("まず基本情報で標準サービス分類を選んでください。例：飲食、民泊、観光チケット、日帰り、空港送迎、翻訳手続き、引越し清掃、生活セットアップ、美容健康。", "Choose a standard service category in Basic info first, such as dining, stays, tickets, day tours, airport transfer, paperwork, moving/cleaning, life setup, or beauty/health."),
+        "建议写清购买时间、瑕疵、配件、是否含包装和交易地点，减少来回确认。": ("購入時期、傷、付属品、箱の有無、受け渡し場所を書くと確認の往復が減ります。", "Add purchase time, defects, accessories, packaging, and handoff location to reduce back-and-forth.")
+    ]
+
     static func icon(for type: String) -> String {
         switch type {
         case "rental": "house"
@@ -7333,11 +7474,11 @@ enum KXListingCopy {
         case "stays":
             (zh, ja, en) = ("搜索民宿、整套短住、地区关键词", "民泊・一棟貸し・エリアを検索", "Search homestays and short stays")
         case "hotels":
-            (zh, ja, en) = ("搜索酒店、温泉旅馆、公寓式酒店", "ホテル・温泉旅館・アパートホテルを検索", "Search hotels, ryokan and aparthotels")
+            (zh, ja, en) = ("搜索民宿、整套短住、地区关键词", "民泊・一棟貸し・エリアを検索", "Search homestays and short stays")
         case "work", "job", "hiring":
             (zh, ja, en) = ("搜索职位、公司、地点、日语要求", "職種・会社・場所・日本語レベルを検索", "Search roles, companies, locations")
         case "local_service":
-            (zh, ja, en) = ("搜索餐饮预约、旅行票务、机场接送、翻译手续、生活服务", "飲食予約、旅行チケット、空港送迎、翻訳・手続き、生活サポートを検索", "Search dining, travel tickets, transfers, paperwork and local support")
+            (zh, ja, en) = ("搜索餐厅、旅行票务、机场接送、翻译手续、生活服务", "飲食店、旅行チケット、空港送迎、翻訳・手続き、生活サポートを検索", "Search restaurants, travel tickets, transfers, paperwork and local support")
         case "discount":
             (zh, ja, en) = ("搜索优惠、商家、地区", "特典・店舗・エリアを検索", "Search deals, merchants, areas")
         default:
@@ -7350,7 +7491,7 @@ enum KXListingCopy {
         switch type {
         case "rental": ["全部", "单人", "合租", "短租", "整租", "家具家电", "近车站"]
         case "stays": stayChips
-        case "hotels": hotelChips
+        case "hotels": stayChips
         case "work", "job", "hiring": ["全部", "兼职", "全职", "时给", "月给", "N3 可", "签证支持", "无经验可"]
         case "local_service": ["全部"] + serviceCreateCategories
         case "discount": ["全部", "餐饮", "学校", "服务", "购物", "限时"]
@@ -7476,6 +7617,14 @@ enum KXListingCopy {
 
     static func categoryLabel(_ value: String, _ language: AppLanguage) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if language == .zh {
+            switch trimmed {
+            case "餐饮预约", "餐厅美食":
+                return "餐厅"
+            default:
+                return value
+            }
+        }
         guard let entry = categoryLabels[trimmed] else { return value }
         switch language {
         case .ja: return entry.ja
@@ -7490,8 +7639,8 @@ enum KXListingCopy {
         let en: String
         switch type {
         case "rental":               (zh, ja, en) = ("这里还没有房源", "まだ物件がありません", "No rentals yet")
-        case "stays":                (zh, ja, en) = ("这里还没有民宿和酒店", "まだ宿泊施設がありません", "No stays yet")
-        case "hotels":               (zh, ja, en) = ("这里还没有酒店住宿", "まだホテルがありません", "No hotels yet")
+        case "stays":                (zh, ja, en) = ("这里还没有民宿", "まだ民泊がありません", "No homestays yet")
+        case "hotels":               (zh, ja, en) = ("这里还没有民宿", "まだ民泊がありません", "No homestays yet")
         case "work", "job", "hiring": (zh, ja, en) = ("这里还没有工作信息", "まだ求人がありません", "No jobs yet")
         case "local_service":        (zh, ja, en) = ("这里还没有商家与服务", "まだ店舗・地域サービスがありません", "No business or local services yet")
         case "discount":             (zh, ja, en) = ("这里还没有优惠", "まだ特典がありません", "No deals yet")
@@ -7510,11 +7659,11 @@ enum KXListingCopy {
         case "stays":
             (zh, ja, en) = ("认证服务方可以发布民宿和短住，审核通过后展示给同城旅客。", "認証ホストの民泊・短期滞在が審査後に表示されます。", "Verified homestays appear here after review.")
         case "hotels":
-            (zh, ja, en) = ("认证商家可以发布酒店、温泉旅馆和公寓式酒店，审核通过后展示。", "認証施設のホテル・旅館・アパートホテルが審査後に表示されます。", "Verified hotels and ryokan appear here after review.")
+            (zh, ja, en) = ("认证服务方可以发布民宿和短住，审核通过后展示。", "認証ホストの民泊・短期滞在が審査後に表示されます。", "Verified homestays appear here after review.")
         case "work", "job", "hiring":
             (zh, ja, en) = ("稍后查看新的同城工作机会。", "新しい求人をまた後でチェックしてください。", "Check back soon for new local jobs.")
         case "local_service":
-            (zh, ja, en) = ("认证商家的餐饮预约、旅行票务、接送交通、翻译手续、搬家清洁和生活服务审核后会展示在这里。", "認証店舗の飲食予約、旅行チケット、送迎、翻訳・手続き、引越し清掃、生活サポートが審査後に表示されます。", "Verified dining, travel, transfers, paperwork, moving and local support appear here after review.")
+            (zh, ja, en) = ("认证商家的餐厅、旅行票务、接送交通、翻译手续、搬家清洁和生活服务审核后会展示在这里。", "認証店舗の飲食店、旅行チケット、送迎、翻訳・手続き、引越し清掃、生活サポートが審査後に表示されます。", "Verified restaurants, travel, transfers, paperwork, moving and local support appear here after review.")
         case "discount":
             (zh, ja, en) = ("商家优惠审核后会展示在这里。", "店舗特典が審査後にここに表示されます。", "Merchant deals appear here after review.")
         default:

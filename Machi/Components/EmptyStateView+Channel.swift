@@ -53,7 +53,7 @@ struct ChannelEmptyState: View {
         case .question:
             return .init(icon: "questionmark.bubble", title: pick("还没有问答", "まだ質問がありません", "No questions yet"), body: pick("提出你的生活疑问,本地人会来回答。", "暮らしの疑問を投稿すると、地元の人が答えてくれます。", "Ask a local-life question and people nearby can help."), cta: pick("提个问", "質問する", "Ask"), tint: .indigo)
         case .service:
-            return .init(icon: "wrench.and.screwdriver", title: pick("还没有服务", "まだ地域サービスがありません", "No local services yet"), body: pick("发布餐饮预约、接送交通、翻译手续、搬家清洁或生活开通等服务。", "飲食予約、送迎、翻訳・手続き、引越し清掃、生活手続きを投稿できます。", "Post dining bookings, transfers, paperwork help, moving, cleaning, or life setup services."), cta: pick("发布服务", "サービスを投稿", "Post service"), tint: .brown)
+            return .init(icon: "wrench.and.screwdriver", title: pick("还没有服务", "まだ地域サービスがありません", "No local services yet"), body: pick("发布餐厅、接送交通、翻译手续、搬家清洁或生活开通等服务。", "飲食店、送迎、翻訳・手続き、引越し清掃、生活手続きを投稿できます。", "Post restaurants, transfers, paperwork help, moving, cleaning, or life setup services."), cta: pick("发布服务", "サービスを投稿", "Post service"), tint: .brown)
         case .merchant:
             return .init(icon: "storefront", title: pick("还没有商家", "まだ店舗がありません", "No businesses yet"), body: pick("把你的店推介给同城人,从认证开始。", "店舗を同じ街の人に紹介しましょう。まずは認証から始められます。", "Introduce your business to people in the city, starting with verification."), cta: pick("认证商家", "店舗を認証", "Verify business"), tint: .teal)
         case .coupon:
