@@ -19,7 +19,12 @@ private extension View {
     }
 }
 
+private func guideText(_ language: AppLanguage, _ zh: String, _ ja: String, _ en: String) -> String {
+    KXListingCopy.pickText(language, zh, ja, en)
+}
+
 struct GuideHomeView: View {
+    @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     @ObservedObject private var regionStore = RegionStore.shared
     @StateObject private var viewModel = GuideViewModel()
@@ -82,17 +87,17 @@ struct GuideHomeView: View {
                         // 两个固定大门：会员权益内容 vs 付费商城——所有
                         // 资料/服务都归到这两处，首页其余区块只做发现。
                         GuideDualEntrySection()
-                        GuideGoalsSection(goals: home.goals?.title ?? "你现在想做什么？", entries: home.goalEntries)
-                        GuideArticleSection(title: "精选指南", subtitle: "由 Machi 编辑部整理", articles: home.featuredArticles)
-                        GuideZoneSection(country: country, title: "日本就职专区", subtitle: "就活流程、履历书、面试与公司选择", categoryKey: "career_japan")
-                        GuideZoneSection(country: country, title: "日本升学专区", subtitle: "大学院、研究计划书、教授联系与出愿", categoryKey: "study_japan")
-                        GuideZoneSection(country: country, title: "语言学校与留学专区", subtitle: "语言学校、签证、入境与费用", categoryKey: "study_abroad_japan")
-                        GuideZoneSection(country: country, title: "日语考级专区", subtitle: "JLPT 备考、词汇语法与学习计划", categoryKey: "jlpt")
-                        GuideZoneSection(country: country, title: "在日生活专区", subtitle: "役所手续、租房、手机银行卡、医疗与防灾", categoryKey: "life_japan")
+                        GuideGoalsSection(goals: home.goals?.title ?? guideText(language, "你现在想做什么？", "いま何をしたいですか？", "What do you want to do now?"), entries: home.goalEntries)
+                        GuideArticleSection(title: guideText(language, "精选指南", "厳選ガイド", "Featured guides"), subtitle: guideText(language, "由 Machi 编辑部整理", "Machi 編集部が整理", "Curated by Machi editors"), articles: home.featuredArticles)
+                        GuideZoneSection(country: country, title: guideText(language, "日本就职专区", "日本就職特集", "Work in Japan"), subtitle: guideText(language, "就活流程、履历书、面试与公司选择", "就活の流れ、履歴書、面接、企業選び", "Job hunting, resumes, interviews, and company choices"), categoryKey: "career_japan")
+                        GuideZoneSection(country: country, title: guideText(language, "日本升学专区", "日本進学特集", "Study in Japan"), subtitle: guideText(language, "大学院、研究计划书、教授联系与出愿", "大学院、研究計画書、教授連絡、出願", "Graduate school, research plans, professor outreach, and applications"), categoryKey: "study_japan")
+                        GuideZoneSection(country: country, title: guideText(language, "语言学校与留学专区", "語学学校・留学特集", "Language Schools and Study Abroad"), subtitle: guideText(language, "语言学校、签证、入境与费用", "語学学校、ビザ、入国、費用", "Language schools, visas, entry, and costs"), categoryKey: "study_abroad_japan")
+                        GuideZoneSection(country: country, title: guideText(language, "日语考级专区", "日本語試験特集", "Japanese Test Prep"), subtitle: guideText(language, "JLPT 备考、词汇语法与学习计划", "JLPT 対策、語彙文法、学習計画", "JLPT prep, vocabulary, grammar, and study plans"), categoryKey: "jlpt")
+                        GuideZoneSection(country: country, title: guideText(language, "在日生活专区", "日本生活特集", "Life in Japan"), subtitle: guideText(language, "役所手续、租房、手机银行卡、医疗与防灾", "役所手続き、賃貸、携帯・銀行、医療、防災", "City hall, rentals, phone and banking, healthcare, and safety"), categoryKey: "life_japan")
                         GuideSchoolsSection(schools: home.featuredSchools ?? [], disclaimer: home.schoolDisclaimer)
                         GuideProductsSection(products: home.featuredProducts + home.featuredServices)
                         GuideCompaniesSection(companies: home.companyHighlights, disclaimer: home.companyDisclaimer ?? home.reviewDisclaimer)
-                        GuideArticleSection(title: "最新更新", subtitle: nil, articles: home.latestArticles, compact: true)
+                        GuideArticleSection(title: guideText(language, "最新更新", "最新更新", "Latest updates"), subtitle: nil, articles: home.latestArticles, compact: true)
                         GuideFAQSection(faq: home.faq)
                     }
                 }
@@ -107,6 +112,7 @@ struct GuideHomeView: View {
 }
 
 struct GuideCategoryView: View {
+    @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     @ObservedObject private var regionStore = RegionStore.shared
     @State private var categories: [KaiXGuideCategoryDTO] = []
@@ -129,10 +135,10 @@ struct GuideCategoryView: View {
     private var scopeCountLabels: [String] {
         var labels: [String] = []
         if let count = selectedScope?.articleCount {
-            labels.append("\(count) 篇指南")
+            labels.append(guideText(language, "\(count) 篇指南", "\(count) 件のガイド", "\(count) guides"))
         }
         if let count = selectedScope?.productCount {
-            labels.append("\(count) 个资料/服务")
+            labels.append(guideText(language, "\(count) 个资料/服务", "\(count) 件の資料/サービス", "\(count) resources/services"))
         }
         return labels
     }
@@ -157,19 +163,19 @@ struct GuideCategoryView: View {
                             GuideRefreshIndicator()
                         }
                         if let errorMessage, hasLoadedContent {
-                            GuideInlineStatus(message: "更新失败：\(errorMessage)")
+                            GuideInlineStatus(message: guideText(language, "更新失败：\(errorMessage)", "更新に失敗しました：\(errorMessage)", "Update failed: \(errorMessage)"))
                         }
                         if !products.isEmpty {
                             GuideProductsSection(
                                 products: products,
-                                title: categoryKey == "jlpt" ? "JLPT 资料包" : "相关资料与服务",
+                                title: categoryKey == "jlpt" ? guideText(language, "JLPT 资料包", "JLPT 資料パック", "JLPT resource packs") : guideText(language, "相关资料与服务", "関連資料・サービス", "Related resources and services"),
                                 subtitle: categoryKey == "jlpt"
-                                    ? "N1-N5 过去问趋势分析与原创练习 · 学习计划"
-                                    : "与本频道相关的资料、模板与服务"
+                                    ? guideText(language, "N1-N5 过去问趋势分析与原创练习 · 学习计划", "N1-N5 の出題傾向分析・オリジナル練習・学習計画", "N1-N5 trend analysis, original drills, and study plans")
+                                    : guideText(language, "与本频道相关的资料、模板与服务", "このカテゴリに関連する資料、テンプレート、サービス", "Resources, templates, and services for this channel")
                             )
                         }
                         if articles.isEmpty {
-                            KXStatePanel(title: "这个分类的指南正在整理中", subtitle: "Machi 编辑部会持续补充内容。", systemImage: "book.closed")
+                            KXStatePanel(title: guideText(language, "这个分类的指南正在整理中", "このカテゴリのガイドを準備中です", "Guides for this category are being prepared"), subtitle: guideText(language, "Machi 编辑部会持续补充内容。", "Machi 編集部が順次追加します。", "Machi editors will keep adding content."), systemImage: "book.closed")
                         } else {
                             LazyVGrid(columns: [GridItem(.flexible())], spacing: 10) {
                                 ForEach(articles) { article in
@@ -183,7 +189,7 @@ struct GuideCategoryView: View {
                 }
             }
         }
-        .navigationTitle(category?.title ?? "日本指南")
+        .navigationTitle(category?.title ?? guideText(language, "日本指南", "日本ガイド", "Japan Guide"))
         .navigationBarTitleDisplayMode(.inline)
         .task(id: "\(categoryKey):\(selectedSubCategory)") {
             await load()
@@ -203,10 +209,10 @@ struct GuideCategoryView: View {
                         .font(.caption2.weight(.black))
                         .tracking(1.4)
                         .foregroundStyle(KXColor.livingAccent)
-                    Text(category?.title ?? "日本指南")
+                    Text(category?.title ?? guideText(language, "日本指南", "日本ガイド", "Japan Guide"))
                         .font(.title2.weight(.bold))
                         .foregroundStyle(KXColor.livingInk)
-                    Text(category?.subtitle ?? "系统化日本生活与成长指南")
+                    Text(category?.subtitle ?? guideText(language, "系统化日本生活与成长指南", "日本生活と成長の体系的なガイド", "Structured guides for life and growth in Japan"))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(KXColor.livingMuted)
                 }
@@ -249,7 +255,7 @@ struct GuideCategoryView: View {
         if !subs.isEmpty {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    GuidePillButton(title: "全部", isSelected: selectedSubCategory.isEmpty) {
+                    GuidePillButton(title: guideText(language, "全部", "すべて", "All"), isSelected: selectedSubCategory.isEmpty) {
                         selectedSubCategory = ""
                     }
                     ForEach(subs) { sub in
@@ -301,10 +307,12 @@ struct GuideCategoryView: View {
 }
 
 private struct GuideRefreshIndicator: View {
+    @Environment(\.appLanguage) private var language
+
     var body: some View {
         HStack(spacing: 8) {
             KXSpinner(size: 14, lineWidth: 2)
-            Text("正在更新内容")
+            Text(guideText(language, "正在更新内容", "内容を更新しています", "Updating content"))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             Spacer()
@@ -330,6 +338,7 @@ private struct GuideInlineStatus: View {
 }
 
 struct GuideArticleDetailView: View {
+    @Environment(\.appLanguage) private var language
     @ObservedObject private var regionStore = RegionStore.shared
     @State private var response: KaiXGuideArticleDetailResponse?
     @State private var isLoading = true
@@ -354,19 +363,19 @@ struct GuideArticleDetailView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         articleHeader(article)
                         articleBody(article)
-                        GuideNotePanel(text: "本内容由 \(article.authorName) 整理，仅供参考。涉及签证、入管、考试等官方流程时，请同时以官方最新公告为准。")
+                        GuideNotePanel(text: guideText(language, "本内容由 \(article.authorName) 整理，仅供参考。涉及签证、入管、考试等官方流程时，请同时以官方最新公告为准。", "本コンテンツは \(article.authorName) が整理した参考情報です。ビザ、入管、試験などの公式手続きは必ず最新の公式発表も確認してください。", "This content was curated by \(article.authorName) for reference only. For visas, immigration, exams, and other official processes, always check the latest official notices."))
                         if let related = response?.related, !related.isEmpty {
-                            GuideArticleSection(title: "相关指南", subtitle: nil, articles: related, compact: true)
+                            GuideArticleSection(title: guideText(language, "相关指南", "関連ガイド", "Related guides"), subtitle: nil, articles: related, compact: true)
                         }
                     }
                     .padding(KXSpacing.screen)
                     .guideBottomInset()
                 }
             } else {
-                EmptyStateView(title: "指南内容不存在", subtitle: "它可能已被移动或下线。", systemImage: "book.closed")
+                EmptyStateView(title: guideText(language, "指南内容不存在", "ガイドが見つかりません", "Guide not found"), subtitle: guideText(language, "它可能已被移动或下线。", "移動または非公開になった可能性があります。", "It may have been moved or unpublished."), systemImage: "book.closed")
             }
         }
-        .navigationTitle("指南")
+        .navigationTitle(guideText(language, "指南", "ガイド", "Guide"))
         .navigationBarTitleDisplayMode(.inline)
         .task(id: "\(country):\(slug)") { await load() }
     }
@@ -374,7 +383,7 @@ struct GuideArticleDetailView: View {
     private func articleHeader(_ article: KaiXGuideArticleDTO) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
-                Text("指南")
+                Text(guideText(language, "指南", "ガイド", "Guide"))
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(KXColor.accent)
                     .padding(.horizontal, 8)
@@ -446,6 +455,7 @@ struct GuideArticleDetailView: View {
 }
 
 struct GuideServicesView: View {
+    @Environment(\.appLanguage) private var language
     @ObservedObject private var regionStore = RegionStore.shared
     @State private var products: [KaiXGuideProductDTO] = []
     @State private var productType = ""
@@ -453,14 +463,16 @@ struct GuideServicesView: View {
     @State private var errorMessage: String?
 
     private var country: String { (regionStore.current?.countryCode ?? "jp").lowercased() }
-    private let filters = [
-        ("", "全部"),
-        ("pdf_material", "PDF 资料"),
-        ("template", "模板"),
-        ("checklist", "清单"),
-        ("resume_review", "履历修改"),
-        ("consultation", "咨询"),
-    ]
+    private var filters: [(String, String)] {
+        [
+            ("", guideText(language, "全部", "すべて", "All")),
+            ("pdf_material", guideText(language, "PDF 资料", "PDF 資料", "PDF resources")),
+            ("template", guideText(language, "模板", "テンプレート", "Templates")),
+            ("checklist", guideText(language, "清单", "チェックリスト", "Checklists")),
+            ("resume_review", guideText(language, "履历修改", "履歴書添削", "Resume review")),
+            ("consultation", guideText(language, "咨询", "相談", "Consultation")),
+        ]
+    }
 
     var body: some View {
         ZStack {
@@ -488,7 +500,7 @@ struct GuideServicesView: View {
                                 Task { await load() }
                             }
                         } else if products.isEmpty {
-                            EmptyStateView(title: "暂无相关资料或服务", subtitle: "更多资料正在准备中。", systemImage: "shippingbox")
+                            EmptyStateView(title: guideText(language, "暂无相关资料或服务", "関連資料・サービスはまだありません", "No related resources or services yet"), subtitle: guideText(language, "更多资料正在准备中。", "追加資料を準備中です。", "More resources are being prepared."), systemImage: "shippingbox")
                         } else {
                             LazyVGrid(columns: [GridItem(.flexible())], spacing: 10) {
                                 ForEach(products) { product in
@@ -502,7 +514,7 @@ struct GuideServicesView: View {
                 }
             }
         }
-        .navigationTitle("商城")
+        .navigationTitle(guideText(language, "商城", "ストア", "Store"))
         .navigationBarTitleDisplayMode(.inline)
         .task(id: productType) { await load() }
     }
@@ -512,12 +524,12 @@ struct GuideServicesView: View {
             HStack(alignment: .top, spacing: 12) {
                 GuideIconBubble(icon: "shippingbox.fill", color: KXColor.heat)
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("商城")
+                    Text(guideText(language, "商城", "ストア", "Store"))
                         .font(.title2.weight(.bold))
-                    Text("资料包、模板、清单、课程与人工辅导服务")
+                    Text(guideText(language, "资料包、模板、清单、课程与人工辅导服务", "資料パック、テンプレート、チェックリスト、講座、個別サポート", "Resource packs, templates, checklists, courses, and coaching services"))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
-                    Text("付费数字资料在 Apple IAP 接入前显示「即将开放」。服务类可先提交预约咨询。")
+                    Text(guideText(language, "付费数字资料在 Apple IAP 接入前显示「即将开放」。服务类可先提交预约咨询。", "有料デジタル資料は Apple IAP 接続前は「まもなく公開」と表示されます。サービスは先に予約相談できます。", "Paid digital resources show as coming soon until Apple IAP is connected. Services can accept appointment inquiries first."))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -545,6 +557,7 @@ struct GuideServicesView: View {
 }
 
 struct GuideMemberResourcesView: View {
+    @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     @ObservedObject private var regionStore = RegionStore.shared
     @State private var products: [KaiXGuideProductDTO] = []
@@ -556,15 +569,17 @@ struct GuideMemberResourcesView: View {
     @State private var errorMessage: String?
 
     private var country: String { (regionStore.current?.countryCode ?? "jp").lowercased() }
-    private let filters = [
-        ("", "全部"),
-        ("jlpt", "日语"),
-        ("study_japan", "升学"),
-        ("career_japan", "就职"),
-        ("life_japan", "生活"),
-        ("study_abroad_japan", "留学"),
-        ("guide_services", "模板"),
-    ]
+    private var filters: [(String, String)] {
+        [
+            ("", guideText(language, "全部", "すべて", "All")),
+            ("jlpt", guideText(language, "日语", "日本語", "Japanese")),
+            ("study_japan", guideText(language, "升学", "進学", "Study")),
+            ("career_japan", guideText(language, "就职", "就職", "Career")),
+            ("life_japan", guideText(language, "生活", "生活", "Life")),
+            ("study_abroad_japan", guideText(language, "留学", "留学", "Study abroad")),
+            ("guide_services", guideText(language, "模板", "テンプレート", "Templates")),
+        ]
+    }
 
     var body: some View {
         ZStack {
@@ -583,7 +598,7 @@ struct GuideMemberResourcesView: View {
                                 Task { await load() }
                             }
                         } else if products.isEmpty {
-                            EmptyStateView(title: "暂无会员资料", subtitle: "更多资料正在整理中。", systemImage: "crown")
+                            EmptyStateView(title: guideText(language, "暂无会员资料", "会員資料はまだありません", "No member resources yet"), subtitle: guideText(language, "更多资料正在整理中。", "追加資料を準備中です。", "More resources are being prepared."), systemImage: "crown")
                         } else {
                             LazyVGrid(columns: [GridItem(.flexible())], spacing: 10) {
                                 ForEach(products) { product in
@@ -600,7 +615,7 @@ struct GuideMemberResourcesView: View {
                 }
             }
         }
-        .navigationTitle("会员专属资料")
+        .navigationTitle(guideText(language, "会员专属资料", "会員専用資料", "Member resources"))
         .navigationBarTitleDisplayMode(.inline)
         .task(id: "\(categoryKey):\(keyword)") { await load() }
     }
@@ -611,19 +626,19 @@ struct GuideMemberResourcesView: View {
                 HStack(alignment: .top, spacing: 12) {
                     GuideIconBubble(icon: "crown.fill", color: KXColor.accent)
                     VStack(alignment: .leading, spacing: 5) {
-                        Text("会员专属资料")
+                        Text(guideText(language, "会员专属资料", "会員専用資料", "Member resources"))
                             .font(.title2.weight(.bold))
-                        Text("为 Machi 认证会员整理的日本升学、就职、日语和生活资料。")
+                        Text(guideText(language, "为 Machi 认证会员整理的日本升学、就职、日语和生活资料。", "Machi 認証会員向けに、日本進学・就職・日本語・生活資料を整理しています。", "Study, career, Japanese, and life resources for Machi verified members."))
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.secondary)
-                        Text("服务类不进入会员免费权益；数字内容在 iOS 端遵守 Apple IAP 规则。")
+                        Text(guideText(language, "服务类不进入会员免费权益；数字内容在 iOS 端遵守 Apple IAP 规则。", "サービス類は会員無料特典に含まれません。デジタル内容は iOS で Apple IAP ルールに従います。", "Services are not included in member freebies; digital content follows Apple IAP rules on iOS."))
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 if !membershipActive {
-                    Text("非会员可查看预览，完整内容需开通会员或在 Web 端完成相应购买后同步查看。")
+                    Text(guideText(language, "非会员可查看预览，完整内容需开通会员或在 Web 端完成相应购买后同步查看。", "非会員はプレビューを確認できます。全文は会員登録、または Web で購入後に同じアカウントで同期して閲覧できます。", "Non-members can view previews. Full content is available after membership or a synced web purchase."))
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(KXColor.accent)
                         .padding(10)
@@ -633,7 +648,7 @@ struct GuideMemberResourcesView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
-                    TextField("搜索会员资料", text: $keyword)
+                    TextField(guideText(language, "搜索会员资料", "会員資料を検索", "Search member resources"), text: $keyword)
                         .textInputAutocapitalization(.never)
                         .onSubmit { Task { await load() } }
                 }
@@ -678,6 +693,7 @@ struct GuideMemberResourcesView: View {
 }
 
 struct GuideProductDetailView: View {
+    @Environment(\.appLanguage) private var language
     @ObservedObject private var regionStore = RegionStore.shared
     @State private var product: KaiXGuideProductDTO?
     @State private var isLoading = true
@@ -709,16 +725,16 @@ struct GuideProductDetailView: View {
                             previewPanel(preview, locked: product.hasPurchaseContent == true)
                         }
                         productDescription(product)
-                        GuideNotePanel(text: "数字资料商品在 Apple IAP 接入前显示「即将开放」。服务类只提交预约咨询，不在 iOS 内提供外部支付按钮。")
+                        GuideNotePanel(text: guideText(language, "数字资料商品在 Apple IAP 接入前显示「即将开放」。服务类只提交预约咨询，不在 iOS 内提供外部支付按钮。", "デジタル資料は Apple IAP 接続前は「まもなく公開」と表示されます。サービス類は予約相談のみで、iOS 内に外部決済ボタンは表示しません。", "Digital resources show as coming soon until Apple IAP is connected. Services only submit appointment inquiries; no external payment buttons are shown in iOS."))
                     }
                     .padding(KXSpacing.screen)
                     .guideBottomInset()
                 }
             } else {
-                EmptyStateView(title: "资料/服务不存在", subtitle: "它可能已被移动或下线。", systemImage: "shippingbox")
+                EmptyStateView(title: guideText(language, "资料/服务不存在", "資料/サービスが見つかりません", "Resource/service not found"), subtitle: guideText(language, "它可能已被移动或下线。", "移動または非公開になった可能性があります。", "It may have been moved or unpublished."), systemImage: "shippingbox")
             }
         }
-        .navigationTitle("商城")
+        .navigationTitle(guideText(language, "商城", "ストア", "Store"))
         .navigationBarTitleDisplayMode(.inline)
         .task(id: "\(country):\(slug)") { await load() }
         .alert("Machi Guide", isPresented: Binding(
@@ -732,13 +748,13 @@ struct GuideProductDetailView: View {
     }
 
     private func productHero(_ product: KaiXGuideProductDTO) -> some View {
-        let price = GuideCopy.productPrice(product)
+        let price = GuideCopy.productPrice(product, language: language)
         return KXCard(padding: 18, radius: 24) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .top, spacing: 13) {
                     GuideIconBubble(icon: product.isService ? "wrench.and.screwdriver.fill" : "doc.text.fill", color: product.isService ? KXColor.rankTeal : KXColor.heat)
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(GuideCopy.productTypeLabel(product.productType))
+                        Text(GuideCopy.productTypeLabel(product.productType, language: language))
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.secondary)
                         Text(product.title)
@@ -759,7 +775,7 @@ struct GuideProductDetailView: View {
                     Button {
                         Task { await productAction(product) }
                     } label: {
-                        Text(GuideCopy.productCTA(product, busy: isSubmitting, loggedIn: KaiXBackend.token != nil))
+                        Text(GuideCopy.productCTA(product, busy: isSubmitting, loggedIn: KaiXBackend.token != nil, language: language))
                             .font(.subheadline.weight(.bold))
                             .frame(height: 40)
                             .padding(.horizontal, 18)
@@ -783,12 +799,12 @@ struct GuideProductDetailView: View {
             }
             Divider().opacity(0.25)
             if !product.targetAudience.isEmpty {
-                GuideMetaRow(title: "适合人群", value: product.targetAudience)
+                GuideMetaRow(title: guideText(language, "适合人群", "対象者", "Best for"), value: product.targetAudience)
             }
             if !product.deliveryMethod.isEmpty {
-                GuideMetaRow(title: "交付方式", value: product.deliveryMethod)
+                GuideMetaRow(title: guideText(language, "交付方式", "提供方法", "Delivery"), value: product.deliveryMethod)
             }
-            GuideMetaRow(title: "内容类型", value: product.isService ? "人工服务" : "数字内容")
+            GuideMetaRow(title: guideText(language, "内容类型", "コンテンツ種別", "Content type"), value: product.isService ? guideText(language, "人工服务", "人的サービス", "Human service") : guideText(language, "数字内容", "デジタル内容", "Digital content"))
         }
         .padding(18)
         .kxGlassSurface(radius: 22)
@@ -801,7 +817,7 @@ struct GuideProductDetailView: View {
     private func purchasedContentPanel(_ product: KaiXGuideProductDTO) -> some View {
         KXCard(padding: 18, radius: 22) {
             VStack(alignment: .leading, spacing: 10) {
-                Label(product.access?.memberUnlocked == true ? "会员已解锁" : "已购买", systemImage: "checkmark.seal.fill")
+                Label(product.access?.memberUnlocked == true ? guideText(language, "会员已解锁", "会員特典で解除済み", "Unlocked by membership") : guideText(language, "已购买", "購入済み", "Purchased"), systemImage: "checkmark.seal.fill")
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(.green)
                 if let pc = product.purchaseContent, !pc.isEmpty {
@@ -812,7 +828,7 @@ struct GuideProductDetailView: View {
                 }
                 if let f = product.fileUrl, !f.isEmpty, let url = URL(string: f) {
                     Link(destination: url) {
-                        Label("下载资料", systemImage: "arrow.down.circle.fill")
+                        Label(guideText(language, "下载资料", "資料をダウンロード", "Download resource"), systemImage: "arrow.down.circle.fill")
                             .font(.subheadline.weight(.semibold))
                     }
                 }
@@ -824,7 +840,7 @@ struct GuideProductDetailView: View {
     private func previewPanel(_ preview: String, locked: Bool) -> some View {
         KXCard(padding: 18, radius: 22) {
             VStack(alignment: .leading, spacing: 8) {
-                Label("预览内容", systemImage: "lock.fill")
+                Label(guideText(language, "预览内容", "プレビュー", "Preview"), systemImage: "lock.fill")
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(.secondary)
                 Text(preview)
@@ -832,7 +848,7 @@ struct GuideProductDetailView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 if locked {
-                    Text("完整内容请在 Web 端购买或开通会员后，于 iOS 登录同一账号查看。")
+                    Text(guideText(language, "完整内容请在 Web 端购买或开通会员后，于 iOS 登录同一账号查看。", "全文は Web で購入または会員登録後、iOS で同じアカウントにログインして確認してください。", "Buy on the web or activate membership, then sign in with the same account on iOS to view the full content."))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -851,7 +867,7 @@ struct GuideProductDetailView: View {
                     productId: product.slug,
                     serviceType: product.productType,
                     contactMethod: "app",
-                    message: "我想预约：\(product.title)"
+                    message: guideText(language, "我想预约：\(product.title)", "\(product.title) を予約相談したいです", "I would like to book: \(product.title)")
                 ))
             } else {
                 response = try await KaiXAPIClient.shared.purchaseGuideProduct(product.slug)
@@ -881,6 +897,7 @@ struct GuideProductDetailView: View {
 }
 
 struct GuideSchoolListView: View {
+    @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     @ObservedObject private var regionStore = RegionStore.shared
     @State private var schools: [KaiXGuideSchoolDTO] = []
@@ -917,7 +934,7 @@ struct GuideSchoolListView: View {
                                 Task { await load() }
                             }
                         } else if schools.isEmpty {
-                            EmptyStateView(title: "暂无匹配学校", subtitle: "试试其他学校类型、地区或关键词。", systemImage: "graduationcap")
+                            EmptyStateView(title: guideText(language, "暂无匹配学校", "条件に合う学校はありません", "No matching schools"), subtitle: guideText(language, "试试其他学校类型、地区或关键词。", "学校種別、地域、キーワードを変えてみてください。", "Try another school type, region, or keyword."), systemImage: "graduationcap")
                         } else {
                             ForEach(schools) { school in
                                 GuideSchoolCard(school: school)
@@ -929,7 +946,7 @@ struct GuideSchoolListView: View {
                 }
             }
         }
-        .navigationTitle("日本学校库")
+        .navigationTitle(guideText(language, "日本学校库", "日本の学校データベース", "Japan School Library"))
         .navigationBarTitleDisplayMode(.inline)
         .task(id: [schoolType, regionGroup, prefecture, field, supportFilter, sort].joined(separator: ":")) { await load() }
         .sheet(isPresented: $showFilterSheet) {
@@ -946,9 +963,9 @@ struct GuideSchoolListView: View {
                 HStack(spacing: 12) {
                     GuideIconBubble(icon: "graduationcap.fill", color: KXColor.rankSky)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("日本学校库")
+                        Text(guideText(language, "日本学校库", "日本の学校データベース", "Japan School Library"))
                             .font(.title3.weight(.bold))
-                        Text("大学、大学院、专门学校与语言学校的官方入口")
+                        Text(guideText(language, "大学、大学院、专门学校与语言学校的官方入口", "大学、大学院、専門学校、語学学校の公式入口", "Official entry points for universities, graduate schools, vocational schools, and language schools"))
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -956,10 +973,10 @@ struct GuideSchoolListView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
-                    TextField("搜索学校名、学科、城市", text: $keyword)
+                    TextField(guideText(language, "搜索学校名、学科、城市", "学校名・学科・都市を検索", "Search school name, major, or city"), text: $keyword)
                         .textInputAutocapitalization(.never)
                         .onSubmit { Task { await load() } }
-                    Button("搜索") {
+                    Button(guideText(language, "搜索", "検索", "Search")) {
                         Task { await load() }
                     }
                     .font(.caption.weight(.bold))
@@ -978,7 +995,13 @@ struct GuideSchoolListView: View {
         VStack(alignment: .leading, spacing: 9) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach([("", "全部"), ("university", "大学"), ("graduate_school", "大学院"), ("vocational_school", "专门学校"), ("language_school", "语言学校")], id: \.0) { value, title in
+                    ForEach([
+                        ("", guideText(language, "全部", "すべて", "All")),
+                        ("university", guideText(language, "大学", "大学", "University")),
+                        ("graduate_school", guideText(language, "大学院", "大学院", "Graduate school")),
+                        ("vocational_school", guideText(language, "专门学校", "専門学校", "Vocational school")),
+                        ("language_school", guideText(language, "语言学校", "語学学校", "Language school")),
+                    ], id: \.0) { value, title in
                         GuidePillButton(title: title, isSelected: schoolType == value) {
                             schoolType = value
                         }
@@ -989,16 +1012,16 @@ struct GuideSchoolListView: View {
             HStack(spacing: 8) {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
-                        GuidePillButton(title: "首都圈", isSelected: regionGroup == "capital_area") {
+                        GuidePillButton(title: guideText(language, "首都圈", "首都圏", "Capital area"), isSelected: regionGroup == "capital_area") {
                             regionGroup = regionGroup == "capital_area" ? "" : "capital_area"
                         }
-                        GuidePillButton(title: "关西圈", isSelected: regionGroup == "kansai_area") {
+                        GuidePillButton(title: guideText(language, "关西圈", "関西圏", "Kansai area"), isSelected: regionGroup == "kansai_area") {
                             regionGroup = regionGroup == "kansai_area" ? "" : "kansai_area"
                         }
-                        GuidePillButton(title: "留学生可申请", isSelected: supportFilter == "international") {
+                        GuidePillButton(title: guideText(language, "留学生可申请", "留学生出願可", "International students"), isSelected: supportFilter == "international") {
                             supportFilter = supportFilter == "international" ? "" : "international"
                         }
-                        GuidePillButton(title: "英文项目", isSelected: supportFilter == "english") {
+                        GuidePillButton(title: guideText(language, "英文项目", "英語プログラム", "English programs"), isSelected: supportFilter == "english") {
                             supportFilter = supportFilter == "english" ? "" : "english"
                         }
                     }
@@ -1009,7 +1032,7 @@ struct GuideSchoolListView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "slider.horizontal.3")
-                        Text(activeFilterCount > 0 ? "筛选 \(activeFilterCount)" : "筛选")
+                        Text(activeFilterCount > 0 ? guideText(language, "筛选 \(activeFilterCount)", "絞り込み \(activeFilterCount)", "Filters \(activeFilterCount)") : guideText(language, "筛选", "絞り込み", "Filters"))
                     }
                     .font(.caption.weight(.bold))
                     .foregroundStyle(activeFilterCount > 0 ? Color.white : KXColor.accent)
@@ -1053,6 +1076,7 @@ struct GuideSchoolListView: View {
 }
 
 struct GuideCompanyListView: View {
+    @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     @ObservedObject private var regionStore = RegionStore.shared
     @State private var companies: [KaiXGuideCompanyDTO] = []
@@ -1086,7 +1110,7 @@ struct GuideCompanyListView: View {
                                 Task { await load() }
                             }
                         } else if companies.isEmpty {
-                            EmptyStateView(title: "暂无匹配公司", subtitle: "试试其他关键词、地区或放宽筛选。", systemImage: "building.2")
+                            EmptyStateView(title: guideText(language, "暂无匹配公司", "条件に合う会社はありません", "No matching companies"), subtitle: guideText(language, "试试其他关键词、地区或放宽筛选。", "別のキーワードや地域、ゆるい条件で試してください。", "Try another keyword, region, or broader filters."), systemImage: "building.2")
                         } else {
                             ForEach(companies) { company in
                                 GuideCompanyCard(company: company)
@@ -1098,7 +1122,7 @@ struct GuideCompanyListView: View {
                 }
             }
         }
-        .navigationTitle("外国人就职公司库")
+        .navigationTitle(guideText(language, "外国人就职公司库", "外国人向け就職企業データベース", "Foreigner-Friendly Company Library"))
         .navigationBarTitleDisplayMode(.inline)
         .task(id: [regionGroup, industry, city, companySize, employmentType, supportFilter, sort].joined(separator: ":")) { await load() }
     }
@@ -1109,9 +1133,9 @@ struct GuideCompanyListView: View {
                 HStack(spacing: 12) {
                     GuideIconBubble(icon: "building.2.fill", color: KXColor.rankTeal)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("外国人就职公司库")
+                        Text(guideText(language, "外国人就职公司库", "外国人向け就職企業データベース", "Foreigner-Friendly Company Library"))
                             .font(.title3.weight(.bold))
-                        Text("以官方招聘页、签证支持和真实评价为主")
+                        Text(guideText(language, "以官方招聘页、签证支持和真实评价为主", "公式採用ページ、ビザ支援、実体験レビューを重視", "Focused on official career pages, visa support, and real reviews"))
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -1119,10 +1143,10 @@ struct GuideCompanyListView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
-                    TextField("搜索公司名、行业、岗位", text: $keyword)
+                    TextField(guideText(language, "搜索公司名、行业、岗位", "会社名・業界・職種を検索", "Search company, industry, or role"), text: $keyword)
                         .textInputAutocapitalization(.never)
                         .onSubmit { Task { await load() } }
-                    Button("搜索") {
+                    Button(guideText(language, "搜索", "検索", "Search")) {
                         Task { await load() }
                     }
                     .font(.caption.weight(.bold))
@@ -1139,7 +1163,7 @@ struct GuideCompanyListView: View {
         VStack(alignment: .leading, spacing: 9) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach([("", "全部地区"), ("tokyo", "东京"), ("yokohama", "横滨"), ("osaka", "大阪"), ("kyoto", "京都"), ("kobe", "神户")], id: \.0) { value, title in
+                    ForEach([("", guideText(language, "全部地区", "すべての地域", "All areas")), ("tokyo", "Tokyo"), ("yokohama", "Yokohama"), ("osaka", "Osaka"), ("kyoto", "Kyoto"), ("kobe", "Kobe")], id: \.0) { value, title in
                         GuidePillButton(title: title, isSelected: city == value) {
                             city = value
                         }
@@ -1149,12 +1173,12 @@ struct GuideCompanyListView: View {
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach([("", "日本全国"), ("capital_area", "首都圈"), ("kansai_area", "关西圈")], id: \.0) { value, title in
+                    ForEach([("", guideText(language, "日本全国", "日本全国", "All Japan")), ("capital_area", guideText(language, "首都圈", "首都圏", "Capital area")), ("kansai_area", guideText(language, "关西圈", "関西圏", "Kansai area"))], id: \.0) { value, title in
                         GuidePillButton(title: title, isSelected: regionGroup == value) {
                             regionGroup = value
                         }
                     }
-                    ForEach([("", "全部行业"), ("it_internet", "IT"), ("software", "软件"), ("ai_data", "AI/Data"), ("manufacturing", "制造"), ("finance", "金融"), ("consulting", "咨询"), ("game_entertainment", "游戏")], id: \.0) { value, title in
+                    ForEach([("", guideText(language, "全部行业", "すべての業界", "All industries")), ("it_internet", "IT"), ("software", guideText(language, "软件", "ソフトウェア", "Software")), ("ai_data", "AI/Data"), ("manufacturing", guideText(language, "制造", "製造", "Manufacturing")), ("finance", guideText(language, "金融", "金融", "Finance")), ("consulting", guideText(language, "咨询", "コンサル", "Consulting")), ("game_entertainment", guideText(language, "游戏", "ゲーム", "Games"))], id: \.0) { value, title in
                         GuidePillButton(title: title, isSelected: industry == value) {
                             industry = value
                         }
@@ -1164,12 +1188,12 @@ struct GuideCompanyListView: View {
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach([("", "全部规模"), ("enterprise", "大手"), ("large", "大型"), ("medium", "中型"), ("startup", "初创")], id: \.0) { value, title in
+                    ForEach([("", guideText(language, "全部规模", "すべての規模", "All sizes")), ("enterprise", guideText(language, "大手", "大手", "Enterprise")), ("large", guideText(language, "大型", "大規模", "Large")), ("medium", guideText(language, "中型", "中規模", "Mid-size")), ("startup", guideText(language, "初创", "スタートアップ", "Startup"))], id: \.0) { value, title in
                         GuidePillButton(title: title, isSelected: companySize == value) {
                             companySize = value
                         }
                     }
-                    ForEach([("", "全部雇佣"), ("new_graduate", "新卒"), ("mid_career", "中途"), ("internship", "实习"), ("global_hire", "Global hire")], id: \.0) { value, title in
+                    ForEach([("", guideText(language, "全部雇佣", "すべての雇用", "All employment")), ("new_graduate", "新卒"), ("mid_career", "中途"), ("internship", guideText(language, "实习", "インターン", "Internship")), ("global_hire", "Global hire")], id: \.0) { value, title in
                         GuidePillButton(title: title, isSelected: employmentType == value) {
                             employmentType = value
                         }
@@ -1179,12 +1203,12 @@ struct GuideCompanyListView: View {
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach([("visa", "签证支持"), ("foreign", "外国人友好"), ("english", "英文岗位"), ("global", "Global career"), ("employees", "外国员工")], id: \.0) { value, title in
+                    ForEach([("visa", guideText(language, "签证支持", "ビザ支援", "Visa support")), ("foreign", guideText(language, "外国人友好", "外国人フレンドリー", "Foreigner-friendly")), ("english", guideText(language, "英文岗位", "英語ポジション", "English roles")), ("global", "Global career"), ("employees", guideText(language, "外国员工", "外国籍社員", "Foreign employees"))], id: \.0) { value, title in
                         GuidePillButton(title: title, isSelected: supportFilter == value) {
                             supportFilter = supportFilter == value ? "" : value
                         }
                     }
-                    ForEach([("recommended", "推荐"), ("data_quality", "完整度"), ("recently_updated", "最近更新"), ("review_count", "评论数"), ("name_jp_asc", "日文名")], id: \.0) { value, title in
+                    ForEach([("recommended", guideText(language, "推荐", "おすすめ", "Recommended")), ("data_quality", guideText(language, "完整度", "充実度", "Completeness")), ("recently_updated", guideText(language, "最近更新", "最近更新", "Recently updated")), ("review_count", guideText(language, "评论数", "レビュー数", "Review count")), ("name_jp_asc", guideText(language, "日文名", "日本語名", "Japanese name"))], id: \.0) { value, title in
                         GuidePillButton(title: title, isSelected: sort == value) {
                             sort = value
                         }
@@ -1225,6 +1249,7 @@ struct GuideCompanyListView: View {
 }
 
 struct GuideSchoolDetailView: View {
+    @Environment(\.appLanguage) private var language
     @ObservedObject private var regionStore = RegionStore.shared
     @State private var response: KaiXGuideSchoolDetailResponse?
     @State private var isLoading = true
@@ -1257,7 +1282,7 @@ struct GuideSchoolDetailView: View {
                         programSection(response.programs)
                         admissionSection(response.admissions)
                         if !response.relatedArticles.isEmpty {
-                            GuideArticleSection(title: "相关指南", subtitle: nil, articles: response.relatedArticles, compact: true)
+                            GuideArticleSection(title: guideText(language, "相关指南", "関連ガイド", "Related guides"), subtitle: nil, articles: response.relatedArticles, compact: true)
                         }
                         if !response.relatedProducts.isEmpty {
                             GuideProductsSection(products: response.relatedProducts)
@@ -1268,10 +1293,10 @@ struct GuideSchoolDetailView: View {
                     .guideBottomInset()
                 }
             } else {
-                EmptyStateView(title: "学校不存在", subtitle: "它可能已被移动或下线。", systemImage: "graduationcap")
+                EmptyStateView(title: guideText(language, "学校不存在", "学校が見つかりません", "School not found"), subtitle: guideText(language, "它可能已被移动或下线。", "移動または非公開になった可能性があります。", "It may have been moved or unpublished."), systemImage: "graduationcap")
             }
         }
-        .navigationTitle("学校详情")
+        .navigationTitle(guideText(language, "学校详情", "学校詳細", "School details"))
         .navigationBarTitleDisplayMode(.inline)
         .task(id: "\(country):\(schoolId)") { await load() }
         .alert("Machi Guide", isPresented: Binding(
@@ -1304,8 +1329,8 @@ struct GuideSchoolDetailView: View {
                                 .foregroundStyle(.secondary)
                         }
                         Text([
-                            GuideCopy.schoolTypeLabel(school.schoolType),
-                            GuideCopy.cityLabel(school.city),
+                            GuideCopy.schoolTypeLabel(school.schoolType, language: language),
+                            GuideCopy.cityLabel(school.city, language: language),
                             school.prefecture.isEmpty ? "" : school.prefecture,
                             school.ward ?? ""
                         ].filter { !$0.isEmpty }.joined(separator: " · "))
@@ -1313,7 +1338,7 @@ struct GuideSchoolDetailView: View {
                             .foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 0)
-                    GuideBadge(GuideCopy.sourceStatusLabel(school.verificationStatus), tint: KXColor.rankSky)
+                    GuideBadge(GuideCopy.sourceStatusLabel(school.verificationStatus, language: language), tint: KXColor.rankSky)
                 }
                 if !school.description.isEmpty {
                     Text(school.description)
@@ -1329,32 +1354,32 @@ struct GuideSchoolDetailView: View {
                 VStack(alignment: .leading, spacing: 7) {
                     if let url = GuideCopy.url(school.website) {
                         Link(destination: url) {
-                            Label("学校官网", systemImage: "link")
+                            Label(guideText(language, "学校官网", "学校公式サイト", "School website"), systemImage: "link")
                         }
                     }
                     if let url = GuideCopy.url(school.internationalAdmissionUrl) {
                         Link(destination: url) {
-                            Label("国际招生/入试页面", systemImage: "doc.text.magnifyingglass")
+                            Label(guideText(language, "国际招生/入试页面", "留学生入試ページ", "International admissions"), systemImage: "doc.text.magnifyingglass")
                         }
                     }
                     if let url = GuideCopy.url(school.applicationUrl) {
                         Link(destination: url) {
-                            Label("申请入口", systemImage: "square.and.pencil")
+                            Label(guideText(language, "申请入口", "出願入口", "Application portal"), systemImage: "square.and.pencil")
                         }
                     }
                     if let url = GuideCopy.url(school.scholarshipUrl) {
                         Link(destination: url) {
-                            Label("奖学金页面", systemImage: "yensign.circle.fill")
+                            Label(guideText(language, "奖学金页面", "奨学金ページ", "Scholarships"), systemImage: "yensign.circle.fill")
                         }
                     }
                     if let url = GuideCopy.url(school.careerSupportUrl) {
                         Link(destination: url) {
-                            Label("就职支持", systemImage: "briefcase.fill")
+                            Label(guideText(language, "就职支持", "就職支援", "Career support"), systemImage: "briefcase.fill")
                         }
                     }
                     if let url = GuideCopy.url(school.dormitoryUrl) {
                         Link(destination: url) {
-                            Label("宿舍信息", systemImage: "house.fill")
+                            Label(guideText(language, "宿舍信息", "寮情報", "Dormitory info"), systemImage: "house.fill")
                         }
                     }
                 }
@@ -1367,29 +1392,29 @@ struct GuideSchoolDetailView: View {
     private func schoolSignalPanel(_ school: KaiXGuideSchoolDTO) -> some View {
         KXCard(padding: 16, radius: 22) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("申请信息")
+                Text(guideText(language, "申请信息", "出願情報", "Application info"))
                     .font(.headline.weight(.bold))
-                GuideMetaRow(title: "地址", value: [school.postalCode ?? "", school.prefecture, school.city, school.ward ?? "", school.address ?? ""].filter { !$0.isEmpty }.joined(separator: " ").ifEmpty("待补充"))
-                GuideMetaRow(title: "学费", value: GuideCopy.moneyRange(min: school.tuitionMin, max: school.tuitionMax, currency: school.currency))
-                GuideMetaRow(title: "入学月份", value: GuideCopy.joinedOrPending(school.admissionMonths))
-                GuideMetaRow(title: "日语要求", value: GuideCopy.levelLabel(school.requiredJapaneseLevel))
-                GuideMetaRow(title: "英语要求", value: GuideCopy.levelLabel(school.requiredEnglishLevel))
-                GuideMetaRow(title: "考试要求", value: "JLPT \(GuideCopy.levelLabel(school.jlptRequired ?? "unknown")) · EJU \(GuideCopy.levelLabel(school.ejuRequired ?? "unknown")) · TOEFL \(GuideCopy.levelLabel(school.toeflRequired ?? "unknown")) · IELTS \(GuideCopy.levelLabel(school.ieltsRequired ?? "unknown"))")
-                GuideMetaRow(title: "学部/研究科", value: [
-                    GuideCopy.joinedOrPending(school.faculties ?? []),
-                    GuideCopy.joinedOrPending(school.graduateSchools ?? []),
-                    GuideCopy.joinedOrPending(school.departments ?? []),
-                ].filter { $0 != "待补充" }.joined(separator: " / ").ifEmpty("待补充"))
-                GuideMetaRow(title: "数据完整度", value: "\(school.dataQualityScore ?? 0) / 100")
-                GuideMetaRow(title: "数据来源", value: [school.sourceName ?? "", school.sourceLastCheckedAt ?? "", GuideCopy.sourceStatusLabel(school.verificationStatus)].filter { !$0.isEmpty }.joined(separator: " · ").ifEmpty("待核验"))
+                GuideMetaRow(title: guideText(language, "地址", "住所", "Address"), value: [school.postalCode ?? "", school.prefecture, school.city, school.ward ?? "", school.address ?? ""].filter { !$0.isEmpty }.joined(separator: " ").ifEmpty(guideText(language, "待补充", "未入力", "Pending")))
+                GuideMetaRow(title: guideText(language, "学费", "学費", "Tuition"), value: GuideCopy.moneyRange(min: school.tuitionMin, max: school.tuitionMax, currency: school.currency, language: language))
+                GuideMetaRow(title: guideText(language, "入学月份", "入学月", "Admission months"), value: GuideCopy.joinedOrPending(school.admissionMonths, language: language))
+                GuideMetaRow(title: guideText(language, "日语要求", "日本語要件", "Japanese requirement"), value: GuideCopy.levelLabel(school.requiredJapaneseLevel, language: language))
+                GuideMetaRow(title: guideText(language, "英语要求", "英語要件", "English requirement"), value: GuideCopy.levelLabel(school.requiredEnglishLevel, language: language))
+                GuideMetaRow(title: guideText(language, "考试要求", "試験要件", "Exam requirements"), value: "JLPT \(GuideCopy.levelLabel(school.jlptRequired ?? "unknown", language: language)) · EJU \(GuideCopy.levelLabel(school.ejuRequired ?? "unknown", language: language)) · TOEFL \(GuideCopy.levelLabel(school.toeflRequired ?? "unknown", language: language)) · IELTS \(GuideCopy.levelLabel(school.ieltsRequired ?? "unknown", language: language))")
+                GuideMetaRow(title: guideText(language, "学部/研究科", "学部/研究科", "Faculties/Graduate schools"), value: [
+                    GuideCopy.joinedOrPending(school.faculties ?? [], language: language),
+                    GuideCopy.joinedOrPending(school.graduateSchools ?? [], language: language),
+                    GuideCopy.joinedOrPending(school.departments ?? [], language: language),
+                ].filter { $0 != guideText(language, "待补充", "未入力", "Pending") }.joined(separator: " / ").ifEmpty(guideText(language, "待补充", "未入力", "Pending")))
+                GuideMetaRow(title: guideText(language, "数据完整度", "データ充実度", "Data completeness"), value: "\(school.dataQualityScore ?? 0) / 100")
+                GuideMetaRow(title: guideText(language, "数据来源", "データ出典", "Data source"), value: [school.sourceName ?? "", school.sourceLastCheckedAt ?? "", GuideCopy.sourceStatusLabel(school.verificationStatus, language: language)].filter { !$0.isEmpty }.joined(separator: " · ").ifEmpty(guideText(language, "待核验", "確認待ち", "Pending verification")))
                 FlowLayout(spacing: 6) {
-                    GuideBadge(GuideCopy.triStateLabel(school.isAcceptingInternationalStudents, trueText: "接受留学生"), tint: KXColor.rankSky)
-                    GuideBadge(GuideCopy.triStateLabel(school.hasEnglishProgram, trueText: "英文项目"), tint: KXColor.rankTeal)
-                    GuideBadge(GuideCopy.triStateLabel(school.hasJapaneseProgram, trueText: "日语项目"), tint: KXColor.rankTeal)
-                    GuideBadge(GuideCopy.triStateLabel(school.hasScholarship, trueText: "奖学金"), tint: KXColor.rankGold)
-                    GuideBadge(GuideCopy.triStateLabel(school.hasDormitory, trueText: "宿舍"), tint: KXColor.rankViolet)
-                    GuideBadge(GuideCopy.triStateLabel(school.hasCareerSupport, trueText: "就业支持"), tint: KXColor.accent)
-                    GuideBadge(GuideCopy.triStateLabel(school.hasLanguageSupport, trueText: "语言支持"), tint: KXColor.rankSky)
+                    GuideBadge(GuideCopy.triStateLabel(school.isAcceptingInternationalStudents, trueText: guideText(language, "接受留学生", "留学生受入", "Accepts international students"), language: language), tint: KXColor.rankSky)
+                    GuideBadge(GuideCopy.triStateLabel(school.hasEnglishProgram, trueText: guideText(language, "英文项目", "英語プログラム", "English programs"), language: language), tint: KXColor.rankTeal)
+                    GuideBadge(GuideCopy.triStateLabel(school.hasJapaneseProgram, trueText: guideText(language, "日语项目", "日本語プログラム", "Japanese programs"), language: language), tint: KXColor.rankTeal)
+                    GuideBadge(GuideCopy.triStateLabel(school.hasScholarship, trueText: guideText(language, "奖学金", "奨学金", "Scholarships"), language: language), tint: KXColor.rankGold)
+                    GuideBadge(GuideCopy.triStateLabel(school.hasDormitory, trueText: guideText(language, "宿舍", "寮", "Dormitory"), language: language), tint: KXColor.rankViolet)
+                    GuideBadge(GuideCopy.triStateLabel(school.hasCareerSupport, trueText: guideText(language, "就业支持", "就職支援", "Career support"), language: language), tint: KXColor.accent)
+                    GuideBadge(GuideCopy.triStateLabel(school.hasLanguageSupport, trueText: guideText(language, "语言支持", "語学サポート", "Language support"), language: language), tint: KXColor.rankSky)
                 }
             }
         }
@@ -1401,7 +1426,7 @@ struct GuideSchoolDetailView: View {
                 Button {
                     Task { await save(school) }
                 } label: {
-                    Label(isSubmitting ? "处理中" : "收藏学校", systemImage: "bookmark.fill")
+                    Label(isSubmitting ? guideText(language, "处理中", "処理中", "Processing") : guideText(language, "收藏学校", "学校を保存", "Save school"), systemImage: "bookmark.fill")
                         .font(.subheadline.weight(.bold))
                         .frame(maxWidth: .infinity)
                         .frame(height: 42)
@@ -1411,12 +1436,12 @@ struct GuideSchoolDetailView: View {
                 .buttonStyle(.plain)
                 .disabled(isSubmitting)
 
-                TextField("发现官网、招生信息有误？在这里提交纠错", text: $correctionText, axis: .vertical)
+                TextField(guideText(language, "发现官网、招生信息有误？在这里提交纠错", "公式サイトや入試情報の誤りを見つけたら、ここから修正を送信", "Found an error in the website or admissions info? Submit a correction here"), text: $correctionText, axis: .vertical)
                     .font(.footnote)
                     .lineLimit(2...4)
                     .padding(11)
                     .background(KXColor.softBackground.opacity(0.82), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-                Button("提交纠错") {
+                Button(guideText(language, "提交纠错", "修正を送信", "Submit correction")) {
                     Task { await submitCorrection(school) }
                 }
                 .font(.caption.weight(.bold))
@@ -1428,9 +1453,16 @@ struct GuideSchoolDetailView: View {
 
     private func programSection(_ programs: [KaiXGuideSchoolProgramDTO]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            GuideSectionHeader(title: "项目与课程", subtitle: "只展示后台录入或官方来源补充的内容")
+            GuideSectionHeader(
+                title: guideText(language, "项目与课程", "プログラム・コース", "Programs and courses"),
+                subtitle: guideText(language, "只展示后台录入或官方来源补充的内容", "管理画面で登録済み、または公式ソースで補足された内容のみ表示します", "Only content entered in admin or backed by official sources is shown")
+            )
             if programs.isEmpty {
-                KXStatePanel(title: "项目资料待补充", subtitle: "当前学校还没有录入具体项目。", systemImage: "list.bullet.rectangle")
+                KXStatePanel(
+                    title: guideText(language, "项目资料待补充", "プログラム情報は準備中です", "Program details are pending"),
+                    subtitle: guideText(language, "当前学校还没有录入具体项目。", "この学校にはまだ具体的なプログラムが登録されていません。", "No specific programs have been entered for this school yet."),
+                    systemImage: "list.bullet.rectangle"
+                )
             } else {
                 ForEach(programs) { program in
                     KXCard(padding: 14, radius: 20) {
@@ -1443,10 +1475,12 @@ struct GuideSchoolDetailView: View {
                                     .foregroundStyle(.secondary)
                             }
                             FlowLayout(spacing: 6) {
-                                GuideBadge(GuideCopy.levelLabel(program.degreeLevel), tint: KXColor.rankSky)
+                                GuideBadge(GuideCopy.levelLabel(program.degreeLevel, language: language), tint: KXColor.rankSky)
                                 if !program.field.isEmpty { GuideBadge(program.field) }
                                 if !program.languageOfInstruction.isEmpty { GuideBadge(program.languageOfInstruction, tint: KXColor.rankTeal) }
-                                if program.durationMonths > 0 { GuideBadge("\(program.durationMonths) 个月") }
+                                if program.durationMonths > 0 {
+                                    GuideBadge(guideText(language, "\(program.durationMonths) 个月", "\(program.durationMonths) か月", "\(program.durationMonths) months"))
+                                }
                             }
                             if !program.description.isEmpty {
                                 Text(program.description)
@@ -1455,7 +1489,7 @@ struct GuideSchoolDetailView: View {
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             if let url = GuideCopy.url(program.applicationUrl) {
-                                Link("项目申请页面", destination: url)
+                                Link(guideText(language, "项目申请页面", "プログラム出願ページ", "Program application page"), destination: url)
                                     .font(.caption.weight(.bold))
                                     .foregroundStyle(KXColor.accent)
                             }
@@ -1468,15 +1502,22 @@ struct GuideSchoolDetailView: View {
 
     private func admissionSection(_ admissions: [KaiXGuideSchoolAdmissionDTO]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            GuideSectionHeader(title: "出愿与入试", subtitle: "申请材料、选考方式和奖学金信息")
+            GuideSectionHeader(
+                title: guideText(language, "出愿与入试", "出願・入試", "Admissions and exams"),
+                subtitle: guideText(language, "申请材料、选考方式和奖学金信息", "出願書類、選考方式、奨学金情報", "Application documents, selection methods, and scholarship info")
+            )
             if admissions.isEmpty {
-                KXStatePanel(title: "出愿资料待补充", subtitle: "请以学校官方招生页面为准。", systemImage: "doc.text")
+                KXStatePanel(
+                    title: guideText(language, "出愿资料待补充", "出願情報は準備中です", "Admission details are pending"),
+                    subtitle: guideText(language, "请以学校官方招生页面为准。", "学校の公式入試ページも必ず確認してください。", "Please also refer to the school's official admissions page."),
+                    systemImage: "doc.text"
+                )
             } else {
                 ForEach(admissions) { admission in
                     KXCard(padding: 14, radius: 20) {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Text(admission.admissionType.isEmpty ? "入试信息" : admission.admissionType)
+                                Text(admission.admissionType.isEmpty ? guideText(language, "入试信息", "入試情報", "Admission info") : admission.admissionType)
                                     .font(.headline.weight(.bold))
                                 Spacer(minLength: 0)
                                 if !admission.enrollmentMonth.isEmpty {
@@ -1484,13 +1525,13 @@ struct GuideSchoolDetailView: View {
                                 }
                             }
                             if !admission.selectionMethod.isEmpty {
-                                GuideMetaRow(title: "选考", value: admission.selectionMethod)
+                                GuideMetaRow(title: guideText(language, "选考", "選考", "Selection"), value: admission.selectionMethod)
                             }
                             if !admission.requiredDocuments.isEmpty {
-                                GuideMetaRow(title: "材料", value: admission.requiredDocuments.joined(separator: "、"))
+                                GuideMetaRow(title: guideText(language, "材料", "書類", "Documents"), value: admission.requiredDocuments.joined(separator: language == .en ? ", " : "、"))
                             }
                             if !admission.scholarshipInfo.isEmpty {
-                                GuideMetaRow(title: "奖学金", value: admission.scholarshipInfo)
+                                GuideMetaRow(title: guideText(language, "奖学金", "奨学金", "Scholarship"), value: admission.scholarshipInfo)
                             }
                             if !admission.notes.isEmpty {
                                 Text(admission.notes)
@@ -1499,7 +1540,7 @@ struct GuideSchoolDetailView: View {
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             if let url = GuideCopy.url(admission.sourceUrl) {
-                                Link("官方来源", destination: url)
+                                Link(guideText(language, "官方来源", "公式ソース", "Official source"), destination: url)
                                     .font(.caption.weight(.bold))
                                     .foregroundStyle(KXColor.accent)
                             }
@@ -1516,7 +1557,7 @@ struct GuideSchoolDetailView: View {
         defer { isSubmitting = false }
         do {
             try await KaiXAPIClient.shared.saveGuideSchool(school.slug.isEmpty ? school.id : school.slug, on: true)
-            toastMessage = "已收藏学校"
+            toastMessage = guideText(language, "已收藏学校", "学校を保存しました", "School saved")
         } catch {
             toastMessage = error.localizedDescription
         }
@@ -1559,6 +1600,7 @@ struct GuideSchoolDetailView: View {
 }
 
 struct GuideCompanyDetailView: View {
+    @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     @ObservedObject private var regionStore = RegionStore.shared
     @State private var response: KaiXGuideCompanyDetailResponse?
@@ -1595,7 +1637,7 @@ struct GuideCompanyDetailView: View {
                             Button {
                                 router.open(.guideCompanyReviews(id: company.slug.isEmpty ? company.id : company.slug))
                             } label: {
-                                Text("查看评论（面试 \(response.interviewReviewCount) · 工作 \(response.workReviewCount)）")
+                                Text(guideText(language, "查看评论（面试 \(response.interviewReviewCount) · 工作 \(response.workReviewCount)）", "レビューを見る（面接 \(response.interviewReviewCount) · 仕事 \(response.workReviewCount)）", "View reviews (interview \(response.interviewReviewCount) · work \(response.workReviewCount))"))
                                     .font(.subheadline.weight(.bold))
                                     .frame(maxWidth: .infinity)
                                     .frame(height: 44)
@@ -1605,7 +1647,7 @@ struct GuideCompanyDetailView: View {
                             .buttonStyle(.plain)
                         }
                         if let related = response.relatedArticles, !related.isEmpty {
-                            GuideArticleSection(title: "相关指南", subtitle: nil, articles: related, compact: true)
+                            GuideArticleSection(title: guideText(language, "相关指南", "関連ガイド", "Related guides"), subtitle: nil, articles: related, compact: true)
                         }
                         GuideNotePanel(text: response.disclaimer)
                     }
@@ -1613,10 +1655,10 @@ struct GuideCompanyDetailView: View {
                     .guideBottomInset()
                 }
             } else {
-                EmptyStateView(title: "公司不存在", subtitle: "它可能已被移动或下线。", systemImage: "building.2")
+                EmptyStateView(title: guideText(language, "公司不存在", "会社が見つかりません", "Company not found"), subtitle: guideText(language, "它可能已被移动或下线。", "移動または非公開になった可能性があります。", "It may have been moved or unpublished."), systemImage: "building.2")
             }
         }
-        .navigationTitle("公司详情")
+        .navigationTitle(guideText(language, "公司详情", "会社詳細", "Company details"))
         .navigationBarTitleDisplayMode(.inline)
         .task(id: "\(country):\(companyId)") { await load() }
         .alert("Machi Guide", isPresented: Binding(
@@ -1647,13 +1689,13 @@ struct GuideCompanyDetailView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
-                        Text([company.industry, company.subIndustry ?? "", company.prefecture ?? "", GuideCopy.cityLabel(company.city), company.ward ?? "", company.size].filter { !$0.isEmpty }.joined(separator: " · "))
+                        Text([company.industry, company.subIndustry ?? "", company.prefecture ?? "", GuideCopy.cityLabel(company.city, language: language), company.ward ?? "", company.size].filter { !$0.isEmpty }.joined(separator: " · "))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 0)
                     if let status = company.verificationStatus, !status.isEmpty {
-                        GuideBadge(GuideCopy.sourceStatusLabel(status), tint: KXColor.rankTeal)
+                        GuideBadge(GuideCopy.sourceStatusLabel(status, language: language), tint: KXColor.rankTeal)
                     }
                 }
                 if !company.description.isEmpty {
@@ -1664,10 +1706,10 @@ struct GuideCompanyDetailView: View {
                 }
                 FlowLayout(spacing: 6) {
                     if let level = company.requiredJapaneseLevel, !level.isEmpty {
-                        GuideBadge("日语 \(GuideCopy.levelLabel(level))", tint: KXColor.rankSky)
+                        GuideBadge(guideText(language, "日语 \(GuideCopy.levelLabel(level, language: language))", "日本語 \(GuideCopy.levelLabel(level, language: language))", "Japanese \(GuideCopy.levelLabel(level, language: language))"), tint: KXColor.rankSky)
                     }
                     if let level = company.requiredEnglishLevel, !level.isEmpty {
-                        GuideBadge("英语 \(GuideCopy.levelLabel(level))", tint: KXColor.rankTeal)
+                        GuideBadge(guideText(language, "英语 \(GuideCopy.levelLabel(level, language: language))", "英語 \(GuideCopy.levelLabel(level, language: language))", "English \(GuideCopy.levelLabel(level, language: language))"), tint: KXColor.rankTeal)
                     }
                     if let types = company.employmentTypes {
                         ForEach(types.prefix(3), id: \.self) { type in
@@ -1678,22 +1720,22 @@ struct GuideCompanyDetailView: View {
                 VStack(alignment: .leading, spacing: 7) {
                     if let url = GuideCopy.url(company.website) {
                         Link(destination: url) {
-                            Label("公司官网", systemImage: "link")
+                            Label(guideText(language, "公司官网", "会社公式サイト", "Company website"), systemImage: "link")
                         }
                     }
                     if let url = GuideCopy.url(company.careerUrl) {
                         Link(destination: url) {
-                            Label("官方招聘页", systemImage: "briefcase.fill")
+                            Label(guideText(language, "官方招聘页", "公式採用ページ", "Official careers page"), systemImage: "briefcase.fill")
                         }
                     }
                     if let url = GuideCopy.url(company.newGraduateUrl) {
                         Link(destination: url) {
-                            Label("新卒採用", systemImage: "person.crop.circle.badge.plus")
+                            Label(guideText(language, "新卒採用", "新卒採用", "New graduate hiring"), systemImage: "person.crop.circle.badge.plus")
                         }
                     }
                     if let url = GuideCopy.url(company.midCareerUrl) {
                         Link(destination: url) {
-                            Label("中途採用", systemImage: "person.text.rectangle")
+                            Label(guideText(language, "中途採用", "中途採用", "Mid-career hiring"), systemImage: "person.text.rectangle")
                         }
                     }
                     if let url = GuideCopy.url(company.globalCareerUrl) {
@@ -1714,7 +1756,7 @@ struct GuideCompanyDetailView: View {
                 Button {
                     Task { await save(company) }
                 } label: {
-                    Label(isSubmitting ? "处理中" : "收藏公司", systemImage: "bookmark.fill")
+                    Label(isSubmitting ? guideText(language, "处理中", "処理中", "Processing") : guideText(language, "收藏公司", "会社を保存", "Save company"), systemImage: "bookmark.fill")
                         .font(.subheadline.weight(.bold))
                         .frame(maxWidth: .infinity)
                         .frame(height: 42)
@@ -1724,12 +1766,12 @@ struct GuideCompanyDetailView: View {
                 .buttonStyle(.plain)
                 .disabled(isSubmitting)
 
-                TextField("发现招聘页、签证信息有误？在这里提交纠错", text: $correctionText, axis: .vertical)
+                TextField(guideText(language, "发现招聘页、签证信息有误？在这里提交纠错", "採用ページやビザ情報の誤りを見つけたら、ここから修正を送信", "Found an error in careers or visa info? Submit a correction here"), text: $correctionText, axis: .vertical)
                     .font(.footnote)
                     .lineLimit(2...4)
                     .padding(11)
                     .background(KXColor.softBackground.opacity(0.82), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-                Button("提交纠错") {
+                Button(guideText(language, "提交纠错", "修正を送信", "Submit correction")) {
                     Task { await submitCorrection(company) }
                 }
                 .font(.caption.weight(.bold))
@@ -1742,24 +1784,24 @@ struct GuideCompanyDetailView: View {
     private func companyFactsPanel(_ company: KaiXGuideCompanyDTO) -> some View {
         KXCard(padding: 16, radius: 22) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("就职信号")
+                Text(guideText(language, "就职信号", "就職シグナル", "Career signals"))
                     .font(.headline.weight(.bold))
-                GuideMetaRow(title: "行业", value: [company.industry, company.subIndustry ?? "", company.companySize ?? company.size].filter { !$0.isEmpty }.joined(separator: " · ").ifEmpty("待补充"))
-                GuideMetaRow(title: "地区", value: [company.prefecture ?? "", GuideCopy.cityLabel(company.city), company.ward ?? ""].filter { !$0.isEmpty }.joined(separator: " · ").ifEmpty("待补充"))
-                GuideMetaRow(title: "地址", value: [company.postalCode ?? "", company.prefecture ?? "", company.city, company.ward ?? "", company.address ?? ""].filter { !$0.isEmpty }.joined(separator: " ").ifEmpty("待补充"))
-                GuideMetaRow(title: "法人番号", value: company.corporateNumber?.isEmpty == false ? company.corporateNumber! : "待补充")
-                GuideMetaRow(title: "雇佣类型", value: GuideCopy.joinedOrPending(company.employmentTypes ?? []))
-                GuideMetaRow(title: "语言要求", value: "日语 \(GuideCopy.levelLabel(company.requiredJapaneseLevel ?? "unknown")) · 英语 \(GuideCopy.levelLabel(company.requiredEnglishLevel ?? "unknown"))")
-                GuideMetaRow(title: "数据完整度", value: "\(company.dataQualityScore ?? 0) / 100")
-                GuideMetaRow(title: "数据来源", value: [company.sourceName ?? "", company.sourceLastCheckedAt ?? "", GuideCopy.sourceStatusLabel(company.verificationStatus ?? "")].filter { !$0.isEmpty }.joined(separator: " · ").ifEmpty("待核验"))
+                GuideMetaRow(title: guideText(language, "行业", "業界", "Industry"), value: [company.industry, company.subIndustry ?? "", company.companySize ?? company.size].filter { !$0.isEmpty }.joined(separator: " · ").ifEmpty(guideText(language, "待补充", "未入力", "Pending")))
+                GuideMetaRow(title: guideText(language, "地区", "地域", "Area"), value: [company.prefecture ?? "", GuideCopy.cityLabel(company.city, language: language), company.ward ?? ""].filter { !$0.isEmpty }.joined(separator: " · ").ifEmpty(guideText(language, "待补充", "未入力", "Pending")))
+                GuideMetaRow(title: guideText(language, "地址", "住所", "Address"), value: [company.postalCode ?? "", company.prefecture ?? "", company.city, company.ward ?? "", company.address ?? ""].filter { !$0.isEmpty }.joined(separator: " ").ifEmpty(guideText(language, "待补充", "未入力", "Pending")))
+                GuideMetaRow(title: guideText(language, "法人番号", "法人番号", "Corporate number"), value: company.corporateNumber?.isEmpty == false ? company.corporateNumber! : guideText(language, "待补充", "未入力", "Pending"))
+                GuideMetaRow(title: guideText(language, "雇佣类型", "雇用形態", "Employment type"), value: GuideCopy.joinedOrPending(company.employmentTypes ?? [], language: language))
+                GuideMetaRow(title: guideText(language, "语言要求", "言語要件", "Language requirements"), value: guideText(language, "日语 \(GuideCopy.levelLabel(company.requiredJapaneseLevel ?? "unknown", language: language)) · 英语 \(GuideCopy.levelLabel(company.requiredEnglishLevel ?? "unknown", language: language))", "日本語 \(GuideCopy.levelLabel(company.requiredJapaneseLevel ?? "unknown", language: language)) · 英語 \(GuideCopy.levelLabel(company.requiredEnglishLevel ?? "unknown", language: language))", "Japanese \(GuideCopy.levelLabel(company.requiredJapaneseLevel ?? "unknown", language: language)) · English \(GuideCopy.levelLabel(company.requiredEnglishLevel ?? "unknown", language: language))"))
+                GuideMetaRow(title: guideText(language, "数据完整度", "データ充実度", "Data completeness"), value: "\(company.dataQualityScore ?? 0) / 100")
+                GuideMetaRow(title: guideText(language, "数据来源", "データ出典", "Data source"), value: [company.sourceName ?? "", company.sourceLastCheckedAt ?? "", GuideCopy.sourceStatusLabel(company.verificationStatus ?? "", language: language)].filter { !$0.isEmpty }.joined(separator: " · ").ifEmpty(guideText(language, "待核验", "確認待ち", "Pending verification")))
                 FlowLayout(spacing: 6) {
-                    GuideBadge(GuideCopy.triStateLabel(company.acceptsForeignApplicants, trueText: "接受外国人申请"), tint: KXColor.rankTeal)
-                    GuideBadge(GuideCopy.triStateLabel(company.supportsWorkVisa, trueText: "签证支持"), tint: KXColor.accent)
-                    GuideBadge(GuideCopy.triStateLabel(company.supportsNewGraduate, trueText: "新卒"), tint: KXColor.rankGold)
-                    GuideBadge(GuideCopy.triStateLabel(company.supportsMidCareer, trueText: "中途"), tint: KXColor.rankGold)
-                    GuideBadge(GuideCopy.triStateLabel(company.hasEnglishPositions, trueText: "英文岗位"), tint: KXColor.rankSky)
-                    GuideBadge(GuideCopy.triStateLabel(company.hasGlobalRoles, trueText: "Global career"), tint: KXColor.rankSky)
-                    GuideBadge(GuideCopy.triStateLabel(company.hasForeignEmployees, trueText: "有外国籍员工"), tint: KXColor.rankViolet)
+                    GuideBadge(GuideCopy.triStateLabel(company.acceptsForeignApplicants, trueText: guideText(language, "接受外国人申请", "外国人応募可", "Accepts foreign applicants"), language: language), tint: KXColor.rankTeal)
+                    GuideBadge(GuideCopy.triStateLabel(company.supportsWorkVisa, trueText: guideText(language, "签证支持", "ビザ支援", "Visa support"), language: language), tint: KXColor.accent)
+                    GuideBadge(GuideCopy.triStateLabel(company.supportsNewGraduate, trueText: "新卒", language: language), tint: KXColor.rankGold)
+                    GuideBadge(GuideCopy.triStateLabel(company.supportsMidCareer, trueText: "中途", language: language), tint: KXColor.rankGold)
+                    GuideBadge(GuideCopy.triStateLabel(company.hasEnglishPositions, trueText: guideText(language, "英文岗位", "英語ポジション", "English roles"), language: language), tint: KXColor.rankSky)
+                    GuideBadge(GuideCopy.triStateLabel(company.hasGlobalRoles, trueText: "Global career", language: language), tint: KXColor.rankSky)
+                    GuideBadge(GuideCopy.triStateLabel(company.hasForeignEmployees, trueText: guideText(language, "有外国籍员工", "外国籍社員あり", "Has foreign employees"), language: language), tint: KXColor.rankViolet)
                 }
             }
         }
@@ -1767,9 +1809,16 @@ struct GuideCompanyDetailView: View {
 
     private func positionSection(_ positions: [KaiXGuideCompanyPositionDTO]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            GuideSectionHeader(title: "公开岗位", subtitle: "来自后台录入或官方招聘页，薪资与条件以官方页面为准")
+            GuideSectionHeader(
+                title: guideText(language, "公开岗位", "公開求人", "Open roles"),
+                subtitle: guideText(language, "来自后台录入或官方招聘页，薪资与条件以官方页面为准", "管理画面の登録情報または公式採用ページをもとに表示しています。給与と条件は公式ページを確認してください。", "Shown from admin-entered data or official careers pages. Salary and conditions should be checked on the official page.")
+            )
             if positions.isEmpty {
-                KXStatePanel(title: "岗位资料待补充", subtitle: "请优先查看公司官方招聘页。", systemImage: "briefcase")
+                KXStatePanel(
+                    title: guideText(language, "岗位资料待补充", "求人情報は準備中です", "Role details are pending"),
+                    subtitle: guideText(language, "请优先查看公司官方招聘页。", "まずは会社の公式採用ページを確認してください。", "Please check the company's official careers page first."),
+                    systemImage: "briefcase"
+                )
             } else {
                 ForEach(positions) { position in
                     GuideCompanyPositionCard(position: position)
@@ -1782,10 +1831,10 @@ struct GuideCompanyDetailView: View {
         KXCard(padding: 16, radius: 22) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text("真实评价")
+                    Text(guideText(language, "真实评价", "リアルレビュー", "Real reviews"))
                         .font(.headline.weight(.bold))
                     Spacer()
-                    Text(company.reviewCount > 0 ? "\(company.reviewCount) 条评价" : "暂无评价")
+                    Text(company.reviewCount > 0 ? guideText(language, "\(company.reviewCount) 条评价", "\(company.reviewCount) 件のレビュー", "\(company.reviewCount) reviews") : guideText(language, "暂无评价", "レビューはまだありません", "No reviews yet"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
@@ -1796,13 +1845,13 @@ struct GuideCompanyDetailView: View {
                     GuideScoreRow(title: "薪资福利", value: scores.salaryBenefit)
                     GuideScoreRow(title: "工作生活平衡", value: scores.workLifeBalance)
                     if let value = scores.visaSupport {
-                        GuideScoreRow(title: "签证支持", value: value)
+                        GuideScoreRow(title: guideText(language, "签证支持", "ビザ支援", "Visa support"), value: value)
                     }
                     if let value = scores.careerGrowth {
-                        GuideScoreRow(title: "成长空间", value: value)
+                        GuideScoreRow(title: guideText(language, "成长空间", "成長機会", "Growth opportunity"), value: value)
                     }
                 } else {
-                    Text("暂无足够真实评价数据。评分将在用户提交并通过审核后显示，我们不预设主观分数。")
+                    Text(guideText(language, "暂无足够真实评价数据。评分将在用户提交并通过审核后显示，我们不预设主观分数。", "十分な実体験レビューはまだありません。スコアはユーザー投稿が審査後に表示され、Machi が主観的な点数を事前設定することはありません。", "There is not enough real review data yet. Scores appear after user submissions pass review; Machi does not preset subjective ratings."))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1860,6 +1909,7 @@ struct GuideCompanyDetailView: View {
 }
 
 struct GuideCompanyReviewsView: View {
+    @Environment(\.appLanguage) private var language
     @ObservedObject private var regionStore = RegionStore.shared
     @State private var response: KaiXGuideCompanyReviewsResponse?
     @State private var isLoading = true
@@ -1874,7 +1924,11 @@ struct GuideCompanyReviewsView: View {
         case interview
         case work
         var id: String { rawValue }
-        var title: String { self == .interview ? "面试评论" : "工作评价" }
+        func title(_ language: AppLanguage) -> String {
+            self == .interview
+                ? guideText(language, "面试评论", "面接レビュー", "Interview reviews")
+                : guideText(language, "工作评价", "仕事レビュー", "Work reviews")
+        }
     }
 
     var body: some View {
@@ -1893,7 +1947,7 @@ struct GuideCompanyReviewsView: View {
                     LazyVStack(alignment: .leading, spacing: 12) {
                         HStack {
                             ForEach(ReviewTab.allCases) { tab in
-                                GuidePillButton(title: "\(tab.title) \(count(for: tab, response: response))", isSelected: selectedTab == tab) {
+                                GuidePillButton(title: "\(tab.title(language)) \(count(for: tab, response: response))", isSelected: selectedTab == tab) {
                                     selectedTab = tab
                                 }
                             }
@@ -1902,7 +1956,7 @@ struct GuideCompanyReviewsView: View {
                         Button {
                             isShowingComposer = true
                         } label: {
-                            Label("写评论", systemImage: "square.and.pencil")
+                            Label(guideText(language, "写评论", "レビューを書く", "Write review"), systemImage: "square.and.pencil")
                                 .font(.subheadline.weight(.bold))
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 42)
@@ -1913,7 +1967,7 @@ struct GuideCompanyReviewsView: View {
 
                         if selectedTab == .interview {
                             if response.interviewReviews.isEmpty {
-                                EmptyStateView(title: "还没有面试评论", subtitle: "到这里分享第一条真实面试经验。", systemImage: "bubble.left.and.bubble.right")
+                                EmptyStateView(title: guideText(language, "还没有面试评论", "面接レビューはまだありません", "No interview reviews yet"), subtitle: guideText(language, "到这里分享第一条真实面试经验。", "最初の実体験レビューを投稿してみましょう。", "Share the first real interview experience here."), systemImage: "bubble.left.and.bubble.right")
                             } else {
                                 ForEach(response.interviewReviews) { review in
                                     GuideInterviewReviewCard(review: review)
@@ -1921,7 +1975,7 @@ struct GuideCompanyReviewsView: View {
                             }
                         } else {
                             if response.workReviews.isEmpty {
-                                EmptyStateView(title: "还没有工作评价", subtitle: "所有评论审核通过后才会展示。", systemImage: "person.text.rectangle")
+                                EmptyStateView(title: guideText(language, "还没有工作评价", "仕事レビューはまだありません", "No work reviews yet"), subtitle: guideText(language, "所有评论审核通过后才会展示。", "レビューは審査通過後に表示されます。", "Reviews appear after moderation."), systemImage: "person.text.rectangle")
                             } else {
                                 ForEach(response.workReviews) { review in
                                     GuideWorkReviewCard(review: review)
@@ -1934,10 +1988,10 @@ struct GuideCompanyReviewsView: View {
                     .guideBottomInset()
                 }
             } else {
-                EmptyStateView(title: "评论不存在", subtitle: "它可能已被移动或下线。", systemImage: "bubble.left")
+                EmptyStateView(title: guideText(language, "评论不存在", "レビューが見つかりません", "Review not found"), subtitle: guideText(language, "它可能已被移动或下线。", "移動または非公開になった可能性があります。", "It may have been moved or unpublished."), systemImage: "bubble.left")
             }
         }
-        .navigationTitle("公司评论")
+        .navigationTitle(guideText(language, "公司评论", "会社レビュー", "Company reviews"))
         .navigationBarTitleDisplayMode(.inline)
         .task(id: "\(country):\(companyId)") { await load() }
         .sheet(isPresented: $isShowingComposer) {
@@ -1971,6 +2025,7 @@ struct GuideCompanyReviewsView: View {
 }
 
 struct GuideInterviewReviewListView: View {
+    @Environment(\.appLanguage) private var language
     @ObservedObject private var regionStore = RegionStore.shared
     @State private var reviews: [KaiXGuideInterviewReviewDTO] = []
     @State private var city = ""
@@ -1989,7 +2044,7 @@ struct GuideInterviewReviewListView: View {
                     LazyVStack(alignment: .leading, spacing: 12) {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 8) {
-                                ForEach([("", "全部地区"), ("tokyo", "东京"), ("osaka", "大阪")], id: \.0) { value, title in
+                                ForEach([("", guideText(language, "全部地区", "すべての地域", "All areas")), ("tokyo", "Tokyo"), ("osaka", "Osaka")], id: \.0) { value, title in
                                     GuidePillButton(title: title, isSelected: city == value) {
                                         city = value
                                     }
@@ -2003,7 +2058,7 @@ struct GuideInterviewReviewListView: View {
                                 Task { await load() }
                             }
                         } else if reviews.isEmpty {
-                            EmptyStateView(title: "还没有面试评论", subtitle: "真实用户提交并审核后会展示在这里。", systemImage: "bubble.left.and.bubble.right")
+                            EmptyStateView(title: guideText(language, "还没有面试评论", "面接レビューはまだありません", "No interview reviews yet"), subtitle: guideText(language, "真实用户提交并审核后会展示在这里。", "実ユーザーの投稿が審査後にここへ表示されます。", "Real user submissions appear here after moderation."), systemImage: "bubble.left.and.bubble.right")
                         } else {
                             ForEach(reviews) { review in
                                 GuideInterviewReviewCard(review: review)
@@ -2015,7 +2070,7 @@ struct GuideInterviewReviewListView: View {
                 }
             }
         }
-        .navigationTitle("面试评论")
+        .navigationTitle(guideText(language, "面试评论", "面接レビュー", "Interview reviews"))
         .navigationBarTitleDisplayMode(.inline)
         .task(id: city) { await load() }
     }
@@ -2039,6 +2094,7 @@ struct GuideInterviewReviewListView: View {
 }
 
 struct GuideSubmitReviewView: View {
+    @Environment(\.appLanguage) private var language
     @Environment(\.dismiss) private var dismiss
     @State private var tab: GuideCompanyReviewsView.ReviewTab
     @State private var position = ""
@@ -2082,69 +2138,69 @@ struct GuideSubmitReviewView: View {
         NavigationStack {
             Form {
                 Section {
-                    Picker("类型", selection: $tab) {
+                    Picker(guideText(language, "类型", "種別", "Type"), selection: $tab) {
                         ForEach(GuideCompanyReviewsView.ReviewTab.allCases) { tab in
-                            Text(tab.title).tag(tab)
+                            Text(tab.title(language)).tag(tab)
                         }
                     }
                     .pickerStyle(.segmented)
-                    TextField("岗位/职种", text: $position)
-                    TextField("雇佣类型", text: $employmentType)
+                    TextField(guideText(language, "岗位/职种", "職種", "Role / position"), text: $position)
+                    TextField(guideText(language, "雇佣类型", "雇用形態", "Employment type"), text: $employmentType)
                 }
 
                 if tab == .interview {
-                    Section("面试信息") {
-                        Stepper("面试轮数 \(interviewRounds)", value: $interviewRounds, in: 0...20)
-                        TextField("面试语言", text: $interviewLanguage)
-                        TextField("难度", text: $difficulty)
-                        TextField("结果", text: $result)
-                        Stepper("面试年份 \(interviewYear)", value: $interviewYear, in: 2000...2100)
-                        TextField("城市", text: $city)
+                    Section(guideText(language, "面试信息", "面接情報", "Interview info")) {
+                        Stepper(guideText(language, "面试轮数 \(interviewRounds)", "面接回数 \(interviewRounds)", "Interview rounds \(interviewRounds)"), value: $interviewRounds, in: 0...20)
+                        TextField(guideText(language, "面试语言", "面接言語", "Interview language"), text: $interviewLanguage)
+                        TextField(guideText(language, "难度", "難易度", "Difficulty"), text: $difficulty)
+                        TextField(guideText(language, "结果", "結果", "Result"), text: $result)
+                        Stepper(guideText(language, "面试年份 \(interviewYear)", "面接年 \(interviewYear)", "Interview year \(interviewYear)"), value: $interviewYear, in: 2000...2100)
+                        TextField(guideText(language, "城市", "都市", "City"), text: $city)
                     }
-                    Section("经验内容") {
-                        TextField("面试问题", text: $questions, axis: .vertical)
+                    Section(guideText(language, "经验内容", "体験内容", "Experience")) {
+                        TextField(guideText(language, "面试问题", "面接質問", "Interview questions"), text: $questions, axis: .vertical)
                             .lineLimit(3...6)
-                        TextField("流程说明", text: $processDescription, axis: .vertical)
+                        TextField(guideText(language, "流程说明", "選考プロセス", "Process description"), text: $processDescription, axis: .vertical)
                             .lineLimit(3...6)
                     }
                 } else {
                     Section {
-                        TextField("优点", text: $pros, axis: .vertical)
+                        TextField(guideText(language, "优点", "良い点", "Pros"), text: $pros, axis: .vertical)
                             .lineLimit(3...6)
-                        TextField("需要留意", text: $cons, axis: .vertical)
+                        TextField(guideText(language, "需要留意", "気になる点", "Watch-outs"), text: $cons, axis: .vertical)
                             .lineLimit(3...6)
-                        TextField("加班情况", text: $overtimeLevel)
-                        TextField("外国人支持", text: $foreignerSupport)
-                        TextField("薪资福利", text: $salaryBenefits)
-                        TextField("成长空间", text: $careerGrowth)
+                        TextField(guideText(language, "加班情况", "残業状況", "Overtime"), text: $overtimeLevel)
+                        TextField(guideText(language, "外国人支持", "外国人サポート", "Foreigner support"), text: $foreignerSupport)
+                        TextField(guideText(language, "薪资福利", "給与・福利厚生", "Salary and benefits"), text: $salaryBenefits)
+                        TextField(guideText(language, "成长空间", "成長機会", "Growth opportunity"), text: $careerGrowth)
                         Slider(value: $recommendationScore, in: 0...5, step: 0.5) {
-                            Text("推荐度")
+                            Text(guideText(language, "推荐度", "おすすめ度", "Recommendation"))
                         } minimumValueLabel: {
                             Text("0")
                         } maximumValueLabel: {
                             Text("5")
                         }
                     } header: {
-                        Text("工作评价")
+                        Text(guideText(language, "工作评价", "仕事レビュー", "Work review"))
                     } footer: {
-                        Text("推荐度 \(recommendationScore, specifier: "%.1f") / 5")
+                        Text(recommendationScoreText)
                     }
                 }
 
                 Section {
-                    Text("默认匿名提交，审核通过后展示。请勿填写个人隐私、联系方式或无法核实的指控。")
+                    Text(guideText(language, "默认匿名提交，审核通过后展示。请勿填写个人隐私、联系方式或无法核实的指控。", "デフォルトで匿名投稿され、審査通過後に表示されます。個人情報、連絡先、確認できない告発は書かないでください。", "Submitted anonymously by default and shown after moderation. Do not include private information, contact details, or unverifiable claims."))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
             }
-            .navigationTitle("写评论")
+            .navigationTitle(guideText(language, "写评论", "レビューを書く", "Write review"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") { dismiss() }
+                    Button(guideText(language, "取消", "キャンセル", "Cancel")) { dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(isSubmitting ? "提交中" : "提交") {
+                    Button(isSubmitting ? guideText(language, "提交中", "送信中", "Submitting") : guideText(language, "提交", "送信", "Submit")) {
                         Task { await submit() }
                     }
                     .disabled(!canSubmit || isSubmitting)
@@ -2203,9 +2259,15 @@ struct GuideSubmitReviewView: View {
             message = error.localizedDescription
         }
     }
+
+    private var recommendationScoreText: String {
+        let score = String(format: "%.1f", recommendationScore)
+        return guideText(language, "推荐度 \(score) / 5", "おすすめ度 \(score) / 5", "Recommendation \(score) / 5")
+    }
 }
 
 struct GuideComingSoonView: View {
+    @Environment(\.appLanguage) private var language
     @ObservedObject private var regionStore = RegionStore.shared
     var empty: KaiXGuideEmptyStateDTO?
 
@@ -2213,10 +2275,10 @@ struct GuideComingSoonView: View {
         VStack(spacing: 16) {
             Spacer(minLength: 40)
             GuideIconBubble(icon: "airplane.departure", color: KXColor.rankSky, size: 68)
-            Text(empty?.title ?? "Machi 指南目前只开放日本地区")
+            Text(empty?.title ?? guideText(language, "Machi 指南目前只开放日本地区", "Machi Guide は現在日本エリアのみ公開中です", "Machi Guide is currently available for Japan only"))
                 .font(.title2.weight(.bold))
                 .multilineTextAlignment(.center)
-            Text(empty?.body ?? "如果你正在准备日本留学、升学、就职，或在备考日语（JLPT）、了解在日生活，切换到日本地区即可查看完整的指南、学校库、公司库与资料服务。其他国家和地区将陆续开放。")
+            Text(empty?.body ?? guideText(language, "如果你正在准备日本留学、升学、就职，或在备考日语（JLPT）、了解在日生活，切换到日本地区即可查看完整的指南、学校库、公司库与资料服务。其他国家和地区将陆续开放。", "日本留学、進学、就職、JLPT 対策、日本生活の準備中なら、日本エリアに切り替えるとガイド、学校データベース、企業データベース、資料サービスを確認できます。他の国と地域も順次公開予定です。", "Switch to Japan to view guides, school and company libraries, and resource services for study abroad, school admissions, careers, JLPT prep, and life in Japan. Other countries and regions will open gradually."))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -2225,7 +2287,7 @@ struct GuideComingSoonView: View {
             Button {
                 _ = regionStore.setCurrent(country: "jp", province: "tokyo", city: "tokyo")
             } label: {
-                Text(empty?.action ?? "切换到日本地区")
+                Text(empty?.action ?? guideText(language, "切换到日本地区", "日本エリアに切り替え", "Switch to Japan"))
                     .font(.subheadline.weight(.bold))
                     .frame(height: 44)
                     .padding(.horizontal, 22)
@@ -2240,6 +2302,7 @@ struct GuideComingSoonView: View {
 }
 
 private struct GuideSchoolFilterSheet: View {
+    @Environment(\.appLanguage) private var language
     @Environment(\.dismiss) private var dismiss
     @Binding var schoolType: String
     @Binding var regionGroup: String
@@ -2252,25 +2315,25 @@ private struct GuideSchoolFilterSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    group("学校类型", options: [("", "全部"), ("university", "大学"), ("graduate_school", "大学院"), ("junior_college", "短大"), ("college_of_technology", "高专"), ("vocational_school", "专门学校"), ("language_school", "语言学校")], selection: $schoolType, toggle: false)
-                    group("圈域", options: [("capital_area", "首都圈"), ("kansai_area", "关西圈")], selection: $regionGroup, toggle: true)
-                    group("都道府县", options: [("", "全部"), ("tokyo", "东京"), ("kanagawa", "神奈川"), ("chiba", "千叶"), ("saitama", "埼玉"), ("kyoto", "京都"), ("osaka", "大阪"), ("hyogo", "兵库")], selection: $prefecture, toggle: false)
-                    group("专业领域", options: [("", "全部"), ("engineering", "工学"), ("business", "经营"), ("it", "IT"), ("language", "语言"), ("design", "设计")], selection: $field, toggle: false)
-                    group("支持条件", options: [("international", "留学生可申请"), ("english", "英文项目"), ("japanese", "日语项目"), ("scholarship", "奖学金"), ("dormitory", "宿舍"), ("career", "就职支持"), ("language_support", "语言支持")], selection: $supportFilter, toggle: true)
-                    group("排序", options: [("recommended", "推荐"), ("data_quality", "完整度"), ("recently_updated", "最近更新"), ("popular", "人气"), ("name_jp_asc", "日文名")], selection: $sort, toggle: false)
+                    group(guideText(language, "学校类型", "学校種別", "School type"), options: [("", guideText(language, "全部", "すべて", "All")), ("university", guideText(language, "大学", "大学", "University")), ("graduate_school", guideText(language, "大学院", "大学院", "Graduate school")), ("junior_college", guideText(language, "短大", "短大", "Junior college")), ("college_of_technology", guideText(language, "高专", "高専", "College of technology")), ("vocational_school", guideText(language, "专门学校", "専門学校", "Vocational school")), ("language_school", guideText(language, "语言学校", "語学学校", "Language school"))], selection: $schoolType, toggle: false)
+                    group(guideText(language, "圈域", "エリア", "Area"), options: [("capital_area", guideText(language, "首都圈", "首都圏", "Capital area")), ("kansai_area", guideText(language, "关西圈", "関西圏", "Kansai area"))], selection: $regionGroup, toggle: true)
+                    group(guideText(language, "都道府县", "都道府県", "Prefecture"), options: [("", guideText(language, "全部", "すべて", "All")), ("tokyo", "Tokyo"), ("kanagawa", "Kanagawa"), ("chiba", "Chiba"), ("saitama", "Saitama"), ("kyoto", "Kyoto"), ("osaka", "Osaka"), ("hyogo", "Hyogo")], selection: $prefecture, toggle: false)
+                    group(guideText(language, "专业领域", "専攻分野", "Field"), options: [("", guideText(language, "全部", "すべて", "All")), ("engineering", guideText(language, "工学", "工学", "Engineering")), ("business", guideText(language, "经营", "経営", "Business")), ("it", "IT"), ("language", guideText(language, "语言", "語学", "Language")), ("design", guideText(language, "设计", "デザイン", "Design"))], selection: $field, toggle: false)
+                    group(guideText(language, "支持条件", "サポート条件", "Support"), options: [("international", guideText(language, "留学生可申请", "留学生出願可", "International students")), ("english", guideText(language, "英文项目", "英語プログラム", "English programs")), ("japanese", guideText(language, "日语项目", "日本語プログラム", "Japanese programs")), ("scholarship", guideText(language, "奖学金", "奨学金", "Scholarship")), ("dormitory", guideText(language, "宿舍", "寮", "Dormitory")), ("career", guideText(language, "就职支持", "就職支援", "Career support")), ("language_support", guideText(language, "语言支持", "語学サポート", "Language support"))], selection: $supportFilter, toggle: true)
+                    group(guideText(language, "排序", "並び替え", "Sort"), options: [("recommended", guideText(language, "推荐", "おすすめ", "Recommended")), ("data_quality", guideText(language, "完整度", "充実度", "Completeness")), ("recently_updated", guideText(language, "最近更新", "最近更新", "Recently updated")), ("popular", guideText(language, "人气", "人気", "Popular")), ("name_jp_asc", guideText(language, "日文名", "日本語名", "Japanese name"))], selection: $sort, toggle: false)
                 }
                 .padding(KXSpacing.screen)
             }
-            .navigationTitle("筛选学校")
+            .navigationTitle(guideText(language, "筛选学校", "学校を絞り込み", "Filter schools"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("重置") {
+                    Button(guideText(language, "重置", "リセット", "Reset")) {
                         schoolType = ""; regionGroup = ""; prefecture = ""; field = ""; supportFilter = ""; sort = "recommended"
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("应用") { dismiss() }.fontWeight(.bold)
+                    Button(guideText(language, "应用", "適用", "Apply")) { dismiss() }.fontWeight(.bold)
                 }
             }
         }
@@ -2296,6 +2359,7 @@ private struct GuideSchoolFilterSheet: View {
 }
 
 private struct GuideHeroSection: View {
+    @Environment(\.appLanguage) private var language
     let home: KaiXGuideHomeResponse
     @Binding var searchText: String
     let onSearch: (String) -> Void
@@ -2305,7 +2369,7 @@ private struct GuideHeroSection: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 6) {
                 Image(systemName: "book.pages")
-                Text("Machi Guide · 日本指南")
+                Text(guideText(language, "Machi Guide · 日本指南", "Machi Guide · 日本ガイド", "Machi Guide · Japan"))
             }
             .font(.caption.weight(.bold))
             .foregroundStyle(KXColor.livingAccent)
@@ -2333,7 +2397,7 @@ private struct GuideHeroSection: View {
                     .submitLabel(.search)
                     .onSubmit { onSearch(searchText) }
                 if searchText.isEmpty {
-                    Button("搜索") { onSearch(searchText) }
+                    Button(guideText(language, "搜索", "検索", "Search")) { onSearch(searchText) }
                         .font(.caption.weight(.bold))
                         .buttonStyle(.borderedProminent)
                         .buttonBorderShape(.capsule)
@@ -2381,6 +2445,7 @@ private struct GuideHeroSection: View {
 }
 
 private struct GuideSearchResultsSection: View {
+    @Environment(\.appLanguage) private var language
     let isSearching: Bool
     let articles: [KaiXGuideArticleDTO]
     let schools: [KaiXGuideSchoolDTO]
@@ -2390,24 +2455,24 @@ private struct GuideSearchResultsSection: View {
 
     var body: some View {
         GuideSectionHeader(
-            title: "搜索结果",
-            subtitle: isSearching ? "正在查找学校、公司和指南" : "共 \(total) 条 · 学校 / 公司 / 指南都已包含"
+            title: guideText(language, "搜索结果", "検索結果", "Search results"),
+            subtitle: isSearching ? guideText(language, "正在查找学校、公司和指南", "学校・会社・ガイドを検索中", "Searching schools, companies, and guides") : guideText(language, "共 \(total) 条 · 学校 / 公司 / 指南都已包含", "合計 \(total) 件 · 学校 / 会社 / ガイドを含む", "\(total) total · schools / companies / guides included")
         )
         if isSearching {
             LoadingView()
         } else if total == 0 {
-            EmptyStateView(title: "没有找到相关内容", subtitle: "换个关键词试试，可以搜学校、公司名和任意指南内容。", systemImage: "magnifyingglass")
+            EmptyStateView(title: guideText(language, "没有找到相关内容", "関連内容が見つかりません", "No matching content"), subtitle: guideText(language, "换个关键词试试，可以搜学校、公司名和任意指南内容。", "別のキーワードを試してください。学校名、会社名、ガイド内容で検索できます。", "Try another keyword. You can search school names, company names, or guide content."), systemImage: "magnifyingglass")
         } else {
             if !schools.isEmpty {
-                groupLabel(icon: "graduationcap.fill", title: "学校", count: schools.count)
+                groupLabel(icon: "graduationcap.fill", title: guideText(language, "学校", "学校", "Schools"), count: schools.count)
                 ForEach(schools) { GuideSchoolCard(school: $0) }
             }
             if !companies.isEmpty {
-                groupLabel(icon: "building.2.fill", title: "就职公司", count: companies.count)
+                groupLabel(icon: "building.2.fill", title: guideText(language, "就职公司", "就職企業", "Companies"), count: companies.count)
                 ForEach(companies) { GuideCompanyCard(company: $0) }
             }
             if !articles.isEmpty {
-                groupLabel(icon: "doc.text.fill", title: "指南文章", count: articles.count)
+                groupLabel(icon: "doc.text.fill", title: guideText(language, "指南文章", "ガイド記事", "Guide articles"), count: articles.count)
                 ForEach(articles) { GuideArticleCard(article: $0, compact: true) }
             }
         }
@@ -2434,11 +2499,12 @@ private struct GuideSearchResultsSection: View {
 }
 
 private struct GuideCategoryGrid: View {
+    @Environment(\.appLanguage) private var language
     let categories: [KaiXGuideCategoryDTO]
 
     var body: some View {
         if !categories.isEmpty {
-            GuideSectionHeader(title: "核心分类", subtitle: "升学、就职、留学、日语、生活与核心资料库")
+            GuideSectionHeader(title: guideText(language, "核心分类", "主要カテゴリ", "Core categories"), subtitle: guideText(language, "升学、就职、留学、日语、生活与核心资料库", "進学、就職、留学、日本語、生活、主要データベース", "Study, careers, study abroad, Japanese, life, and core libraries"))
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                 ForEach(categories) { category in
                     GuideCategoryCard(category: category)
@@ -2449,12 +2515,13 @@ private struct GuideCategoryGrid: View {
 }
 
 private struct GuideResourceEntriesSection: View {
+    @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     let entries: [KaiXGuideResourceEntryDTO]
 
     var body: some View {
         if !entries.isEmpty {
-            GuideSectionHeader(title: "核心资料库", subtitle: "学校与就职公司信息以官方来源和后台审核为准")
+            GuideSectionHeader(title: guideText(language, "核心资料库", "主要データベース", "Core libraries"), subtitle: guideText(language, "学校与就职公司信息以官方来源和后台审核为准", "学校と企業情報は公式ソースと運営審査を重視", "School and company info is based on official sources and admin review"))
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                 ForEach(entries) { entry in
                     Button {
@@ -2477,7 +2544,7 @@ private struct GuideResourceEntriesSection: View {
                                 .multilineTextAlignment(.leading)
                             Spacer(minLength: 0)
                             HStack(spacing: 4) {
-                                Text("进入资料库")
+                                Text(guideText(language, "进入资料库", "データベースへ", "Open library"))
                                 Image(systemName: "arrow.right")
                             }
                             .font(.caption.weight(.bold))
@@ -2512,13 +2579,14 @@ private struct GuideResourceEntriesSection: View {
 }
 
 private struct GuideGoalsSection: View {
+    @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     let goals: String
     let entries: [KaiXGuideGoalEntryDTO]
 
     var body: some View {
         if !entries.isEmpty {
-            GuideSectionHeader(title: goals, subtitle: "按你的目标快速进入")
+            GuideSectionHeader(title: goals, subtitle: guideText(language, "按你的目标快速进入", "目的別にすばやく移動", "Jump in by goal"))
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(entries) { entry in
@@ -2598,17 +2666,18 @@ private struct GuideZoneSection: View {
 }
 
 private struct GuideProductsSection: View {
+    @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     let products: [KaiXGuideProductDTO]
-    var title: String = "商城"
-    var subtitle: String = "资料包、模板、清单与人工辅导"
+    var title: String?
+    var subtitle: String?
 
     var body: some View {
         if !products.isEmpty {
             HStack {
-                GuideSectionHeader(title: title, subtitle: subtitle)
+                GuideSectionHeader(title: title ?? guideText(language, "商城", "ストア", "Store"), subtitle: subtitle ?? guideText(language, "资料包、模板、清单与人工辅导", "資料パック、テンプレート、チェックリスト、個別サポート", "Resource packs, templates, checklists, and coaching"))
                 Spacer()
-                Button("查看全部") {
+                Button(guideText(language, "查看全部", "すべて見る", "View all")) {
                     router.open(.guideServices)
                 }
                 .font(.caption.weight(.bold))
@@ -2628,28 +2697,29 @@ private struct GuideProductsSection: View {
 }
 
 /// The two permanent doors of the Guide tab: everything entitled by the
-/// membership lives behind 会员专区, while templates and human help live behind
+/// membership lives behind Member area, while templates and human help live behind
 /// 资料与服务. Side-by-side tiles so the split is legible at a glance.
 private struct GuideDualEntrySection: View {
+    @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            GuideSectionHeader(title: "会员与商城", subtitle: "会员专属资料、原创资料包、模板与人工服务统一入口")
+            GuideSectionHeader(title: guideText(language, "会员与商城", "会員・ストア", "Membership and Store"), subtitle: guideText(language, "会员专属资料、原创资料包、模板与人工服务统一入口", "会員資料、オリジナル資料パック、テンプレート、人的サービスの入口", "One place for member resources, original packs, templates, and services"))
             HStack(spacing: 10) {
                 entryTile(
                     icon: "crown.fill",
                     tint: KXColor.accent,
-                    title: "会员专区",
-                    subtitle: "清单模板资料\n会员权益内容"
+                    title: guideText(language, "会员专区", "会員エリア", "Member area"),
+                    subtitle: guideText(language, "清单模板资料\n会员权益内容", "チェックリスト・テンプレート\n会員特典コンテンツ", "Checklists and templates\nMember content")
                 ) {
                     router.open(.guideMemberResources)
                 }
                 entryTile(
                     icon: "bag.fill",
                     tint: .orange,
-                    title: "商城",
-                    subtitle: "资料包与人工服务\n按需购买预约"
+                    title: guideText(language, "商城", "ストア", "Store"),
+                    subtitle: guideText(language, "资料包与人工服务\n按需购买预约", "資料パック・人的サービス\n必要に応じて購入/予約", "Resource packs and services\nBuy or book as needed")
                 ) {
                     router.open(.guideServices)
                 }
@@ -2687,6 +2757,7 @@ private struct GuideDualEntrySection: View {
 }
 
 private struct GuideSchoolsSection: View {
+    @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     let schools: [KaiXGuideSchoolDTO]
     let disclaimer: String?
@@ -2694,9 +2765,9 @@ private struct GuideSchoolsSection: View {
     var body: some View {
         if !schools.isEmpty {
             HStack {
-                GuideSectionHeader(title: "日本学校库", subtitle: "大学、大学院、专门学校、语言学校")
+                GuideSectionHeader(title: guideText(language, "日本学校库", "日本の学校データベース", "Japan School Library"), subtitle: guideText(language, "大学、大学院、专门学校、语言学校", "大学、大学院、専門学校、語学学校", "Universities, graduate schools, vocational schools, language schools"))
                 Spacer()
-                Button("查看全部") {
+                Button(guideText(language, "查看全部", "すべて見る", "View all")) {
                     router.open(.guideSchools)
                 }
                 .font(.caption.weight(.bold))
@@ -2716,6 +2787,7 @@ private struct GuideSchoolsSection: View {
 }
 
 private struct GuideCompaniesSection: View {
+    @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     let companies: [KaiXGuideCompanyDTO]
     let disclaimer: String?
@@ -2723,9 +2795,9 @@ private struct GuideCompaniesSection: View {
     var body: some View {
         if !companies.isEmpty {
             HStack {
-                GuideSectionHeader(title: "外国人就职公司库", subtitle: "官方招聘页、签证支持与真实评价")
+                GuideSectionHeader(title: guideText(language, "外国人就职公司库", "外国人向け就職企業データベース", "Foreigner-Friendly Company Library"), subtitle: guideText(language, "官方招聘页、签证支持与真实评价", "公式採用ページ、ビザ支援、実体験レビュー", "Official career pages, visa support, and real reviews"))
                 Spacer()
-                Button("查看全部") {
+                Button(guideText(language, "查看全部", "すべて見る", "View all")) {
                     router.open(.guideCompanies)
                 }
                 .font(.caption.weight(.bold))
@@ -2737,7 +2809,7 @@ private struct GuideCompaniesSection: View {
             Button {
                 router.open(.guideInterviewReviews)
             } label: {
-                Label("查看真实评论", systemImage: "bubble.left.and.bubble.right.fill")
+                Label(guideText(language, "查看真实评论", "リアルレビューを見る", "View real reviews"), systemImage: "bubble.left.and.bubble.right.fill")
                     .font(.subheadline.weight(.bold))
                     .frame(maxWidth: .infinity)
                     .frame(height: 42)
@@ -2756,11 +2828,12 @@ private struct GuideCompaniesSection: View {
 }
 
 private struct GuideFAQSection: View {
+    @Environment(\.appLanguage) private var language
     let faq: [KaiXGuideFaqDTO]
 
     var body: some View {
         if !faq.isEmpty {
-            GuideSectionHeader(title: "常见问题", subtitle: nil)
+            GuideSectionHeader(title: guideText(language, "常见问题", "よくある質問", "FAQ"), subtitle: nil)
             VStack(spacing: 9) {
                 ForEach(faq) { item in
                     DisclosureGroup {
@@ -2783,15 +2856,16 @@ private struct GuideFAQSection: View {
 }
 
 private struct GuideCategoryCard: View {
+    @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     let category: KaiXGuideCategoryDTO
     private var countLabels: [String] {
         var labels: [String] = []
         if let count = category.articleCount {
-            labels.append("\(count) 篇")
+            labels.append(guideText(language, "\(count) 篇", "\(count) 件", "\(count) articles"))
         }
         if let count = category.productCount {
-            labels.append("\(count) 个资料")
+            labels.append(guideText(language, "\(count) 个资料", "\(count) 件の資料", "\(count) resources"))
         }
         return labels
     }
@@ -2833,6 +2907,7 @@ private struct GuideCategoryCard: View {
 }
 
 private struct GuideArticleCard: View {
+    @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     let article: KaiXGuideArticleDTO
     var compact = false
@@ -2843,7 +2918,7 @@ private struct GuideArticleCard: View {
         } label: {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 6) {
-                    Text("指南")
+                    Text(guideText(language, "指南", "ガイド", "Guide"))
                         .font(.caption2.weight(.bold))
                     .foregroundStyle(KXColor.livingAccent)
                         .padding(.horizontal, 7)
@@ -2884,6 +2959,7 @@ private struct GuideArticleCard: View {
 }
 
 private struct GuideProductCard: View {
+    @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     let product: KaiXGuideProductDTO
 
@@ -2893,11 +2969,11 @@ private struct GuideProductCard: View {
         } label: {
             VStack(alignment: .leading, spacing: 9) {
                 HStack {
-                    Text(GuideCopy.productTypeLabel(product.productType))
+                    Text(GuideCopy.productTypeLabel(product.productType, language: language))
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 0)
-                    Text(GuideCopy.productPrice(product))
+                    Text(GuideCopy.productPrice(product, language: language))
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(product.isService ? KXColor.rankTeal : (product.isComingSoon ? KXColor.heat : KXColor.accent))
                 }
@@ -2914,7 +2990,7 @@ private struct GuideProductCard: View {
                         .multilineTextAlignment(.leading)
                 }
                 if !product.targetAudience.isEmpty {
-                    Text("适合：\(product.targetAudience)")
+                    Text(guideText(language, "适合：\(product.targetAudience)", "対象：\(product.targetAudience)", "Best for: \(product.targetAudience)"))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
@@ -2930,6 +3006,7 @@ private struct GuideProductCard: View {
 }
 
 private struct GuideSchoolCard: View {
+    @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     let school: KaiXGuideSchoolDTO
 
@@ -2953,7 +3030,7 @@ private struct GuideSchoolCard: View {
                         }
                     }
                     Spacer(minLength: 0)
-                    Text(GuideCopy.schoolTypeLabel(school.schoolType))
+                    Text(GuideCopy.schoolTypeLabel(school.schoolType, language: language))
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(KXColor.rankSky)
                         .padding(.horizontal, 8)
@@ -2966,9 +3043,9 @@ private struct GuideSchoolCard: View {
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                 HStack(spacing: 10) {
-                    Text(GuideCopy.cityLabel(school.city))
-                    Text(GuideCopy.levelLabel(school.requiredJapaneseLevel))
-                    Text(GuideCopy.joinedOrPending(school.admissionMonths))
+                    Text(GuideCopy.cityLabel(school.city, language: language))
+                    Text(GuideCopy.levelLabel(school.requiredJapaneseLevel, language: language))
+                    Text(GuideCopy.joinedOrPending(school.admissionMonths, language: language))
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -2976,7 +3053,7 @@ private struct GuideSchoolCard: View {
                     ForEach(school.fieldsOfStudy.prefix(3), id: \.self) { field in
                         GuideBadge(field)
                     }
-                    GuideBadge(GuideCopy.triStateLabel(school.isAcceptingInternationalStudents, trueText: "留学生招生"), tint: KXColor.rankSky)
+                    GuideBadge(GuideCopy.triStateLabel(school.isAcceptingInternationalStudents, trueText: guideText(language, "留学生招生", "留学生募集", "International admissions"), language: language), tint: KXColor.rankSky)
                 }
             }
             .padding(14)
@@ -2988,6 +3065,7 @@ private struct GuideSchoolCard: View {
 }
 
 private struct GuideCompanyCard: View {
+    @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     let company: KaiXGuideCompanyDTO
 
@@ -3009,7 +3087,7 @@ private struct GuideCompanyCard: View {
                         }
                     }
                     Spacer(minLength: 0)
-                    Text(company.industry.isEmpty ? "公司" : company.industry)
+                    Text(company.industry.isEmpty ? guideText(language, "公司", "会社", "Company") : company.industry)
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 8)
@@ -3017,9 +3095,9 @@ private struct GuideCompanyCard: View {
                         .background(KXColor.softBackground, in: Capsule())
                 }
                 HStack(spacing: 10) {
-                    Text(GuideCopy.cityLabel(company.city))
-                    if company.foundedYear > 0 { Text("成立 \(company.foundedYear)") }
-                    Text(company.reviewCount > 0 ? "\(company.reviewCount) 条真实评价" : "暂无评价")
+                    Text(GuideCopy.cityLabel(company.city, language: language))
+                    if company.foundedYear > 0 { Text(guideText(language, "成立 \(company.foundedYear)", "\(company.foundedYear)年設立", "Founded \(company.foundedYear)")) }
+                    Text(company.reviewCount > 0 ? guideText(language, "\(company.reviewCount) 条真实评价", "\(company.reviewCount) 件の実体験レビュー", "\(company.reviewCount) real reviews") : guideText(language, "暂无评价", "レビューはまだありません", "No reviews yet"))
                         .foregroundStyle(company.reviewCount > 0 ? KXColor.accent : .secondary)
                 }
                 .font(.caption)
@@ -3032,10 +3110,10 @@ private struct GuideCompanyCard: View {
                         .multilineTextAlignment(.leading)
                 }
                 FlowLayout(spacing: 6) {
-                    GuideBadge(GuideCopy.triStateLabel(company.acceptsForeignApplicants, trueText: "外国人申请"), tint: KXColor.rankTeal)
-                    GuideBadge(GuideCopy.triStateLabel(company.supportsWorkVisa, trueText: "签证支持"), tint: KXColor.accent)
+                    GuideBadge(GuideCopy.triStateLabel(company.acceptsForeignApplicants, trueText: guideText(language, "外国人申请", "外国人応募", "Foreign applicants"), language: language), tint: KXColor.rankTeal)
+                    GuideBadge(GuideCopy.triStateLabel(company.supportsWorkVisa, trueText: guideText(language, "签证支持", "ビザ支援", "Visa support"), language: language), tint: KXColor.accent)
                     if let level = company.requiredJapaneseLevel, !level.isEmpty {
-                        GuideBadge("日语 \(GuideCopy.levelLabel(level))", tint: KXColor.rankSky)
+                        GuideBadge(guideText(language, "日语 \(GuideCopy.levelLabel(level, language: language))", "日本語 \(GuideCopy.levelLabel(level, language: language))", "Japanese \(GuideCopy.levelLabel(level, language: language))"), tint: KXColor.rankSky)
                     }
                 }
             }
@@ -3048,6 +3126,7 @@ private struct GuideCompanyCard: View {
 }
 
 private struct GuideCompanyPositionCard: View {
+    @Environment(\.appLanguage) private var language
     let position: KaiXGuideCompanyPositionDTO
 
     var body: some View {
@@ -3070,11 +3149,11 @@ private struct GuideCompanyPositionCard: View {
                 }
                 FlowLayout(spacing: 6) {
                     if !position.positionCategory.isEmpty { GuideBadge(position.positionCategory) }
-                    if !position.city.isEmpty { GuideBadge(GuideCopy.cityLabel(position.city), tint: KXColor.rankSky) }
+                    if !position.city.isEmpty { GuideBadge(GuideCopy.cityLabel(position.city, language: language), tint: KXColor.rankSky) }
                     if !position.remoteType.isEmpty { GuideBadge(position.remoteType) }
-                    let salary = GuideCopy.moneyRange(min: position.salaryMin, max: position.salaryMax, currency: position.currency)
-                    if salary != "待补充" { GuideBadge(salary, tint: KXColor.rankGold) }
-                    if !position.visaSupport.isEmpty { GuideBadge("签证 \(position.visaSupport)", tint: KXColor.accent) }
+                    let salary = GuideCopy.moneyRange(min: position.salaryMin, max: position.salaryMax, currency: position.currency, language: language)
+                    if position.salaryMin > 0 || position.salaryMax > 0 { GuideBadge(salary, tint: KXColor.rankGold) }
+                    if !position.visaSupport.isEmpty { GuideBadge(guideText(language, "签证 \(position.visaSupport)", "ビザ \(position.visaSupport)", "Visa \(position.visaSupport)"), tint: KXColor.accent) }
                 }
                 if !position.description.isEmpty {
                     Text(position.description)
@@ -3083,13 +3162,13 @@ private struct GuideCompanyPositionCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if !position.requirements.isEmpty {
-                    Text("要求：\(position.requirements)")
+                    Text(guideText(language, "要求：\(position.requirements)", "要件：\(position.requirements)", "Requirements: \(position.requirements)"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if let url = GuideCopy.url(position.sourceUrl) {
-                    Link("官方岗位页面", destination: url)
+                    Link(guideText(language, "官方岗位页面", "公式求人ページ", "Official job page"), destination: url)
                         .font(.caption.weight(.bold))
                         .foregroundStyle(KXColor.accent)
                 }
@@ -3099,6 +3178,7 @@ private struct GuideCompanyPositionCard: View {
 }
 
 private struct GuideInterviewReviewCard: View {
+    @Environment(\.appLanguage) private var language
     let review: KaiXGuideInterviewReviewDTO
 
     var body: some View {
@@ -3108,8 +3188,8 @@ private struct GuideInterviewReviewCard: View {
                     GuideBadge(companyName, tint: KXColor.accent)
                 }
                 if !review.position.isEmpty { GuideBadge(review.position) }
-                if !review.difficulty.isEmpty { GuideBadge("难度：\(review.difficulty)") }
-                if !review.result.isEmpty { GuideBadge("结果：\(review.result)") }
+                if !review.difficulty.isEmpty { GuideBadge(guideText(language, "难度：\(review.difficulty)", "難易度：\(review.difficulty)", "Difficulty: \(review.difficulty)")) }
+                if !review.result.isEmpty { GuideBadge(guideText(language, "结果：\(review.result)", "結果：\(review.result)", "Result: \(review.result)")) }
             }
             if !review.questions.isEmpty {
                 Text(review.questions)
@@ -3122,7 +3202,7 @@ private struct GuideInterviewReviewCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(3)
             }
-            Text([review.interviewRounds > 0 ? "\(review.interviewRounds) 轮面试" : "", review.interviewLanguage, GuideCopy.cityLabel(review.city), review.interviewYear > 0 ? "\(review.interviewYear)" : ""].filter { !$0.isEmpty }.joined(separator: " · "))
+            Text([review.interviewRounds > 0 ? guideText(language, "\(review.interviewRounds) 轮面试", "\(review.interviewRounds) 回面接", "\(review.interviewRounds) rounds") : "", review.interviewLanguage, GuideCopy.cityLabel(review.city, language: language), review.interviewYear > 0 ? "\(review.interviewYear)" : ""].filter { !$0.isEmpty }.joined(separator: " · "))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -3133,6 +3213,7 @@ private struct GuideInterviewReviewCard: View {
 }
 
 private struct GuideWorkReviewCard: View {
+    @Environment(\.appLanguage) private var language
     let review: KaiXGuideCompanyReviewDTO
 
     var body: some View {
@@ -3140,7 +3221,7 @@ private struct GuideWorkReviewCard: View {
             FlowLayout(spacing: 6) {
                 if !review.position.isEmpty { GuideBadge(review.position, tint: KXColor.accent) }
                 if !review.employmentType.isEmpty { GuideBadge(review.employmentType) }
-                if review.recommendationScore > 0 { GuideBadge("推荐 \(String(format: "%.1f", review.recommendationScore))/5") }
+                if review.recommendationScore > 0 { GuideBadge(guideText(language, "推荐 \(String(format: "%.1f", review.recommendationScore))/5", "おすすめ \(String(format: "%.1f", review.recommendationScore))/5", "Recommendation \(String(format: "%.1f", review.recommendationScore))/5")) }
             }
             if !review.pros.isEmpty {
                 Text(review.pros)
@@ -3148,7 +3229,7 @@ private struct GuideWorkReviewCard: View {
                     .lineLimit(3)
             }
             if !review.cons.isEmpty {
-                Text("需要留意：\(review.cons)")
+                Text(guideText(language, "需要留意：\(review.cons)", "気になる点：\(review.cons)", "Watch-outs: \(review.cons)"))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .lineLimit(3)
@@ -3338,71 +3419,71 @@ private enum GuideCopy {
         return Color(hex: hex) ?? KXColor.accent
     }
 
-    static func cityLabel(_ city: String) -> String {
+    static func cityLabel(_ city: String, language: AppLanguage = .zh) -> String {
         switch city.lowercased() {
-        case "tokyo": return "东京"
-        case "osaka": return "大阪"
-        case "kyoto": return "京都"
-        case "yokohama": return "横滨"
-        case "kobe": return "神户"
-        case "saitama": return "埼玉"
-        case "chiba": return "千叶"
-        case "": return "日本全国"
+        case "tokyo": return guideText(language, "东京", "東京", "Tokyo")
+        case "osaka": return guideText(language, "大阪", "大阪", "Osaka")
+        case "kyoto": return guideText(language, "京都", "京都", "Kyoto")
+        case "yokohama": return guideText(language, "横滨", "横浜", "Yokohama")
+        case "kobe": return guideText(language, "神户", "神戸", "Kobe")
+        case "saitama": return guideText(language, "埼玉", "埼玉", "Saitama")
+        case "chiba": return guideText(language, "千叶", "千葉", "Chiba")
+        case "": return guideText(language, "日本全国", "日本全国", "All Japan")
         default: return city
         }
     }
 
-    static func schoolTypeLabel(_ type: String) -> String {
+    static func schoolTypeLabel(_ type: String, language: AppLanguage = .zh) -> String {
         switch type {
-        case "university": return "大学"
-        case "graduate_school": return "大学院"
-        case "junior_college": return "短期大学"
-        case "college_of_technology": return "高专"
-        case "vocational_school": return "专门学校"
-        case "language_school": return "语言学校"
-        case "university_preparatory": return "大学预备课程"
-        default: return type.isEmpty ? "学校" : type
+        case "university": return guideText(language, "大学", "大学", "University")
+        case "graduate_school": return guideText(language, "大学院", "大学院", "Graduate school")
+        case "junior_college": return guideText(language, "短期大学", "短期大学", "Junior college")
+        case "college_of_technology": return guideText(language, "高专", "高専", "College of technology")
+        case "vocational_school": return guideText(language, "专门学校", "専門学校", "Vocational school")
+        case "language_school": return guideText(language, "语言学校", "語学学校", "Language school")
+        case "university_preparatory": return guideText(language, "大学预备课程", "大学予備課程", "University preparatory")
+        default: return type.isEmpty ? guideText(language, "学校", "学校", "School") : type
         }
     }
 
-    static func levelLabel(_ level: String) -> String {
+    static func levelLabel(_ level: String, language: AppLanguage = .zh) -> String {
         let normalized = level.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return "待补充" }
+        guard !normalized.isEmpty else { return guideText(language, "待补充", "未入力", "Pending") }
         switch normalized.lowercased() {
-        case "unknown", "未知", "tbd", "n/a": return "待补充"
-        case "none": return "无明确要求"
+        case "unknown", "未知", "tbd", "n/a": return guideText(language, "待补充", "未入力", "Pending")
+        case "none": return guideText(language, "无明确要求", "明確な要件なし", "No clear requirement")
         case "n1", "n2", "n3", "n4", "n5": return normalized.uppercased()
-        case "business": return "商务水平"
-        case "native": return "接近母语"
+        case "business": return guideText(language, "商务水平", "ビジネスレベル", "Business level")
+        case "native": return guideText(language, "接近母语", "ネイティブ相当", "Near native")
         default: return normalized
         }
     }
 
-    static func triStateLabel(_ value: Bool?, trueText: String) -> String {
+    static func triStateLabel(_ value: Bool?, trueText: String, language: AppLanguage = .zh) -> String {
         switch value {
         case .some(true): return trueText
-        case .some(false): return "未确认"
-        case .none: return "待核实"
+        case .some(false): return guideText(language, "未确认", "未確認", "Unconfirmed")
+        case .none: return guideText(language, "待核实", "確認待ち", "Pending")
         }
     }
 
-    static func sourceStatusLabel(_ status: String) -> String {
+    static func sourceStatusLabel(_ status: String, language: AppLanguage = .zh) -> String {
         switch status {
-        case "verified": return "已核验"
-        case "official": return "官方来源"
-        case "needs_review": return "待核验"
-        case "unverified": return "未核验"
-        default: return status.isEmpty ? "待核验" : status
+        case "verified": return guideText(language, "已核验", "確認済み", "Verified")
+        case "official": return guideText(language, "官方来源", "公式ソース", "Official source")
+        case "needs_review": return guideText(language, "待核验", "確認待ち", "Needs review")
+        case "unverified": return guideText(language, "未核验", "未確認", "Unverified")
+        default: return status.isEmpty ? guideText(language, "待核验", "確認待ち", "Needs review") : status
         }
     }
 
-    static func joinedOrPending(_ values: [String]) -> String {
+    static func joinedOrPending(_ values: [String], language: AppLanguage = .zh) -> String {
         let clean = values.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-        return clean.isEmpty ? "待补充" : clean.joined(separator: "、")
+        return clean.isEmpty ? guideText(language, "待补充", "未入力", "Pending") : clean.joined(separator: language == .en ? ", " : "、")
     }
 
-    static func moneyRange(min: Int, max: Int, currency: String) -> String {
-        guard min > 0 || max > 0 else { return "待补充" }
+    static func moneyRange(min: Int, max: Int, currency: String, language: AppLanguage = .zh) -> String {
+        guard min > 0 || max > 0 else { return guideText(language, "待补充", "未入力", "Pending") }
         let symbol: String
         switch currency {
         case "JPY", "CNY": symbol = "¥"
@@ -3423,46 +3504,47 @@ private enum GuideCopy {
         return URL(string: raw)
     }
 
-    static func productTypeLabel(_ type: String) -> String {
+    static func productTypeLabel(_ type: String, language: AppLanguage = .zh) -> String {
         switch type {
-        case "pdf_material": return "PDF 资料"
-        case "template": return "模板资料"
-        case "checklist": return "清单"
-        case "course": return "课程"
-        case "consultation": return "咨询服务"
-        case "resume_review": return "履历修改"
-        case "research_plan_review": return "研究计划书修改"
-        case "language_school_support": return "语言学校辅导"
-        case "graduate_school_support": return "大学院辅导"
-        case "interview_coaching": return "面试辅导"
-        default: return "资料服务"
+        case "pdf_material": return guideText(language, "PDF 资料", "PDF 資料", "PDF resources")
+        case "template": return guideText(language, "模板资料", "テンプレート資料", "Templates")
+        case "checklist": return guideText(language, "清单", "チェックリスト", "Checklist")
+        case "course": return guideText(language, "课程", "講座", "Course")
+        case "consultation": return guideText(language, "咨询服务", "相談サービス", "Consultation")
+        case "resume_review": return guideText(language, "履历修改", "履歴書添削", "Resume review")
+        case "research_plan_review": return guideText(language, "研究计划书修改", "研究計画書添削", "Research plan review")
+        case "language_school_support": return guideText(language, "语言学校辅导", "語学学校サポート", "Language school support")
+        case "graduate_school_support": return guideText(language, "大学院辅导", "大学院サポート", "Graduate school support")
+        case "interview_coaching": return guideText(language, "面试辅导", "面接対策", "Interview coaching")
+        default: return guideText(language, "资料服务", "資料サービス", "Resource service")
         }
     }
 
-    static func productPrice(_ product: KaiXGuideProductDTO) -> String {
-        if product.isComingSoon || product.status == "coming_soon" { return "即将开放" }
-        if product.isPriceHidden == true || product.isAppointmentOnly == true { return "预约咨询" }
+    static func productPrice(_ product: KaiXGuideProductDTO, language: AppLanguage = .zh) -> String {
+        if product.isComingSoon || product.status == "coming_soon" { return guideText(language, "即将开放", "まもなく公開", "Coming soon") }
+        if product.isPriceHidden == true || product.isAppointmentOnly == true { return guideText(language, "预约咨询", "予約相談", "Consult") }
         if product.isService, product.priceLabel.isEmpty {
-            if product.servicePriceType == "quote_required" { return "按需求报价" }
+            if product.servicePriceType == "quote_required" { return guideText(language, "按需求报价", "要見積もり", "Quote required") }
             if product.servicePriceType == "starting_from", let starting = product.startingPrice, starting > 0 {
-                return "\(KaiXPriceFormatter.format(Double(starting), currency: product.currency)) 起"
+                let price = KaiXPriceFormatter.format(Double(starting), currency: product.currency)
+                return guideText(language, "\(price) 起", "\(price) から", "From \(price)")
             }
-            return "预约咨询"
+            return guideText(language, "预约咨询", "予約相談", "Consult")
         }
-        if product.isFree { return "免费" }
+        if product.isFree { return guideText(language, "免费", "無料", "Free") }
         if !product.priceLabel.isEmpty { return product.priceLabel }
         return KaiXPriceFormatter.format(Double(product.price), currency: product.currency, billingPeriod: product.billingPeriod)
     }
 
-    static func productCTA(_ product: KaiXGuideProductDTO, busy: Bool, loggedIn: Bool) -> String {
-        if busy { return "处理中" }
+    static func productCTA(_ product: KaiXGuideProductDTO, busy: Bool, loggedIn: Bool, language: AppLanguage = .zh) -> String {
+        if busy { return guideText(language, "处理中", "処理中", "Processing") }
         if let cta = product.ctaLabel, !cta.isEmpty { return cta }
-        if product.isService || product.isAppointmentOnly == true || product.isPriceHidden == true { return "预约咨询" }
+        if product.isService || product.isAppointmentOnly == true || product.isPriceHidden == true { return guideText(language, "预约咨询", "予約相談", "Consult") }
         // Free resources never tell an already-signed-in user to "log in":
         // they're authenticated by the time they reach Guide (login wall), so
         // show the action they can actually take.
-        if product.isFree { return loggedIn ? "免费查看" : "登录后查看" }
-        return "即将开放"
+        if product.isFree { return loggedIn ? guideText(language, "免费查看", "無料で見る", "View free") : guideText(language, "登录后查看", "ログインして見る", "Sign in to view") }
+        return guideText(language, "即将开放", "まもなく公開", "Coming soon")
     }
 
     static func productActionEnabled(_ product: KaiXGuideProductDTO, busy: Bool) -> Bool {

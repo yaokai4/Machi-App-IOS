@@ -218,7 +218,7 @@ struct RegionPickerView: View {
                         HStack(spacing: KXSpacing.sm) {
                             Text(circle.name).font(.body)
                             Spacer()
-                            Text("\(KaiXRegionDirectory.regionsForMetroCircle(circle.code).count) 城")
+                            Text(metroCircleCountLabel(KaiXRegionDirectory.regionsForMetroCircle(circle.code).count))
                                 .font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
                             Image(systemName: "chevron.right").font(.footnote.weight(.medium)).foregroundStyle(.tertiary)
                         }
@@ -376,6 +376,10 @@ struct RegionPickerView: View {
         )
         return "\(country) · \(province)"
     }
+
+    private func metroCircleCountLabel(_ count: Int) -> String {
+        KXListingCopy.pickText(language, "\(count) 城", "\(count) 都市", "\(count) cities")
+    }
 }
 
 private struct ProvinceRoute: Hashable {
@@ -445,7 +449,7 @@ private struct ProvinceListView: View {
                             HStack {
                                 Text(circle.name).font(.body)
                                 Spacer()
-                                Text("\(KaiXRegionDirectory.regionsForMetroCircle(circle.code).count) 城")
+                                Text(metroCircleCountLabel(KaiXRegionDirectory.regionsForMetroCircle(circle.code).count))
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(.tertiary)
                                 Image(systemName: "chevron.right")
@@ -502,6 +506,10 @@ private struct ProvinceListView: View {
         .kxPageBackground()
         .navigationTitle(KaiXRegionDirectory.localizedCountryName(country, language: language))
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func metroCircleCountLabel(_ count: Int) -> String {
+        KXListingCopy.pickText(language, "\(count) 城", "\(count) 都市", "\(count) cities")
     }
 }
 
