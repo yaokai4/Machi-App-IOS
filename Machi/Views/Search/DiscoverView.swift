@@ -3177,7 +3177,7 @@ struct CityListingDetailView: View {
         let ratingAvg = listing.rating_avg ?? listing.ratingAvg ?? 0
         return HStack(alignment: .center, spacing: 14) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(KXListingCopy.priceLabel(listing))
+                Text(KXListingCopy.priceLabel(listing, language))
                     .font(.title3.weight(.black))
                     .foregroundStyle(isWork ? KXColor.livingAccent : KXColor.livingWarm)
                     .lineLimit(1)
@@ -3272,11 +3272,11 @@ struct CityListingDetailView: View {
             let hasReservation = reservationRequired || !openHours.isEmpty || !reservationNote.isEmpty || !storePhone.isEmpty
 
             if !packages.isEmpty {
-                KXListingSection(title: "团购套餐", icon: "ticket") {
+                KXListingSection(title: KXListingCopy.pickText(language, "团购套餐", "セット・クーポン", "Packages"), icon: "ticket") {
                     VStack(spacing: 10) {
                         HStack {
                             Spacer()
-                            Text("暂不支持线上购买")
+                            Text(KXListingCopy.pickText(language, "暂不支持线上购买", "オンライン購入は未対応", "Online purchase unavailable"))
                                 .font(.caption2.weight(.bold))
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 8).padding(.vertical, 4)
@@ -3310,7 +3310,7 @@ struct CityListingDetailView: View {
             }
 
             if !dishes.isEmpty {
-                KXListingSection(title: "菜单", icon: "fork.knife") {
+                KXListingSection(title: KXListingCopy.pickText(language, "菜单", "メニュー", "Menu"), icon: "fork.knife") {
                     VStack(spacing: 0) {
                         ForEach(Array(dishes.enumerated()), id: \.offset) { idx, dish in
                             HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -3333,12 +3333,24 @@ struct CityListingDetailView: View {
             }
 
             if hasReservation {
-                KXListingSection(title: "预约 · 到店", icon: "calendar.badge.clock") {
+                KXListingSection(title: KXListingCopy.pickText(language, "预约 · 到店", "予約・来店", "Booking & visit"), icon: "calendar.badge.clock") {
                     VStack(alignment: .leading, spacing: 6) {
-                        if !openHours.isEmpty { Label("营业时间 · \(openHours)", systemImage: "clock").font(.subheadline).foregroundStyle(.secondary) }
-                        if reservationRequired { Label("本店采用预约制，建议先预约再到店。", systemImage: "checkmark.seal").font(.subheadline).foregroundStyle(.secondary) }
+                        if !openHours.isEmpty {
+                            Label("\(KXListingCopy.pickText(language, "营业时间", "営業時間", "Hours")) · \(openHours)", systemImage: "clock")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        if reservationRequired {
+                            Label(KXListingCopy.pickText(language, "本店采用预约制，建议先预约再到店。", "予約制です。来店前の予約をおすすめします。", "Reservation is recommended before visiting."), systemImage: "checkmark.seal")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
                         if !reservationNote.isEmpty { Text(reservationNote).font(.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
-                        if !storePhone.isEmpty { Label("到店电话 · \(storePhone)", systemImage: "phone").font(.subheadline).foregroundStyle(.secondary) }
+                        if !storePhone.isEmpty {
+                            Label("\(KXListingCopy.pickText(language, "到店电话", "店舗電話", "Phone")) · \(storePhone)", systemImage: "phone")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -3353,7 +3365,7 @@ struct CityListingDetailView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(KXListingCopy.priceLabel(listing))
+                            Text(KXListingCopy.priceLabel(listing, language))
                                 .font(.title2.weight(.black))
                                 .foregroundStyle(listing.type == "job" || listing.type == "hiring" ? KXColor.livingAccent : KXColor.livingWarm)
                             Text(KXListingCopy.displayTitle(listing))
@@ -3365,7 +3377,7 @@ struct CityListingDetailView: View {
                         KXListingBadge(title: KXListingCopy.statusLabel(listing.status, type: listing.type, language), tint: KXListingCopy.statusColor(listing.status))
                     }
                     FlowLayout(spacing: 8) {
-                        ForEach(KXListingCopy.badges(for: listing), id: \.self) { badge in
+                        ForEach(KXListingCopy.badges(for: listing, language), id: \.self) { badge in
                             KXListingBadge(title: badge, tint: KXColor.livingAccent)
                         }
                     }
@@ -3376,7 +3388,7 @@ struct CityListingDetailView: View {
                 KXListingAttributeSection(listing: listing)
 
                 if let description = listing.description, !description.isEmpty {
-                    KXListingSection(title: "描述", icon: "text.alignleft") {
+                    KXListingSection(title: KXListingCopy.pickText(language, "描述", "説明", "Description"), icon: "text.alignleft") {
                         Text(description)
                             .font(.body)
                             .foregroundStyle(.primary)
@@ -3386,16 +3398,16 @@ struct CityListingDetailView: View {
 
                 merchantDetailSections(listing)
 
-                KXListingSection(title: "发布者", icon: "person.crop.circle") {
+                KXListingSection(title: KXListingCopy.pickText(language, "发布者", "投稿者", "Poster"), icon: "person.crop.circle") {
                     HStack(spacing: 12) {
                         Circle()
                             .fill(KXColor.livingAccentSoft)
                             .frame(width: 44, height: 44)
                             .overlay(Text((listing.seller?.display_name ?? "M").prefix(1)).font(.headline.weight(.bold)).foregroundStyle(KXColor.livingAccent))
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(listing.seller?.display_name ?? "Machi 用户")
+                            Text(listing.seller?.display_name ?? KXListingCopy.pickText(language, "Machi 用户", "Machi ユーザー", "Machi user"))
                                 .font(.subheadline.weight(.bold))
-                            Text(KXListingCopy.verificationLabel(listing.verification_status))
+                            Text(KXListingCopy.verificationLabel(listing.verification_status, language))
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
                         }
@@ -3406,13 +3418,13 @@ struct CityListingDetailView: View {
                 ListingReviewsSectionView(listing: listing, currentUser: currentUser)
 
                 if !sellerOtherItems.isEmpty {
-                    listingRail(title: "TA 的其他发布", icon: "person.crop.rectangle.stack", items: sellerOtherItems)
+                    listingRail(title: KXListingCopy.pickText(language, "TA 的其他发布", "このユーザーの他の投稿", "More from this poster"), icon: "person.crop.rectangle.stack", items: sellerOtherItems)
                 }
                 if !similarItems.isEmpty {
-                    listingRail(title: "相似推荐", icon: "sparkles.rectangle.stack", items: similarItems)
+                    listingRail(title: KXListingCopy.pickText(language, "相似推荐", "関連おすすめ", "Similar listings"), icon: "sparkles.rectangle.stack", items: similarItems)
                 }
 
-                KXListingSection(title: "安全提醒", icon: "shield.checkered") {
+                KXListingSection(title: KXListingCopy.pickText(language, "安全提醒", "安全の注意", "Safety tips"), icon: "shield.checkered") {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(KXListingCopy.safetyTips(for: listing.type, language), id: \.self) { tip in
                             Label(tip, systemImage: "checkmark.circle")
@@ -3568,27 +3580,50 @@ struct CityListingDetailView: View {
         return [
             ListingQuickInquiry(
                 id: "available",
-                title: "还在吗？",
-                message: "你好，我想确认「\(title)」还可以交易吗？",
-                details: [["label": "咨询内容", "value": "确认是否仍可交易"]]
+                title: KXListingCopy.pickText(language, "还在吗？", "まだありますか？", "Still available?"),
+                message: KXListingCopy.pickText(
+                    language,
+                    "你好，我想确认「\(title)」还可以交易吗？",
+                    "こんにちは。「\(title)」はまだ取引できますか？",
+                    "Hi, is \"\(title)\" still available?"
+                ),
+                details: [["label": KXListingCopy.pickText(language, "咨询内容", "内容", "Question"), "value": KXListingCopy.pickText(language, "确认是否仍可交易", "まだ取引可能か確認", "Check availability")]]
             ),
             ListingQuickInquiry(
                 id: "meetup",
-                title: "约自取",
-                message: "你好，我想预约自取「\(title)」，方便的话请告诉我可交易时间。",
-                details: [["label": "希望交易方式", "value": "自取 / 面交"], ["label": "希望地点", "value": location]]
+                title: KXListingCopy.pickText(language, "约自取", "受け取り相談", "Meet up"),
+                message: KXListingCopy.pickText(
+                    language,
+                    "你好，我想预约自取「\(title)」，方便的话请告诉我可交易时间。",
+                    "こんにちは。「\(title)」の受け取りを相談したいです。可能な日時を教えてください。",
+                    "Hi, I would like to arrange pickup for \"\(title)\". Please let me know a good time."
+                ),
+                details: [
+                    ["label": KXListingCopy.pickText(language, "希望交易方式", "希望取引方法", "Preferred handoff"), "value": KXListingCopy.pickText(language, "自取 / 面交", "受け取り / 対面", "Pickup / meet up")],
+                    ["label": KXListingCopy.pickText(language, "希望地点", "希望場所", "Preferred location"), "value": location]
+                ]
             ),
             ListingQuickInquiry(
                 id: "condition",
-                title: "问瑕疵",
-                message: "你好，我想了解「\(title)」的使用痕迹、配件和是否有瑕疵。",
-                details: [["label": "咨询内容", "value": "确认状态、配件和瑕疵"]]
+                title: KXListingCopy.pickText(language, "问瑕疵", "状態確認", "Condition"),
+                message: KXListingCopy.pickText(
+                    language,
+                    "你好，我想了解「\(title)」的使用痕迹、配件和是否有瑕疵。",
+                    "こんにちは。「\(title)」の使用感、付属品、傷などを確認したいです。",
+                    "Hi, I would like to know the condition, accessories, and any defects for \"\(title)\"."
+                ),
+                details: [["label": KXListingCopy.pickText(language, "咨询内容", "内容", "Question"), "value": KXListingCopy.pickText(language, "确认状态、配件和瑕疵", "状態・付属品・傷の確認", "Condition, accessories, and defects")]]
             ),
             ListingQuickInquiry(
                 id: "price",
-                title: "可议价吗？",
-                message: "你好，我对「\(title)」感兴趣，想问一下价格是否可以商量。",
-                details: [["label": "咨询内容", "value": "价格是否可商量"]]
+                title: KXListingCopy.pickText(language, "可议价吗？", "価格相談", "Negotiate"),
+                message: KXListingCopy.pickText(
+                    language,
+                    "你好，我对「\(title)」感兴趣，想问一下价格是否可以商量。",
+                    "こんにちは。「\(title)」に興味があります。価格相談は可能ですか？",
+                    "Hi, I am interested in \"\(title)\". Is the price negotiable?"
+                ),
+                details: [["label": KXListingCopy.pickText(language, "咨询内容", "内容", "Question"), "value": KXListingCopy.pickText(language, "价格是否可商量", "価格相談の可否", "Whether the price is negotiable")]]
             ),
         ]
     }
@@ -3653,7 +3688,7 @@ struct CityListingDetailView: View {
     private func submitInquiry(message: String, details: [[String: String]]) async {
         guard let listing else { return }
         guard !isOwnListing(listing) else {
-            actionMessage = "不能咨询自己发布的信息。"
+            actionMessage = KXListingCopy.pickText(language, "不能咨询自己发布的信息。", "自分の投稿には問い合わせできません。", "You cannot inquire about your own listing.")
             return
         }
         isBusy = true
@@ -3693,7 +3728,7 @@ struct CityListingDetailView: View {
         defer { isBusy = false }
         do {
             try await KaiXAPIClient.shared.reportListing(listing.id, reason: "suspicious", note: "App 用户举报")
-            actionMessage = "举报已提交，Machi 会进行审核。"
+            actionMessage = KXListingCopy.pickText(language, "举报已提交，Machi 会进行审核。", "通報を送信しました。Machi が確認します。", "Report submitted. Machi will review it.")
         } catch {
             actionMessage = error.localizedDescription
         }
@@ -3749,36 +3784,38 @@ private struct ListingInquirySuccessSheet: View {
     let onClose: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "checkmark.seal.fill")
-                    .font(.title.weight(.black))
-                    .foregroundStyle(KXColor.accent)
-                    .frame(width: 52, height: 52)
-                    .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(receipt.successTitle)
-                        .font(.title3.weight(.black))
-                    Text(KXListingCopy.pickText(
-                        language,
-                        "记录已进入工作台，私信只作为后续沟通补充。",
-                        "記録はワークベンチに保存されました。メッセージは補足連絡用です。",
-                        "The record is saved to your workbench; messages are only for follow-up."
-                    ))
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.title.weight(.black))
+                        .foregroundStyle(KXColor.accent)
+                        .frame(width: 52, height: 52)
+                        .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(receipt.successTitle)
+                            .font(.title3.weight(.black))
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(KXListingCopy.pickText(
+                            language,
+                            "记录已进入工作台，私信只作为后续沟通补充。",
+                            "記録はワークベンチに保存されました。メッセージは補足連絡用です。",
+                            "The record is saved to your workbench; messages are only for follow-up."
+                        ))
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer()
+                    Button(action: onClose) {
+                        Image(systemName: "xmark")
+                            .font(.caption.weight(.black))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 32, height: 32)
+                            .background(Color.secondary.opacity(0.10), in: Circle())
+                    }
+                    .buttonStyle(.plain)
                 }
-                Spacer()
-                Button(action: onClose) {
-                    Image(systemName: "xmark")
-                        .font(.caption.weight(.black))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 32, height: 32)
-                        .background(Color.secondary.opacity(0.10), in: Circle())
-                }
-                .buttonStyle(.plain)
-            }
 
             VStack(alignment: .leading, spacing: 10) {
                 receiptLine(KXListingCopy.pickText(language, "信息", "投稿", "Listing"), receipt.listingTitle)
@@ -3820,42 +3857,44 @@ private struct ListingInquirySuccessSheet: View {
                 }
             }
 
-            VStack(spacing: 10) {
-                Button(action: onOpenRecords) {
-                    Label(receipt.recordLabel(language), systemImage: "tray.full")
-                        .font(.subheadline.weight(.black))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 48)
-                        .background(KXColor.accent, in: Capsule())
-                        .foregroundStyle(Color.white)
-                }
-                .buttonStyle(.plain)
+                VStack(spacing: 10) {
+                    Button(action: onOpenRecords) {
+                        Label(receipt.recordLabel(language), systemImage: "tray.full")
+                            .font(.subheadline.weight(.black))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 48)
+                            .background(KXColor.accent, in: Capsule())
+                            .foregroundStyle(Color.white)
+                    }
+                    .buttonStyle(.plain)
 
-                Button(action: onOpenConversation) {
-                    Label(
-                        KXListingCopy.pickText(language, "继续私信补充", "補足メッセージを送る", "Continue follow-up message"),
-                        systemImage: "bubble.left.and.bubble.right"
-                    )
-                        .font(.subheadline.weight(.black))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 46)
-                        .background(KXColor.softBackground, in: Capsule())
-                        .foregroundStyle(receipt.conversationId.isEmpty ? .secondary : KXColor.accent)
-                }
-                .buttonStyle(.plain)
-                .disabled(receipt.conversationId.isEmpty)
+                    Button(action: onOpenConversation) {
+                        Label(
+                            KXListingCopy.pickText(language, "继续私信补充", "補足メッセージを送る", "Continue follow-up message"),
+                            systemImage: "bubble.left.and.bubble.right"
+                        )
+                            .font(.subheadline.weight(.black))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 46)
+                            .background(KXColor.softBackground, in: Capsule())
+                            .foregroundStyle(receipt.conversationId.isEmpty ? .secondary : KXColor.accent)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(receipt.conversationId.isEmpty)
 
-                Button(action: onClose) {
-                    Text(KXListingCopy.pickText(language, "返回详情", "詳細へ戻る", "Back to detail"))
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 40)
+                    Button(action: onClose) {
+                        Text(KXListingCopy.pickText(language, "返回详情", "詳細へ戻る", "Back to detail"))
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 40)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
+            .padding(KaiXTheme.horizontalPadding)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(KaiXTheme.horizontalPadding)
         .kxPageBackground()
     }
 
@@ -6094,7 +6133,7 @@ private struct KXSecondhandListingCard: View {
             VStack(alignment: .leading, spacing: 9) {
                 cover
                     .frame(width: innerWidth)
-                Text(KXListingCopy.priceLabel(listing))
+                Text(KXListingCopy.priceLabel(listing, language))
                     .font(.headline.weight(.black))
                     .foregroundStyle(KXColor.heat)
                     .lineLimit(1)
@@ -6107,7 +6146,7 @@ private struct KXSecondhandListingCard: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.leading)
                     .frame(width: innerWidth, alignment: .leading)
-                let badges = KXListingCopy.secondhandCardBadges(for: listing)
+                let badges = KXListingCopy.secondhandCardBadges(for: listing, language)
                 if !badges.isEmpty {
                     HStack(spacing: 4) {
                         ForEach(badges.prefix(2), id: \.self) { badge in
@@ -6221,6 +6260,8 @@ private struct ListingMediaPage: View {
 }
 
 private struct ListingMediaPlaceholder: View {
+    @Environment(\.appLanguage) private var language
+
     let type: String
 
     var body: some View {
@@ -6246,7 +6287,9 @@ private struct ListingMediaPlaceholder: View {
                 Image(systemName: type == "video" ? "play.rectangle.fill" : KXListingCopy.icon(for: type))
                     .font(.system(size: 34, weight: .bold))
                     .foregroundStyle(KXColor.livingAccent.opacity(0.8))
-                Text(type == "video" ? "视频封面生成中" : "暂无图片")
+                Text(type == "video"
+                     ? KXListingCopy.pickText(language, "视频封面生成中", "動画カバーを生成中", "Generating video cover")
+                     : KXListingCopy.pickText(language, "暂无图片", "画像はまだありません", "No photos yet"))
                     .font(.caption.weight(.bold))
                     .foregroundStyle(KXColor.livingMuted)
             }
@@ -6268,7 +6311,7 @@ private struct KXJobListingRow: View {
     }
     private var salaryText: String {
         let s = (KXListingCopy.attr(listing, "salary") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        return s.isEmpty ? KXListingCopy.priceLabel(listing) : s
+        return s.isEmpty ? KXListingCopy.priceLabel(listing, language) : s
     }
     private var companyVerified: Bool {
         KXListingCopy.boolAttr(listing, "company_verified") || listing.verification_status == "verified"
@@ -6288,7 +6331,8 @@ private struct KXJobListingRow: View {
     }
     private var japaneseLabel: String? {
         let j = (KXListingCopy.attr(listing, "japanese_level") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        return j.isEmpty ? nil : (j.contains("日语") || j.contains("日本語") ? j : "日语 \(j)")
+        let hasLanguagePrefix = j.contains("日语") || j.contains("日本語") || j.localizedCaseInsensitiveContains("Japanese")
+        return j.isEmpty ? nil : (hasLanguagePrefix ? j : "\(KXListingCopy.pickText(language, "日语", "日本語", "Japanese")) \(j)")
     }
     private var visaSupport: Bool { KXListingCopy.boolAttr(listing, "visa_support") }
     private var companyInitial: String {
@@ -6302,15 +6346,20 @@ private struct KXJobListingRow: View {
     private var jobFactChips: [String] {
         var chips: [String] = []
         let visa = (KXListingCopy.attr(listing, "visa_support") ?? "").lowercased()
-        if visa == "available" || visa == "support" || visa == "true" { chips.append("签证支持") }
-        else if visa == "consult" { chips.append("签证可咨询") }
-        if KXListingCopy.boolAttr(listing, "no_experience_ok") { chips.append("无经验可") }
-        if KXListingCopy.boolAttr(listing, "remote_ok") { chips.append("可远程") }
-        if KXListingCopy.boolAttr(listing, "student_ok") { chips.append("留学生可") }
-        if KXListingCopy.boolAttr(listing, "transportation_fee") { chips.append("交通费支给") }
+        if visa == "available" || visa == "support" || visa == "true" {
+            chips.append(KXListingCopy.pickText(language, "签证支持", "ビザサポート", "Visa support"))
+        } else if visa == "consult" {
+            chips.append(KXListingCopy.pickText(language, "签证可咨询", "ビザ相談可", "Visa negotiable"))
+        }
+        if KXListingCopy.boolAttr(listing, "no_experience_ok") { chips.append(KXListingCopy.pickText(language, "无经验可", "未経験可", "No experience OK")) }
+        if KXListingCopy.boolAttr(listing, "remote_ok") { chips.append(KXListingCopy.pickText(language, "可远程", "リモート可", "Remote OK")) }
+        if KXListingCopy.boolAttr(listing, "student_ok") { chips.append(KXListingCopy.pickText(language, "留学生可", "留学生可", "Students OK")) }
+        if KXListingCopy.boolAttr(listing, "transportation_fee") { chips.append(KXListingCopy.pickText(language, "交通费支给", "交通費支給", "Transport paid")) }
         let holidays = KXListingCopy.attr(listing, "holidays") ?? ""
         if !holidays.isEmpty { chips.append(holidays.count > 6 ? String(holidays.prefix(6)) : holidays) }
-        if KXListingCopy.boolAttr(listing, "foreigner_friendly"), chips.count < 5 { chips.append("外国人友好") }
+        if KXListingCopy.boolAttr(listing, "foreigner_friendly"), chips.count < 5 {
+            chips.append(KXListingCopy.pickText(language, "外国人友好", "外国人歓迎", "Foreigner-friendly"))
+        }
         return Array(chips.prefix(5))
     }
 
@@ -6380,7 +6429,7 @@ private struct KXJobListingRow: View {
 
                 HStack(spacing: 5) {
                     Spacer(minLength: 0)
-                    Text("查看详情 · 投递")
+                    Text(KXListingCopy.pickText(language, "查看详情 · 投递", "詳細を見る・応募", "View details · Apply"))
                         .font(.caption.weight(.black))
                     Image(systemName: "arrow.right")
                         .font(.caption2.weight(.black))
@@ -6441,7 +6490,7 @@ private struct KXStructuredListingRow: View {
                 }
                 VStack(alignment: .leading, spacing: 7) {
                     HStack(alignment: .top) {
-                        Text(KXListingCopy.priceLabel(listing))
+                        Text(KXListingCopy.priceLabel(listing, language))
                             .font(.headline.weight(.black))
                             .foregroundStyle(KXColor.heat)
                             .lineLimit(2)
@@ -6457,7 +6506,7 @@ private struct KXStructuredListingRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                     FlowLayout(spacing: 6) {
-                        ForEach(KXListingCopy.badges(for: listing).prefix(3), id: \.self) { badge in
+                        ForEach(KXListingCopy.badges(for: listing, language).prefix(3), id: \.self) { badge in
                             KXListingBadge(title: badge, tint: KXColor.rankTeal)
                         }
                     }
@@ -7403,14 +7452,14 @@ enum KXListingCopy {
         return pickText(language, zh, ja, en)
     }
 
-    static func formatVerificationStatus(_ status: String) -> String {
+    static func formatVerificationStatus(_ status: String, _ language: AppLanguage = .zh) -> String {
         switch normalized(status) {
-        case "verified": "认证"
-        case "pending": "待核验"
-        case "needs_review": "需复核"
-        case "rejected": "认证拒绝"
-        case "unverified": "未认证"
-        default: "未认证"
+        case "verified": pickText(language, "认证", "認証済み", "Verified")
+        case "pending": pickText(language, "待核验", "確認待ち", "Pending verification")
+        case "needs_review": pickText(language, "需复核", "再確認が必要", "Needs review")
+        case "rejected": pickText(language, "认证拒绝", "認証却下", "Verification rejected")
+        case "unverified": pickText(language, "未认证", "未認証", "Unverified")
+        default: pickText(language, "未认证", "未認証", "Unverified")
         }
     }
 
@@ -7506,15 +7555,15 @@ enum KXListingCopy {
         }
     }
 
-    static func formatPrice(_ listing: KaiXCityListingDTO) -> String {
+    static func formatPrice(_ listing: KaiXCityListingDTO, _ language: AppLanguage = .zh) -> String {
         let type = listing.type
         let priceType = normalized(listing.price_type ?? "")
-        if priceType == "free" { return "免费" }
+        if priceType == "free" { return pickText(language, "免费", "無料", "Free") }
         if ["appointment_only", "quote_required", "consultation", "negotiable"].contains(priceType) {
-            return fallbackPriceLabel(for: type)
+            return fallbackPriceLabel(for: type, language)
         }
         guard let price = listing.price, price.isFinite, price > 0 else {
-            return fallbackPriceLabel(for: type)
+            return fallbackPriceLabel(for: type, language)
         }
         let amount = price.rounded() == price
             ? NumberFormatter.localizedString(from: NSNumber(value: Int(price)), number: .decimal)
@@ -7531,16 +7580,16 @@ enum KXListingCopy {
         }()
         let rendered = "\(prefix)\(amount)"
         switch priceType {
-        case "monthly", "month": return "\(rendered)/月"
-        case "hourly", "hour": return "\(rendered)/小时"
-        case "per_night", "nightly": return "\(rendered)/晚"
-        case "daily": return "\(rendered)/日"
-        case "weekly": return "\(rendered)/周"
-        case "yearly", "annual": return "\(rendered)/年"
-        case "starting_from": return "\(rendered) 起"
+        case "monthly", "month": return "\(rendered)\(pickText(language, "/月", "/月", "/mo"))"
+        case "hourly", "hour": return "\(rendered)\(pickText(language, "/小时", "/時", "/hr"))"
+        case "per_night", "nightly": return "\(rendered)\(pickText(language, "/晚", "/泊", "/night"))"
+        case "daily": return "\(rendered)\(pickText(language, "/日", "/日", "/day"))"
+        case "weekly": return "\(rendered)\(pickText(language, "/周", "/週", "/wk"))"
+        case "yearly", "annual": return "\(rendered)\(pickText(language, "/年", "/年", "/yr"))"
+        case "starting_from": return "\(rendered) \(pickText(language, "起", "から", "and up"))"
         default:
-            if type == "rental" { return "\(rendered)/月" }
-            if type == "job" || type == "hiring" { return "\(rendered)/小时" }
+            if type == "rental" { return "\(rendered)\(pickText(language, "/月", "/月", "/mo"))" }
+            if type == "job" || type == "hiring" { return "\(rendered)\(pickText(language, "/小时", "/時", "/hr"))" }
             return rendered
         }
     }
@@ -7592,8 +7641,8 @@ enum KXListingCopy {
         }
     }
 
-    static func priceLabel(_ listing: KaiXCityListingDTO) -> String {
-        formatPrice(listing)
+    static func priceLabel(_ listing: KaiXCityListingDTO, _ language: AppLanguage = .zh) -> String {
+        formatPrice(listing, language)
     }
 
     static func displayTitle(_ listing: KaiXCityListingDTO) -> String {
@@ -7636,43 +7685,43 @@ enum KXListingCopy {
         }
     }
 
-    static func badges(for listing: KaiXCityListingDTO) -> [String] {
+    static func badges(for listing: KaiXCityListingDTO, _ language: AppLanguage = .zh) -> [String] {
         var result: [String] = []
-        if listing.verification_status == "pending" { result.append(formatVerificationStatus(listing.verification_status)) }
-        if listing.verification_status == "verified" { result.append(formatVerificationStatus(listing.verification_status)) }
+        if listing.verification_status == "pending" { result.append(formatVerificationStatus(listing.verification_status, language)) }
+        if listing.verification_status == "verified" { result.append(formatVerificationStatus(listing.verification_status, language)) }
         switch listing.type {
         case "rental":
-            if boolAttr(listing, "short_term_allowed") { result.append("短租") }
-            if boolAttr(listing, "share_allowed") { result.append("合租") }
-            if boolAttr(listing, "furnished") { result.append("家具家电") }
+            if boolAttr(listing, "short_term_allowed") { result.append(pickText(language, "短租", "短期可", "Short-term")) }
+            if boolAttr(listing, "share_allowed") { result.append(pickText(language, "合租", "シェア可", "Shared OK")) }
+            if boolAttr(listing, "furnished") { result.append(pickText(language, "家具家电", "家具家電付き", "Furnished")) }
         case "job", "hiring":
-            if boolAttr(listing, "visa_support") { result.append("签证支持") }
-            if let level = attr(listing, "japanese_level") { result.append("日语 \(level)") }
+            if boolAttr(listing, "visa_support") { result.append(pickText(language, "签证支持", "ビザサポート", "Visa support")) }
+            if let level = attr(listing, "japanese_level") { result.append("\(pickText(language, "日语", "日本語", "Japanese")) \(level)") }
             if let employment = attr(listing, "employment_type") { result.append(employment) }
         case "local_service":
             if let service = attr(listing, "service_type") { result.append(service) }
-            if boolAttr(listing, "certified_provider") || listing.verification_status == "verified" { result.append("认证服务方") }
+            if boolAttr(listing, "certified_provider") || listing.verification_status == "verified" { result.append(pickText(language, "认证服务方", "認証済みサービス", "Verified provider")) }
             if let area = attr(listing, "service_area") { result.append(area) }
         case "discount":
             if let merchant = attr(listing, "merchant_name") { result.append(merchant) }
-            if let validUntil = attr(listing, "valid_until") { result.append("有效至 \(validUntil)") }
-            if boolAttr(listing, "merchant_verified") || listing.verification_status == "verified" { result.append("认证商家") }
+            if let validUntil = attr(listing, "valid_until") { result.append("\(pickText(language, "有效至", "有効期限", "Valid until")) \(validUntil)") }
+            if boolAttr(listing, "merchant_verified") || listing.verification_status == "verified" { result.append(pickText(language, "认证商家", "認証済み店舗", "Verified merchant")) }
         default:
             if let condition = attr(listing, "condition") { result.append(condition) }
-            if boolAttr(listing, "pickup_available") { result.append("可自取") }
-            if boolAttr(listing, "shipping_available") { result.append("可邮寄") }
+            if boolAttr(listing, "pickup_available") { result.append(pickText(language, "可自取", "手渡し可", "Pickup OK")) }
+            if boolAttr(listing, "shipping_available") { result.append(pickText(language, "可邮寄", "配送可", "Shipping OK")) }
             if let time = attr(listing, "available_time") { result.append(time) }
         }
         return result
     }
 
-    static func secondhandCardBadges(for listing: KaiXCityListingDTO) -> [String] {
+    static func secondhandCardBadges(for listing: KaiXCityListingDTO, _ language: AppLanguage = .zh) -> [String] {
         guard listing.type == "secondhand" else { return [] }
         var result: [String] = []
         if let mode = attr(listing, "listing_mode") { result.append(mode) }
-        if boolAttr(listing, "price_negotiable") { result.append("可议价") }
-        if boolAttr(listing, "pickup_available") { result.append("可自取") }
-        if boolAttr(listing, "shipping_available") { result.append("可邮寄") }
+        if boolAttr(listing, "price_negotiable") { result.append(pickText(language, "可议价", "価格相談可", "Negotiable")) }
+        if boolAttr(listing, "pickup_available") { result.append(pickText(language, "可自取", "手渡し可", "Pickup OK")) }
+        if boolAttr(listing, "shipping_available") { result.append(pickText(language, "可邮寄", "配送可", "Shipping OK")) }
         if let condition = attr(listing, "condition") { result.append(condition) }
         return result
     }
@@ -7682,7 +7731,7 @@ enum KXListingCopy {
         switch listing.type {
         case "rental":
             base = [
-                ("月租", priceLabel(listing)),
+                ("月租", priceLabel(listing, language)),
                 ("地区", cleanText(listing.location_text)),
                 ("最近车站", attr(listing, "nearest_station")),
                 ("户型", attr(listing, "layout")),
@@ -7703,7 +7752,7 @@ enum KXListingCopy {
             default: nil
             }
             base = [
-                ("薪资", priceLabel(listing)),
+                ("薪资", priceLabel(listing, language)),
                 ("公司/店铺", attr(listing, "company_name")),
                 ("地点", cleanText(listing.location_text)),
                 ("雇佣形式", attr(listing, "employment_type")),
@@ -7716,13 +7765,13 @@ enum KXListingCopy {
                 ("无经验可", boolAttr(listing, "no_experience_ok") ? "可" : nil),
                 ("留学生可", boolAttr(listing, "student_ok") ? "可" : nil),
                 ("可远程", boolAttr(listing, "remote_ok") ? "可" : nil),
-                ("审核状态", verificationLabel(listing.verification_status)),
+                ("审核状态", verificationLabel(listing.verification_status, language)),
             ]
         case "local_service":
             switch serviceVertical(for: listing) {
             case .foodRestaurant?:
                 base = [
-                    ("起步价格", priceLabel(listing)),
+                    ("起步价格", priceLabel(listing, language)),
                     ("服务方", attr(listing, "business_name")),
                     ("服务类型", attr(listing, "service_type")),
                     ("服务范围", attr(listing, "service_area") ?? cleanText(listing.location_text)),
@@ -7734,11 +7783,11 @@ enum KXListingCopy {
                     ("预约说明", attr(listing, "reservation_note")),
                     ("服务语言", attr(listing, "languages")),
                     ("认证服务方", boolAttr(listing, "certified_provider") || listing.verification_status == "verified" ? "已认证" : nil),
-                    ("审核状态", verificationLabel(listing.verification_status)),
+                    ("审核状态", verificationLabel(listing.verification_status, language)),
                 ]
             case .diningBooking?:
                 base = [
-                    ("起步价格", priceLabel(listing)),
+                    ("起步价格", priceLabel(listing, language)),
                     ("服务方", attr(listing, "business_name")),
                     ("服务类型", attr(listing, "service_type")),
                     ("服务范围", attr(listing, "service_area") ?? cleanText(listing.location_text)),
@@ -7752,11 +7801,11 @@ enum KXListingCopy {
                     ("服务流程", attr(listing, "service_process")),
                     ("取消规则", attr(listing, "cancellation_rule")),
                     ("服务语言", attr(listing, "languages")),
-                    ("审核状态", verificationLabel(listing.verification_status)),
+                    ("审核状态", verificationLabel(listing.verification_status, language)),
                 ]
             case .lodging?:
                 base = [
-                    ("起步价格", priceLabel(listing)),
+                    ("起步价格", priceLabel(listing, language)),
                     ("服务方", attr(listing, "business_name")),
                     ("服务类型", attr(listing, "service_type")),
                     ("房型", attr(listing, "room_type")),
@@ -7771,11 +7820,11 @@ enum KXListingCopy {
                     ("即时确认", boolAttr(listing, "instant_confirmation") ? "支持" : nil),
                     ("取消规则", attr(listing, "cancellation_rule")),
                     ("资质/许可说明", attr(listing, "license_note")),
-                    ("审核状态", verificationLabel(listing.verification_status)),
+                    ("审核状态", verificationLabel(listing.verification_status, language)),
                 ]
             case .attractionTicket?, .dayTour?:
                 base = [
-                    ("起步价格", priceLabel(listing)),
+                    ("起步价格", priceLabel(listing, language)),
                     ("服务方", attr(listing, "business_name")),
                     ("服务类型", attr(listing, "service_type")),
                     ("票种", attr(listing, "ticket_type")),
@@ -7788,11 +7837,11 @@ enum KXListingCopy {
                     ("含酒店接送", boolAttr(listing, "pickup_service") ? "包含" : nil),
                     ("取消规则", attr(listing, "cancellation_rule")),
                     ("资质/许可说明", attr(listing, "license_note")),
-                    ("审核状态", verificationLabel(listing.verification_status)),
+                    ("审核状态", verificationLabel(listing.verification_status, language)),
                 ]
             case .airportTransfer?:
                 base = [
-                    ("起步价格", priceLabel(listing)),
+                    ("起步价格", priceLabel(listing, language)),
                     ("服务方", attr(listing, "business_name")),
                     ("服务类型", attr(listing, "service_type")),
                     ("机场/路线", attr(listing, "airport_route")),
@@ -7804,11 +7853,11 @@ enum KXListingCopy {
                     ("等待规则", attr(listing, "waiting_rule")),
                     ("夜间/追加费用", attr(listing, "surcharge_note")),
                     ("取消规则", attr(listing, "cancellation_rule")),
-                    ("审核状态", verificationLabel(listing.verification_status)),
+                    ("审核状态", verificationLabel(listing.verification_status, language)),
                 ]
             case .paperworkTranslation?:
                 base = [
-                    ("起步价格", priceLabel(listing)),
+                    ("起步价格", priceLabel(listing, language)),
                     ("服务方", attr(listing, "business_name")),
                     ("服务类型", attr(listing, "service_type")),
                     ("服务语言", attr(listing, "languages")),
@@ -7820,11 +7869,11 @@ enum KXListingCopy {
                     ("结果说明", boolAttr(listing, "no_result_guarantee") ? "不保证结果" : nil),
                     ("资质/许可说明", attr(listing, "license_note")),
                     ("取消规则", attr(listing, "cancellation_rule")),
-                    ("审核状态", verificationLabel(listing.verification_status)),
+                    ("审核状态", verificationLabel(listing.verification_status, language)),
                 ]
             case .movingCleaning?:
                 base = [
-                    ("起步价格", priceLabel(listing)),
+                    ("起步价格", priceLabel(listing, language)),
                     ("服务方", attr(listing, "business_name")),
                     ("服务类型", attr(listing, "service_type")),
                     ("服务范围", attr(listing, "service_area") ?? cleanText(listing.location_text)),
@@ -7836,11 +7885,11 @@ enum KXListingCopy {
                     ("用户需准备", attr(listing, "user_prepare")),
                     ("追加费用", attr(listing, "surcharge_note")),
                     ("取消规则", attr(listing, "cancellation_rule")),
-                    ("审核状态", verificationLabel(listing.verification_status)),
+                    ("审核状态", verificationLabel(listing.verification_status, language)),
                 ]
             case .lifeSetup?:
                 base = [
-                    ("起步价格", priceLabel(listing)),
+                    ("起步价格", priceLabel(listing, language)),
                     ("服务方", attr(listing, "business_name")),
                     ("服务类型", attr(listing, "service_type")),
                     ("服务范围", attr(listing, "service_area") ?? cleanText(listing.location_text)),
@@ -7852,11 +7901,11 @@ enum KXListingCopy {
                     ("结果说明", attr(listing, "cannot_guarantee")),
                     ("价格区间", attr(listing, "price_range")),
                     ("取消规则", attr(listing, "cancellation_rule")),
-                    ("审核状态", verificationLabel(listing.verification_status)),
+                    ("审核状态", verificationLabel(listing.verification_status, language)),
                 ]
             case .beautyHealth?:
                 base = [
-                    ("起步价格", priceLabel(listing)),
+                    ("起步价格", priceLabel(listing, language)),
                     ("服务方", attr(listing, "business_name")),
                     ("服务类型", attr(listing, "service_type")),
                     ("服务范围", attr(listing, "service_area") ?? cleanText(listing.location_text)),
@@ -7867,11 +7916,11 @@ enum KXListingCopy {
                     ("用户需准备", attr(listing, "user_prepare")),
                     ("安全说明", attr(listing, "medical_disclaimer")),
                     ("取消规则", attr(listing, "cancellation_rule")),
-                    ("审核状态", verificationLabel(listing.verification_status)),
+                    ("审核状态", verificationLabel(listing.verification_status, language)),
                 ]
             case .petFamily?:
                 base = [
-                    ("起步价格", priceLabel(listing)),
+                    ("起步价格", priceLabel(listing, language)),
                     ("服务方", attr(listing, "business_name")),
                     ("服务类型", attr(listing, "service_type")),
                     ("服务范围", attr(listing, "service_area") ?? cleanText(listing.location_text)),
@@ -7881,11 +7930,11 @@ enum KXListingCopy {
                     ("用户需准备", attr(listing, "user_prepare")),
                     ("资质/许可说明", attr(listing, "license_note")),
                     ("取消规则", attr(listing, "cancellation_rule")),
-                    ("审核状态", verificationLabel(listing.verification_status)),
+                    ("审核状态", verificationLabel(listing.verification_status, language)),
                 ]
             case .none:
                 base = [
-                    ("起步价格", priceLabel(listing)),
+                    ("起步价格", priceLabel(listing, language)),
                     ("服务方", attr(listing, "business_name")),
                     ("服务类型", attr(listing, "service_type")),
                     ("服务范围", attr(listing, "service_area") ?? cleanText(listing.location_text)),
@@ -7893,12 +7942,12 @@ enum KXListingCopy {
                     ("可预约时间", attr(listing, "availability")),
                     ("服务流程", attr(listing, "service_process")),
                     ("取消规则", attr(listing, "cancellation_rule")),
-                    ("审核状态", verificationLabel(listing.verification_status)),
+                    ("审核状态", verificationLabel(listing.verification_status, language)),
                 ]
             }
         case "discount":
             base = [
-                ("优惠", priceLabel(listing)),
+                ("优惠", priceLabel(listing, language)),
                 ("商家", attr(listing, "merchant_name")),
                 ("地点", cleanText(listing.location_text)),
                 ("优惠内容", attr(listing, "discount_info")),
@@ -7908,7 +7957,7 @@ enum KXListingCopy {
             ]
         default:
             base = [
-                ("价格", priceLabel(listing)),
+                ("价格", priceLabel(listing, language)),
                 ("地点", cleanText(listing.location_text)),
                 ("分类", cleanText(listing.category)),
                 ("发布类型", attr(listing, "listing_mode")),
@@ -7927,7 +7976,126 @@ enum KXListingCopy {
         }
         return base.compactMap { key, value in
             guard let value, !value.isEmpty else { return nil }
-            return (key, value)
+            return (localizedAttributeLabel(key, language), localizedAttributeValue(value, language))
+        }
+    }
+
+    private static func localizedAttributeLabel(_ key: String, _ language: AppLanguage) -> String {
+        switch key {
+        case "月租": pickText(language, "月租", "月額家賃", "Monthly rent")
+        case "地区": pickText(language, "地区", "エリア", "Area")
+        case "最近车站": pickText(language, "最近车站", "最寄り駅", "Nearest station")
+        case "户型": pickText(language, "户型", "間取り", "Layout")
+        case "面积": pickText(language, "面积", "面積", "Area size")
+        case "入住时间": pickText(language, "入住时间", "入居時期", "Move-in")
+        case "合租": pickText(language, "合租", "シェア", "Shared")
+        case "短租": pickText(language, "短租", "短期", "Short-term")
+        case "家具家电": pickText(language, "家具家电", "家具家電", "Furnished")
+        case "薪资": pickText(language, "薪资", "給与", "Pay")
+        case "公司/店铺": pickText(language, "公司/店铺", "会社・店舗", "Company/store")
+        case "地点": pickText(language, "地点", "場所", "Location")
+        case "雇佣形式": pickText(language, "雇佣形式", "雇用形態", "Employment type")
+        case "日语要求": pickText(language, "日语要求", "日本語要件", "Japanese level")
+        case "签证支持": pickText(language, "签证支持", "ビザサポート", "Visa support")
+        case "工作时间": pickText(language, "工作时间", "勤務時間", "Working hours")
+        case "休日休假": pickText(language, "休日休假", "休日・休暇", "Holidays")
+        case "试用期": pickText(language, "试用期", "試用期間", "Trial period")
+        case "福利待遇": pickText(language, "福利待遇", "福利厚生", "Benefits")
+        case "无经验可": pickText(language, "无经验可", "未経験可", "No experience OK")
+        case "留学生可": pickText(language, "留学生可", "留学生可", "Students OK")
+        case "可远程": pickText(language, "可远程", "リモート可", "Remote OK")
+        case "审核状态": pickText(language, "审核状态", "審査状態", "Review status")
+        case "起步价格": pickText(language, "起步价格", "開始価格", "Starting price")
+        case "服务方": pickText(language, "服务方", "提供者", "Provider")
+        case "服务类型": pickText(language, "服务类型", "サービス種別", "Service type")
+        case "服务范围": pickText(language, "服务范围", "対応範囲", "Service area")
+        case "营业时间": pickText(language, "营业时间", "営業時間", "Hours")
+        case "价格区间": pickText(language, "价格区间", "価格帯", "Price range")
+        case "到店电话": pickText(language, "到店电话", "店舗電話", "Phone")
+        case "预约制": pickText(language, "预约制", "予約制", "Reservation")
+        case "预约说明": pickText(language, "预约说明", "予約説明", "Booking notes")
+        case "服务语言": pickText(language, "服务语言", "対応言語", "Languages")
+        case "认证服务方": pickText(language, "认证服务方", "認証済み提供者", "Verified provider")
+        case "可预约时间": pickText(language, "可预约时间", "予約可能時間", "Available times")
+        case "服务流程": pickText(language, "服务流程", "サービス手順", "Service flow")
+        case "取消规则": pickText(language, "取消规则", "キャンセル規定", "Cancellation")
+        case "房型": pickText(language, "房型", "部屋タイプ", "Room type")
+        case "可住人数": pickText(language, "可住人数", "定員", "Guests")
+        case "价格单位": pickText(language, "价格单位", "価格単位", "Price unit")
+        case "入住办理": pickText(language, "入住办理", "チェックイン", "Check-in")
+        case "退房时间": pickText(language, "退房时间", "チェックアウト", "Check-out")
+        case "最少入住": pickText(language, "最少入住", "最低宿泊", "Minimum stay")
+        case "设施服务": pickText(language, "设施服务", "設備", "Amenities")
+        case "房量与日期": pickText(language, "房量与日期", "空室・日程", "Availability")
+        case "含早餐": pickText(language, "含早餐", "朝食付き", "Breakfast")
+        case "即时确认": pickText(language, "即时确认", "即時確認", "Instant confirmation")
+        case "资质/许可说明": pickText(language, "资质/许可说明", "資格・許可", "License notes")
+        case "票种": pickText(language, "票种", "チケット種別", "Ticket type")
+        case "日期/有效期": pickText(language, "日期/有效期", "日付・有効期限", "Date/validity")
+        case "时长": pickText(language, "时长", "所要時間", "Duration")
+        case "集合地点": pickText(language, "集合地点", "集合場所", "Meeting point")
+        case "包含内容": pickText(language, "包含内容", "含まれるもの", "Included")
+        case "不包含内容": pickText(language, "不包含内容", "含まれないもの", "Not included")
+        case "用户需准备": pickText(language, "用户需准备", "利用者の準備", "User preparation")
+        case "含酒店接送": pickText(language, "含酒店接送", "ホテル送迎", "Hotel pickup")
+        case "机场/路线": pickText(language, "机场/路线", "空港・ルート", "Airport/route")
+        case "车型": pickText(language, "车型", "車種", "Vehicle")
+        case "人数": pickText(language, "人数", "人数", "Passengers")
+        case "行李数": pickText(language, "行李数", "荷物数", "Luggage")
+        case "航班号说明": pickText(language, "航班号说明", "便名メモ", "Flight notes")
+        case "等待规则": pickText(language, "等待规则", "待機ルール", "Waiting rules")
+        case "夜间/追加费用": pickText(language, "夜间/追加费用", "夜間・追加料金", "Surcharges")
+        case "文件/手续类型": pickText(language, "文件/手续类型", "書類・手続き種別", "Document type")
+        case "所需材料": pickText(language, "所需材料", "必要書類", "Required materials")
+        case "交付时间": pickText(language, "交付时间", "納期", "Delivery time")
+        case "结果说明": pickText(language, "结果说明", "結果の説明", "Result notes")
+        case "房型/面积": pickText(language, "房型/面积", "部屋・面積", "Property size")
+        case "物品量": pickText(language, "物品量", "荷物量", "Item volume")
+        case "车辆/人员": pickText(language, "车辆/人员", "車両・人員", "Vehicle/staff")
+        case "办理类型": pickText(language, "办理类型", "手続き種別", "Setup type")
+        case "服务项目": pickText(language, "服务项目", "サービス項目", "Service items")
+        case "服务时长": pickText(language, "服务时长", "施術時間", "Service duration")
+        case "安全说明": pickText(language, "安全说明", "安全説明", "Safety notes")
+        case "服务对象": pickText(language, "服务对象", "対象", "Service target")
+        case "优惠": pickText(language, "优惠", "特典", "Deal")
+        case "商家": pickText(language, "商家", "店舗", "Merchant")
+        case "优惠内容": pickText(language, "优惠内容", "特典内容", "Deal details")
+        case "有效期": pickText(language, "有效期", "有効期限", "Valid until")
+        case "使用规则": pickText(language, "使用规则", "利用条件", "Usage rules")
+        case "商家认证": pickText(language, "商家认证", "店舗認証", "Merchant verification")
+        case "价格": pickText(language, "价格", "価格", "Price")
+        case "分类": pickText(language, "分类", "カテゴリ", "Category")
+        case "发布类型": pickText(language, "发布类型", "投稿種別", "Listing mode")
+        case "品牌": pickText(language, "品牌", "ブランド", "Brand")
+        case "新旧程度": pickText(language, "新旧程度", "状態", "Condition")
+        case "原价/参考价": pickText(language, "原价/参考价", "元値・参考価格", "Original/reference")
+        case "价格可议": pickText(language, "价格可议", "価格相談", "Negotiable")
+        case "购买时间": pickText(language, "购买时间", "購入時期", "Purchase time")
+        case "配件/包装": pickText(language, "配件/包装", "付属品・箱", "Accessories/box")
+        case "瑕疵说明": pickText(language, "瑕疵说明", "傷・不具合", "Defects")
+        case "可交易时间": pickText(language, "可交易时间", "取引可能時間", "Available time")
+        case "交易方式": pickText(language, "交易方式", "取引方法", "Handoff")
+        case "取货说明": pickText(language, "取货说明", "受け渡しメモ", "Pickup notes")
+        case "状态": pickText(language, "状态", "状態", "Status")
+        default: key
+        }
+    }
+
+    private static func localizedAttributeValue(_ value: String, _ language: AppLanguage) -> String {
+        switch value {
+        case "可": pickText(language, "可", "可", "Yes")
+        case "有": pickText(language, "有", "あり", "Yes")
+        case "无": pickText(language, "无", "なし", "No")
+        case "未注明": pickText(language, "未注明", "未記入", "Not specified")
+        case "支持": pickText(language, "支持", "対応", "Supported")
+        case "可咨询": pickText(language, "可咨询", "相談可", "Consultable")
+        case "需要预约": pickText(language, "需要预约", "予約が必要", "Reservation required")
+        case "已认证": pickText(language, "已认证", "認証済み", "Verified")
+        case "待核验": pickText(language, "待核验", "確認待ち", "Pending verification")
+        case "包含": pickText(language, "包含", "含む", "Included")
+        case "不保证结果": pickText(language, "不保证结果", "結果保証なし", "No result guarantee")
+        case "可商量": pickText(language, "可商量", "相談可", "Negotiable")
+        default: value
         }
     }
 
@@ -7989,8 +8157,8 @@ enum KXListingCopy {
         }
     }
 
-    static func verificationLabel(_ status: String) -> String {
-        formatVerificationStatus(status)
+    static func verificationLabel(_ status: String, _ language: AppLanguage = .zh) -> String {
+        formatVerificationStatus(status, language)
     }
 
     static func attr(_ listing: KaiXCityListingDTO, _ key: String) -> String? {
@@ -8008,13 +8176,13 @@ enum KXListingCopy {
             .lowercased() ?? ""
     }
 
-    private static func fallbackPriceLabel(for type: String) -> String {
+    private static func fallbackPriceLabel(for type: String, _ language: AppLanguage = .zh) -> String {
         switch type {
-        case "rental": "租金咨询"
-        case "job", "hiring": "薪资面议"
-        case "local_service": "预约咨询"
-        case "discount": "查看优惠"
-        default: "价格咨询"
+        case "rental": pickText(language, "租金咨询", "家賃相談", "Rent on request")
+        case "job", "hiring": pickText(language, "薪资面议", "給与応相談", "Pay negotiable")
+        case "local_service": pickText(language, "预约咨询", "予約相談", "Booking inquiry")
+        case "discount": pickText(language, "查看优惠", "特典を見る", "View deal")
+        default: pickText(language, "价格咨询", "価格相談", "Price on request")
         }
     }
 

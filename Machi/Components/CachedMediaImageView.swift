@@ -134,6 +134,8 @@ struct MediaImageView: View {
 }
 
 struct MediaVideoView: View {
+    @Environment(\.appLanguage) private var language
+
     let sourceURL: URL?
     let posterURL: URL?
     var autoPlay = false
@@ -157,7 +159,7 @@ struct MediaVideoView: View {
                         VStack(spacing: 10) {
                             Image(systemName: playbackFailed ? "exclamationmark.arrow.triangle.2.circlepath" : "video.fill")
                                 .font(.system(size: 36, weight: .bold))
-                            Text(playbackFailed ? "视频加载失败，点按重试" : "视频")
+                            Text(playbackFailed ? L("videoLoadFailedRetry", language) : L("video", language))
                                 .font(.caption.weight(.bold))
                         }
                         .foregroundStyle(.white.opacity(0.82))
@@ -177,13 +179,19 @@ struct MediaVideoView: View {
                             .shadow(color: .black.opacity(0.22), radius: 12, y: 5)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(playbackFailed ? "重试视频" : "播放视频")
+                    .accessibilityLabel(playbackFailed ? L("retryVideo", language) : L("playVideo", language))
                 }
             }
         }
         .clipped()
         .task(id: sourceURL?.absoluteString ?? "nil") {
-            isPlaying = autoPlay
+            guard autoPlay else {
+                player?.pause()
+                player = nil
+                isPlaying = false
+                playbackFailed = false
+                return
+            }
             configurePlayer(shouldPlay: autoPlay)
         }
         .onReceive(NotificationCenter.default.publisher(for: .AVPlayerItemFailedToPlayToEndTime)) { note in
