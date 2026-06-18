@@ -66,6 +66,7 @@ extension UserEntity {
     }
 
     var fallbackAvatarInitial: String {
+        if isGuest { return "M" }
         let preferred = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let fallback = username.trimmingCharacters(in: .whitespacesAndNewlines)
         let source = preferred.isEmpty ? fallback : preferred

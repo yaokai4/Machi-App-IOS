@@ -11,7 +11,8 @@ struct MediaGridView: View {
     var body: some View {
         if !mediaItems.isEmpty {
             let count = mediaItems.count
-            // 朋友圈式预览:所有卡片都用固定正方形裁切,点开后再看完整比例。
+            // 图片仍保持朋友圈式正方形预览；单个视频用更轻的横向
+            // 16:10 卡片，减少 Feed 里的视觉压迫感。
             let columnCount = count == 1 ? 1 : (count == 2 || count == 4 ? 2 : 3)
             let tileSpacing: CGFloat = 4
             let columns = Array(repeating: GridItem(.flexible(), spacing: tileSpacing), count: columnCount)
@@ -48,7 +49,7 @@ struct MediaGridView: View {
                             }
                         }
                         .frame(maxWidth: .infinity)
-                        .modifier(MediaTileShape())
+                        .modifier(MediaTileShape(aspectRatio: tileAspectRatio(for: item, count: count)))
                         .contentShape(Rectangle())
                         .overlay(alignment: .bottomTrailing) {
                             if item.type == .video, item.duration > 0 {
@@ -85,13 +86,20 @@ struct MediaGridView: View {
         return String(format: "%02d:%02d", total / 60, total % 60)
     }
 
+    private func tileAspectRatio(for item: MediaEntity, count: Int) -> CGFloat {
+        count == 1 && item.type == .video ? 16.0 / 10.0 : 1.0
+    }
+
 }
 
-/// Feed 预览始终用 1:1 方格。原图比例只在全屏预览里展示。
+/// Feed images keep the 1:1 grid rhythm; single videos are allowed to use
+/// a wider preview so they read as video without dominating the card.
 private struct MediaTileShape: ViewModifier {
+    let aspectRatio: CGFloat
+
     func body(content: Content) -> some View {
         Color.clear
-            .aspectRatio(1, contentMode: .fit)
+            .aspectRatio(aspectRatio, contentMode: .fit)
             .overlay { content }
             .clipped()
     }

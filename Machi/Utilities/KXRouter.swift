@@ -49,7 +49,8 @@ final class AppRouter: ObservableObject {
 
     func open(_ route: KXRoute, in tab: AppTab) {
         guard let normalizedRoute = route.normalized else {
-            routeErrorMessage = "内容暂时无法打开，请稍后重试。"
+            let language = AppLanguage.resolved(from: UserDefaults.standard.string(forKey: "appLanguageCode") ?? AppLanguage.system.rawValue)
+            routeErrorMessage = L("routeUnavailable", language)
             return
         }
         append(normalizedRoute, to: tab)

@@ -3362,7 +3362,7 @@ struct CityListingDetailView: View {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer()
-                        KXListingBadge(title: KXListingCopy.statusLabel(listing.status, type: listing.type), tint: KXListingCopy.statusColor(listing.status))
+                        KXListingBadge(title: KXListingCopy.statusLabel(listing.status, type: listing.type, language), tint: KXListingCopy.statusColor(listing.status))
                     }
                     FlowLayout(spacing: 8) {
                         ForEach(KXListingCopy.badges(for: listing), id: \.self) { badge in
@@ -3414,7 +3414,7 @@ struct CityListingDetailView: View {
 
                 KXListingSection(title: "安全提醒", icon: "shield.checkered") {
                     VStack(alignment: .leading, spacing: 8) {
-                        ForEach(KXListingCopy.safetyTips(for: listing.type), id: \.self) { tip in
+                        ForEach(KXListingCopy.safetyTips(for: listing.type, language), id: \.self) { tip in
                             Label(tip, systemImage: "checkmark.circle")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
@@ -4788,6 +4788,18 @@ struct CreateCityListingView: View {
         }
     }
 
+    private func messageIsPositive(_ text: String) -> Bool {
+        let lowercased = text.lowercased()
+        return text.contains("成功")
+            || text.contains("提交")
+            || text.contains("保存")
+            || text.contains("送信")
+            || text.contains("保存")
+            || lowercased.contains("success")
+            || lowercased.contains("submitted")
+            || lowercased.contains("saved")
+    }
+
     private var requiredProgress: (done: Int, total: Int) {
         let filled: (String) -> Bool = { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         var values = [filled(title), filled(location)]
@@ -4829,16 +4841,16 @@ struct CreateCityListingView: View {
 
     private var missingRequiredCopy: String {
         let filled: (String) -> Bool = { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        if !filled(title) { return "请先补充标题" }
-        if !filled(location) { return "请补充地区、车站或交易地点" }
-        if region == nil { return "请先选择可发布的城市" }
-        if listingType == "rental" && !typeRequiredFieldsReady { return "请补充户型、面积、最近车站和入住时间" }
-        if (listingType == "work" || listingType == "job" || listingType == "hiring") && !typeRequiredFieldsReady { return "请补充公司/店铺名和工作时间" }
-        if listingType == "local_service" && serviceVertical == nil { return "请先选择商家与服务细分类" }
-        if listingType == "local_service" && !typeRequiredFieldsReady { return "请补齐当前服务分类的必填字段" }
-        if listingType == "discount" && !typeRequiredFieldsReady { return "请补充商家、优惠内容和有效期" }
-        if listingType == "secondhand" && !typeRequiredFieldsReady { return "请补充分类、价格和新旧程度，免费送可填 0" }
-        return "信息完整后即可提交"
+        if !filled(title) { return KXListingCopy.pickText(language, "请先补充标题", "タイトルを入力してください", "Add a title first") }
+        if !filled(location) { return KXListingCopy.pickText(language, "请补充地区、车站或交易地点", "エリア、駅、または受け渡し場所を入力してください", "Add an area, station, or meetup location") }
+        if region == nil { return KXListingCopy.pickText(language, "请先选择可发布的城市", "投稿先の都市を選んでください", "Choose a city before posting") }
+        if listingType == "rental" && !typeRequiredFieldsReady { return KXListingCopy.pickText(language, "请补充户型、面积、最近车站和入住时间", "間取り、面積、最寄り駅、入居時期を入力してください", "Add layout, size, nearest station, and move-in date") }
+        if (listingType == "work" || listingType == "job" || listingType == "hiring") && !typeRequiredFieldsReady { return KXListingCopy.pickText(language, "请补充公司/店铺名和工作时间", "会社・店舗名と勤務時間を入力してください", "Add company/store name and working hours") }
+        if listingType == "local_service" && serviceVertical == nil { return KXListingCopy.pickText(language, "请先选择商家与服务细分类", "店舗・サービスの細分類を選んでください", "Choose a business/service subcategory") }
+        if listingType == "local_service" && !typeRequiredFieldsReady { return KXListingCopy.pickText(language, "请补齐当前服务分类的必填字段", "現在のサービス分類の必須項目を入力してください", "Complete the required fields for this service type") }
+        if listingType == "discount" && !typeRequiredFieldsReady { return KXListingCopy.pickText(language, "请补充商家、优惠内容和有效期", "店舗、特典内容、有効期限を入力してください", "Add merchant, deal details, and validity") }
+        if listingType == "secondhand" && !typeRequiredFieldsReady { return KXListingCopy.pickText(language, "请补充分类、价格和新旧程度，免费送可填 0", "カテゴリ、価格、状態を入力してください。無料譲渡は 0 で登録できます", "Add category, price, and condition. Use 0 for free items") }
+        return KXListingCopy.pickText(language, "信息完整后即可提交", "情報がそろうと送信できます", "You can submit once the details are complete")
     }
 
     var body: some View {
@@ -4855,10 +4867,10 @@ struct CreateCityListingView: View {
                     if let message {
                         Text(message)
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(message.contains("成功") || message.contains("提交") ? KXColor.accent : KXColor.heat)
+                            .foregroundStyle(messageIsPositive(message) ? KXColor.accent : KXColor.heat)
                             .padding(KXSpacing.md)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background((message.contains("成功") || message.contains("提交") ? KXColor.accent : KXColor.heat).opacity(0.09), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .background((messageIsPositive(message) ? KXColor.accent : KXColor.heat).opacity(0.09), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
                 }
                 .padding(.horizontal, KaiXTheme.horizontalPadding)
@@ -4893,9 +4905,9 @@ struct CreateCityListingView: View {
             }
             .buttonStyle(.plain)
             VStack(alignment: .leading, spacing: 2) {
-                Text(isEditing ? "编辑发布" : KXListingCopy.createTitle(for: listingType))
+                Text(isEditing ? KXListingCopy.pickText(language, "编辑发布", "投稿を編集", "Edit listing") : KXListingCopy.createTitle(for: listingType, language))
                     .font(.headline.weight(.semibold))
-                Text(region.map { "\($0.countryEmoji) \($0.cityName)" } ?? "选择城市后发布")
+                Text(region.map { KaiXRegionDirectory.localizedHeaderLabel($0, language: language) } ?? KXListingCopy.pickText(language, "选择城市后发布", "都市を選んで投稿", "Choose a city to post"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
@@ -4919,7 +4931,7 @@ struct CreateCityListingView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(isEditing ? "完善并保存修改" : KXListingCopy.createTitle(for: listingType))
+                    Text(isEditing ? KXListingCopy.pickText(language, "完善并保存修改", "内容を整えて保存", "Review and save changes") : KXListingCopy.createTitle(for: listingType, language))
                         .font(.title3.weight(.black))
                     Spacer()
                     Text("\(progress.done)/\(progress.total)")
@@ -4929,7 +4941,7 @@ struct CreateCityListingView: View {
                         .frame(height: 24)
                         .background(typeAccent.opacity(0.10), in: Capsule())
                 }
-                Text(KXListingCopy.createGuidance(for: listingType))
+                Text(KXListingCopy.createGuidance(for: listingType, language))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -4942,7 +4954,7 @@ struct CreateCityListingView: View {
     }
 
     private var photoSection: some View {
-        KXListingSection(title: "图片与视频", icon: "photo.on.rectangle") {
+        KXListingSection(title: KXListingCopy.pickText(language, "图片与视频", "写真・動画", "Photos & video"), icon: "photo.on.rectangle") {
             VStack(alignment: .leading, spacing: 12) {
                 PhotosPicker(selection: $pickerItems, maxSelectionCount: imageLimit, matching: .any(of: [.images, .videos])) {
                     HStack(spacing: KXSpacing.md) {
@@ -4952,10 +4964,10 @@ struct CreateCityListingView: View {
                             .frame(width: 42, height: 42)
                             .background(typeAccent.opacity(0.12), in: Circle())
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(mediaDrafts.isEmpty ? "添加图片或视频" : "继续添加媒体")
+                            Text(mediaDrafts.isEmpty ? KXListingCopy.pickText(language, "添加图片或视频", "写真または動画を追加", "Add photos or video") : KXListingCopy.pickText(language, "继续添加媒体", "メディアを追加", "Add more media"))
                                 .font(.subheadline.weight(.bold))
                                 .foregroundStyle(.primary)
-                            Text("最多 \(imageLimit) 个媒体，其中最多 1 个视频，第一项作为封面。避免包含身份证、护照等敏感信息。")
+                            Text(KXListingCopy.pickText(language, "最多 \(imageLimit) 个媒体，其中最多 1 个视频，第一项作为封面。避免包含身份证、护照等敏感信息。", "最大 \(imageLimit) 件まで、動画は 1 件まで。最初のメディアがカバーになります。身分証やパスポートなどの個人情報は入れないでください。", "Up to \(imageLimit) media files, including at most 1 video. The first item becomes the cover. Avoid IDs, passports, or sensitive information."))
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -4989,7 +5001,7 @@ struct CreateCityListingView: View {
                                 .frame(width: 112, height: 112)
                                 .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
                                 .overlay(alignment: .topLeading) {
-                                    Text(index == 0 ? "封面" : "\(index + 1)")
+                                    Text(index == 0 ? KXListingCopy.pickText(language, "封面", "カバー", "Cover") : "\(index + 1)")
                                         .font(.caption2.weight(.black))
                                         .foregroundStyle(.white)
                                         .padding(.horizontal, 7)
@@ -5033,7 +5045,7 @@ struct CreateCityListingView: View {
                                 .frame(width: 112, height: 112)
                                 .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
                                 .overlay(alignment: .topLeading) {
-                                    Text(existingMedia.isEmpty && index == 0 ? "封面" : "\(existingMedia.count + index + 1)")
+                                    Text(existingMedia.isEmpty && index == 0 ? KXListingCopy.pickText(language, "封面", "カバー", "Cover") : "\(existingMedia.count + index + 1)")
                                         .font(.caption2.weight(.black))
                                         .foregroundStyle(.white)
                                         .padding(.horizontal, 7)
@@ -5079,14 +5091,14 @@ struct CreateCityListingView: View {
     }
 
     private var basicInfoSection: some View {
-        KXListingSection(title: "基本信息", icon: "square.and.pencil") {
+        KXListingSection(title: KXListingCopy.pickText(language, "基本信息", "基本情報", "Basic info"), icon: "square.and.pencil") {
             VStack(spacing: 12) {
-                KXListingFormField(title: "标题", placeholder: KXListingCopy.titlePlaceholder(for: listingType), icon: "text.cursor", text: $title)
-                KXListingFormField(title: "分类", placeholder: KXListingCopy.categoryPlaceholder(for: listingType), icon: "square.grid.2x2", text: categoryBinding)
+                KXListingFormField(title: KXListingCopy.pickText(language, "标题", "タイトル", "Title"), placeholder: KXListingCopy.titlePlaceholder(for: listingType, language), icon: "text.cursor", text: $title)
+                KXListingFormField(title: KXListingCopy.pickText(language, "分类", "カテゴリ", "Category"), placeholder: KXListingCopy.categoryPlaceholder(for: listingType, language), icon: "square.grid.2x2", text: categoryBinding)
                 listingCategorySelector
-                KXListingFormField(title: listingType == "rental" ? "租金" : "价格", placeholder: KXListingCopy.pricePlaceholder(for: listingType), icon: "yensign.circle", text: $price, keyboard: .decimalPad)
-                KXListingFormField(title: "地区 / 车站 / 交易地点", placeholder: "例如 新宿站附近、池袋、线上咨询", icon: "location", text: $location)
-                KXListingFormField(title: "描述", placeholder: KXListingCopy.descriptionPlaceholder(for: listingType), icon: "text.alignleft", text: $description, lineLimit: 4...8)
+                KXListingFormField(title: listingType == "rental" ? KXListingCopy.pickText(language, "租金", "家賃", "Rent") : KXListingCopy.pickText(language, "价格", "価格", "Price"), placeholder: KXListingCopy.pricePlaceholder(for: listingType, language), icon: "yensign.circle", text: $price, keyboard: .decimalPad)
+                KXListingFormField(title: KXListingCopy.pickText(language, "地区 / 车站 / 交易地点", "エリア / 駅 / 受け渡し場所", "Area / station / meetup"), placeholder: KXListingCopy.pickText(language, "例如 新宿站附近、池袋、线上咨询", "例：新宿駅近く、池袋、オンライン相談", "e.g. near Shinjuku Station, Ikebukuro, online"), icon: "location", text: $location)
+                KXListingFormField(title: KXListingCopy.pickText(language, "描述", "説明", "Description"), placeholder: KXListingCopy.descriptionPlaceholder(for: listingType, language), icon: "text.alignleft", text: $description, lineLimit: 4...8)
             }
         }
     }
@@ -5120,7 +5132,7 @@ struct CreateCityListingView: View {
     private var serviceCreateCategorySelector: some View {
         let activeSection = activeServiceCreateSection
         return VStack(alignment: .leading, spacing: 10) {
-            Label("一级分类", systemImage: "square.grid.3x3")
+            Label(KXListingCopy.pickText(language, "一级分类", "大カテゴリ", "Primary category"), systemImage: "square.grid.3x3")
                 .font(.caption.weight(.black))
                 .foregroundStyle(.secondary)
             ScrollView(.horizontal, showsIndicators: false) {
@@ -5164,7 +5176,7 @@ struct CreateCityListingView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(typeAccent.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
 
-            Label("二级分类", systemImage: "line.3.horizontal.decrease.circle")
+            Label(KXListingCopy.pickText(language, "二级分类", "サブカテゴリ", "Subcategory"), systemImage: "line.3.horizontal.decrease.circle")
                 .font(.caption.weight(.black))
                 .foregroundStyle(.secondary)
             FlowLayout(spacing: 8) {
@@ -5189,13 +5201,13 @@ struct CreateCityListingView: View {
     }
 
     private var safetySection: some View {
-        KXListingSection(title: "安全确认", icon: "shield.checkered") {
+        KXListingSection(title: KXListingCopy.pickText(language, "安全确认", "安全確認", "Safety check"), icon: "shield.checkered") {
             VStack(alignment: .leading, spacing: 10) {
-                ForEach(KXListingCopy.safetyTips(for: listingType), id: \.self) { tip in
+                ForEach(KXListingCopy.safetyTips(for: listingType, language), id: \.self) { tip in
                     KXListingHintRow(text: tip, icon: "checkmark.circle.fill", tint: KXColor.accent)
                 }
                 KXListingHintRow(
-                    text: "Machi 只做信息发布、联系、收藏、举报和审核，不代收交易款、押金或保证金。",
+                    text: KXListingCopy.pickText(language, "Machi 只做信息发布、联系、收藏、举报和审核，不代收交易款、押金或保证金。", "Machi は情報掲載、連絡、保存、通報、審査のみを行い、取引代金・敷金・保証金は預かりません。", "Machi only supports listing, contact, saving, reporting, and review. It does not hold payments, deposits, or guarantees."),
                     icon: "exclamationmark.triangle.fill",
                     tint: KXColor.heat
                 )
@@ -5212,10 +5224,10 @@ struct CreateCityListingView: View {
                     .foregroundStyle(hasBlockingMediaUpload ? KXColor.heat : typeAccent)
                     .frame(width: 22, height: 22)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("还差一步")
+                    Text(KXListingCopy.pickText(language, "还差一步", "あと一歩", "One more step"))
                         .font(.subheadline.weight(.black))
                         .foregroundStyle(.primary)
-                    Text(hasBlockingMediaUpload ? "有媒体上传失败，请删除后重新选择。" : missingRequiredCopy)
+                    Text(hasBlockingMediaUpload ? KXListingCopy.pickText(language, "有媒体上传失败，请删除后重新选择。", "アップロードに失敗したメディアがあります。削除して選び直してください。", "Some media failed to upload. Remove it and choose again.") : missingRequiredCopy)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -5234,7 +5246,7 @@ struct CreateCityListingView: View {
     private var submitBar: some View {
         VStack(spacing: 8) {
             if !canSubmit {
-                Text(hasBlockingMediaUpload ? "有媒体上传失败，请删除后重新选择。" : missingRequiredCopy)
+                Text(hasBlockingMediaUpload ? KXListingCopy.pickText(language, "有媒体上传失败，请删除后重新选择。", "アップロードに失敗したメディアがあります。削除して選び直してください。", "Some media failed to upload. Remove it and choose again.") : missingRequiredCopy)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -5242,7 +5254,7 @@ struct CreateCityListingView: View {
             Button { Task { await submit() } } label: {
                 HStack(spacing: 8) {
                     if isSubmitting { KXSpinner(size: 18, lineWidth: 2.2, tint: .white) }
-                    Text(isSubmitting ? "提交中" : isEditing ? "保存修改" : KXListingCopy.submitLabel(for: listingType))
+                    Text(isSubmitting ? KXListingCopy.pickText(language, "提交中", "送信中", "Submitting") : isEditing ? KXListingCopy.pickText(language, "保存修改", "変更を保存", "Save changes") : KXListingCopy.submitLabel(for: listingType, language))
                         .font(.headline.weight(.bold))
                 }
                 .frame(maxWidth: .infinity)
@@ -5302,7 +5314,7 @@ struct CreateCityListingView: View {
             }
         } else if listingType == "local_service" {
             if let vertical = serviceVertical {
-                KXListingSection(title: KXListingCopy.serviceVerticalLabel(vertical), icon: "calendar.badge.clock") {
+                KXListingSection(title: KXListingCopy.serviceVerticalLabel(vertical, language), icon: "calendar.badge.clock") {
                     VStack(spacing: 12) {
                         KXListingFormField(title: "服务方名称", placeholder: "个人 / 店铺 / 公司名称", icon: "person.crop.square", text: $serviceBusinessName)
                         KXListingChoiceRow(
@@ -6064,6 +6076,7 @@ private struct KXListingHintRow: View {
 }
 
 private struct KXSecondhandListingCard: View {
+    @Environment(\.appLanguage) private var language
     let listing: KaiXCityListingDTO
     var width: CGFloat? = nil
     let onOpen: () -> Void
@@ -6113,7 +6126,7 @@ private struct KXSecondhandListingCard: View {
                 HStack(spacing: 4) {
                     Image(systemName: "mappin.and.ellipse")
                         .font(.caption2.weight(.bold))
-                    Text(KXListingCopy.compactMeta(listing))
+                    Text(KXListingCopy.compactMeta(listing, language))
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
                 }
@@ -6155,7 +6168,7 @@ private struct KXSecondhandListingCard: View {
         .frame(width: innerWidth, height: innerWidth)
         .overlay(alignment: .topLeading) {
             KXListingBadge(
-                title: KXListingCopy.formatListingStatus(listing.status, type: listing.type),
+                title: KXListingCopy.formatListingStatus(listing.status, type: listing.type, language),
                 tint: KXListingCopy.statusColor(listing.status)
             )
             .frame(maxWidth: statusBadgeMaxWidth, alignment: .leading)
@@ -6394,6 +6407,7 @@ private struct KXJobListingRow: View {
 }
 
 private struct KXStructuredListingRow: View {
+    @Environment(\.appLanguage) private var language
     let listing: KaiXCityListingDTO
     let onOpen: () -> Void
 
@@ -6432,13 +6446,13 @@ private struct KXStructuredListingRow: View {
                             .foregroundStyle(KXColor.heat)
                             .lineLimit(2)
                         Spacer()
-                        KXListingBadge(title: KXListingCopy.statusLabel(listing.status, type: listing.type), tint: KXListingCopy.statusColor(listing.status))
+                        KXListingBadge(title: KXListingCopy.statusLabel(listing.status, type: listing.type, language), tint: KXListingCopy.statusColor(listing.status))
                     }
                     Text(KXListingCopy.displayTitle(listing))
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.primary)
                         .lineLimit(2)
-                    Text(KXListingCopy.structuredMeta(listing))
+                    Text(KXListingCopy.structuredMeta(listing, language))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
@@ -6464,7 +6478,7 @@ private struct KXListingAttributeSection: View {
     var body: some View {
         KXListingSection(title: KXListingCopy.pickText(language, "核心字段", "基本情報", "Key details"), icon: KXListingCopy.icon(for: listing.type)) {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 10) {
-                ForEach(KXListingCopy.attributes(for: listing), id: \.0) { item in
+                ForEach(KXListingCopy.attributes(for: listing, language), id: \.0) { item in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(KXListingCopy.attributeLabel(item.0, language))
                             .font(.caption.weight(.bold))
@@ -6817,20 +6831,24 @@ enum KXListingCopy {
         return nil
     }
 
-    static func serviceVerticalLabel(_ vertical: ServiceVertical) -> String {
+    static func serviceVerticalLabel(_ vertical: ServiceVertical, _ language: AppLanguage = .zh) -> String {
+        let zh: String
+        let ja: String
+        let en: String
         switch vertical {
-        case .foodRestaurant: "餐厅美食字段"
-        case .diningBooking: "餐饮预约优惠字段"
-        case .lodging: "住宿字段"
-        case .attractionTicket: "景点门票字段"
-        case .dayTour: "一日游字段"
-        case .airportTransfer: "接送与交通字段"
-        case .paperworkTranslation: "翻译 / 手续字段"
-        case .movingCleaning: "搬家 / 清洁字段"
-        case .lifeSetup: "生活开通 / 住后支持字段"
-        case .beautyHealth: "美容健康预约字段"
-        case .petFamily: "宠物与家庭支持字段"
+        case .foodRestaurant: (zh, ja, en) = ("餐厅美食字段", "飲食店フィールド", "Dining fields")
+        case .diningBooking: (zh, ja, en) = ("餐饮预约优惠字段", "飲食予約特典フィールド", "Dining booking fields")
+        case .lodging: (zh, ja, en) = ("住宿字段", "宿泊フィールド", "Stay fields")
+        case .attractionTicket: (zh, ja, en) = ("景点门票字段", "観光チケットフィールド", "Attraction ticket fields")
+        case .dayTour: (zh, ja, en) = ("一日游字段", "日帰りツアーフィールド", "Day tour fields")
+        case .airportTransfer: (zh, ja, en) = ("接送与交通字段", "送迎・交通フィールド", "Transfer fields")
+        case .paperworkTranslation: (zh, ja, en) = ("翻译 / 手续字段", "翻訳・手続きフィールド", "Paperwork fields")
+        case .movingCleaning: (zh, ja, en) = ("搬家 / 清洁字段", "引越し・清掃フィールド", "Moving & cleaning fields")
+        case .lifeSetup: (zh, ja, en) = ("生活开通 / 住后支持字段", "生活手続きフィールド", "Life setup fields")
+        case .beautyHealth: (zh, ja, en) = ("美容健康预约字段", "美容・健康予約フィールド", "Beauty & health fields")
+        case .petFamily: (zh, ja, en) = ("宠物与家庭支持字段", "ペット・家庭サポートフィールド", "Pet & family fields")
         }
+        return pickText(language, zh, ja, en)
     }
 
     static func serviceTypeOptions(for vertical: ServiceVertical) -> [String] {
@@ -7240,81 +7258,107 @@ enum KXListingCopy {
         return pickText(language, zh, ja, en)
     }
 
-    static func createTitle(for type: String) -> String {
+    static func createTitle(for type: String, _ language: AppLanguage = .zh) -> String {
+        let zh: String
+        let ja: String
+        let en: String
         switch type {
-        case "rental": "发布房源"
-        case "job": "发布求职信息"
-        case "work", "hiring": "发布招聘"
-        case "local_service": "发布商家与服务"
-        case "discount": "发布优惠"
-        default: "发布二手"
+        case "rental": (zh, ja, en) = ("发布房源", "物件を投稿", "Post rental")
+        case "job": (zh, ja, en) = ("发布求职信息", "求職情報を投稿", "Post job-seeking profile")
+        case "work", "hiring": (zh, ja, en) = ("发布招聘", "求人を投稿", "Post job")
+        case "local_service": (zh, ja, en) = ("发布商家与服务", "店舗・サービスを投稿", "Post business/service")
+        case "discount": (zh, ja, en) = ("发布优惠", "特典を投稿", "Post deal")
+        default: (zh, ja, en) = ("发布二手", "出品する", "List item")
         }
+        return pickText(language, zh, ja, en)
     }
 
-    static func createGuidance(for type: String) -> String {
+    static func createGuidance(for type: String, _ language: AppLanguage = .zh) -> String {
+        let zh: String
+        let ja: String
+        let en: String
         switch type {
         case "rental":
-            return "把租金、车站、户型、面积和入住时间写清楚，房源会更容易被认真咨询。"
+            (zh, ja, en) = ("把租金、车站、户型、面积和入住时间写清楚，房源会更容易被认真咨询。", "家賃、駅、間取り、面積、入居時期を明確にすると、質の高い問い合わせが増えます。", "Clear rent, station, layout, size, and move-in timing bring better inquiries.")
         case "work", "job", "hiring":
-            return "岗位、工作时间、日语要求和签证说明越清楚，越能减少无效沟通。"
+            (zh, ja, en) = ("岗位、工作时间、日语要求和签证说明越清楚，越能减少无效沟通。", "職種、勤務時間、日本語レベル、ビザ条件を明確にすると無駄なやり取りを減らせます。", "Clear role, hours, Japanese level, and visa notes reduce unqualified messages.")
         case "local_service":
-            return "先选择一级服务，再选细分类。系统只展示该服务真正需要的字段，资质、价格、服务边界和取消规则会直接影响审核与用户信任。"
+            (zh, ja, en) = ("先选择一级服务，再选细分类。系统只展示该服务真正需要的字段，资质、价格、服务边界和取消规则会直接影响审核与用户信任。", "大カテゴリから細分類を選ぶと、そのサービスに必要な項目だけ表示されます。資格、料金、範囲、取消規定は審査と信頼に直結します。", "Choose a primary service, then a subcategory. Only relevant fields appear; credentials, pricing, boundaries, and cancellation rules affect review and trust.")
         case "discount":
-            return "优惠内容、有效期和使用规则需要明确，避免用户到店后产生误解。"
+            (zh, ja, en) = ("优惠内容、有效期和使用规则需要明确，避免用户到店后产生误解。", "特典内容、有効期限、利用条件を明確にして、来店時の誤解を防ぎましょう。", "Make deal details, validity, and usage rules clear to avoid confusion in-store.")
         default:
-            return "清楚的照片、价格、地点和新旧程度，会让同城交易更快也更安全。"
+            (zh, ja, en) = ("清楚的照片、价格、地点和新旧程度，会让同城交易更快也更安全。", "写真、価格、場所、状態が明確だと、地域取引はより速く安全になります。", "Clear photos, price, location, and condition make local trades faster and safer.")
         }
+        return pickText(language, zh, ja, en)
     }
 
     static func createType(for type: String) -> String {
         type == "work" ? "hiring" : type
     }
 
-    static func submitLabel(for type: String) -> String {
-        type == "secondhand" ? "发布" : "提交审核"
+    static func submitLabel(for type: String, _ language: AppLanguage = .zh) -> String {
+        type == "secondhand"
+            ? pickText(language, "发布", "投稿", "Post")
+            : pickText(language, "提交审核", "審査に送信", "Submit for review")
     }
 
-    static func categoryPlaceholder(for type: String) -> String {
+    static func categoryPlaceholder(for type: String, _ language: AppLanguage = .zh) -> String {
+        let zh: String
+        let ja: String
+        let en: String
         switch type {
-        case "rental": "类型，例如 单人 / 合租 / 短租"
-        case "work", "job", "hiring": "行业或岗位分类"
-        case "local_service": "服务分类，例如 日本料理 / 民宿 / 景点门票 / 机场接送"
-        case "discount": "优惠分类"
-        default: "分类，例如 家具 / 家电 / 教材"
+        case "rental": (zh, ja, en) = ("类型，例如 单人 / 合租 / 短租", "種類：一人暮らし / ルームシェア / 短期", "Type, e.g. single / share / short-term")
+        case "work", "job", "hiring": (zh, ja, en) = ("行业或岗位分类", "業種または職種カテゴリ", "Industry or role category")
+        case "local_service": (zh, ja, en) = ("服务分类，例如 日本料理 / 民宿 / 景点门票 / 机场接送", "サービス分類：日本料理 / 民泊 / 観光チケット / 空港送迎", "Service category, e.g. Japanese dining / stay / tickets / airport transfer")
+        case "discount": (zh, ja, en) = ("优惠分类", "特典カテゴリ", "Deal category")
+        default: (zh, ja, en) = ("分类，例如 家具 / 家电 / 教材", "カテゴリ：家具 / 家電 / 教材", "Category, e.g. furniture / appliances / textbooks")
         }
+        return pickText(language, zh, ja, en)
     }
 
-    static func titlePlaceholder(for type: String) -> String {
+    static func titlePlaceholder(for type: String, _ language: AppLanguage = .zh) -> String {
+        let zh: String
+        let ja: String
+        let en: String
         switch type {
-        case "rental": "例如 池袋 1K 公寓，可预约看房"
-        case "work", "job", "hiring": "例如 新宿咖啡店周末兼职"
-        case "local_service": "例如 东京周末一日游 / 机场接送 / 材料翻译协助"
-        case "discount": "例如 留学生套餐 9 折"
-        default: "例如 日文配列键盘 / 搬家出清书桌"
+        case "rental": (zh, ja, en) = ("例如 池袋 1K 公寓，可预约看房", "例：池袋 1K、内見予約可", "e.g. Ikebukuro 1K, viewing available")
+        case "work", "job", "hiring": (zh, ja, en) = ("例如 新宿咖啡店周末兼职", "例：新宿カフェの週末アルバイト", "e.g. Weekend cafe shift in Shinjuku")
+        case "local_service": (zh, ja, en) = ("例如 东京周末一日游 / 机场接送 / 材料翻译协助", "例：東京週末ツアー / 空港送迎 / 書類翻訳サポート", "e.g. Tokyo day tour / airport transfer / document translation")
+        case "discount": (zh, ja, en) = ("例如 留学生套餐 9 折", "例：留学生セット 10% オフ", "e.g. 10% off student set")
+        default: (zh, ja, en) = ("例如 日文配列键盘 / 搬家出清书桌", "例：日本語配列キーボード / 引越し処分デスク", "e.g. Japanese keyboard / moving-sale desk")
         }
+        return pickText(language, zh, ja, en)
     }
 
-    static func pricePlaceholder(for type: String) -> String {
+    static func pricePlaceholder(for type: String, _ language: AppLanguage = .zh) -> String {
+        let zh: String
+        let ja: String
+        let en: String
         switch type {
-        case "rental": "月租，例如 58000"
-        case "work", "job", "hiring": "薪资，例如 1200"
-        default: "价格，例如 8000"
+        case "rental": (zh, ja, en) = ("月租，例如 58000", "月額家賃：例 58000", "Monthly rent, e.g. 58000")
+        case "work", "job", "hiring": (zh, ja, en) = ("薪资，例如 1200", "給与：例 1200", "Pay, e.g. 1200")
+        default: (zh, ja, en) = ("价格，例如 8000", "価格：例 8000", "Price, e.g. 8000")
         }
+        return pickText(language, zh, ja, en)
     }
 
-    static func descriptionPlaceholder(for type: String) -> String {
+    static func descriptionPlaceholder(for type: String, _ language: AppLanguage = .zh) -> String {
+        let zh: String
+        let ja: String
+        let en: String
         switch type {
         case "rental":
-            return "写清房间状态、费用包含项、初期费用、可入住时间、看房方式。"
+            (zh, ja, en) = ("写清房间状态、费用包含项、初期费用、可入住时间、看房方式。", "部屋の状態、費用に含まれるもの、初期費用、入居可能時期、内見方法を書いてください。", "Describe room condition, included costs, initial fees, move-in timing, and viewing method.")
         case "work", "job", "hiring":
-            return "写清工作内容、薪资、排班、试用期、交通费和需要准备的材料。"
+            (zh, ja, en) = ("写清工作内容、薪资、排班、试用期、交通费和需要准备的材料。", "仕事内容、給与、シフト、試用期間、交通費、必要書類を書いてください。", "Describe duties, pay, schedule, probation, transport fee, and required materials.")
         case "local_service":
-            return "写清适合谁、服务包含/不包含什么、预约规则、旅行/景点说明、取消退款规则，以及预约前需要准备的信息。"
+            (zh, ja, en) = ("写清适合谁、服务包含/不包含什么、预约规则、旅行/景点说明、取消退款规则，以及预约前需要准备的信息。", "対象者、含まれる内容・含まれない内容、予約規則、旅行/観光説明、取消・返金規定、事前準備を書いてください。", "Explain who it suits, what is included/excluded, booking rules, travel or attraction notes, cancellation/refund rules, and what users should prepare.")
         case "discount":
-            return "写清适用门店、适用人群、不可叠加条件和使用方式。"
+            (zh, ja, en) = ("写清适用门店、适用人群、不可叠加条件和使用方式。", "対象店舗、対象者、併用不可条件、利用方法を書いてください。", "Describe eligible stores, audience, non-stackable conditions, and how to use it.")
         default:
-            return "写清购买时间、使用情况、瑕疵、配件、交易地点和是否可议价。"
+            (zh, ja, en) = ("写清购买时间、使用情况、瑕疵、配件、交易地点和是否可议价。", "購入時期、使用状況、傷、付属品、受け渡し場所、価格相談可否を書いてください。", "Describe purchase time, usage, defects, accessories, meetup location, and negotiability.")
         }
+        return pickText(language, zh, ja, en)
     }
 
     static func defaultCategory(for type: String) -> String {
@@ -7331,28 +7375,32 @@ enum KXListingCopy {
         title(for: type)
     }
 
-    static func formatListingStatus(_ status: String, type: String? = nil) -> String {
+    static func formatListingStatus(_ status: String, type: String? = nil, _ language: AppLanguage = .zh) -> String {
+        let zh: String
+        let ja: String
+        let en: String
         switch normalized(status) {
-        case "draft": "草稿"
-        case "pending_review": "审核中"
-        case "reserved": "已预约"
-        case "sold": "已售出"
-        case "rented": "已租出"
-        case "closed": "已关闭"
-        case "expired": "已过期"
-        case "rejected": "已拒绝"
-        case "hidden": "已下架"
+        case "draft": (zh, ja, en) = ("草稿", "下書き", "Draft")
+        case "pending_review": (zh, ja, en) = ("审核中", "審査中", "In review")
+        case "reserved": (zh, ja, en) = ("已预约", "予約済み", "Reserved")
+        case "sold": (zh, ja, en) = ("已售出", "売約済み", "Sold")
+        case "rented": (zh, ja, en) = ("已租出", "成約済み", "Rented")
+        case "closed": (zh, ja, en) = ("已关闭", "終了", "Closed")
+        case "expired": (zh, ja, en) = ("已过期", "期限切れ", "Expired")
+        case "rejected": (zh, ja, en) = ("已拒绝", "却下", "Rejected")
+        case "hidden": (zh, ja, en) = ("已下架", "非公開", "Hidden")
         case "published":
             switch type {
-            case "rental": "可咨询"
-            case "job", "hiring": "招聘中"
-            case "local_service": "可预约"
-            case "discount": "有效中"
-            case "event": "开放报名"
-            default: "出售中"
+            case "rental": (zh, ja, en) = ("可咨询", "問い合わせ可", "Open")
+            case "job", "hiring": (zh, ja, en) = ("招聘中", "募集中", "Hiring")
+            case "local_service": (zh, ja, en) = ("可预约", "予約可", "Bookable")
+            case "discount": (zh, ja, en) = ("有效中", "有効", "Active")
+            case "event": (zh, ja, en) = ("开放报名", "受付中", "Open")
+            default: (zh, ja, en) = ("出售中", "販売中", "Available")
             }
-        default: "待补充"
+        default: (zh, ja, en) = ("待补充", "未設定", "Pending")
         }
+        return pickText(language, zh, ja, en)
     }
 
     static func formatVerificationStatus(_ status: String) -> String {
@@ -7558,20 +7606,21 @@ enum KXListingCopy {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    static func compactMeta(_ listing: KaiXCityListingDTO) -> String {
-        [cleanText(listing.location_text), attr(listing, "condition"), attr(listing, "available_time"), statusLabel(listing.status, type: listing.type)]
+    static func compactMeta(_ listing: KaiXCityListingDTO, _ language: AppLanguage = .zh) -> String {
+        [cleanText(listing.location_text), attr(listing, "condition"), attr(listing, "available_time"), statusLabel(listing.status, type: listing.type, language)]
             .compactMap { $0?.isEmpty == false ? $0 : nil }
             .joined(separator: " · ")
     }
 
-    static func structuredMeta(_ listing: KaiXCityListingDTO) -> String {
+    static func structuredMeta(_ listing: KaiXCityListingDTO, _ language: AppLanguage = .zh) -> String {
         switch listing.type {
         case "rental":
             return [cleanText(listing.location_text), attr(listing, "nearest_station"), attr(listing, "layout"), attr(listing, "area_sqm")]
                 .compactMap { $0?.isEmpty == false ? $0 : nil }
                 .joined(separator: " · ")
         case "job", "hiring":
-            return [attr(listing, "company_name"), cleanText(listing.location_text), attr(listing, "employment_type"), "日语 \(attr(listing, "japanese_level") ?? "未注明")"]
+            let level = attr(listing, "japanese_level") ?? pickText(language, "未注明", "未記入", "Not specified")
+            return [attr(listing, "company_name"), cleanText(listing.location_text), attr(listing, "employment_type"), "\(pickText(language, "日语", "日本語", "Japanese")) \(level)"]
                 .compactMap { $0?.isEmpty == false ? $0 : nil }
                 .joined(separator: " · ")
         case "local_service":
@@ -7579,11 +7628,11 @@ enum KXListingCopy {
                 .compactMap { $0?.isEmpty == false ? $0 : nil }
                 .joined(separator: " · ")
         case "discount":
-            return [attr(listing, "merchant_name"), cleanText(listing.location_text), attr(listing, "valid_until").map { "有效至 \($0)" }]
+            return [attr(listing, "merchant_name"), cleanText(listing.location_text), attr(listing, "valid_until").map { "\(pickText(language, "有效至", "有効期限", "Valid until")) \($0)" }]
                 .compactMap { $0?.isEmpty == false ? $0 : nil }
                 .joined(separator: " · ")
         default:
-            return compactMeta(listing)
+            return compactMeta(listing, language)
         }
     }
 
@@ -7628,7 +7677,7 @@ enum KXListingCopy {
         return result
     }
 
-    static func attributes(for listing: KaiXCityListingDTO) -> [(String, String)] {
+    static func attributes(for listing: KaiXCityListingDTO, _ language: AppLanguage = .zh) -> [(String, String)] {
         let base: [(String, String?)]
         switch listing.type {
         case "rental":
@@ -7873,7 +7922,7 @@ enum KXListingCopy {
                 ("可交易时间", attr(listing, "available_time")),
                 ("交易方式", attr(listing, "delivery_method")),
                 ("取货说明", attr(listing, "pickup_note")),
-                ("状态", statusLabel(listing.status, type: listing.type)),
+                ("状态", statusLabel(listing.status, type: listing.type, language)),
             ]
         }
         return base.compactMap { key, value in
@@ -7882,20 +7931,44 @@ enum KXListingCopy {
         }
     }
 
-    static func safetyTips(for type: String) -> [String] {
+    static func safetyTips(for type: String, _ language: AppLanguage = .zh) -> [String] {
         if type == "rental" {
-            return ["Machi 不代收押金、订金或房租", "不要提前转账，先核实房源和发布者身份", "避免暴露完整住址，线下看房注意安全", "遇到虚假地址、假照片或可疑收费立即举报"]
+            return [
+                pickText(language, "Machi 不代收押金、订金或房租", "Machi は敷金・申込金・家賃を預かりません", "Machi does not hold deposits, reservation fees, or rent"),
+                pickText(language, "不要提前转账，先核实房源和发布者身份", "事前送金は避け、物件と投稿者の本人確認をしてください", "Do not transfer money upfront; verify the listing and poster first"),
+                pickText(language, "避免暴露完整住址，线下看房注意安全", "詳細住所の公開は避け、内見時は安全に注意してください", "Avoid exposing the full address and stay safe during viewings"),
+                pickText(language, "遇到虚假地址、假照片或可疑收费立即举报", "偽住所、偽写真、不審な請求はすぐ通報してください", "Report fake addresses, fake photos, or suspicious fees immediately")
+            ]
         }
         if type == "work" || type == "job" || type == "hiring" {
-            return ["招聘不允许押金、保证金或培训费骗局", "核实招聘方身份、工作地点和签证支持说明", "警惕虚假高薪、违法兼职和灰产招聘", "遇到可疑内容立即举报"]
+            return [
+                pickText(language, "招聘不允许押金、保证金或培训费骗局", "求人で敷金・保証金・研修費を請求する詐欺は禁止です", "Jobs must not require deposits, guarantees, or training-fee scams"),
+                pickText(language, "核实招聘方身份、工作地点和签证支持说明", "採用側の身元、勤務地、ビザサポート条件を確認してください", "Verify the employer, work location, and visa-support details"),
+                pickText(language, "警惕虚假高薪、违法兼职和灰产招聘", "不自然な高収入、違法バイト、グレーな求人に注意してください", "Watch for fake high pay, illegal gigs, or gray-market jobs"),
+                pickText(language, "遇到可疑内容立即举报", "不審な内容はすぐ通報してください", "Report suspicious content immediately")
+            ]
         }
         if type == "local_service" {
-            return ["商家与服务默认进入审核，服务方认证状态会展示", "餐饮、住宿、票务、旅行、接送交通和手续协助需写清资质、包含/不包含内容和取消规则", "暂不开放外卖配送、维修安装、学习咨询；禁止成人服务、高风险线下服务和违法服务", "不要提前转账给未核验服务方，预约前确认服务范围、取消规则和所需材料"]
+            return [
+                pickText(language, "商家与服务默认进入审核，服务方认证状态会展示", "店舗・サービスは原則審査され、提供者の認証状態が表示されます", "Business and service posts are reviewed, and provider verification is shown"),
+                pickText(language, "餐饮、住宿、票务、旅行、接送交通和手续协助需写清资质、包含/不包含内容和取消规则", "飲食、宿泊、チケット、旅行、送迎、手続き支援は資格、含まれる/含まれない内容、取消規定を明記してください", "Dining, stays, tickets, travel, transfers, and paperwork help must state credentials, inclusions/exclusions, and cancellation rules"),
+                pickText(language, "暂不开放外卖配送、维修安装、学习咨询；禁止成人服务、高风险线下服务和违法服务", "デリバリー、修理設置、学習相談は現在対象外です。成人向け、高リスク対面、違法サービスは禁止です", "Delivery, repair/installation, and study consulting are not supported yet. Adult, high-risk offline, and illegal services are prohibited"),
+                pickText(language, "不要提前转账给未核验服务方，预约前确认服务范围、取消规则和所需材料", "未確認の提供者へ事前送金せず、予約前に範囲、取消規定、必要書類を確認してください", "Do not prepay unverified providers; confirm scope, cancellation rules, and required materials before booking")
+            ]
         }
         if type == "discount" {
-            return ["确认优惠有效期、适用门店和使用规则", "不要把个人敏感信息发给未核验商家", "遇到虚假折扣、诱导转账或强制消费立即举报"]
+            return [
+                pickText(language, "确认优惠有效期、适用门店和使用规则", "特典の有効期限、対象店舗、利用条件を確認してください", "Confirm the deal validity, eligible stores, and usage rules"),
+                pickText(language, "不要把个人敏感信息发给未核验商家", "未確認の店舗へ個人情報を送らないでください", "Do not send sensitive personal information to unverified merchants"),
+                pickText(language, "遇到虚假折扣、诱导转账或强制消费立即举报", "虚偽割引、送金誘導、強制消費はすぐ通報してください", "Report fake discounts, payment pressure, or forced purchases immediately")
+            ]
         }
-        return ["Machi 不代收二手交易款", "不要提前转账，交易建议选择公共场所", "核实对方身份，谨慎提供个人信息", "遇到可疑内容立即举报"]
+        return [
+            pickText(language, "Machi 不代收二手交易款", "Machi はフリマ代金を預かりません", "Machi does not hold marketplace payments"),
+            pickText(language, "不要提前转账，交易建议选择公共场所", "事前送金は避け、受け渡しは公共の場所がおすすめです", "Avoid paying upfront; meet in a public place"),
+            pickText(language, "核实对方身份，谨慎提供个人信息", "相手を確認し、個人情報の共有は慎重にしてください", "Verify the other person and be careful with personal information"),
+            pickText(language, "遇到可疑内容立即举报", "不審な内容はすぐ通報してください", "Report suspicious content immediately")
+        ]
     }
 
     static func sortForDisplay(_ lhs: KaiXCityListingDTO, _ rhs: KaiXCityListingDTO) -> Bool {
@@ -7904,8 +7977,8 @@ enum KXListingCopy {
         return left > right
     }
 
-    static func statusLabel(_ status: String, type: String? = nil) -> String {
-        formatListingStatus(status, type: type)
+    static func statusLabel(_ status: String, type: String? = nil, _ language: AppLanguage = .zh) -> String {
+        formatListingStatus(status, type: type, language)
     }
 
     static func statusColor(_ status: String) -> Color {

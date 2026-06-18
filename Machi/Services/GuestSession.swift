@@ -26,6 +26,10 @@ enum GuestSession {
         let targetId = guestID
         let descriptor = FetchDescriptor<UserEntity>(predicate: #Predicate { $0.id == targetId })
         if let existing = try? context.fetch(descriptor).first {
+            if existing.displayName.trimmingCharacters(in: .whitespacesAndNewlines) == "访客" {
+                existing.displayName = "Machi Guest"
+                try? context.save()
+            }
             return existing
         }
         let guest = UserEntity(
@@ -33,7 +37,7 @@ enum GuestSession {
             // handle that may have synced into the local store.
             id: guestID,
             username: "machi_guest_local",
-            displayName: "访客",
+            displayName: "Machi Guest",
             role: .member,
             avatarSymbol: "person.fill",
             avatarColorName: "gray"

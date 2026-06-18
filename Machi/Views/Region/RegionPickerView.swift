@@ -86,15 +86,15 @@ struct RegionPickerView: View {
                     Button(L("cancel", language)) { dismiss() }
                 }
             }
-            .alert("无法获取定位", isPresented: $showLocationDeniedAlert) {
-                Button("去设置开启") {
+            .alert(L("locationUnavailableTitle", language), isPresented: $showLocationDeniedAlert) {
+                Button(L("locationOpenSettings", language)) {
                     if let url = URL(string: UIApplication.openSettingsURLString) {
                         UIApplication.shared.open(url)
                     }
                 }
                 Button(L("cancel", language), role: .cancel) {}
             } message: {
-                Text("请在 系统设置 → Machi → 位置 里允许「使用 App 期间」访问，或在下方手动选择城市。")
+                Text(L("locationDeniedMessage", language))
             }
             .navigationDestination(for: KaiXRegionDirectory.Country.self) { country in
                 ProvinceListView(country: country) { region in
@@ -149,10 +149,10 @@ struct RegionPickerView: View {
                 }
                 .frame(width: 26)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("使用当前位置")
+                    Text(L("useCurrentLocation", language))
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.primary)
-                    Text(isLocating ? "正在定位你所在的城市…" : "自动获取你所在的城市，无需手动选择")
+                    Text(isLocating ? L("locatingCurrentCity", language) : L("autoDetectCity", language))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
