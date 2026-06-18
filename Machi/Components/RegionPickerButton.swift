@@ -68,6 +68,17 @@ struct RegionPickerButton: View {
 
     private var label: String {
         guard let region else { return L("pickRegion", language) }
+        let cityName = KaiXRegionDirectory.localizedCityName(
+            countryCode: region.countryCode,
+            provinceCode: region.provinceCode,
+            city: .init(code: region.cityCode, name: region.cityName),
+            language: language
+        )
+        let provinceName = KaiXRegionDirectory.localizedProvinceName(
+            countryCode: region.countryCode,
+            province: .init(code: region.provinceCode, name: region.provinceName),
+            language: language
+        )
         // Province + city only when it actually adds information.
         // Country with provinces (CN/JP/US) and province != city codes.
         let countryHasProvinces = KaiXRegionDirectory
@@ -81,15 +92,15 @@ struct RegionPickerButton: View {
             // combined label gets too long, the .minimumScaleFactor on
             // the Text will shrink it instead of clipping; if it's
             // still too wide, fall back to the city alone.
-            let combined = "\(region.provinceName) · \(region.cityName)"
-            return combined.count > 8 ? region.cityName : combined
+            let combined = "\(provinceName) · \(cityName)"
+            return combined.count > 8 ? cityName : combined
         }
-        return region.cityName
+        return cityName
     }
 
     private var accessibilityLabel: String {
         guard let region else { return L("pickRegion", language) }
-        return region.displayName
+        return KaiXRegionDirectory.localizedDisplayName(region, language: language)
     }
 }
 

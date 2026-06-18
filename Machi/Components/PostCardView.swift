@@ -138,7 +138,7 @@ struct PostCardView: View, Equatable {
                                         Text("·")
                                             .font(KXTypography.meta)
                                             .foregroundStyle(.tertiary)
-                                        Text("\(region.countryEmoji) \(region.cityName)")
+                                        Text(KaiXRegionDirectory.localizedHeaderLabel(region, language: language))
                                             .font(KXTypography.meta)
                                             .foregroundStyle(.secondary)
                                             .lineLimit(1)

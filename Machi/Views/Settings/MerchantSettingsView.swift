@@ -49,7 +49,7 @@ struct MerchantSettingsView: View {
             .padding(.top, 12)
             .kxTabBarSafeBottomPadding()
         }
-        .navigationTitle("商家服务后台")
+        .navigationTitle(L("merchantServiceConsoleTitle", language))
         .navigationBarTitleDisplayMode(.inline)
         .kxPageBackground()
         .scrollDismissesKeyboard(.interactively)
@@ -82,7 +82,7 @@ struct MerchantSettingsView: View {
                     )
                     .shadow(color: statusTint.opacity(0.32), radius: 7, y: 3)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(business?.business_name.isEmpty == false ? business?.business_name ?? "申请认证商家服务" : "申请认证商家服务")
+                    Text(business?.business_name.isEmpty == false ? business?.business_name ?? L("merchantServiceApplyTitle", language) : L("merchantServiceApplyTitle", language))
                         .font(.title3.weight(.bold))
                     Text(statusLabel)
                         .font(.caption.weight(.black))
@@ -90,7 +90,7 @@ struct MerchantSettingsView: View {
                 }
                 Spacer()
             }
-            Text("覆盖餐饮预约、住宿旅行、票务行程、接送交通、手续翻译、搬家清洁、生活开通和美容健康等高频本地服务。提交后进入人工审核，Web 与 iOS 同步显示认证状态。")
+            Text(L("merchantServiceConsoleSubtitle", language))
                 .font(.footnote.weight(.medium))
                 .foregroundStyle(.secondary)
                 .lineSpacing(3)
@@ -114,15 +114,29 @@ struct MerchantSettingsView: View {
 
     private var messageIsPositive: Bool {
         guard let message else { return false }
-        return message.hasPrefix("已") || message.contains("成功")
+        let knownPositiveMessages = [
+            L("merchantSubmittedMessage", language),
+            L("merchantSavedMessage", language),
+            L("merchantDocumentWithdrawn", language),
+        ]
+        if knownPositiveMessages.contains(message) { return true }
+        if message.hasPrefix("已") || message.contains("成功") { return true }
+        return message.localizedCaseInsensitiveContains("uploaded")
+            || message.localizedCaseInsensitiveContains("saved")
+            || message.localizedCaseInsensitiveContains("submitted")
+            || message.localizedCaseInsensitiveContains("withdrawn")
+            || message.contains("アップロード")
+            || message.contains("保存")
+            || message.contains("送信")
+            || message.contains("取り下げ")
     }
 
     private var dashboardCard: some View {
-        SettingsSectionCard(title: "经营看板") {
+        SettingsSectionCard(title: L("merchantDashboard", language)) {
             if isLoading {
                 HStack(spacing: 10) {
                     KXSpinner(size: 18, lineWidth: 2.4)
-                    Text("正在加载商家资料")
+                    Text(L("merchantProfileLoading", language))
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
@@ -130,10 +144,10 @@ struct MerchantSettingsView: View {
                 .padding(14)
             } else {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                    MerchantMetricTile(title: "全部发布", value: dashboard?.metrics.listings ?? business?.listing_count ?? 0, icon: "square.grid.2x2.fill", tint: .blue)
-                    MerchantMetricTile(title: "展示中", value: dashboard?.metrics.published ?? business?.published_listing_count ?? 0, icon: "checkmark.seal.fill", tint: .green)
-                    MerchantMetricTile(title: "全部线索", value: dashboard?.metrics.inquiries ?? business?.inquiry_count ?? 0, icon: "bubble.left.and.bubble.right.fill", tint: .orange)
-                    MerchantMetricTile(title: "新增线索", value: dashboard?.metrics.new_inquiries ?? 0, icon: "sparkles", tint: .purple)
+                    MerchantMetricTile(title: L("merchantMetricAllListings", language), value: dashboard?.metrics.listings ?? business?.listing_count ?? 0, icon: "square.grid.2x2.fill", tint: .blue)
+                    MerchantMetricTile(title: L("merchantMetricPublished", language), value: dashboard?.metrics.published ?? business?.published_listing_count ?? 0, icon: "checkmark.seal.fill", tint: .green)
+                    MerchantMetricTile(title: L("merchantMetricInquiries", language), value: dashboard?.metrics.inquiries ?? business?.inquiry_count ?? 0, icon: "bubble.left.and.bubble.right.fill", tint: .orange)
+                    MerchantMetricTile(title: L("merchantMetricNewInquiries", language), value: dashboard?.metrics.new_inquiries ?? 0, icon: "sparkles", tint: .purple)
                 }
                 .padding(12)
             }
@@ -167,40 +181,40 @@ struct MerchantSettingsView: View {
         }
         if let country = KaiXRegionDirectory.countries.first(where: { $0.code == countryCode.trimmed.lowercased() }) {
             return citySlug.trimmed.isEmpty
-                ? "\(country.emoji) \(KaiXRegionDirectory.localizedCountryName(country, language: language)) · 选择城市"
+                ? "\(country.emoji) \(KaiXRegionDirectory.localizedCountryName(country, language: language)) · \(L("merchantSelectCity", language))"
                 : "\(country.emoji) \(KaiXRegionDirectory.localizedCountryName(country, language: language)) · \(citySlug)"
         }
-        return citySlug.trimmed.isEmpty ? "选择经营城市" : "\(countryCode) · \(citySlug)"
+        return citySlug.trimmed.isEmpty ? L("merchantSelectCity", language) : "\(countryCode) · \(citySlug)"
     }
 
     private var applicationForm: some View {
-        SettingsSectionCard(title: "认证资料") {
+        SettingsSectionCard(title: L("merchantVerificationProfile", language)) {
             VStack(alignment: .leading, spacing: 14) {
-                MerchantFormGroupHeader(icon: "storefront.fill", title: "基本信息", tint: .teal)
-                MerchantField(icon: "building.2", title: "商家/品牌名称", required: true, text: $businessName, placeholder: "Machi Coffee / 东京生活服务")
-                MerchantPickerField(icon: "tag", title: "商家类型", required: true, selection: $businessType, values: businessTypes)
-                MerchantField(icon: "doc.text", title: "主体全称", required: true, text: $legalName, placeholder: "株式会社 / 个体事业者 / 法人主体")
-                MerchantField(icon: "person.text.rectangle", title: "负责人姓名", required: true, text: $representativeName, placeholder: "负责人或联系人", capitalization: .words)
-                MerchantField(icon: "number", title: "登记号 / 许可编号", text: $registrationNumber, placeholder: "法人番号、营业执照编号、许可编号")
+                MerchantFormGroupHeader(icon: "storefront.fill", title: L("merchantBasicInfo", language), tint: .teal)
+                MerchantField(icon: "building.2", title: L("merchantBusinessName", language), required: true, text: $businessName, placeholder: L("merchantBusinessNamePlaceholder", language))
+                MerchantPickerField(icon: "tag", title: L("merchantBusinessType", language), required: true, selection: $businessType, values: businessTypes, labelForValue: businessTypeLabel)
+                MerchantField(icon: "doc.text", title: L("merchantLegalName", language), required: true, text: $legalName, placeholder: L("merchantLegalNamePlaceholder", language))
+                MerchantField(icon: "person.text.rectangle", title: L("merchantRepresentativeName", language), required: true, text: $representativeName, placeholder: L("merchantRepresentativeNamePlaceholder", language), capitalization: .words)
+                MerchantField(icon: "number", title: L("merchantRegistrationNumber", language), text: $registrationNumber, placeholder: L("merchantRegistrationNumberPlaceholder", language))
 
-                MerchantFormGroupHeader(icon: "mappin.and.ellipse", title: "联系与位置", tint: .blue)
-                MerchantTapField(icon: "globe.asia.australia", title: "经营城市", required: true, valueLabel: regionFieldLabel) {
+                MerchantFormGroupHeader(icon: "mappin.and.ellipse", title: L("merchantContactLocation", language), tint: .blue)
+                MerchantTapField(icon: "globe.asia.australia", title: L("merchantOperatingCity", language), required: true, valueLabel: regionFieldLabel) {
                     isRegionPickerPresented = true
                 }
-                MerchantField(icon: "phone", title: "电话 / Line / WhatsApp", required: true, text: $phone, placeholder: "+81 90...", keyboard: .phonePad)
-                MerchantField(icon: "envelope", title: "联系邮箱", text: $email, placeholder: "business@example.com", keyboard: .emailAddress)
-                MerchantField(icon: "link", title: "官网 / 社媒", text: $website, placeholder: "https://...", keyboard: .URL)
-                MerchantField(icon: "location", title: "经营地址", required: true, text: $address, placeholder: "东京都新宿区...")
-                MerchantField(icon: "signpost.right", title: "邮编", text: $postalCode, placeholder: "160-0022", keyboard: .numbersAndPunctuation)
-                MerchantField(icon: "bubble.left.and.text.bubble.right", title: "公开联系方式", text: $contactMethod, placeholder: "站内信 / 电话 / Line / 官网表单")
+                MerchantField(icon: "phone", title: L("merchantPhone", language), required: true, text: $phone, placeholder: "+81 90...", keyboard: .phonePad)
+                MerchantField(icon: "envelope", title: L("merchantEmail", language), text: $email, placeholder: "business@example.com", keyboard: .emailAddress)
+                MerchantField(icon: "link", title: L("merchantWebsite", language), text: $website, placeholder: "https://...", keyboard: .URL)
+                MerchantField(icon: "location", title: L("merchantAddress", language), required: true, text: $address, placeholder: L("merchantAddressPlaceholder", language))
+                MerchantField(icon: "signpost.right", title: L("merchantPostalCode", language), text: $postalCode, placeholder: "160-0022", keyboard: .numbersAndPunctuation)
+                MerchantField(icon: "bubble.left.and.text.bubble.right", title: L("merchantPublicContact", language), text: $contactMethod, placeholder: L("merchantPublicContactPlaceholder", language))
 
-                MerchantFormGroupHeader(icon: "sparkles", title: "服务内容", tint: .orange)
+                MerchantFormGroupHeader(icon: "sparkles", title: L("merchantServiceContent", language), tint: .orange)
                 VStack(alignment: .leading, spacing: 8) {
-                    MerchantFieldTitle(title: "服务分类", required: true)
-                    FlowTags(values: serviceCategories, selected: $selectedCategories)
+                    MerchantFieldTitle(title: L("merchantServiceCategories", language), required: true)
+                    FlowTags(values: serviceCategories, selected: $selectedCategories, labelForValue: categoryLabel)
                 }
-                MerchantTextEditor(icon: "text.alignleft", title: "服务介绍", required: true, text: $serviceDescription, placeholder: "介绍服务范围、价格区间、服务语言、预约方式、退款/取消规则等。")
-                MerchantTextEditor(icon: "paperclip", title: "申请备注", text: $applicationNote, placeholder: "补充资质、门店照片、平台链接、过往案例等。")
+                MerchantTextEditor(icon: "text.alignleft", title: L("merchantServiceIntro", language), required: true, text: $serviceDescription, placeholder: L("merchantServiceIntroPlaceholder", language), countLabel: characterCountText)
+                MerchantTextEditor(icon: "paperclip", title: L("merchantApplicationNote", language), text: $applicationNote, placeholder: L("merchantApplicationNotePlaceholder", language), countLabel: characterCountText)
 
                 VStack(spacing: 10) {
                     Button {
@@ -212,7 +226,7 @@ struct MerchantSettingsView: View {
                             } else {
                                 Image(systemName: "paperplane.fill")
                             }
-                            Text(isSaving ? "提交中" : "提交认证审核")
+                            Text(isSaving ? L("merchantSubmitting", language) : L("merchantSubmitReview", language))
                         }
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.white)
@@ -230,7 +244,7 @@ struct MerchantSettingsView: View {
                     Button {
                         Task { await save(submit: false) }
                     } label: {
-                        Label(isSaving ? "保存中" : "仅保存资料", systemImage: "tray.and.arrow.down")
+                        Label(isSaving ? L("saving", language) : L("saveProfileOnly", language), systemImage: "tray.and.arrow.down")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(KXColor.accent)
                             .frame(maxWidth: .infinity)
@@ -248,9 +262,9 @@ struct MerchantSettingsView: View {
     }
 
     private var documentSection: some View {
-        SettingsSectionCard(title: "认证材料") {
+        SettingsSectionCard(title: L("merchantDocuments", language)) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("支持 PDF 或图片：营业执照、法人登记、许可证明、负责人身份证明等。材料为私密文件，仅本人和后台可查看。正式提交审核至少需要 1 份材料。")
+                Text(L("merchantDocsHelp", language))
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(.secondary)
                     .lineSpacing(3)
@@ -264,7 +278,7 @@ struct MerchantSettingsView: View {
                         } else {
                             Image(systemName: "doc.badge.plus")
                         }
-                        Text(isUploading ? "上传中" : "上传材料")
+                        Text(isUploading ? L("uploading", language) : L("uploadDocuments", language))
                     }
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(KXColor.accent)
@@ -284,7 +298,7 @@ struct MerchantSettingsView: View {
 
                 let docs = business?.documents ?? []
                 if docs.isEmpty {
-                    Text("还没有上传认证材料。")
+                    Text(L("merchantDocsEmpty", language))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                 } else {
@@ -294,14 +308,14 @@ struct MerchantSettingsView: View {
                                 Image(systemName: doc.contentType == "application/pdf" ? "doc.richtext.fill" : "photo.fill")
                                     .foregroundStyle(.green)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(doc.documentType ?? "认证材料")
+                                    Text(doc.documentType ?? L("merchantDocumentDefault", language))
                                         .font(.subheadline.weight(.bold))
                                     Text("\(formatBytes(doc.fileSize ?? 0)) · \(doc.status ?? doc.documentStatus ?? "submitted")")
                                         .font(.caption.weight(.medium))
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                Text("私密")
+                                Text(L("privateBadge", language))
                                     .font(.caption2.weight(.black))
                                     .foregroundStyle(.green)
                                     .padding(.horizontal, 8)
@@ -319,7 +333,7 @@ struct MerchantSettingsView: View {
                                     }
                                     .buttonStyle(.borderless)
                                     .disabled(deletingDocumentId != nil || isSaving || isUploading)
-                                    .accessibilityLabel("撤回认证材料")
+                                    .accessibilityLabel(L("removeMerchantDocument", language))
                                 }
                             }
                             .padding(10)
@@ -335,7 +349,7 @@ struct MerchantSettingsView: View {
     @ViewBuilder
     private var reviewNoteSection: some View {
         if let note = business?.review_note, !note.isEmpty {
-            SettingsSectionCard(title: "后台审核意见") {
+            SettingsSectionCard(title: L("merchantReviewNoteTitle", language)) {
                 Text(note)
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.secondary)
@@ -369,12 +383,12 @@ struct MerchantSettingsView: View {
     private var statusLabel: String {
         switch status {
         case "verified": return L("merchantVerified", language)
-        case "pending": return "审核中"
-        case "needs_review": return "需补充材料"
-        case "rejected": return "未通过"
-        case "suspended": return "已暂停"
-        case "draft": return "草稿"
-        default: return "未申请"
+        case "pending": return L("merchantStatusPendingLabel", language)
+        case "needs_review": return L("merchantStatusNeedsReviewLabel", language)
+        case "rejected": return L("merchantStatusRejectedLabel", language)
+        case "suspended": return L("merchantStatusSuspendedLabel", language)
+        case "draft": return L("merchantStatusDraftLabel", language)
+        default: return L("merchantStatusNotStartedLabel", language)
         }
     }
 
@@ -399,7 +413,7 @@ struct MerchantSettingsView: View {
             return
         }
         businessName = profile.business_name
-        businessType = profile.business_type.isEmpty ? "生活服务" : profile.business_type
+        businessType = profile.business_type.isEmpty ? "生活开通" : profile.business_type
         legalName = profile.legal_name ?? ""
         representativeName = profile.representative_name ?? ""
         registrationNumber = profile.registration_number ?? ""
@@ -413,7 +427,7 @@ struct MerchantSettingsView: View {
         contactMethod = profile.contact_method ?? ""
         serviceDescription = profile.description ?? ""
         applicationNote = profile.application_note ?? ""
-        selectedCategories = Set(profile.service_categories?.isEmpty == false ? profile.service_categories ?? [] : ["生活服务"])
+        selectedCategories = Set(profile.service_categories?.isEmpty == false ? profile.service_categories ?? [] : ["生活支持"])
     }
 
     @discardableResult
@@ -431,7 +445,7 @@ struct MerchantSettingsView: View {
             applyBusiness(response.business)
             dashboard = try? await KaiXAPIClient.shared.businessDashboard()
             if showMessage {
-                message = submit ? "已提交认证审核，后台会人工审核。" : "商家资料已保存。"
+                message = submit ? L("merchantSubmittedMessage", language) : L("merchantSavedMessage", language)
             }
             return response.business
         } catch {
@@ -465,21 +479,21 @@ struct MerchantSettingsView: View {
     }
 
     private func validationMessage(submit: Bool) -> String? {
-        if businessName.trimmed.isEmpty { return "请填写商家/品牌名称。" }
+        if businessName.trimmed.isEmpty { return L("merchantValidationName", language) }
         guard submit else { return nil }
         var missing: [String] = []
-        if businessType.trimmed.isEmpty { missing.append("商家类型") }
-        if legalName.trimmed.isEmpty { missing.append("主体全称") }
-        if representativeName.trimmed.isEmpty { missing.append("负责人姓名") }
-        if countryCode.trimmed.isEmpty { missing.append("国家") }
-        if citySlug.trimmed.isEmpty { missing.append("城市") }
-        if phone.trimmed.isEmpty && email.trimmed.isEmpty { missing.append("电话或邮箱") }
-        if address.trimmed.isEmpty { missing.append("经营地址") }
-        if serviceDescription.trimmed.isEmpty { missing.append("服务介绍") }
-        if selectedCategories.isEmpty { missing.append("服务分类") }
+        if businessType.trimmed.isEmpty { missing.append(L("merchantBusinessType", language)) }
+        if legalName.trimmed.isEmpty { missing.append(L("merchantLegalName", language)) }
+        if representativeName.trimmed.isEmpty { missing.append(L("merchantRepresentativeName", language)) }
+        if countryCode.trimmed.isEmpty { missing.append(L("merchantMissingCountry", language)) }
+        if citySlug.trimmed.isEmpty { missing.append(L("merchantMissingCity", language)) }
+        if phone.trimmed.isEmpty && email.trimmed.isEmpty { missing.append(L("merchantMissingPhoneOrEmail", language)) }
+        if address.trimmed.isEmpty { missing.append(L("merchantAddress", language)) }
+        if serviceDescription.trimmed.isEmpty { missing.append(L("merchantServiceIntro", language)) }
+        if selectedCategories.isEmpty { missing.append(L("merchantServiceCategories", language)) }
         let documentCount = business?.documents?.count ?? 0
-        if documentCount + pendingUploadedFileIds.count <= 0 { missing.append("认证材料") }
-        return missing.isEmpty ? nil : "请完善：" + missing.joined(separator: "、")
+        if documentCount + pendingUploadedFileIds.count <= 0 { missing.append(L("merchantDocuments", language)) }
+        return missing.isEmpty ? nil : L("merchantValidationCompletePrefix", language) + missing.joined(separator: missingSeparator)
     }
 
     private func handleFileImport(_ result: Result<[URL], Error>) async {
@@ -493,7 +507,7 @@ struct MerchantSettingsView: View {
                 ensuredBusiness = await save(submit: false, showMessage: false)
             }
             guard let businessId = ensuredBusiness?.id else {
-                message = "请先填写商家名称并保存资料。"
+                message = L("merchantUploadFirstSave", language)
                 return
             }
             isUploading = true
@@ -516,7 +530,7 @@ struct MerchantSettingsView: View {
             }
             pendingUploadedFileIds.append(contentsOf: uploadedIds)
             _ = await save(submit: false, showMessage: false)
-            message = "已上传 \(uploadedIds.count) 份认证材料。"
+            message = String(format: L("merchantUploadedCount", language), uploadedIds.count)
         } catch {
             message = error.kaixUserMessage
         }
@@ -530,7 +544,7 @@ struct MerchantSettingsView: View {
             pendingUploadedFileIds.removeAll()
             applyBusiness(response.business)
             dashboard = try? await KaiXAPIClient.shared.businessDashboard()
-            message = "认证材料已撤回。"
+            message = L("merchantDocumentWithdrawn", language)
         } catch {
             message = error.kaixUserMessage
         }
@@ -544,9 +558,28 @@ struct MerchantSettingsView: View {
     }
 
     private func formatBytes(_ bytes: Int) -> String {
-        if bytes <= 0 { return "文件" }
+        if bytes <= 0 { return L("fileSizeUnknown", language) }
         if bytes < 1_048_576 { return "\(max(1, bytes / 1024)) KB" }
         return String(format: "%.1f MB", Double(bytes) / 1_048_576.0)
+    }
+
+    private func businessTypeLabel(_ value: String) -> String {
+        if let section = KXListingCopy.serviceCreateSections.first(where: { $0.zh == value }) {
+            return section.label(language)
+        }
+        return KXListingCopy.categoryLabel(value, language)
+    }
+
+    private func categoryLabel(_ value: String) -> String {
+        KXListingCopy.categoryLabel(value, language)
+    }
+
+    private func characterCountText(_ count: Int) -> String {
+        String(format: L("characterCountFormat", language), count)
+    }
+
+    private var missingSeparator: String {
+        language == .en ? ", " : "、"
     }
 }
 
@@ -718,19 +751,21 @@ private struct MerchantPickerField: View {
     var required = false
     @Binding var selection: String
     let values: [String]
+    var labelForValue: (String) -> String = { $0 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             MerchantFieldTitle(title: title, required: required)
             Menu {
                 ForEach(values, id: \.self) { value in
+                    let label = labelForValue(value)
                     Button {
                         selection = value
                     } label: {
                         if selection == value {
-                            Label(value, systemImage: "checkmark")
+                            Label(label, systemImage: "checkmark")
                         } else {
-                            Text(value)
+                            Text(label)
                         }
                     }
                 }
@@ -740,7 +775,7 @@ private struct MerchantPickerField: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .frame(width: 20)
-                    Text(selection)
+                    Text(labelForValue(selection))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
                     Spacer(minLength: 6)
@@ -767,6 +802,7 @@ private struct MerchantTextEditor: View {
     var required = false
     @Binding var text: String
     let placeholder: String
+    var countLabel: (Int) -> String = { "\($0) 字" }
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -775,7 +811,7 @@ private struct MerchantTextEditor: View {
                 MerchantFieldTitle(title: title, required: required)
                 Spacer()
                 if !text.isEmpty {
-                    Text("\(text.count) 字")
+                    Text(countLabel(text.count))
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.tertiary)
                 }
@@ -809,6 +845,7 @@ private struct MerchantTextEditor: View {
 private struct FlowTags: View {
     let values: [String]
     @Binding var selected: Set<String>
+    var labelForValue: (String) -> String = { $0 }
 
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 8)], spacing: 8) {
@@ -828,7 +865,7 @@ private struct FlowTags: View {
                             Image(systemName: "checkmark")
                                 .font(.caption2.weight(.black))
                         }
-                        Text(value)
+                        Text(labelForValue(value))
                             .font(.caption.weight(.bold))
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)

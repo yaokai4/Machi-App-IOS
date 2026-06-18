@@ -160,16 +160,22 @@ final class ComposePostViewModel: ObservableObject {
     }
 
     var uploadProgressText: String {
+        uploadProgressText(language: .zh)
+    }
+
+    func uploadProgressText(language: AppLanguage) -> String {
         guard !mediaDrafts.isEmpty else { return "" }
         let uploaded = mediaDrafts.filter { mediaUploadStates[$0.id] == .uploaded }.count
         let percent = Int((overallUploadProgress * 100).rounded())
         if hasFailedMediaUploads {
-            return "有媒体上传失败，请重试或删除后再发布"
+            return L("mediaUploadFailedRetry", language)
         }
         if isPublishing {
-            return "正在发布 \(uploaded)/\(mediaDrafts.count)"
+            return String(format: L("mediaUploadPublishedCount", language), uploaded, mediaDrafts.count)
         }
-        return uploaded == mediaDrafts.count ? "媒体已上传" : "上传中 \(uploaded)/\(mediaDrafts.count) · \(percent)%"
+        return uploaded == mediaDrafts.count
+            ? L("mediaUploadComplete", language)
+            : String(format: L("mediaUploadProgress", language), uploaded, mediaDrafts.count, percent)
     }
 
     var overallUploadProgress: Double {
@@ -369,12 +375,12 @@ final class ComposePostViewModel: ObservableObject {
         guard canPublish else { return false }
         guard !isPublishing else { return false }
         guard !hasPendingMediaUploads else {
-            errorMessage = "媒体还在上传，请等进度完成后再发布。"
+            errorMessage = L("mediaUploadStillRunning", language)
             state = .error(errorMessage ?? L("failedToPost", language))
             return false
         }
         guard !hasFailedMediaUploads else {
-            errorMessage = "有媒体上传失败，请重试或删除后再发布。"
+            errorMessage = L("mediaUploadFailedRetry", language)
             state = .error(errorMessage ?? L("failedToPost", language))
             return false
         }

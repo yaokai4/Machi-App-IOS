@@ -593,7 +593,8 @@ struct ComposePostView: View {
                     } else {
                         KXSpinner(size: 20, lineWidth: 2.4)
                     }
-                    Text(viewModel.uploadProgressText.isEmpty ? L("processingMedia", language) : viewModel.uploadProgressText)
+                    let uploadText = viewModel.uploadProgressText(language: language)
+                    Text(uploadText.isEmpty ? L("processingMedia", language) : uploadText)
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.secondary)
                     Spacer()

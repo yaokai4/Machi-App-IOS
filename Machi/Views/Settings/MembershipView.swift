@@ -93,7 +93,7 @@ struct MembershipView: View {
 
     private var priceText: String {
         if !store.displayPrice.isEmpty { return store.displayPrice }
-        return store.selectedPlan?.displayPriceLabel ?? "会员套餐"
+        return store.selectedPlan?.displayPriceLabel ?? L("membershipPlanFallback", language)
     }
 
     private var planCards: some View {
@@ -142,9 +142,9 @@ struct MembershipView: View {
 
     private func periodLabel(_ plan: KaiXMembershipPlanDTO) -> String {
         let period = plan.billingPeriod ?? plan.billing_period ?? plan.billing_cycle
-        if period == "yearly" { return "包年订阅" }
-        if period == "monthly" { return "按月订阅" }
-        return "会员套餐"
+        if period == "yearly" { return L("membershipYearlyPlan", language) }
+        if period == "monthly" { return L("membershipMonthlyPlan", language) }
+        return L("membershipPlanFallback", language)
     }
 
     private var activeCard: some View {
