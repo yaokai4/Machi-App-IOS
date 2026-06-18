@@ -897,7 +897,7 @@ struct ListingReviewsSectionView: View {
                         .font(.title.weight(.black))
                         .foregroundStyle(.orange)
                     KXRatingStarsView(value: avg, showsValue: false, starSize: 10)
-                    Text("\(count) 条点评")
+                    Text(KXListingCopy.pickText(language, "\(count) 条点评", "\(count)件のレビュー", "\(count) reviews"))
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }

@@ -138,8 +138,8 @@ struct PostSpecificDetailSection: View {
     private func openConversation() async {
         guard let me = currentUser else {
             toastManager.show(.custom(
-                title: "请先登录",
-                message: "登录后才能发起私信",
+                title: KXListingCopy.pickText(language, "请先登录", "ログインしてください", "Please sign in"),
+                message: KXListingCopy.pickText(language, "登录后才能发起私信", "ログインするとメッセージを送れます", "Sign in to start a private message"),
                 systemImage: "person.crop.circle.badge.exclamationmark",
                 tint: KXColor.accent,
                 technicalDetails: nil,
@@ -155,7 +155,7 @@ struct PostSpecificDetailSection: View {
             router.open(.conversation(conversationId: thread.id))
         } catch {
             toastManager.show(.requestFailed(
-                message: "无法打开私信",
+                message: KXListingCopy.pickText(language, "无法打开私信", "メッセージを開けませんでした", "Could not open messages"),
                 technicalDetails: error.localizedDescription,
             ), duration: 2.5)
         }

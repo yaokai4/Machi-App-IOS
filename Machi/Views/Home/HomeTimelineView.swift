@@ -212,12 +212,21 @@ struct HomeTimelineView: View {
     }
 
     private var feed: some View {
-        ScrollView {
+        let feedPosts = visibleFeedPosts
+        return ScrollView {
             LazyVStack(spacing: 8) {
                 if viewModel.mode == .hot {
                     hotScopePicker
                 }
-                ForEach(viewModel.posts) { post in
+                if feedPosts.isEmpty {
+                    EmptyStateView(
+                        title: KXListingCopy.pickText(language, "这里还没有热榜内容", "まだ急上昇コンテンツがありません", "No hot posts here yet"),
+                        subtitle: KXListingCopy.pickText(language, "换一个范围，或稍后回来看看新的本地动态。", "範囲を切り替えるか、あとでもう一度確認してください。", "Try another scope or check back later for local activity."),
+                        systemImage: "flame"
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 260)
+                }
+                ForEach(feedPosts) { post in
                     let displayedPost = postStore.post(id: post.id) ?? post
                     let originalPost = displayedPost.repostOfPostId.flatMap { postStore.post(id: $0) }
                     let isQuoteRepost = originalPost != nil && !displayedPost.previewText.isEmpty
@@ -246,8 +255,8 @@ struct HomeTimelineView: View {
                     )
                     .equatable()
                     .task(id: displayedPost.id) {
-                        guard displayedPost.id == viewModel.posts.last?.id else { return }
-                        await viewModel.loadMoreIfNeeded(context: modelContext, currentUser: currentUser, post: displayedPost, postStore: postStore)
+                        guard displayedPost.id == feedPosts.last?.id else { return }
+                        await viewModel.loadMoreIfNeeded(context: modelContext, currentUser: currentUser, post: nil, postStore: postStore)
                     }
                 }
 
@@ -263,6 +272,28 @@ struct HomeTimelineView: View {
         .refreshable {
             await viewModel.refresh(context: modelContext, currentUser: currentUser, postStore: postStore)
         }
+    }
+
+    private var visibleFeedPosts: [PostEntity] {
+        guard viewModel.mode == .hot, let region = regionStore.current else {
+            return viewModel.posts
+        }
+        switch hotScope {
+        case .all:
+            return viewModel.posts
+        case .country:
+            return viewModel.posts.filter { $0.country == region.countryCode }
+        case .city:
+            return viewModel.posts.filter { postMatches($0, region: region) }
+        }
+    }
+
+    private func postMatches(_ post: PostEntity, region: KaiXRegionDirectory.Region) -> Bool {
+        let regionCodes = KaiXRegionDirectory.regionCodesForMetro(region: region)
+        let cityCodes = KaiXRegionDirectory.cityCodesForMetro(region: region)
+        return regionCodes.contains(post.regionCode)
+            || (post.country == region.countryCode && cityCodes.contains(post.city))
+            || (post.regionCode.isEmpty && post.country.isEmpty && post.city.isEmpty)
     }
 
     /// Pivot chip row that lets the user switch the hot-list between

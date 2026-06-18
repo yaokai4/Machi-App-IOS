@@ -338,7 +338,7 @@ struct DiscoverView: View {
                             .foregroundStyle(KXColor.accent)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("搜索")
+                    .accessibilityLabel(L("search", language))
                 }
             }
             .padding(.horizontal, KXSpacing.lg)
@@ -471,12 +471,12 @@ private enum DiscoverSegment: String, CaseIterable, Identifiable, Hashable {
 
     var id: String { rawValue }
 
-    var title: String {
+    func title(_ language: AppLanguage) -> String {
         switch self {
-        case .recommend: "正在发生"
-        case .ranking: "热榜"
-        case .topics: "话题"
-        case .users: "用户推荐"
+        case .recommend: KXListingCopy.pickText(language, "正在发生", "いま起きていること", "Happening")
+        case .ranking: KXListingCopy.pickText(language, "热榜", "急上昇", "Hot")
+        case .topics: KXListingCopy.pickText(language, "话题", "話題", "Topics")
+        case .users: KXListingCopy.pickText(language, "用户推荐", "おすすめユーザー", "People")
         }
     }
 }
@@ -516,8 +516,67 @@ private struct DiscoverCategory: Identifiable, Hashable {
     let count: Int
 
     var id: String { spec.id }
-    var title: String { spec.title }
-    var subtitle: String { spec.subtitle }
+    func title(_ language: AppLanguage) -> String {
+        switch id {
+        case "secondhand": KXListingCopy.pickText(language, "二手市场", "フリマ", "Marketplace")
+        case "housing": KXListingCopy.pickText(language, "租房 · 住宿", "賃貸・宿泊", "Homes & Stays")
+        case "work": KXListingCopy.pickText(language, "工作", "仕事", "Work")
+        case "service": KXListingCopy.pickText(language, "商家与服务", "店舗・サービス", "Businesses & services")
+        case "guide": KXListingCopy.pickText(language, "城市指南", "都市ガイド", "City guide")
+        case "news": KXListingCopy.pickText(language, "本地快讯", "地域ニュース", "Local updates")
+        case "coupon": KXListingCopy.pickText(language, "商家优惠", "店舗特典", "Deals")
+        case "groups": KXListingCopy.pickText(language, "活动小组", "イベント・グループ", "Groups & events")
+        case "question": KXListingCopy.pickText(language, "问答互助", "質問・助け合い", "Q&A")
+        case "warning": KXListingCopy.pickText(language, "避坑经验", "注意・体験談", "Warnings")
+        case "jobseek": KXListingCopy.pickText(language, "找工作", "仕事を探す", "Find work")
+        case "jobpost": KXListingCopy.pickText(language, "招聘", "求人", "Hiring")
+        case "referral": KXListingCopy.pickText(language, "内推", "紹介", "Referrals")
+        case "language": KXListingCopy.pickText(language, "语言交换", "言語交換", "Language exchange")
+        case "food": KXListingCopy.pickText(language, "Food meetup", "グルメ会", "Food meetup")
+        case "localgroup": KXListingCopy.pickText(language, "本地小组", "地域グループ", "Local groups")
+        case "merchant": KXListingCopy.pickText(language, "商家", "店舗", "Merchants")
+        case "travel_stays": KXListingCopy.pickText(language, "民宿 · 短住", "民泊・短期滞在", "Stays")
+        case "attractions": KXListingCopy.pickText(language, "景点票务", "観光チケット", "Attractions")
+        case "verified_merchant": KXListingCopy.pickText(language, "认证商家", "認証済み店舗", "Verified merchants")
+        case "poll": KXListingCopy.pickText(language, "投票", "投票", "Polls")
+        case "longpost": KXListingCopy.pickText(language, "长文", "長文", "Long posts")
+        case "anonymous": KXListingCopy.pickText(language, "匿名提问", "匿名質問", "Anonymous questions")
+        case "localinfo": KXListingCopy.pickText(language, "本地资讯", "地域情報", "Local info")
+        case "roommate": KXListingCopy.pickText(language, "找室友", "ルームメイト募集", "Roommates")
+        default: spec.title
+        }
+    }
+
+    func subtitle(_ language: AppLanguage) -> String {
+        switch id {
+        case "secondhand": KXListingCopy.pickText(language, "闲置交易、求购和搬家出清", "中古取引・買います・引越し処分", "Local resale, wanted posts, moving sales")
+        case "housing": KXListingCopy.pickText(language, "长租房源、看房预约与民宿短住", "賃貸・内見予約・短期滞在", "Rentals, viewings, short stays")
+        case "work": KXListingCopy.pickText(language, "职位、招聘、内推和申请进度", "求人・採用・紹介・応募状況", "Jobs, hiring, referrals, applications")
+        case "service": KXListingCopy.pickText(language, "餐厅美食、订座点评、景点玩乐", "グルメ・予約・観光体験", "Dining, bookings, local experiences")
+        case "guide": KXListingCopy.pickText(language, "攻略、经验、避坑", "手順・体験談・注意点", "Guides, tips, warnings")
+        case "news": KXListingCopy.pickText(language, "新闻、交通、生活提醒", "ニュース・交通・生活のお知らせ", "News, transit, life alerts")
+        case "coupon": KXListingCopy.pickText(language, "折扣福利、本地商家活动", "割引・特典・地域イベント", "Discounts and merchant offers")
+        case "groups": KXListingCopy.pickText(language, "聚会、运动、语言交换", "集まり・運動・言語交換", "Meetups, sports, exchange")
+        case "question": KXListingCopy.pickText(language, "问答、匿名提问、生活求助", "質問・匿名相談・生活ヘルプ", "Questions and local help")
+        case "warning": KXListingCopy.pickText(language, "风险提醒和踩雷复盘", "リスク共有と体験談", "Risk alerts and lessons")
+        case "jobseek": KXListingCopy.pickText(language, "求职线索、兼职、全职", "求職・バイト・正社員", "Leads, part-time, full-time")
+        case "jobpost": KXListingCopy.pickText(language, "职位发布和招聘方认证", "求人掲載と採用側認証", "Roles and employer verification")
+        case "referral": KXListingCopy.pickText(language, "公司内推", "社内紹介", "Company referrals")
+        case "language": KXListingCopy.pickText(language, "公开语言学习活动", "公開の言語学習イベント", "Language-learning meetups")
+        case "food": KXListingCopy.pickText(language, "餐厅、咖啡和小型饭局", "飲食店・カフェ・食事会", "Restaurants, cafes, meals")
+        case "localgroup": KXListingCopy.pickText(language, "运动、周末活动、城市散步", "運動・週末活動・街歩き", "Sports, weekends, walks")
+        case "merchant": KXListingCopy.pickText(language, "本地店铺和服务商资料", "地域店舗とサービス提供者", "Local merchant profiles")
+        case "travel_stays": KXListingCopy.pickText(language, "民宿、酒店、温泉旅馆", "民泊・ホテル・温泉旅館", "Homestays, hotels, ryokan")
+        case "attractions": KXListingCopy.pickText(language, "门票、一日游和本地向导", "チケット・日帰り・ガイド", "Tickets, day trips, guides")
+        case "verified_merchant": KXListingCopy.pickText(language, "已提交认证资料的商家", "認証済みの店舗", "Approved merchant profiles")
+        case "poll": KXListingCopy.pickText(language, "选项投票", "選択式の投票", "Option polls")
+        case "longpost": KXListingCopy.pickText(language, "作为内容形式使用", "読み物形式の投稿", "Long-form posts")
+        case "anonymous": KXListingCopy.pickText(language, "匿名问答/生活吐槽", "匿名Q&A・相談", "Anonymous Q&A")
+        case "localinfo": KXListingCopy.pickText(language, "社区告示", "地域のお知らせ", "Community notices")
+        case "roommate": KXListingCopy.pickText(language, "合租找人", "ルームシェア募集", "Roomshare leads")
+        default: spec.subtitle
+        }
+    }
     var icon: String { spec.icon }
     var types: [ContentType] { spec.types }
     var channel: CityChannel { spec.channel }
@@ -543,14 +602,38 @@ private struct DiscoverCategory: Identifiable, Hashable {
         }
     }
 
-    var heroTags: [String] {
+    func heroTags(_ language: AppLanguage) -> [String] {
         switch id {
-        case "secondhand": return ["估价", "求购", "面交安全"]
-        case "housing": return ["长租", "民宿短住", "看房预约"]
-        case "work": return ["薪资", "签证", "雇主认证"]
-        case "service": return ["餐厅美食", "订座", "景点玩乐"]
-        case "travel_stays": return ["民宿", "酒店", "温泉旅馆"]
-        case "attractions": return ["门票", "一日游", "向导"]
+        case "secondhand": return [
+            KXListingCopy.pickText(language, "估价", "相場", "Pricing"),
+            KXListingCopy.pickText(language, "求购", "買います", "Wanted"),
+            KXListingCopy.pickText(language, "面交安全", "安全な受け渡し", "Safe meetup")
+        ]
+        case "housing": return [
+            KXListingCopy.pickText(language, "长租", "長期賃貸", "Rentals"),
+            KXListingCopy.pickText(language, "民宿短住", "短期滞在", "Short stays"),
+            KXListingCopy.pickText(language, "看房预约", "内見予約", "Viewing")
+        ]
+        case "work": return [
+            KXListingCopy.pickText(language, "薪资", "給与", "Pay"),
+            KXListingCopy.pickText(language, "签证", "ビザ", "Visa"),
+            KXListingCopy.pickText(language, "雇主认证", "雇用主認証", "Employer verified")
+        ]
+        case "service": return [
+            KXListingCopy.pickText(language, "餐厅美食", "グルメ", "Dining"),
+            KXListingCopy.pickText(language, "订座", "予約", "Booking"),
+            KXListingCopy.pickText(language, "景点玩乐", "観光体験", "Things to do")
+        ]
+        case "travel_stays": return [
+            KXListingCopy.categoryLabel("民宿", language),
+            KXListingCopy.categoryLabel("酒店", language),
+            KXListingCopy.categoryLabel("温泉旅馆", language)
+        ]
+        case "attractions": return [
+            KXListingCopy.pickText(language, "门票", "チケット", "Tickets"),
+            KXListingCopy.categoryLabel("一日游", language),
+            KXListingCopy.pickText(language, "向导", "ガイド", "Guides")
+        ]
         default: return []
         }
     }
@@ -580,7 +663,20 @@ private struct CurrentRegionCard: View {
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.78)
-                    Text(region.map { "正在浏览\(KaiXRegionDirectory.localizedMetroName(for: $0, language: language) ?? $0.cityName)的本地动态和生活信息" } ?? "选择城市后，首页、发现和热榜会围绕本地内容展开")
+                    Text(region.map {
+                        let city = KaiXRegionDirectory.localizedMetroName(for: $0, language: language) ?? KaiXRegionDirectory.localizedShortLabel($0, language: language)
+                        return KXListingCopy.pickText(
+                            language,
+                            "正在浏览\(city)的本地动态和生活信息",
+                            "\(city)の地域投稿と生活情報を表示しています",
+                            "Browsing local posts and life updates for \(city)"
+                        )
+                    } ?? KXListingCopy.pickText(
+                        language,
+                        "选择城市后，首页、发现和热榜会围绕本地内容展开",
+                        "都市を選ぶと、ホーム・発見・急上昇が地域中心に切り替わります",
+                        "Choose a city to tune Home, Discover, and Hot to local content"
+                    ))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
@@ -589,7 +685,7 @@ private struct CurrentRegionCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 HStack(spacing: 4) {
-                    Text("切换城市")
+                    Text(KXListingCopy.pickText(language, "切换城市", "都市を変更", "Change city"))
                         .font(.caption.weight(.bold))
                         .foregroundStyle(KXColor.accent)
                     Image(systemName: "chevron.right")
@@ -616,6 +712,7 @@ private struct CurrentRegionCard: View {
 }
 
 private struct DiscoverCategoryGrid: View {
+    @Environment(\.appLanguage) private var language
     let primaryCategories: [DiscoverCategory]
     let onOpen: (DiscoverCategory) -> Void
     let onMore: () -> Void
@@ -629,12 +726,12 @@ private struct DiscoverCategoryGrid: View {
         let core = Array(primaryCategories.prefix(4))
         return VStack(alignment: .leading, spacing: KXSpacing.sm) {
             HStack(alignment: .center) {
-                DiscoverSectionTitle(title: "城市功能入口", trailing: nil)
+                DiscoverSectionTitle(title: KXListingCopy.pickText(language, "城市功能入口", "街の機能", "City tools"), trailing: nil)
                 Spacer(minLength: 10)
                 Button(action: onMore) {
                     HStack(spacing: 4) {
                         Image(systemName: "square.grid.2x2")
-                        Text("更多频道")
+                        Text(KXListingCopy.pickText(language, "更多频道", "もっと見る", "More"))
                     }
                     .font(.caption.weight(.bold))
                     .foregroundStyle(KXColor.accent)
@@ -660,6 +757,7 @@ private struct DiscoverCategoryGrid: View {
 
 /// The shared row used in both the 8-cell grid and the More sheet.
 private struct DiscoverCategoryCell: View {
+    @Environment(\.appLanguage) private var language
     enum Prominence {
         case normal
         case high
@@ -677,7 +775,7 @@ private struct DiscoverCategoryCell: View {
     }
 
     private var heroLine: String {
-        category.heroTags.prefix(3).joined(separator: " · ")
+        category.heroTags(language).prefix(3).joined(separator: " · ")
     }
 
     /// Premium tile: gradient icon squircle + one-line title + one-line
@@ -709,12 +807,12 @@ private struct DiscoverCategoryCell: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(category.title)
+                Text(category.title(language))
                     .font(.headline.weight(.bold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
-                Text(category.subtitle)
+                Text(category.subtitle(language))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     // Always reserve two lines so a 1-line subtitle tile is the
@@ -747,12 +845,12 @@ private struct DiscoverCategoryCell: View {
                 .background(category.tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(category.title)
+                Text(category.title(language))
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
-                Text(category.subtitle)
+                Text(category.subtitle(language))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -768,6 +866,8 @@ private struct DiscoverCategoryCell: View {
 
 /// The 9th cell — opens MoreChannelSheet.
 private struct DiscoverMoreCell: View {
+    @Environment(\.appLanguage) private var language
+
     var body: some View {
         HStack(spacing: KXSpacing.sm) {
             Image(systemName: "ellipsis.circle")
@@ -777,11 +877,11 @@ private struct DiscoverMoreCell: View {
                 .background(KXColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("更多")
+                Text(KXListingCopy.pickText(language, "更多", "もっと見る", "More"))
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
-                Text("分组查看细分功能")
+                Text(KXListingCopy.pickText(language, "分组查看细分功能", "カテゴリ別に探す", "Browse by use case"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -806,6 +906,7 @@ private struct DiscoverMoreCell: View {
 /// tools remain tools, not main channels.
 private struct MoreChannelSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appLanguage) private var language
     let categories: [DiscoverCategory]
     let onSelect: (DiscoverCategory) -> Void
 
@@ -829,6 +930,18 @@ private struct MoreChannelSheet: View {
         ]
     }
 
+    private func groupTitle(_ title: String) -> String {
+        switch title {
+        case "城市信息": return KXListingCopy.pickText(language, "城市信息", "街の情報", "City info")
+        case "交易生活": return KXListingCopy.pickText(language, "交易生活", "暮らしの取引", "Life & trade")
+        case "机会工作": return KXListingCopy.pickText(language, "机会工作", "仕事と機会", "Work opportunities")
+        case "本地连接": return KXListingCopy.pickText(language, "本地连接", "地域のつながり", "Local connections")
+        case "服务商家": return KXListingCopy.pickText(language, "服务商家", "店舗・サービス", "Services & merchants")
+        case "内容工具": return KXListingCopy.pickText(language, "内容工具", "投稿ツール", "Content tools")
+        default: return title
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -837,7 +950,7 @@ private struct MoreChannelSheet: View {
                         let items = group.1.compactMap { categoryMap[$0] }
                         if !items.isEmpty {
                             VStack(alignment: .leading, spacing: 10) {
-                                Text(group.0)
+                                Text(groupTitle(group.0))
                                     .font(.subheadline.weight(.bold))
                                     .foregroundStyle(.secondary)
                                     .padding(.horizontal, 2)
@@ -859,11 +972,11 @@ private struct MoreChannelSheet: View {
                 .padding(.vertical, KXSpacing.md)
             }
             .kxPageBackground()
-            .navigationTitle("全部频道")
+            .navigationTitle(KXListingCopy.pickText(language, "全部频道", "すべてのチャンネル", "All channels"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") { dismiss() }
+                    Button(KXListingCopy.pickText(language, "关闭", "閉じる", "Close")) { dismiss() }
                 }
             }
         }
@@ -883,8 +996,11 @@ private struct CityHotRankingView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: KXSpacing.sm) {
             DiscoverSectionTitle(
-                title: region.map { "\(KaiXRegionDirectory.localizedMetroName(for: $0, language: language) ?? $0.cityName)热榜" } ?? "当前城市热榜",
-                trailing: "查看全部",
+                title: region.map {
+                    let city = KaiXRegionDirectory.localizedMetroName(for: $0, language: language) ?? KaiXRegionDirectory.localizedShortLabel($0, language: language)
+                    return "\(city)\(L("hot", language))"
+                } ?? "\(L("currentRegion", language))\(L("hot", language))",
+                trailing: KXListingCopy.pickText(language, "查看全部", "すべて見る", "See all"),
                 trailingAction: onSeeAll
             )
 
@@ -893,7 +1009,7 @@ private struct CityHotRankingView: View {
                     Image(systemName: "flame")
                         .font(.headline.weight(.bold))
                         .foregroundStyle(KXColor.heat)
-                    Text("正在积累本地热度")
+                    Text(KXListingCopy.pickText(language, "正在积累本地热度", "地域の反応を集計中", "Building local momentum"))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -1032,7 +1148,10 @@ private struct DiscoverEditorialView: View {
         if !posts.isEmpty {
             VStack(alignment: .leading, spacing: KXSpacing.sm) {
                 DiscoverSectionTitle(
-                    title: region.map { "\($0.cityName)编辑部精选" } ?? "编辑部精选",
+                    title: region.map {
+                        let city = KaiXRegionDirectory.localizedMetroName(for: $0, language: language) ?? KaiXRegionDirectory.localizedShortLabel($0, language: language)
+                        return KXListingCopy.pickText(language, "\(city)编辑部精选", "\(city)編集部ピックアップ", "\(city) editor picks")
+                    } ?? KXListingCopy.pickText(language, "编辑部精选", "編集部ピックアップ", "Editor picks"),
                     trailing: nil
                 )
                 VStack(spacing: 0) {
@@ -1040,7 +1159,7 @@ private struct DiscoverEditorialView: View {
                         Button {
                             onOpen(post)
                         } label: {
-                            DiscoverEditorialRow(post: post, author: authors[post.authorId])
+                            DiscoverEditorialRow(post: post, author: authors[post.authorId], language: language)
                         }
                         .buttonStyle(.plain)
 
@@ -1058,11 +1177,14 @@ private struct DiscoverEditorialView: View {
 private struct DiscoverEditorialRow: View {
     let post: PostEntity
     let author: UserEntity?
+    let language: AppLanguage
 
     /// Light, honest label. We never present seed content as a real person —
     /// the badge + the official account name make the source explicit.
     private var badge: String {
-        post.seedAuthorType == "editorial" ? "编辑部整理" : "城市助手"
+        post.seedAuthorType == "editorial"
+            ? KXListingCopy.pickText(language, "编辑部整理", "編集部整理", "Editorial")
+            : KXListingCopy.pickText(language, "城市助手", "街のアシスタント", "City helper")
     }
 
     var body: some View {
@@ -1070,7 +1192,7 @@ private struct DiscoverEditorialRow: View {
             AvatarView(user: author, size: 38)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
-                    Text(author?.displayName ?? "Machi 城市助手")
+                    Text(author?.displayName ?? KXListingCopy.pickText(language, "Machi 城市助手", "Machi 街のアシスタント", "Machi City Helper"))
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
@@ -1100,11 +1222,12 @@ private struct DiscoverEditorialRow: View {
 }
 
 private struct DiscoverSegmentedTabs: View {
+    @Environment(\.appLanguage) private var language
     @Binding var selection: DiscoverSegment
 
     var body: some View {
         KXSegmentedControl(DiscoverSegment.allCases, selection: $selection, itemMinWidth: 76, itemHeight: 42) { segment in
-            Text(segment.title)
+            Text(segment.title(language))
         }
     }
 }
@@ -1837,7 +1960,7 @@ struct DiscoverTypeCard: View {
                 Text(title)
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(.primary)
-                Text(item?.title.isEmpty == false ? item?.title ?? "" : (isLocal ? "本地内容" : "入口说明"))
+                Text(item?.title.isEmpty == false ? item?.title ?? "" : (isLocal ? KXListingCopy.pickText(language, "本地内容", "地域コンテンツ", "Local content") : KXListingCopy.pickText(language, "入口说明", "入口の説明", "Entry guide")))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -1858,12 +1981,12 @@ private enum ListingSortMode: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var title: String {
+    func title(_ language: AppLanguage) -> String {
         switch self {
-        case .newest: "最新"
-        case .priceLow: "价格低"
-        case .priceHigh: "价格高"
-        case .rating: "评分高"
+        case .newest: KXListingCopy.pickText(language, "最新", "新着順", "Newest")
+        case .priceLow: KXListingCopy.pickText(language, "价格低", "安い順", "Price low")
+        case .priceHigh: KXListingCopy.pickText(language, "价格高", "高い順", "Price high")
+        case .rating: KXListingCopy.pickText(language, "评分高", "評価順", "Top rated")
         }
     }
 
@@ -1902,6 +2025,24 @@ private struct ListingScopeArea: Identifiable, Hashable {
     let title: String
     let subtitle: String
     let regionCodes: [String]
+
+    func localizedTitle(_ language: AppLanguage) -> String {
+        switch id {
+        case "kanto": KXListingCopy.pickText(language, "关东圈", "関東圏", "Greater Kanto")
+        case "kansai": KXListingCopy.pickText(language, "关西圈", "関西圏", "Greater Kansai")
+        case "popular": KXListingCopy.pickText(language, "其他热门", "その他の人気都市", "Other popular")
+        default: title
+        }
+    }
+
+    func localizedSubtitle(_ language: AppLanguage) -> String {
+        switch id {
+        case "kanto": KXListingCopy.pickText(language, "东京、横滨、川崎、埼玉、千叶", "東京・横浜・川崎・埼玉・千葉", "Tokyo, Yokohama, Kawasaki, Saitama, Chiba")
+        case "kansai": KXListingCopy.pickText(language, "大阪、京都、神户、奈良、大津", "大阪・京都・神戸・奈良・大津", "Osaka, Kyoto, Kobe, Nara, Otsu")
+        case "popular": KXListingCopy.pickText(language, "名古屋、福冈、仙台", "名古屋・福岡・仙台", "Nagoya, Fukuoka, Sendai")
+        default: subtitle
+        }
+    }
 }
 
 private let listingScopeAreas: [ListingScopeArea] = [
@@ -2076,13 +2217,18 @@ struct CityListingChannelView: View {
     private var activeScopeLabel: String {
         switch scopeMode {
         case .city:
-            return region?.cityName ?? "当前城市"
+            return region.map { KaiXRegionDirectory.localizedShortLabel($0, language: language) } ?? L("currentRegion", language)
         case .country:
-            return region?.countryName ?? "当前国家"
+            return region.map {
+                KaiXRegionDirectory.localizedCountryName(
+                    .init(code: $0.countryCode, name: $0.countryName, emoji: $0.countryEmoji, tier: 1, hasProvinces: !$0.provinceCode.isEmpty),
+                    language: language
+                )
+            } ?? KXListingCopy.pickText(language, "当前国家", "現在の国", "Current country")
         case .area:
-            return selectedArea?.title ?? "城市圈"
+            return selectedArea?.localizedTitle(language) ?? KXListingCopy.pickText(language, "城市圈", "都市圏", "Metro area")
         case .selectedCity:
-            return selectedScopeRegion?.cityName ?? "热门城市"
+            return selectedScopeRegion.map { KaiXRegionDirectory.localizedShortLabel($0, language: language) } ?? ListingFilterLocalizer.text("热门城市", language)
         }
     }
 
@@ -2210,7 +2356,7 @@ struct CityListingChannelView: View {
             .buttonStyle(.plain)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(region?.cityName ?? "当前城市") · \(KXListingCopy.title(for: baseType, language))")
+                Text("\(region.map { KaiXRegionDirectory.localizedShortLabel($0, language: language) } ?? L("currentRegion", language)) · \(KXListingCopy.title(for: baseType, language))")
                     .font(.headline.weight(.semibold))
                     .lineLimit(1)
                 Text(KXListingCopy.subtitle(for: baseType, language))
@@ -2241,9 +2387,9 @@ struct CityListingChannelView: View {
     /// 住房频道三标签：长租房源 / 民宿短住 / 酒店住宿。
     private var rentalTabSwitcher: some View {
         HStack(spacing: 4) {
-            rentalTabButton(.homes, title: "长租房源", icon: "house")
-            rentalTabButton(.stays, title: "民宿短住", icon: "bed.double")
-            rentalTabButton(.hotels, title: "酒店", icon: "building.2")
+            rentalTabButton(.homes, title: KXListingCopy.pickText(language, "长租房源", "長期賃貸", "Rentals"), icon: "house")
+            rentalTabButton(.stays, title: KXListingCopy.pickText(language, "民宿短住", "民泊短期", "Short stays"), icon: "bed.double")
+            rentalTabButton(.hotels, title: KXListingCopy.pickText(language, "酒店", "ホテル", "Hotels"), icon: "building.2")
         }
         .padding(4)
         .background(KXColor.softBackground.opacity(0.82), in: Capsule())
@@ -2282,15 +2428,20 @@ struct CityListingChannelView: View {
                 }
                 // 单行控制条：范围(城市/国家) ····· 筛选 / 排序。
                 HStack(spacing: 6) {
-                    scopeButton(title: region?.cityName ?? "城市", mode: .city)
-                    scopeButton(title: region?.countryName ?? "国家", mode: .country)
+                    scopeButton(title: region.map { KaiXRegionDirectory.localizedShortLabel($0, language: language) } ?? KXListingCopy.pickText(language, "城市", "都市", "City"), mode: .city)
+                    scopeButton(title: region.map {
+                        KaiXRegionDirectory.localizedCountryName(
+                            .init(code: $0.countryCode, name: $0.countryName, emoji: $0.countryEmoji, tier: 1, hasProvinces: !$0.provinceCode.isEmpty),
+                            language: language
+                        )
+                    } ?? KXListingCopy.pickText(language, "国家", "国", "Country"), mode: .country)
                     Spacer(minLength: 6)
                     Button {
                         withAnimation(.snappy(duration: 0.22)) {
                             filtersOpen.toggle()
                         }
                     } label: {
-                        Label(activeFilterCount > 0 ? "筛选 \(activeFilterCount)" : "筛选", systemImage: "slider.horizontal.3")
+                        Label(activeFilterCount > 0 ? "\(KXListingCopy.pickText(language, "筛选", "絞り込み", "Filters")) \(activeFilterCount)" : KXListingCopy.pickText(language, "筛选", "絞り込み", "Filters"), systemImage: "slider.horizontal.3")
                             .font(.caption.weight(.bold))
                             .foregroundStyle(filtersOpen || activeFilterCount > 0 ? KXColor.accent : .primary)
                             .padding(.horizontal, 10)
@@ -2306,14 +2457,14 @@ struct CityListingChannelView: View {
                                 Task { await load(quiet: true) }
                             } label: {
                                 if sortMode == mode {
-                                    Label(mode.title, systemImage: "checkmark")
+                                    Label(mode.title(language), systemImage: "checkmark")
                                 } else {
-                                    Text(mode.title)
+                                    Text(mode.title(language))
                                 }
                             }
                         }
                     } label: {
-                        Label(sortMode.title, systemImage: "arrow.up.arrow.down")
+                        Label(sortMode.title(language), systemImage: "arrow.up.arrow.down")
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.primary)
                             .padding(.horizontal, 10)
@@ -2340,13 +2491,13 @@ struct CityListingChannelView: View {
 
             // 轻量结果摘要行：替代原来卡片里占两行的标题块。
             HStack(spacing: 6) {
-                Text("\(visibleItems.count) 条结果")
+                Text(resultCountText(visibleItems.count))
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.secondary)
                 Text("·")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.tertiary)
-                Text("\(activeScopeLabel) · \(selectedCategory)")
+                Text("\(activeScopeLabel) · \(ListingFilterLocalizer.text(selectedCategory, language))")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
@@ -2364,7 +2515,7 @@ struct CityListingChannelView: View {
                         attrFilters = [:]
                         Task { await load() }
                     } label: {
-                        Label("清空筛选", systemImage: "xmark.circle.fill")
+                        Label(KXListingCopy.pickText(language, "清空筛选", "絞り込みをクリア", "Clear filters"), systemImage: "xmark.circle.fill")
                             .font(.caption.weight(.bold))
                             .foregroundStyle(KXColor.livingAccent)
                     }
@@ -2383,7 +2534,7 @@ struct CityListingChannelView: View {
                     selectedCategory = "全部"
                     Task { await load(quiet: true) }
                 } label: {
-                    Text(section.title)
+                    Text(ListingFilterLocalizer.text(section.title, language))
                         .font(.caption.weight(.black))
                         .foregroundStyle(serviceSection == section.key && selectedCategory == "全部" ? Color.white : .primary)
                         .padding(.horizontal, 13)
@@ -2511,15 +2662,15 @@ struct CityListingChannelView: View {
     private var scopeFilterPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 8) {
-                Text(baseType == "rental" ? (lodgingActive ? "每晚价格" : "月租范围") : isWorkChannel ? "薪资范围" : "价格范围")
+                Text(ListingFilterLocalizer.text(baseType == "rental" ? (lodgingActive ? "每晚价格" : "月租范围") : isWorkChannel ? "薪资范围" : "价格范围", language))
                     .font(.caption.weight(.black))
                     .foregroundStyle(.secondary)
                 HStack(spacing: 10) {
-                    filterPriceField(title: "最低", text: $minimumPrice)
+                    filterPriceField(title: ListingFilterLocalizer.text("最低", language), text: $minimumPrice)
                     Text("—")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.tertiary)
-                    filterPriceField(title: "最高", text: $maximumPrice)
+                    filterPriceField(title: ListingFilterLocalizer.text("最高", language), text: $maximumPrice)
                 }
             }
 
@@ -2610,7 +2761,7 @@ struct CityListingChannelView: View {
             Divider().opacity(0.55)
 
             VStack(alignment: .leading, spacing: 7) {
-                Text("城市范围")
+                Text(ListingFilterLocalizer.text("城市范围", language))
                     .font(.caption.weight(.black))
                     .foregroundStyle(.secondary)
                 ForEach(listingScopeAreas) { area in
@@ -2625,10 +2776,10 @@ struct CityListingChannelView: View {
                                 .font(.subheadline.weight(.bold))
                                 .foregroundStyle(selectedScopeArea == area.id && scopeMode == .area ? KXColor.accent : .secondary)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(area.title)
+                                Text(area.localizedTitle(language))
                                     .font(.subheadline.weight(.bold))
                                     .foregroundStyle(.primary)
-                                Text(area.subtitle)
+                                Text(area.localizedSubtitle(language))
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
@@ -2644,7 +2795,7 @@ struct CityListingChannelView: View {
             }
 
             VStack(alignment: .leading, spacing: 7) {
-                Text("热门城市")
+                Text(ListingFilterLocalizer.text("热门城市", language))
                     .font(.caption.weight(.black))
                     .foregroundStyle(.secondary)
                 FlowLayout(spacing: 8) {
@@ -2656,7 +2807,7 @@ struct CityListingChannelView: View {
                                 selectedScopeArea = ""
                                 Task { await load() }
                             } label: {
-                                Text(city.cityName)
+                                Text(KaiXRegionDirectory.localizedShortLabel(city, language: language))
                                     .font(.caption.weight(.bold))
                                     .foregroundStyle(scopeMode == .selectedCity && selectedScopeRegionCode == city.regionCode ? Color.white : .primary)
                                     .padding(.horizontal, 12)
@@ -2723,7 +2874,7 @@ struct CityListingChannelView: View {
         selection: Binding<String>
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
+            Text(ListingFilterLocalizer.text(title, language))
                 .font(.caption.weight(.black))
                 .foregroundStyle(.secondary)
             FlowLayout(spacing: 8) {
@@ -2731,7 +2882,7 @@ struct CityListingChannelView: View {
                     Button {
                         selection.wrappedValue = option.value
                     } label: {
-                        Text(option.label)
+                        Text(ListingFilterLocalizer.text(option.label, language))
                             .font(.caption.weight(.bold))
                             .foregroundStyle(selection.wrappedValue == option.value ? Color.white : .primary)
                             .padding(.horizontal, 12)
@@ -2747,12 +2898,12 @@ struct CityListingChannelView: View {
 
     private func filterToggleSection(title: String, toggles: [(key: String, label: String)]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
+            Text(ListingFilterLocalizer.text(title, language))
                 .font(.caption.weight(.black))
                 .foregroundStyle(.secondary)
             FlowLayout(spacing: 8) {
                 ForEach(toggles, id: \.key) { item in
-                    filterToggle(title: item.label, isOn: attrToggleBinding(item.key))
+                    filterToggle(title: ListingFilterLocalizer.text(item.label, language), isOn: attrToggleBinding(item.key))
                 }
             }
         }
@@ -2954,6 +3105,10 @@ struct CityListingChannelView: View {
             return (selected.cityCode, selected.regionCode, [], nil)
         }
     }
+
+    private func resultCountText(_ count: Int) -> String {
+        KXListingCopy.pickText(language, "\(count) 条结果", "\(count)件の結果", "\(count) results")
+    }
 }
 
 /// One user's published listings of a single type — opened from a tappable
@@ -3012,7 +3167,7 @@ struct UserListingsView: View {
                 Text(title)
                     .font(.headline.weight(.bold))
                     .foregroundStyle(KXColor.livingInk)
-                Text("\(items.count) 条发布")
+                Text(KXListingCopy.pickText(language, "\(items.count) 条发布", "\(items.count)件の投稿", "\(items.count) listings"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(KXColor.livingMuted)
             }
@@ -4039,6 +4194,67 @@ private enum ListingIntakeLocalizer {
         "预约日期": ("予約日", "Appointment date"),
         "预约时段": ("予約時間帯", "Appointment time"),
         "服务项目": ("サービス項目", "Service item")
+    ]
+}
+
+private enum ListingFilterLocalizer {
+    static func text(_ value: String, _ language: AppLanguage) -> String {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return value }
+        if let entry = table[normalized] {
+            return KXListingCopy.pickText(language, normalized, entry.ja, entry.en)
+        }
+        let category = KXListingCopy.categoryLabel(normalized, language)
+        if category != normalized { return category }
+        return ListingIntakeLocalizer.text(normalized, language)
+    }
+
+    private static let table: [String: (ja: String, en: String)] = [
+        "每晚价格": ("1泊料金", "Nightly price"),
+        "月租范围": ("月額家賃", "Monthly rent"),
+        "薪资范围": ("給与範囲", "Pay range"),
+        "价格范围": ("価格範囲", "Price range"),
+        "最低": ("下限", "Min"),
+        "最高": ("上限", "Max"),
+        "不限": ("指定なし", "Any"),
+        "出售": ("売ります", "For sale"),
+        "全新": ("新品", "Brand new"),
+        "几乎全新": ("ほぼ新品", "Like new"),
+        "良好": ("良好", "Good"),
+        "有使用痕迹": ("使用感あり", "Used"),
+        "可用": ("使用可", "Fair"),
+        "面交": ("手渡し", "Meetup"),
+        "自取": ("引き取り", "Pickup"),
+        "邮寄": ("配送", "Shipping"),
+        "可商量": ("相談可", "Negotiable"),
+        "交易偏好": ("取引条件", "Deal preferences"),
+        "可自取": ("引き取り可", "Pickup available"),
+        "可邮寄": ("配送可", "Shipping available"),
+        "2 人及以上": ("2名以上", "2+ guests"),
+        "3 人及以上": ("3名以上", "3+ guests"),
+        "4 人及以上": ("4名以上", "4+ guests"),
+        "6 人及以上": ("6名以上", "6+ guests"),
+        "住宿条件": ("宿泊条件", "Stay options"),
+        "条件": ("条件", "Options"),
+        "可宠物": ("ペット可", "Pet friendly"),
+        "可短租": ("短期可", "Short-term OK"),
+        "可合租": ("ルームシェア可", "Share OK"),
+        "雇佣形式": ("雇用形態", "Employment type"),
+        "日语要求": ("日本語条件", "Japanese requirement"),
+        "日语不限": ("日本語不問", "No Japanese required"),
+        "签证支持": ("ビザサポート", "Visa support"),
+        "有": ("あり", "Available"),
+        "可咨询": ("相談可", "Ask"),
+        "可远程": ("リモート可", "Remote OK"),
+        "服务细分类": ("サービス細分類", "Service subcategory"),
+        "餐饮预约": ("飲食予約", "Dining"),
+        "旅行票务": ("旅行・チケット", "Travel"),
+        "接送交通": ("送迎・交通", "Transfers"),
+        "美容健康": ("美容・健康", "Beauty & health"),
+        "商家条件": ("店舗条件", "Merchant options"),
+        "需要预约": ("予約必須", "Booking required"),
+        "城市范围": ("都市圏", "Metro area"),
+        "热门城市": ("人気都市", "Popular cities")
     ]
 }
 

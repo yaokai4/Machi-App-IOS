@@ -733,26 +733,30 @@ struct ProfileView: View {
     private var computedAchievements: [AchievementBadge] {
         var badges: [AchievementBadge] = []
         if viewModel.totalHeat >= 10_000 {
-            badges.append(.init(icon: "flame.fill", title: "万热达人", color: KXColor.heat))
+            badges.append(.init(icon: "flame.fill", title: achievementTitle("万热达人", "1万ヒート達成", "10K heat"), color: KXColor.heat))
         }
         if viewModel.postCount >= 50 {
-            badges.append(.init(icon: "pencil.tip", title: "高产作者", color: .indigo))
+            badges.append(.init(icon: "pencil.tip", title: achievementTitle("高产作者", "投稿上級者", "Power creator"), color: .indigo))
         } else if viewModel.postCount >= 10 {
-            badges.append(.init(icon: "pencil", title: "活跃作者", color: .indigo))
+            badges.append(.init(icon: "pencil", title: achievementTitle("活跃作者", "アクティブ投稿者", "Active creator"), color: .indigo))
         }
         if displayedFollowerCount >= 100 {
-            badges.append(.init(icon: "person.3.fill", title: "百人关注", color: .blue))
+            badges.append(.init(icon: "person.3.fill", title: achievementTitle("百人关注", "100人フォロワー", "100 followers"), color: .blue))
         }
         if viewModel.bookmarkCount >= 20 {
-            badges.append(.init(icon: "bookmark.fill", title: "收藏达人", color: .teal))
+            badges.append(.init(icon: "bookmark.fill", title: achievementTitle("收藏达人", "保存上手", "Saved often"), color: .teal))
         }
         if profileUser.merchantVerified {
-            badges.append(.init(icon: "checkmark.seal.fill", title: "认证商家", color: .green))
+            badges.append(.init(icon: "checkmark.seal.fill", title: achievementTitle("认证商家", "認証済み店舗", "Verified merchant"), color: .green))
         }
         if profileUser.role == .creator {
-            badges.append(.init(icon: "sparkles", title: "本地创作者", color: KXColor.accent))
+            badges.append(.init(icon: "sparkles", title: achievementTitle("本地创作者", "ローカルクリエイター", "Local creator"), color: KXColor.accent))
         }
         return badges
+    }
+
+    private func achievementTitle(_ zh: String, _ ja: String, _ en: String) -> String {
+        KXListingCopy.pickText(language, zh, ja, en)
     }
 
     private var computedTopTopics: [String] {

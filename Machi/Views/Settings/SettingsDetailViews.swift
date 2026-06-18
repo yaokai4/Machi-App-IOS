@@ -3,6 +3,10 @@ import SwiftUI
 import UIKit
 import UserNotifications
 
+private func settingsText(_ language: AppLanguage, _ zh: String, _ ja: String, _ en: String) -> String {
+    KXListingCopy.pickText(language, zh, ja, en)
+}
+
 private enum AccountSecurityVerificationMethod: String, CaseIterable, Identifiable {
     case password
     case emailCode
@@ -12,9 +16,9 @@ private enum AccountSecurityVerificationMethod: String, CaseIterable, Identifiab
     func title(_ language: AppLanguage) -> String {
         switch self {
         case .password:
-            return "当前密码"
+            return settingsText(language, "当前密码", "現在のパスワード", "Current password")
         case .emailCode:
-            return "邮箱验证码"
+            return settingsText(language, "邮箱验证码", "メール認証コード", "Email code")
         }
     }
 }
@@ -81,10 +85,10 @@ struct AccountPasswordSettingsView: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 10) {
-                Text("安全验证")
+                Text(settingsText(language, "安全验证", "セキュリティ確認", "Security verification"))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
-                Picker("安全验证", selection: $verificationMethod) {
+                Picker(settingsText(language, "安全验证", "セキュリティ確認", "Security verification"), selection: $verificationMethod) {
                     ForEach(AccountSecurityVerificationMethod.allCases) { method in
                         Text(method.title(language)).tag(method)
                     }
@@ -103,11 +107,11 @@ struct AccountPasswordSettingsView: View {
                             Task { await sendPasswordCode() }
                         } label: {
                             Group {
-                                if isSendingPasswordCode {
-                                    KXSpinner(size: 18, lineWidth: 2.2)
-                                } else {
-                                    Text("发送").font(.subheadline.weight(.bold))
-                                }
+                        if isSendingPasswordCode {
+                            KXSpinner(size: 18, lineWidth: 2.2)
+                        } else {
+                            Text(settingsText(language, "发送", "送信", "Send")).font(.subheadline.weight(.bold))
+                        }
                             }
                             .foregroundStyle(KXColor.accent)
                             .padding(.horizontal, 16)
@@ -117,7 +121,7 @@ struct AccountPasswordSettingsView: View {
                         .buttonStyle(KXPressableStyle(scale: 0.97))
                         .disabled(isSendingPasswordCode || user.email.isEmpty)
                     }
-                    Text(user.email.isEmpty ? "当前账号未绑定邮箱，请使用当前密码验证。" : "验证码将发送到 \(maskedEmail(user.email))。")
+                    Text(user.email.isEmpty ? noBoundEmailMessage : codeWillSendMessage(maskedEmail(user.email)))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -225,14 +229,14 @@ struct AccountPasswordSettingsView: View {
             passwordChallengeId = nil
             newPassword = ""
             confirmPassword = ""
-            message = "密码已更新，请使用新密码登录。"
+            message = settingsText(language, "密码已更新，请使用新密码登录。", "パスワードを更新しました。次回から新しいパスワードでログインしてください。", "Password updated. Please use the new password next time you sign in.")
         } catch let apiError as KaiXAPIError {
             if apiError.error.code == "invalid_credentials" {
                 message = L("currentPasswordIncorrect", language)
             } else if apiError.error.code == "password_reuse" {
                 message = L("passwordSameAsOld", language)
             } else if apiError.error.code == "invalid_code" || apiError.error.code == "code_expired" {
-                message = "验证码无效或已过期"
+                message = invalidCodeMessage
             } else {
                 message = apiError.error.message
             }
@@ -249,7 +253,7 @@ struct AccountPasswordSettingsView: View {
 
     private func sendPasswordCode() async {
         guard !user.email.isEmpty else {
-            message = "当前账号未绑定邮箱，请使用当前密码验证。"
+            message = noBoundEmailMessage
             return
         }
         isSendingPasswordCode = true
@@ -257,10 +261,26 @@ struct AccountPasswordSettingsView: View {
         do {
             let response = try await KaiXAPIClient.shared.sendSecurityCode(purpose: "change_password")
             passwordChallengeId = response.challenge_id
-            message = "验证码已发送到 \(response.email_hint ?? maskedEmail(user.email))。"
+            message = codeSentMessage(response.email_hint ?? maskedEmail(user.email))
         } catch {
             message = error.kaixUserMessage
         }
+    }
+
+    private var noBoundEmailMessage: String {
+        settingsText(language, "当前账号未绑定邮箱，请使用当前密码验证。", "このアカウントにはメールが未登録です。現在のパスワードで確認してください。", "No email is bound to this account. Please verify with your current password.")
+    }
+
+    private var invalidCodeMessage: String {
+        settingsText(language, "验证码无效或已过期", "認証コードが無効または期限切れです", "The verification code is invalid or expired")
+    }
+
+    private func codeWillSendMessage(_ email: String) -> String {
+        settingsText(language, "验证码将发送到 \(email)。", "認証コードを \(email) に送信します。", "The verification code will be sent to \(email).")
+    }
+
+    private func codeSentMessage(_ email: String) -> String {
+        settingsText(language, "验证码已发送到 \(email)。", "認証コードを \(email) に送信しました。", "Verification code sent to \(email).")
     }
 
     private func maskedEmail(_ email: String) -> String {
@@ -300,11 +320,11 @@ struct ContactSettingsView: View {
     var body: some View {
         SettingsFormPage(title: L("contactInfo", language)) {
             contactHero
-            formBlock(title: "绑定邮箱", subtitle: user.email.isEmpty ? "当前账号尚未绑定邮箱。" : "当前邮箱：\(maskedEmail(user.email))", icon: "envelope.badge", tint: .teal) {
+            formBlock(title: settingsText(language, "绑定邮箱", "メールを連携", "Email binding"), subtitle: boundEmailSubtitle, icon: "envelope.badge", tint: .teal) {
                 textField(L("email", language), text: $email, keyboard: .emailAddress)
             }
-            formBlock(title: "安全验证", subtitle: verificationMethod == .password ? "输入当前密码后才可以修改绑定邮箱。" : "验证码将发送到当前邮箱。", icon: "shield.lefthalf.filled", tint: .purple) {
-                Picker("安全验证", selection: $verificationMethod) {
+            formBlock(title: settingsText(language, "安全验证", "セキュリティ確認", "Security verification"), subtitle: verificationSubtitle, icon: "shield.lefthalf.filled", tint: .purple) {
+                Picker(settingsText(language, "安全验证", "セキュリティ確認", "Security verification"), selection: $verificationMethod) {
                     ForEach(AccountSecurityVerificationMethod.allCases) { method in
                         Text(method.title(language)).tag(method)
                     }
@@ -315,19 +335,19 @@ struct ContactSettingsView: View {
                     secureField(L("currentPassword", language), text: $currentPassword)
                 } else {
                     HStack(spacing: 10) {
-                        textField("当前邮箱验证码", text: $currentEmailCode, keyboard: .numberPad)
+                        textField(settingsText(language, "当前邮箱验证码", "現在のメール認証コード", "Current email code"), text: $currentEmailCode, keyboard: .numberPad)
                         sendCodeButton(isLoading: isSendingCurrentCode, disabled: user.email.isEmpty) {
                             await sendCurrentEmailCode()
                         }
                     }
-                    Text(user.email.isEmpty ? "没有当前邮箱时，请使用当前密码验证。" : "验证码将发送到当前邮箱。")
+                    Text(user.email.isEmpty ? noCurrentEmailMessage : currentEmailCodeMessage)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
             }
-            formBlock(title: "新邮箱验证", subtitle: "发送验证码到新的邮箱，验证通过后两端同步更新。", icon: "checkmark.message", tint: .blue) {
+            formBlock(title: settingsText(language, "新邮箱验证", "新しいメールの確認", "New email verification"), subtitle: settingsText(language, "发送验证码到新的邮箱，验证通过后两端同步更新。", "新しいメールに認証コードを送信し、確認後に Web と iOS を同期します。", "Send a code to the new email. After verification, Web and iOS update together."), icon: "checkmark.message", tint: .blue) {
                 HStack(spacing: 10) {
-                    textField("新邮箱验证码", text: $newEmailCode, keyboard: .numberPad)
+                    textField(settingsText(language, "新邮箱验证码", "新しいメール認証コード", "New email code"), text: $newEmailCode, keyboard: .numberPad)
                     sendCodeButton(isLoading: isSendingNewCode, disabled: !canSendNewEmailCode) {
                         await sendNewEmailCode()
                     }
@@ -352,10 +372,10 @@ struct ContactSettingsView: View {
                 .background(LinearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .shadow(color: .blue.opacity(0.18), radius: 10, x: 0, y: 6)
             VStack(alignment: .leading, spacing: 5) {
-                Text("安全修改联系方式")
+                Text(settingsText(language, "安全修改联系方式", "連絡先を安全に変更", "Secure contact updates"))
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(.primary)
-                Text("邮箱会同步到 Machi 账号，Web 和 iOS 登录状态会一起更新。手机号目前只保存在本机。")
+                Text(settingsText(language, "邮箱会同步到 Machi 账号，Web 和 iOS 登录状态会一起更新。手机号目前只保存在本机。", "メールは Machi アカウントに同期され、Web と iOS のログイン情報も更新されます。電話番号は現在この端末にのみ保存されます。", "Email syncs to your Machi account and updates both Web and iOS sign-in. Phone number is currently stored on this device only."))
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(.secondary)
                     .lineSpacing(2)
@@ -433,7 +453,7 @@ struct ContactSettingsView: View {
                 if isLoading {
                     ProgressView()
                 } else {
-                    Text("发送")
+                    Text(settingsText(language, "发送", "送信", "Send"))
                 }
             }
             .font(.subheadline.weight(.semibold))
@@ -546,7 +566,7 @@ struct ContactSettingsView: View {
             if apiError.error.code == "invalid_credentials" {
                 message = L("currentPasswordIncorrect", language)
             } else if apiError.error.code == "invalid_code" || apiError.error.code == "code_expired" {
-                message = "验证码无效或已过期"
+                message = invalidCodeMessage
             } else {
                 message = apiError.error.message
             }
@@ -557,7 +577,7 @@ struct ContactSettingsView: View {
 
     private func sendCurrentEmailCode() async {
         guard !user.email.isEmpty else {
-            message = "当前账号未绑定邮箱，请使用当前密码验证。"
+            message = noBoundEmailMessage
             return
         }
         isSendingCurrentCode = true
@@ -565,7 +585,7 @@ struct ContactSettingsView: View {
         do {
             let response = try await KaiXAPIClient.shared.sendSecurityCode(purpose: "change_email_old")
             currentEmailChallengeId = response.challenge_id
-            message = "验证码已发送到 \(response.email_hint ?? maskedEmail(user.email))。"
+            message = codeSentMessage(response.email_hint ?? maskedEmail(user.email))
         } catch {
             message = error.kaixUserMessage
         }
@@ -581,10 +601,42 @@ struct ContactSettingsView: View {
         do {
             let response = try await KaiXAPIClient.shared.sendSecurityCode(purpose: "change_email_new", email: normalizedEmail)
             newEmailChallengeId = response.challenge_id
-            message = "验证码已发送到 \(response.email_hint ?? maskedEmail(normalizedEmail))。"
+            message = codeSentMessage(response.email_hint ?? maskedEmail(normalizedEmail))
         } catch {
             message = error.kaixUserMessage
         }
+    }
+
+    private var boundEmailSubtitle: String {
+        user.email.isEmpty
+        ? settingsText(language, "当前账号尚未绑定邮箱。", "このアカウントにはまだメールが登録されていません。", "No email is bound to this account yet.")
+        : settingsText(language, "当前邮箱：\(maskedEmail(user.email))", "現在のメール: \(maskedEmail(user.email))", "Current email: \(maskedEmail(user.email))")
+    }
+
+    private var verificationSubtitle: String {
+        verificationMethod == .password
+        ? settingsText(language, "输入当前密码后才可以修改绑定邮箱。", "現在のパスワードを入力するとメールを変更できます。", "Enter your current password before changing the bound email.")
+        : currentEmailCodeMessage
+    }
+
+    private var noCurrentEmailMessage: String {
+        settingsText(language, "没有当前邮箱时，请使用当前密码验证。", "現在のメールがない場合は、現在のパスワードで確認してください。", "When there is no current email, verify with your current password.")
+    }
+
+    private var currentEmailCodeMessage: String {
+        settingsText(language, "验证码将发送到当前邮箱。", "認証コードを現在のメールに送信します。", "The code will be sent to the current email.")
+    }
+
+    private var noBoundEmailMessage: String {
+        settingsText(language, "当前账号未绑定邮箱，请使用当前密码验证。", "このアカウントにはメールが未登録です。現在のパスワードで確認してください。", "No email is bound to this account. Please verify with your current password.")
+    }
+
+    private var invalidCodeMessage: String {
+        settingsText(language, "验证码无效或已过期", "認証コードが無効または期限切れです", "The verification code is invalid or expired")
+    }
+
+    private func codeSentMessage(_ email: String) -> String {
+        settingsText(language, "验证码已发送到 \(email)。", "認証コードを \(email) に送信しました。", "Verification code sent to \(email).")
     }
 
     private func maskedEmail(_ email: String) -> String {
@@ -689,8 +741,8 @@ struct CountrySettingsView: View {
     }
 
     var body: some View {
-        SettingsFormPage(title: "国家") {
-            Text("切换国家会同时把当前浏览城市切换到该国家的默认城市；其他入口只能切换当前国家下的城市。")
+        SettingsFormPage(title: settingsText(language, "国家", "国", "Country")) {
+            Text(settingsText(language, "切换国家会同时把当前浏览城市切换到该国家的默认城市；其他入口只能切换当前国家下的城市。", "国を切り替えると現在の閲覧都市もその国のデフォルト都市に切り替わります。他の入口では現在の国の都市のみ選択できます。", "Changing country also switches your current browsing city to that country's default city. Other entry points can only switch cities within the current country."))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             ForEach(options) { option in
@@ -718,16 +770,16 @@ struct CountrySettingsView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .alert("确认切换国家？", isPresented: Binding(get: { pendingCountry != nil }, set: { if !$0 { pendingCountry = nil } })) {
-            Button("取消", role: .cancel) { pendingCountry = nil }
-            Button("确认切换") {
+        .alert(settingsText(language, "确认切换国家？", "国を切り替えますか？", "Change country?"), isPresented: Binding(get: { pendingCountry != nil }, set: { if !$0 { pendingCountry = nil } })) {
+            Button(settingsText(language, "取消", "キャンセル", "Cancel"), role: .cancel) { pendingCountry = nil }
+            Button(settingsText(language, "确认切换", "切り替える", "Confirm")) {
                 if let pendingCountry {
                     Task { await save(pendingCountry) }
                 }
                 pendingCountry = nil
             }
         } message: {
-            Text("国家切换会影响首页、发现、资讯和发布页可选择的城市。")
+            Text(settingsText(language, "国家切换会影响首页、发现、资讯和发布页可选择的城市。", "国の切り替えはホーム、発見、情報、投稿ページで選べる都市に影響します。", "Changing country affects cities available on Home, Discover, Guide, and Publish."))
         }
     }
 
@@ -756,7 +808,7 @@ struct CountrySettingsView: View {
             } else {
                 try modelContext.save()
             }
-            message = "国家已更新"
+            message = settingsText(language, "国家已更新", "国を更新しました", "Country updated")
         } catch {
             message = error.kaixUserMessage
         }
@@ -836,7 +888,7 @@ struct AccountSecuritySettingsView: View {
                 AccountPasswordSettingsView(user: currentUser)
             }
             SettingsDivider()
-            SettingsRowLink(icon: "g.circle.fill", tint: .blue, title: "Google 账号", subtitle: "绑定后可用 Google 一键登录") {
+            SettingsRowLink(icon: "g.circle.fill", tint: .blue, title: settingsText(language, "Google 账号", "Google アカウント", "Google account"), subtitle: settingsText(language, "绑定后可用 Google 一键登录", "連携すると Google でワンタップログインできます", "Link Google for one-tap sign-in")) {
                 GoogleAccountSettingsView(currentUser: currentUser)
             }
             SettingsDivider()
@@ -878,15 +930,15 @@ struct GoogleAccountSettingsView: View {
     @State private var showUnlinkConfirm = false
 
     var body: some View {
-        SettingsFormPage(title: "Google 账号") {
+        SettingsFormPage(title: settingsText(language, "Google 账号", "Google アカウント", "Google account")) {
             VStack(alignment: .leading, spacing: 10) {
-                Label(hasGoogle ? "已绑定 Google" : "未绑定 Google",
+                Label(hasGoogle ? settingsText(language, "已绑定 Google", "Google 連携済み", "Google linked") : settingsText(language, "未绑定 Google", "Google 未連携", "Google not linked"),
                       systemImage: hasGoogle ? "checkmark.seal.fill" : "g.circle")
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(hasGoogle ? .blue : .secondary)
                 Text(hasGoogle
-                     ? "你可以使用 Google 一键登录这个 Machi 账号。"
-                     : "绑定后，下次可直接用 Google 一键登录，无需输入密码。")
+                     ? settingsText(language, "你可以使用 Google 一键登录这个 Machi 账号。", "この Machi アカウントに Google でログインできます。", "You can sign in to this Machi account with Google.")
+                     : settingsText(language, "绑定后，下次可直接用 Google 一键登录，无需输入密码。", "連携すると次回から Google でログインでき、パスワード入力は不要です。", "After linking, you can sign in with Google without entering a password."))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -897,13 +949,13 @@ struct GoogleAccountSettingsView: View {
                 Button(role: .destructive) {
                     showUnlinkConfirm = true
                 } label: {
-                    if isWorking { ProgressView() } else { Text("解绑 Google") }
+                    if isWorking { ProgressView() } else { Text(settingsText(language, "解绑 Google", "Google 連携を解除", "Unlink Google")) }
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
                 .disabled(isWorking || !canUnlink)
                 if !canUnlink {
-                    Text("该账号通过 Google 创建，请先绑定邮箱并设置登录密码，再解绑 Google，以免无法再次登录。")
+                    Text(settingsText(language, "该账号通过 Google 创建，请先绑定邮箱并设置登录密码，再解绑 Google，以免无法再次登录。", "このアカウントは Google で作成されています。ログインできなくならないよう、先にメール連携とパスワード設定を行ってください。", "This account was created with Google. Add an email and password before unlinking so you can still sign in."))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -911,7 +963,7 @@ struct GoogleAccountSettingsView: View {
                 Button {
                     Task { await link() }
                 } label: {
-                    if isWorking { ProgressView() } else { Text("绑定 Google 账号") }
+                    if isWorking { ProgressView() } else { Text(settingsText(language, "绑定 Google 账号", "Google アカウントを連携", "Link Google account")) }
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
@@ -923,11 +975,11 @@ struct GoogleAccountSettingsView: View {
             }
         }
         .task { await refresh() }
-        .confirmationDialog("解绑 Google 账号？", isPresented: $showUnlinkConfirm, titleVisibility: .visible) {
-            Button("解绑", role: .destructive) { Task { await unlink() } }
-            Button("取消", role: .cancel) {}
+        .confirmationDialog(settingsText(language, "解绑 Google 账号？", "Google 連携を解除しますか？", "Unlink Google account?"), isPresented: $showUnlinkConfirm, titleVisibility: .visible) {
+            Button(settingsText(language, "解绑", "解除", "Unlink"), role: .destructive) { Task { await unlink() } }
+            Button(settingsText(language, "取消", "キャンセル", "Cancel"), role: .cancel) {}
         } message: {
-            Text("解绑后将无法使用 Google 一键登录，仍可用用户名 / 邮箱和密码登录。")
+            Text(settingsText(language, "解绑后将无法使用 Google 一键登录，仍可用用户名 / 邮箱和密码登录。", "解除後は Google ログインを利用できません。ユーザー名 / メールとパスワードでは引き続きログインできます。", "After unlinking, Google sign-in will no longer work. You can still sign in with username/email and password."))
         }
     }
 
@@ -950,9 +1002,9 @@ struct GoogleAccountSettingsView: View {
         do {
             try await GoogleAuthService.shared.linkAccount()
             await refresh()
-            message = "已绑定 Google 账号。"
+            message = settingsText(language, "已绑定 Google 账号。", "Google アカウントを連携しました。", "Google account linked.")
         } catch let apiError as KaiXAPIError {
-            message = Self.linkErrorMessage(apiError.error.code, fallback: apiError.error.message)
+            message = Self.linkErrorMessage(apiError.error.code, language: language, fallback: apiError.error.message)
         } catch {
             // User cancelled the web auth session — leave silently.
             message = nil
@@ -968,7 +1020,7 @@ struct GoogleAccountSettingsView: View {
             let me = try await KaiXAPIClient.shared.googleUnlink()
             hasGoogle = me.has_google ?? false
             canUnlink = me.can_unlink_google ?? false
-            message = "已解绑 Google 账号。"
+            message = settingsText(language, "已解绑 Google 账号。", "Google 連携を解除しました。", "Google account unlinked.")
         } catch let apiError as KaiXAPIError {
             message = apiError.error.message
         } catch {
@@ -976,13 +1028,18 @@ struct GoogleAccountSettingsView: View {
         }
     }
 
-    private static func linkErrorMessage(_ code: String, fallback: String) -> String {
+    private static func linkErrorMessage(_ code: String, language: AppLanguage, fallback: String) -> String {
         switch code {
-        case "google_already_linked": return "该 Google 账号已绑定到其他 Machi 账号。"
-        case "already_linked_other": return "当前账号已绑定了另一个 Google 账号，请先解绑。"
-        case "state_expired": return "绑定会话已过期，请重试。"
-        case "google_denied": return "已取消 Google 授权。"
-        default: return fallback.isEmpty ? "Google 绑定失败，请重试。" : fallback
+        case "google_already_linked":
+            return settingsText(language, "该 Google 账号已绑定到其他 Machi 账号。", "この Google アカウントは別の Machi アカウントに連携されています。", "This Google account is already linked to another Machi account.")
+        case "already_linked_other":
+            return settingsText(language, "当前账号已绑定了另一个 Google 账号，请先解绑。", "現在のアカウントは別の Google アカウントと連携済みです。先に解除してください。", "This account is already linked to another Google account. Unlink it first.")
+        case "state_expired":
+            return settingsText(language, "绑定会话已过期，请重试。", "連携セッションの期限が切れました。もう一度お試しください。", "The linking session expired. Please try again.")
+        case "google_denied":
+            return settingsText(language, "已取消 Google 授权。", "Google 認証をキャンセルしました。", "Google authorization was cancelled.")
+        default:
+            return fallback.isEmpty ? settingsText(language, "Google 绑定失败，请重试。", "Google 連携に失敗しました。もう一度お試しください。", "Google linking failed. Please try again.") : fallback
         }
     }
 }
@@ -1000,7 +1057,7 @@ struct MembershipSettingsView: View {
                 .foregroundStyle(user.isVerified ? .blue : .secondary)
             Text(user.role == .member ? L("memberVerificationHelp", language) : L("creatorAccountHelp", language))
                 .foregroundStyle(.secondary)
-            Button(isSubmitting ? "提交中" : L("applyVerification", language)) {
+            Button(isSubmitting ? settingsText(language, "提交中", "送信中", "Submitting") : L("applyVerification", language)) {
                 Task { await applyVerification() }
             }
                 .buttonStyle(.borderedProminent)
@@ -1027,7 +1084,7 @@ struct MembershipSettingsView: View {
                 当前角色: \(user.role.rawValue)
                 """
             )
-            message = "认证申请已提交，后台会人工审核并联系你补充材料。"
+            message = settingsText(language, "认证申请已提交，后台会人工审核并联系你补充材料。", "認証申請を送信しました。運営が確認し、必要に応じて追加資料について連絡します。", "Verification request submitted. The team will review it and contact you if more materials are needed.")
         } catch {
             message = error.kaixUserMessage
         }
