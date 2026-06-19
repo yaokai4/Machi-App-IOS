@@ -36,6 +36,29 @@ final class ProfileViewModel: ObservableObject {
         let repository = PostRepository(context: context)
         var sectionErrors: [String] = []
 
+        if user.isGuest {
+            authoredPosts = []
+            repliedPosts = []
+            likedPosts = []
+            bookmarkedPosts = []
+            mediaPosts = []
+            posts = []
+            authors = [user.id: user]
+            mediaByPostId = [:]
+            postCount = 0
+            replyCount = 0
+            likeCount = 0
+            bookmarkCount = 0
+            mediaCount = 0
+            draftCount = 0
+            totalHeat = 0
+            savedByOthersCount = 0
+            contentTypeCounts = [:]
+            postStore?.setProfilePosts([], userId: userId)
+            state = .empty
+            return
+        }
+
         if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
             if let remoteUser = try? await UserRepository(context: context).fetchUser(id: userId) {
                 UserRepository.apply(remoteUser, to: user)
