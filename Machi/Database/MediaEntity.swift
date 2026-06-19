@@ -134,6 +134,12 @@ extension MediaEntity {
 
 private extension String {
     var asMediaURL: URL? {
+        if let absolute = URL(string: self), absolute.scheme != nil {
+            return absolute
+        }
+        if hasPrefix("/api/") || hasPrefix("/uploads/") || hasPrefix("/media/") {
+            return URL(string: self, relativeTo: KaiXBackend.baseURL)?.absoluteURL
+        }
         if hasPrefix("/") {
             return URL(fileURLWithPath: self)
         }

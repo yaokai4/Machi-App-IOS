@@ -344,6 +344,14 @@ struct ChatView: View {
             .onChange(of: viewModel.messages.count) { _, _ in
                 scrollToLatest(proxy, animated: true)
             }
+            .onChange(of: viewModel.messages.last?.id) { _, _ in
+                scrollToLatest(proxy, animated: true)
+            }
+            .onChange(of: viewModel.state) { _, newState in
+                if newState == .loaded {
+                    scrollToLatest(proxy, animated: false)
+                }
+            }
             .onChange(of: viewModel.mediaDrafts.count) { _, _ in
                 scrollToLatest(proxy, animated: true)
             }
@@ -579,20 +587,22 @@ private struct ChatInputBar: View {
         let hasVideo = mediaDrafts.contains { $0.type == .video }
         let imageCount = mediaDrafts.filter { $0.type == .image }.count
         let remainingImageSlots = Swift.max(1, KaiXConfig.maxImageItemsPerPost - imageCount)
-        HStack(alignment: .bottom, spacing: 8) {
-            PhotosPicker(selection: $pickerItems, maxSelectionCount: remainingImageSlots, matching: .images) {
-                ChatInputToolIcon(systemImage: "photo", disabled: hasVideo || imageCount >= KaiXConfig.maxImageItemsPerPost)
-            }
-            .disabled(hasVideo || imageCount >= KaiXConfig.maxImageItemsPerPost)
+        HStack(alignment: .bottom, spacing: 10) {
+            HStack(spacing: 6) {
+                PhotosPicker(selection: $pickerItems, maxSelectionCount: remainingImageSlots, matching: .images) {
+                    ChatInputToolIcon(systemImage: "photo", disabled: hasVideo || imageCount >= KaiXConfig.maxImageItemsPerPost)
+                }
+                .disabled(hasVideo || imageCount >= KaiXConfig.maxImageItemsPerPost)
 
-            PhotosPicker(selection: $pickerItems, maxSelectionCount: KaiXConfig.maxVideoItemsPerPost, matching: .videos) {
-                ChatInputToolIcon(systemImage: "video", disabled: !mediaDrafts.isEmpty)
+                PhotosPicker(selection: $pickerItems, maxSelectionCount: KaiXConfig.maxVideoItemsPerPost, matching: .videos) {
+                    ChatInputToolIcon(systemImage: "video", disabled: !mediaDrafts.isEmpty)
+                }
+                .disabled(!mediaDrafts.isEmpty)
             }
-            .disabled(!mediaDrafts.isEmpty)
 
             TextField(L("messagePlaceholder", language), text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
-                .lineLimit(1...4)
+                .lineLimit(1...5)
                 .submitLabel(.send)
                 .onSubmit {
                     if canSend && !isSending {
@@ -600,13 +610,16 @@ private struct ChatInputBar: View {
                     }
                 }
                 .font(.body)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .frame(minHeight: 42)
-                .background(KXColor.cardBackground.opacity(0.92), in: RoundedRectangle(cornerRadius: 21, style: .continuous))
+                .padding(.horizontal, 15)
+                .padding(.vertical, 11)
+                .frame(minHeight: 44)
+                .background(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(KXColor.softBackground.opacity(0.96))
+                )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 21, style: .continuous)
-                        .stroke(KXColor.separator.opacity(0.8), lineWidth: 0.7)
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(KXColor.separator.opacity(0.62), lineWidth: 0.7)
                 )
 
             Button {
@@ -617,34 +630,30 @@ private struct ChatInputBar: View {
                     KXSpinner(size: 18, lineWidth: 2.2, tint: canSend ? .white : KXColor.accent)
                 } else {
                     Image(systemName: "paperplane.fill")
-                        .font(.subheadline.weight(.semibold))
+                        .font(.subheadline.weight(.bold))
                 }
             }
-            .frame(width: 42, height: 42)
-            .foregroundStyle(canSend ? .white : KXColor.accent.opacity(0.42))
+            .frame(width: 44, height: 44)
+            .foregroundStyle(canSend ? .white : KXColor.accent.opacity(0.38))
             .background {
                 Circle()
                     .fill(canSend ? KXColor.accent : KXColor.accent.opacity(0.08))
             }
             .clipShape(Circle())
-            .overlay(Circle().stroke(canSend ? Color.clear : KXColor.accent.opacity(0.10), lineWidth: 0.7))
-            .shadow(color: canSend ? KXColor.accent.opacity(0.18) : .clear, radius: 10, y: 4)
+            .overlay(Circle().stroke(canSend ? Color.clear : KXColor.accent.opacity(0.12), lineWidth: 0.8))
+            .shadow(color: canSend ? KXColor.accent.opacity(0.20) : .clear, radius: 12, y: 5)
             .disabled(!canSend || isSending)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .background {
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 30, style: .continuous)
-                        .stroke(KXColor.glassStroke.opacity(0.58), lineWidth: 0.8)
-                )
-                .shadow(color: KXColor.glassShadow.opacity(1.2), radius: 18, y: 8)
+            KXColor.pageBackground
+                .opacity(0.97)
+                .ignoresSafeArea(edges: .bottom)
         }
-        .padding(.horizontal, 10)
-        .padding(.top, 7)
-        .padding(.bottom, 8)
+        .overlay(alignment: .top) {
+            Divider().opacity(0.28)
+        }
     }
 }
 
@@ -658,9 +667,14 @@ private struct ChatInputToolIcon: View {
 
     var body: some View {
         Image(systemName: systemImage)
-            .font(.headline.weight(.semibold))
+            .font(.subheadline.weight(.bold))
             .foregroundStyle(disabled ? KXColor.livingMuted.opacity(0.42) : KXColor.accent)
-            .frame(width: 38, height: 42)
-            .contentShape(Rectangle())
+            .frame(width: 38, height: 44)
+            .background {
+                Circle()
+                    .fill(disabled ? KXColor.softBackground.opacity(0.42) : KXColor.accent.opacity(0.09))
+            }
+            .overlay(Circle().stroke(KXColor.separator.opacity(disabled ? 0.16 : 0.35), lineWidth: 0.7))
+            .contentShape(Circle())
     }
 }

@@ -151,6 +151,20 @@ struct kaiziTests {
         #expect(ids == ["user-a", "user-b"])
     }
 
+    @Test func relativeServerMediaPathsResolveAgainstBackendBaseURL() async throws {
+        let media = MediaEntity(
+            postId: "message-with-private-attachment",
+            type: .image,
+            remoteURL: "/api/uploads/download/file_1?token=abc"
+        )
+        let expected = URL(
+            string: "/api/uploads/download/file_1?token=abc",
+            relativeTo: KaiXBackend.baseURL
+        )?.absoluteURL.absoluteString
+
+        #expect(media.sourceURL?.absoluteString == expected)
+    }
+
     @Test func productionBootstrapDoesNotCreateDemoContent() async throws {
         let context = try makeContext()
 
