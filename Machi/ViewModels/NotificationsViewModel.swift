@@ -94,7 +94,6 @@ final class NotificationsViewModel: ObservableObject {
         notificationStore?.setNotifications(notifications)
         do {
             try await NotificationRepository(context: context).markRead(notification)
-            syncRemoteRead(ids: [notification.remoteId ?? notification.id])
         } catch {
             notification.isRead = previous
             rebuildGroupedNotifications()
@@ -108,10 +107,8 @@ final class NotificationsViewModel: ObservableObject {
         aggregate.notifications.forEach { $0.isRead = true }
         rebuildGroupedNotifications()
         notificationStore?.setNotifications(notifications)
-        let remoteIds = aggregate.notifications.map { $0.remoteId ?? $0.id }
         do {
             try await NotificationRepository(context: context).markRead(aggregate.notifications)
-            syncRemoteRead(ids: remoteIds)
         } catch {
             previous.forEach { $0.0.isRead = $0.1 }
             rebuildGroupedNotifications()
@@ -129,7 +126,6 @@ final class NotificationsViewModel: ObservableObject {
         do {
             if shouldMarkRead {
                 try await NotificationRepository(context: context).markRead(aggregate.notifications)
-                syncRemoteRead(ids: aggregate.notifications.map { $0.remoteId ?? $0.id })
             } else {
                 try await NotificationRepository(context: context).markUnread(aggregate.notifications)
             }
@@ -157,15 +153,6 @@ final class NotificationsViewModel: ObservableObject {
             notificationStore?.setNotifications(notifications)
             state = notifications.isEmpty ? .empty : .loaded
             transientError = error.kaixUserMessage
-        }
-    }
-
-    private func syncRemoteRead(ids: [String]) {
-        guard KaiXBackend.token != nil else { return }
-        let uniqueIds = Array(Set(ids))
-        guard !uniqueIds.isEmpty else { return }
-        Task.detached {
-            try? await KaiXAPIClient.shared.markNotificationsRead(ids: uniqueIds)
         }
     }
 
