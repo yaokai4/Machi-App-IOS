@@ -25,10 +25,9 @@ final class GoogleAuthService: NSObject, ASWebAuthenticationPresentationContextP
         }
         KaiXBackend.token = token
         let dto = try await KaiXAPIClient.shared.me()
-        let entity = RemoteSyncService.shared.upsertUser(dto, context: context)
+        let entity = UserRepository.entity(from: dto)
         AuthService.shared.persistSession(user: entity)
-        try? context.save()
-        Task { await RemoteSyncService.shared.bootstrap(context: context) }
+        _ = context
         return entity
     }
 
@@ -128,10 +127,9 @@ enum AppleAuthService {
             fullName: fullName,
             email: credential.email
         )
-        let entity = RemoteSyncService.shared.upsertUser(response.user, context: context)
+        let entity = UserRepository.entity(from: response.user)
         AuthService.shared.persistSession(user: entity)
-        try? context.save()
-        Task { await RemoteSyncService.shared.bootstrap(context: context) }
+        _ = context
         return entity
     }
 }

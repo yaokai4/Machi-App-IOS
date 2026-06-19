@@ -804,7 +804,7 @@ struct CountrySettingsView: View {
                     "city": region.cityCode,
                     "current_region_code": region.regionCode,
                 ])
-                _ = RemoteSyncService.shared.upsertUser(dto, context: modelContext)
+                UserRepository.apply(dto, to: currentUser)
             } else {
                 try modelContext.save()
             }
@@ -866,7 +866,7 @@ struct ProfileRegionSettingsView: View {
                     "province": region.provinceCode,
                     "city": region.cityCode
                 ])
-                _ = RemoteSyncService.shared.upsertUser(dto, context: modelContext)
+                UserRepository.apply(dto, to: currentUser)
             } else {
                 try modelContext.save()
             }

@@ -282,6 +282,33 @@ struct EditProfileView: View {
         isSaving = true
         errorMessage = nil
         do {
+            if KaiXBackend.token != nil {
+                let uploadedAvatarURL = try await uploadedProfileImageURLIfNeeded(avatarURL, purpose: "avatar")
+                let uploadedCoverURL = try await uploadedProfileImageURLIfNeeded(coverURL, purpose: "profile_cover")
+                var patch = [
+                    "display_name": displayName.trimmingCharacters(in: .whitespacesAndNewlines),
+                    "bio": bio.trimmingCharacters(in: .whitespacesAndNewlines),
+                    "location": location.trimmingCharacters(in: .whitespacesAndNewlines),
+                    "avatar_symbol": avatarSymbol,
+                    "avatar_color": avatarColorName,
+                ]
+                if !uploadedAvatarURL.isEmpty {
+                    patch["avatar_url"] = uploadedAvatarURL
+                }
+                if !uploadedCoverURL.isEmpty {
+                    patch["cover_url"] = uploadedCoverURL
+                }
+                let updated = try await KaiXAPIClient.shared.updateMe(patch)
+                UserRepository.apply(updated, to: user)
+                avatarURL = user.avatarURL
+                coverURL = user.coverURL
+                avatarSymbol = user.avatarSymbol
+                avatarColorName = user.avatarColorName
+                try? modelContext.save()
+                dismiss()
+                isSaving = false
+                return
+            }
             try await UserRepository(context: modelContext).updateProfile(
                 user: user,
                 displayName: displayName,
@@ -299,6 +326,43 @@ struct EditProfileView: View {
             errorMessage = error.kaixUserMessage
         }
         isSaving = false
+    }
+
+    private func uploadedProfileImageURLIfNeeded(_ rawValue: String, purpose: String) async throws -> String {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        if let url = URL(string: trimmed),
+           let scheme = url.scheme?.lowercased(),
+           scheme == "http" || scheme == "https" {
+            return trimmed
+        }
+
+        let fileURL: URL
+        if let url = URL(string: trimmed), url.isFileURL {
+            fileURL = url
+        } else {
+            fileURL = URL(fileURLWithPath: trimmed)
+        }
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            return trimmed
+        }
+
+        let data = try await Task.detached(priority: .userInitiated) {
+            try Data(contentsOf: fileURL)
+        }.value
+        let uploaded = try await KaiXAPIClient.shared.uploadFile(
+            data: data,
+            mime: "image/jpeg",
+            fileName: fileURL.lastPathComponent.isEmpty ? "\(purpose).jpg" : fileURL.lastPathComponent,
+            purpose: purpose,
+            entityType: "user",
+            entityId: user.id
+        )
+        let remote = uploaded.file.cdnUrl
+            ?? uploaded.file.url
+            ?? uploaded.file.thumbnailUrl
+            ?? uploaded.media.sourceURLString
+        return remote.isEmpty ? trimmed : remote
     }
 
     @MainActor

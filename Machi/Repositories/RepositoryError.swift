@@ -6,6 +6,7 @@ enum RepositoryError: LocalizedError {
     case duplicate
     case saveFailed
     case mediaFailed
+    case authenticationRequired
 
     var errorDescription: String? {
         switch self {
@@ -14,6 +15,7 @@ enum RepositoryError: LocalizedError {
         case .duplicate: "The record already exists."
         case .saveFailed: "Could not save changes."
         case .mediaFailed: "Could not process media."
+        case .authenticationRequired: "Please log in to continue."
         }
     }
 }
@@ -46,6 +48,8 @@ enum AppError: Equatable, LocalizedError {
                 self = .persistence
             case .mediaFailed:
                 self = .media
+            case .authenticationRequired:
+                self = .permission
             }
             return
         }

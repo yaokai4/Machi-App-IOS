@@ -41,9 +41,8 @@ final class SearchViewModel: ObservableObject {
     @Published private(set) var userTrendingItems: [TrendingItem] = []
     @Published private(set) var latestItems: [TrendingItem] = []
 
-    /// `allowRemote: false` keeps the load purely on the local SwiftData
-    /// store — unit tests exercise the ranking logic hermetically without
-    /// live explore data bleeding into their fixtures.
+    /// `allowRemote: false` keeps the load hermetic for UI/unit fixtures
+    /// without live explore data bleeding into deterministic tests.
     func load(context: ModelContext, currentUser: UserEntity, postStore: PostStore? = nil, searchStore: SearchStore? = nil, allowRemote: Bool = true) async {
         let hasCachedContent = !topics.isEmpty || !hotPosts.isEmpty || !happeningPosts.isEmpty
         if !hasCachedContent {
@@ -60,25 +59,33 @@ final class SearchViewModel: ObservableObject {
             var loadedHappening: [PostEntity] = []
             var loadedHot: [PostEntity] = []
             var loadedTopics: [TopicEntity] = []
+            var loadedAuthors: [String: UserEntity] = [:]
+            var loadedMediaByPostId: [String: [MediaEntity]] = [:]
 
             if allowRemote {
                 do {
                     let response = try await KaiXAPIClient.shared.exploreHappening(region: region, limit: 30)
-                    loadedHappening = upsertRemotePosts(response.orderedPosts, context: context)
+                    let bundle = ServerEntityFactory.postBundle(from: response.orderedPosts)
+                    loadedHappening = bundle.orderedPosts
+                    loadedAuthors.merge(bundle.authors) { _, fresh in fresh }
+                    loadedMediaByPostId.merge(bundle.mediaByPostId) { _, fresh in fresh }
                 } catch {
                     loadedHappening = []
                 }
 
                 do {
                     let response = try await KaiXAPIClient.shared.exploreHot(region: region, limit: 30)
-                    loadedHot = upsertRemotePosts(response.orderedPosts, context: context)
+                    let bundle = ServerEntityFactory.postBundle(from: response.orderedPosts)
+                    loadedHot = bundle.orderedPosts
+                    loadedAuthors.merge(bundle.authors) { _, fresh in fresh }
+                    loadedMediaByPostId.merge(bundle.mediaByPostId) { _, fresh in fresh }
                 } catch {
                     loadedHot = []
                 }
 
                 do {
                     let response = try await KaiXAPIClient.shared.exploreTopics(region: region, limit: 20)
-                    loadedTopics = try upsertRemoteTopics(response.orderedTopics, context: context)
+                    loadedTopics = response.orderedTopics.map(ServerEntityFactory.topic(from:))
                 } catch {
                     loadedTopics = []
                 }
@@ -90,7 +97,7 @@ final class SearchViewModel: ObservableObject {
             if loadedHappening.isEmpty {
                 loadedHappening = loadedHot
             }
-            if loadedTopics.isEmpty {
+            if loadedTopics.isEmpty && KaiXRuntimeFlags.allowLocalStoreFallback {
                 loadedTopics = try await topicRepository.fetchTrending(limit: 20)
             }
 
@@ -100,12 +107,18 @@ final class SearchViewModel: ObservableObject {
 
             let visiblePosts = orderedUniquePosts(loadedHappening + loadedHot)
             postStore?.register(visiblePosts)
-            mediaByPostId = try await postRepository.fetchMedia(for: visiblePosts)
+            mediaByPostId = loadedMediaByPostId
+            if mediaByPostId.isEmpty || visiblePosts.contains(where: { mediaByPostId[$0.id] == nil }) {
+                let fetchedMedia = try await postRepository.fetchMedia(for: visiblePosts)
+                mediaByPostId.merge(fetchedMedia) { existing, fetched in existing.isEmpty ? fetched : existing }
+            }
             for post in visiblePosts where mediaByPostId[post.id] == nil {
                 mediaByPostId[post.id] = []
             }
-            let postAuthors = try await userRepository.fetchUsers(ids: Set(visiblePosts.map(\.authorId)))
-            authors = Dictionary(uniqueKeysWithValues: postAuthors.map { ($0.id, $0) })
+            let missingAuthorIds = Set(visiblePosts.map(\.authorId)).subtracting(loadedAuthors.keys)
+            let postAuthors = try await userRepository.fetchUsers(ids: missingAuthorIds)
+            loadedAuthors.merge(Dictionary(uniqueKeysWithValues: postAuthors.map { ($0.id, $0) })) { _, fresh in fresh }
+            authors = loadedAuthors
             suggestedUsers = try await userRepository.fetchRecommendedUsers(excluding: currentUser.id, limit: 12)
             followingIds = try await userRepository.followingIds(for: currentUser.id)
             rebuildTrendingItems()
@@ -220,52 +233,6 @@ final class SearchViewModel: ObservableObject {
         latestItems = trendingItems.sorted { $0.createdAt > $1.createdAt }
         topicTrendingItems = topics.map(makeTopicTrendingItem)
         userTrendingItems = suggestedUsers.map(makeUserTrendingItem)
-    }
-
-    private func upsertRemotePosts(_ posts: [KaiXPostDTO], context: ModelContext) -> [PostEntity] {
-        guard !posts.isEmpty else { return [] }
-        var result: [PostEntity] = []
-        for dto in posts {
-            if let author = dto.author {
-                _ = RemoteSyncService.shared.upsertUser(author, context: context)
-            }
-            if let originalAuthor = dto.original_post?.author {
-                _ = RemoteSyncService.shared.upsertUser(originalAuthor, context: context)
-            }
-            result.append(RemoteSyncService.shared.upsertPost(dto, context: context))
-        }
-        try? context.save()
-        return orderedUniquePosts(result)
-    }
-
-    private func upsertRemoteTopics(_ remoteTopics: [KaiXTopicDTO], context: ModelContext) throws -> [TopicEntity] {
-        guard !remoteTopics.isEmpty else { return [] }
-        var result: [TopicEntity] = []
-        for dto in remoteTopics {
-            let name = dto.normalizedTag
-            guard !name.isEmpty else { continue }
-            var descriptor = FetchDescriptor<TopicEntity>(
-                predicate: #Predicate { $0.name == name }
-            )
-            descriptor.fetchLimit = 1
-            if let existing = try context.fetch(descriptor).first {
-                existing.postCount = dto.postCountValue
-                existing.heatScore = dto.heatScoreValue
-                existing.updatedAt = .now
-                result.append(existing)
-            } else {
-                let topic = TopicEntity(
-                    id: "topic-\(name)",
-                    name: name,
-                    postCount: dto.postCountValue,
-                    heatScore: dto.heatScoreValue
-                )
-                context.insert(topic)
-                result.append(topic)
-            }
-        }
-        try? context.save()
-        return result
     }
 
     private func orderedUniquePosts(_ posts: [PostEntity]) -> [PostEntity] {

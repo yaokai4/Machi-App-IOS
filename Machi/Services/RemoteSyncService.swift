@@ -1,19 +1,11 @@
 import Foundation
 import SwiftData
 
-/// Bridge between the unified KaiX backend and the existing
-/// SwiftData-based iOS persistence layer.
+/// Legacy bridge retained for explicit local fixture/debug flows.
 ///
-/// The App's screens read from SwiftData entities (`UserEntity`,
-/// `PostEntity`, `CommentEntity`, …). To put iOS on the same data
-/// source as Web without rewriting every Repository, this service
-/// pulls fresh records from `/api/*` and upserts them into SwiftData
-/// (mirroring `remoteId == server id`). It is intended to be invoked
-/// from the existing `HomeViewModel.refresh()` / pull-to-refresh and
-/// from app launch.
-///
-/// All inserts are idempotent: matching `remoteId` updates the
-/// existing entity rather than duplicating it.
+/// Production data now comes directly from `KaiXAPIClient` and is kept in
+/// memory for SwiftUI compatibility; business records are not mirrored into a
+/// persistent iOS database.
 @MainActor
 final class RemoteSyncService {
     static let shared = RemoteSyncService()
@@ -51,27 +43,25 @@ final class RemoteSyncService {
 
     // MARK: - login
 
-    /// Authenticate against the unified backend and upsert the user
-    /// into SwiftData. Persists the token in `KaiXBackend.token` so
-    /// subsequent calls carry it automatically.
+    /// Authenticate against the unified backend. Production treats the
+    /// backend row as the source of truth and returns an in-memory user
+    /// object instead of creating a local account row.
     @discardableResult
     func loginAndSync(handle: String, password: String, captchaId: String? = nil, captchaCode: String? = nil, context: ModelContext) async throws -> UserEntity {
         let response = try await api.login(handle: handle, password: password, captchaId: captchaId, captchaCode: captchaCode)
-        let entity = upsertUser(response.user, context: context)
+        let entity = UserRepository.entity(from: response.user)
         AuthService.shared.persistSession(user: entity)
-        try? context.save()
-        Task { await self.bootstrap(context: context) }
+        _ = context
         return entity
     }
 
-    /// Register a brand-new account against the unified backend and
-    /// upsert into SwiftData.
+    /// Register a brand-new account against the unified backend.
     @discardableResult
     func registerAndSync(handle: String, displayName: String, password: String, email: String? = nil, code: String? = nil, region: KaiXRegionDirectory.Region, appLanguage: AppLanguage? = nil, context: ModelContext) async throws -> UserEntity {
         let response = try await api.register(handle: handle, displayName: displayName, password: password, email: email, code: code, region: region, appLanguage: appLanguage)
-        let entity = upsertUser(response.user, context: context)
+        let entity = UserRepository.entity(from: response.user)
         AuthService.shared.persistSession(user: entity)
-        try? context.save()
+        _ = context
         return entity
     }
 

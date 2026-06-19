@@ -55,6 +55,24 @@ final class PostRepository {
     }
 
     func fetchPage(mode: TimelineMode, currentUserId: String, page: Int, pageSize: Int) async throws -> [PostEntity] {
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            let apiMode: KaiXAPIClient.FeedMode
+            switch mode {
+            case .recommend: apiMode = .recommend
+            case .local: apiMode = .local
+            case .following: apiMode = .following
+            case .hot: apiMode = .hot
+            }
+            let region = await MainActor.run { RegionStore.shared.current }
+            let response = try await KaiXAPIClient.shared.feed(
+                mode: apiMode,
+                regionCode: mode == .local ? region?.regionCode : nil,
+                country: region?.countryCode,
+                province: mode == .local ? (region?.provinceCode.isEmpty == true ? nil : region?.provinceCode) : nil,
+                city: mode == .local ? region?.cityCode : nil
+            )
+            return ServerEntityFactory.postBundle(from: response.items).orderedPosts
+        }
         let published = PostStatus.published.rawValue
         let active = PostStatus.active.rawValue
         // The trailing `id` tiebreaker is load-bearing: bulk-seeded and
@@ -191,6 +209,17 @@ final class PostRepository {
         page: Int,
         pageSize: Int
     ) async throws -> [PostEntity] {
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            let response = try await KaiXAPIClient.shared.feed(
+                mode: channel == .hot ? .hot : .recommend,
+                regionCode: region.regionCode,
+                country: region.countryCode,
+                province: region.provinceCode.isEmpty ? nil : region.provinceCode,
+                city: region.cityCode,
+                contentTypes: channel.contentTypes
+            )
+            return ServerEntityFactory.postBundle(from: response.items).orderedPosts
+        }
         let published = PostStatus.published.rawValue
         let active = PostStatus.active.rawValue
         let regionCodes = KaiXRegionDirectory.regionCodesForMetro(region: region)
@@ -264,6 +293,9 @@ final class PostRepository {
     }
 
     func fetchPost(id: String, currentUserId: String? = nil) async throws -> PostEntity? {
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            return ServerEntityFactory.post(from: try await KaiXAPIClient.shared.post(id))
+        }
         var descriptor = FetchDescriptor<PostEntity>(predicate: #Predicate { $0.id == id })
         descriptor.fetchLimit = 1
         let post = try context.fetch(descriptor).first
@@ -275,6 +307,15 @@ final class PostRepository {
 
     func fetchPosts(ids: Set<String>, currentUserId: String? = nil) async throws -> [PostEntity] {
         guard !ids.isEmpty else { return [] }
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            var result: [PostEntity] = []
+            for id in ids {
+                if let post = try? await fetchPost(id: id, currentUserId: currentUserId) {
+                    result.append(post)
+                }
+            }
+            return result
+        }
         let idList = Array(ids)
         let published = PostStatus.published.rawValue
         let active = PostStatus.active.rawValue
@@ -288,6 +329,10 @@ final class PostRepository {
     }
 
     func fetchPosts(authorId: String) async throws -> [PostEntity] {
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            let page = try await KaiXAPIClient.shared.userPosts(authorId, segment: .posts)
+            return ServerEntityFactory.postBundle(from: page.items).orderedPosts
+        }
         let published = PostStatus.published.rawValue
         let active = PostStatus.active.rawValue
         return try context.fetch(FetchDescriptor<PostEntity>(
@@ -297,6 +342,9 @@ final class PostRepository {
     }
 
     func fetchDrafts(authorId: String) async throws -> [PostEntity] {
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            return []
+        }
         let draft = PostStatus.draft.rawValue
         return try context.fetch(FetchDescriptor<PostEntity>(
             predicate: #Predicate { $0.authorId == authorId && $0.statusRaw == draft },
@@ -307,6 +355,9 @@ final class PostRepository {
     func fetchPosts(topic: String) async throws -> [PostEntity] {
         let normalized = topic.normalizedTopicName
         guard !normalized.isEmpty else { return [] }
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            return ServerEntityFactory.postBundle(from: try await KaiXAPIClient.shared.topic(normalized)).orderedPosts
+        }
         let published = PostStatus.published.rawValue
         let active = PostStatus.active.rawValue
         var descriptor = FetchDescriptor<PostEntity>(
@@ -319,6 +370,10 @@ final class PostRepository {
     }
 
     func fetchRepliedPosts(authorId: String) async throws -> [PostEntity] {
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            let page = try await KaiXAPIClient.shared.userPosts(authorId, segment: .replies)
+            return ServerEntityFactory.postBundle(from: page.items).orderedPosts
+        }
         let comments = try context.fetch(FetchDescriptor<CommentEntity>(
             predicate: #Predicate { $0.authorId == authorId && $0.deletedAt == nil },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
@@ -341,6 +396,12 @@ final class PostRepository {
     }
 
     func fetchLikedPosts() async throws -> [PostEntity] {
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            let userId = AuthService.shared.currentUserId
+            guard !userId.isEmpty else { return [] }
+            let page = try await KaiXAPIClient.shared.userPosts(userId, segment: .likes)
+            return ServerEntityFactory.postBundle(from: page.items).orderedPosts
+        }
         let published = PostStatus.published.rawValue
         let active = PostStatus.active.rawValue
         return try context.fetch(FetchDescriptor<PostEntity>(
@@ -350,6 +411,12 @@ final class PostRepository {
     }
 
     func fetchBookmarkedPosts() async throws -> [PostEntity] {
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            let userId = AuthService.shared.currentUserId
+            guard !userId.isEmpty else { return [] }
+            let page = try await KaiXAPIClient.shared.userPosts(userId, segment: .bookmarks)
+            return ServerEntityFactory.postBundle(from: page.items).orderedPosts
+        }
         let published = PostStatus.published.rawValue
         let active = PostStatus.active.rawValue
         return try context.fetch(FetchDescriptor<PostEntity>(
@@ -359,7 +426,11 @@ final class PostRepository {
     }
 
     func fetchMedia(postId: String) async throws -> [MediaEntity] {
-        try context.fetch(FetchDescriptor<MediaEntity>(
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            let dto = try await KaiXAPIClient.shared.post(postId)
+            return ServerEntityFactory.media(from: dto.media, postId: dto.id)
+        }
+        return try context.fetch(FetchDescriptor<MediaEntity>(
             predicate: #Predicate { $0.postId == postId },
             sortBy: [SortDescriptor(\.createdAt)]
         ))
@@ -368,6 +439,13 @@ final class PostRepository {
     func fetchMedia(for posts: [PostEntity]) async throws -> [String: [MediaEntity]] {
         let ids = Set(posts.map(\.id))
         guard !ids.isEmpty else { return [:] }
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            var result: [String: [MediaEntity]] = [:]
+            for id in ids {
+                result[id] = (try? await fetchMedia(postId: id)) ?? []
+            }
+            return result
+        }
         let idList = Array(ids)
         let media = try context.fetch(FetchDescriptor<MediaEntity>(
             predicate: #Predicate { idList.contains($0.postId) },
@@ -443,13 +521,7 @@ final class PostRepository {
                 contentType: contentType.rawValue,
                 attributes: attributes.isEmpty ? nil : attributes
             )
-            if let author = remote.author {
-                _ = RemoteSyncService.shared.upsertUser(author, context: context)
-            }
-            let post = RemoteSyncService.shared.upsertPost(remote, context: context)
-            post.syncStatus = .synced
-            try context.save()
-            return post
+            return ServerEntityFactory.post(from: remote)
         }
 
         let post = PostEntity(
@@ -615,6 +687,10 @@ final class PostRepository {
         currentUserId: String,
         countAlreadyUpdated: Bool = false
     ) async throws {
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            ServerEntityFactory.apply(try await KaiXAPIClient.shared.setLike(post.id, isLiked), to: post)
+            return
+        }
         let likeDelta = isLiked ? 1 : -1
         let previousHeat = countAlreadyUpdated
             ? heatScore(for: post, likeDelta: likeDelta)
@@ -642,6 +718,10 @@ final class PostRepository {
         currentUserId: String,
         countAlreadyUpdated: Bool = false
     ) async throws {
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            ServerEntityFactory.apply(try await KaiXAPIClient.shared.setBookmark(post.id, isBookmarked), to: post)
+            return
+        }
         let bookmarkDelta = isBookmarked ? 1 : -1
         let previousHeat = countAlreadyUpdated
             ? heatScore(for: post, bookmarkDelta: bookmarkDelta)
@@ -660,6 +740,10 @@ final class PostRepository {
     }
 
     func repost(post: PostEntity, currentUserId: String) async throws -> PostEntity {
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            ServerEntityFactory.apply(try await KaiXAPIClient.shared.setRepost(post.id, true), to: post)
+            return post
+        }
         let existing = try existingReposts(for: post, currentUserId: currentUserId)
         if let repost = existing.first {
             if existing.count > 1 {
@@ -691,6 +775,10 @@ final class PostRepository {
     ) async throws -> PostEntity {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw RepositoryError.validationFailed }
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            let quote = try await KaiXAPIClient.shared.quoteRepost(post.id, content: trimmed)
+            return ServerEntityFactory.post(from: quote)
+        }
 
         let previousHeat = countAlreadyUpdated
             ? heatScore(for: post, repostDelta: 1)
@@ -723,6 +811,10 @@ final class PostRepository {
         currentUserId: String,
         countAlreadyUpdated: Bool = false
     ) async throws -> PostEntity? {
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            ServerEntityFactory.apply(try await KaiXAPIClient.shared.setRepost(post.id, isReposted), to: post)
+            return nil
+        }
         let existing = try existingReposts(for: post, currentUserId: currentUserId)
         let wasReposted = post.isRepostedByCurrentUser || !existing.isEmpty
         let repostDelta = isReposted ? 1 : -1
@@ -788,6 +880,15 @@ final class PostRepository {
     ) async throws -> CommentEntity {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.isEmpty == false else { throw RepositoryError.validationFailed }
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            let dto = try await KaiXAPIClient.shared.createComment(
+                postId: post.id,
+                content: trimmed,
+                parentId: parentCommentId
+            )
+            post.commentCount += 1
+            return ServerEntityFactory.comment(from: dto)
+        }
 
         let previousHeat = commentCountAlreadyUpdated
             ? heatScore(for: post, commentDelta: 1)
@@ -840,6 +941,10 @@ final class PostRepository {
     }
 
     func deleteComment(comment: CommentEntity, commentCountAlreadyUpdated: Bool = false) async throws {
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            try await KaiXAPIClient.shared.deleteComment(comment.id)
+            return
+        }
         let postId = comment.postId
         let parentId = comment.id
         let descendants = try context.fetch(FetchDescriptor<CommentEntity>(
@@ -862,6 +967,10 @@ final class PostRepository {
     }
 
     func deletePost(post: PostEntity) async throws {
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            try await KaiXAPIClient.shared.deletePost(post.remoteId ?? post.id)
+            return
+        }
         let postId = post.id
         let remoteId = post.remoteId
         let reposts = try context.fetch(FetchDescriptor<PostEntity>(
@@ -896,6 +1005,10 @@ final class PostRepository {
     func updatePost(post: PostEntity, content: String) async throws {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.isEmpty == false else { throw RepositoryError.validationFailed }
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            ServerEntityFactory.apply(try await KaiXAPIClient.shared.editPost(post.remoteId ?? post.id, content: trimmed), to: post)
+            return
+        }
 
         let remoteId = post.remoteId
         post.content = trimmed

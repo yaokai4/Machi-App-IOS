@@ -12,6 +12,15 @@ enum KaiXDatabaseContainer {
     static let shared: ModelContainer = {
         let schema = Schema(KaiXSchemaV5.models)
 
+        if !KaiXRuntimeFlags.allowLocalStoreFallback {
+            do {
+                logger.info("production local persistence disabled: using in-memory compatibility container")
+                return try makeEphemeralContainer(schema: schema)
+            } catch {
+                fatalError("Unable to create in-memory compatibility container: \(error.localizedDescription)")
+            }
+        }
+
         if isRunningUnitTests {
             do {
                 return try makeEphemeralContainer(schema: schema)

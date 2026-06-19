@@ -102,12 +102,6 @@ struct ContentView: View {
             }
             sessionStore.setCurrentUser(appState.currentUser?.id)
             userStore.setCurrentUser(appState.currentUser)
-            // After local SwiftData is in shape, pull the latest state
-            // from the unified backend so iOS and Web actually share the
-            // same data. This is a no-op when offline / unauthenticated.
-            if KaiXBackend.token != nil {
-                await RemoteSyncService.shared.bootstrap(context: modelContext)
-            }
             // Foreground notification loop: poll the server's notification
             // list and surface anything new as a REAL system banner +
             // app-icon badge. Cancelled automatically when the session
@@ -178,24 +172,64 @@ struct ContentView: View {
         }
     }
 
-    /// One notification tick: mirror the server list into SwiftData,
-    /// refresh the in-app store/badge, and banner anything new.
+    /// One notification tick: read the server list directly, refresh the
+    /// in-app store/badge, and banner anything new.
     private func syncSystemNotifications() async {
         guard KaiXBackend.token != nil, let user = appState.currentUser, !user.isGuest else { return }
-        let fresh = await RemoteSyncService.shared.syncNotifications(context: modelContext)
-        if let all = try? await NotificationRepository(context: modelContext).fetchNotifications() {
+        do {
+            let response = try await KaiXAPIClient.shared.notifications(kind: "all")
+            let all = response.items.map(notificationEntity(from:))
             notificationStore.setNotifications(all)
+            notificationStore.setUnreadCount(response.unread_count)
+            let wanted = all.filter {
+                !$0.isRead && NotificationPreferenceService.isEnabled($0.type, recipientUserId: user.id)
+            }
+            guard !wanted.isEmpty else { return }
+            var actors: [String: UserEntity] = [:]
+            for dto in response.items.compactMap(\.actor) {
+                actors[dto.id] = UserRepository.entity(from: dto)
+            }
+            let missingActorIds = Set(wanted.map(\.actorId)).subtracting(actors.keys)
+            if !missingActorIds.isEmpty {
+                let fetched = try await UserRepository(context: modelContext).fetchUsers(ids: missingActorIds)
+                for actor in fetched {
+                    actors[actor.id] = actor
+                }
+            }
+            await SystemNotificationService.shared.deliver(
+                wanted,
+                actors: actors,
+                language: language
+            )
+        } catch {
+            // Background polling should never interrupt foreground use.
         }
-        // Honor the user's per-type switches from 设置 → 通知设置.
-        let wanted = fresh.filter { NotificationPreferenceService.isEnabled($0.type, recipientUserId: user.id) }
-        guard !wanted.isEmpty else { return }
-        let actorIds = Set(wanted.map(\.actorId))
-        let actorList = (try? await UserRepository(context: modelContext).fetchUsers(ids: actorIds)) ?? []
-        await SystemNotificationService.shared.deliver(
-            wanted,
-            actors: Dictionary(uniqueKeysWithValues: actorList.map { ($0.id, $0) }),
-            language: language
+    }
+
+    private func notificationEntity(from dto: KaiXNotificationDTO) -> NotificationEntity {
+        NotificationEntity(
+            id: dto.id,
+            type: NotificationType(rawValue: dto.type) ?? .system,
+            actorId: dto.actor?.id ?? dto.actor_id,
+            targetPostId: dto.target_post_id,
+            targetCommentId: dto.target_comment_id,
+            targetConversationId: dto.target_conversation_id,
+            content: dto.content ?? "",
+            isRead: dto.is_read,
+            createdAt: parseServerDate(dto.created_at) ?? .now,
+            remoteId: dto.id,
+            syncStatus: .synced
         )
+    }
+
+    private func parseServerDate(_ raw: String?) -> Date? {
+        guard let raw, !raw.isEmpty else { return nil }
+        let withFraction = ISO8601DateFormatter()
+        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = withFraction.date(from: raw) { return date }
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime]
+        return iso.date(from: raw)
     }
 
     /// Shared success path for a real (non-guest) login or registration.

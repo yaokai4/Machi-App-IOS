@@ -19,8 +19,12 @@ final class MessagesViewModel: ObservableObject {
             let repository = MessageRepository(context: context)
             threads = try await repository.fetchThreads(currentUserId: currentUser.id)
             messageStore?.setConversations(threads)
-            let users = try await UserRepository(context: context).fetchUsers()
-            peers = Dictionary(uniqueKeysWithValues: users.map { ($0.id, $0) })
+            if KaiXBackend.token != nil {
+                peers = repository.cachedPeers()
+            } else {
+                let users = try await UserRepository(context: context).fetchUsers()
+                peers = Dictionary(uniqueKeysWithValues: users.map { ($0.id, $0) })
+            }
             state = threads.isEmpty ? .empty : .loaded
         } catch {
             if hasCachedContent {
@@ -90,19 +94,11 @@ final class ChatViewModel: ObservableObject {
             state = .loading
         }
         do {
-            messages = try await MessageRepository(context: context).fetchMessages(threadId: thread.id)
+            let repository = MessageRepository(context: context)
+            messages = try await repository.fetchMessages(threadId: thread.id)
             messageStore?.setMessages(messages, conversationId: thread.id)
             let ids = Set(messages.map(\.id))
-            if ids.isEmpty {
-                mediaByMessageId = [:]
-            } else {
-                let idList = Array(ids)
-                let media = try context.fetch(FetchDescriptor<MediaEntity>(
-                    predicate: #Predicate { idList.contains($0.postId) },
-                    sortBy: [SortDescriptor(\.createdAt)]
-                ))
-                mediaByMessageId = Dictionary(grouping: media, by: \.postId)
-            }
+            mediaByMessageId = try await repository.fetchMedia(threadId: thread.id, messageIds: ids)
             state = messages.isEmpty ? .empty : .loaded
         } catch {
             if hasCachedContent {
@@ -182,10 +178,8 @@ final class ChatViewModel: ObservableObject {
             inputText = ""
             mediaDrafts = []
             let messageId = message.id
-            let media = (try? context.fetch(FetchDescriptor<MediaEntity>(
-                predicate: #Predicate { $0.postId == messageId },
-                sortBy: [SortDescriptor(\.createdAt)]
-            ))) ?? []
+            let sentMediaById = (try? await MessageRepository(context: context).fetchMedia(threadId: thread.id, messageIds: [messageId])) ?? [:]
+            let media = sentMediaById[messageId] ?? []
             messages.append(message)
             mediaByMessageId[message.id] = media
             state = .loaded
@@ -217,6 +211,10 @@ final class ChatViewModel: ObservableObject {
     }
 
     func retryMessage(context: ModelContext, thread: MessageThreadEntity, message: MessageEntity, messageStore: MessageStore? = nil) async {
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            errorMessage = RepositoryError.authenticationRequired.kaixUserMessage
+            return
+        }
         guard message.status == .failed else { return }
         let previousStatus = message.status
         message.status = .sending

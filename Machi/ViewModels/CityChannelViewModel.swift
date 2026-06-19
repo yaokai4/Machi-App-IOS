@@ -19,7 +19,7 @@ final class CityChannelViewModel: ObservableObject {
     // order; the local offset query is only the offline fallback.
     private var remoteCursor: String?
     private var remoteHasMore = false
-    private var pendingRemoteIds: [String]?
+    private var pendingRemoteBundle: ServerEntityFactory.PostBundle?
     // Ids already in `posts`, so an appended page can never repeat a row.
     private var loadedIds = Set<String>()
 
@@ -37,7 +37,7 @@ final class CityChannelViewModel: ObservableObject {
         canLoadMore = true
         remoteCursor = nil
         remoteHasMore = false
-        pendingRemoteIds = nil
+        pendingRemoteBundle = nil
         loadedIds = []
         if clearExisting {
             posts = []
@@ -125,12 +125,13 @@ final class CityChannelViewModel: ObservableObject {
             let repository = PostRepository(context: context)
             let page: [PostEntity]
             let usedRemotePage: Bool
-            if let remoteIds = pendingRemoteIds {
-                pendingRemoteIds = nil
+            if let bundle = pendingRemoteBundle {
+                pendingRemoteBundle = nil
                 usedRemotePage = true
-                let fetched = try await repository.fetchPosts(ids: Set(remoteIds), currentUserId: currentUser.id)
-                let byId = Dictionary(uniqueKeysWithValues: fetched.map { ($0.id, $0) })
-                page = remoteIds.compactMap { byId[$0] }
+                page = bundle.orderedPosts
+                authors.merge(bundle.authors) { _, fresh in fresh }
+                mediaByPostId.merge(bundle.mediaByPostId) { _, fresh in fresh }
+                postStore.register(bundle.allPosts)
             } else {
                 usedRemotePage = false
                 page = try await repository.fetchCityPage(
@@ -162,21 +163,20 @@ final class CityChannelViewModel: ObservableObject {
     /// cursor. Best-effort: on failure the local cache keeps the view alive.
     private func syncFromRemote(context: ModelContext, region: KaiXRegionDirectory.Region, cursor: String?) async {
         do {
-            let page = try await RemoteSyncService.shared.syncFeed(
+            let page = try await KaiXAPIClient.shared.feed(
                 mode: channel == .hot ? .hot : .recommend,
                 cursor: cursor,
                 regionCode: region.regionCode,
                 country: region.countryCode,
                 province: region.provinceCode.isEmpty ? nil : region.provinceCode,
                 city: region.cityCode,
-                contentTypes: channel.contentTypes,
-                context: context
+                contentTypes: channel.contentTypes
             )
-            remoteCursor = page.nextCursor
-            remoteHasMore = page.nextCursor != nil && !page.ids.isEmpty
-            pendingRemoteIds = page.ids.isEmpty ? nil : page.ids
+            remoteCursor = page.next_cursor
+            remoteHasMore = page.next_cursor != nil && !page.items.isEmpty
+            pendingRemoteBundle = page.items.isEmpty ? nil : ServerEntityFactory.postBundle(from: page.items)
         } catch {
-            pendingRemoteIds = nil
+            pendingRemoteBundle = nil
         }
     }
 

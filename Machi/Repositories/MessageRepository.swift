@@ -4,12 +4,27 @@ import SwiftData
 @MainActor
 final class MessageRepository {
     private let context: ModelContext
+    private static var cachedPeersById: [String: UserEntity] = [:]
+    private static var cachedMediaByConversationId: [String: [String: [MediaEntity]]] = [:]
 
     init(context: ModelContext) {
         self.context = context
     }
 
     func fetchThreads(currentUserId: String) async throws -> [MessageThreadEntity] {
+        if KaiXBackend.token != nil {
+            let conversations = try await KaiXAPIClient.shared.conversations()
+            var peers: [String: UserEntity] = [:]
+            let threads = conversations.map { dto -> MessageThreadEntity in
+                if let peer = dto.peer {
+                    peers[peer.id] = UserRepository.entity(from: peer)
+                }
+                return Self.thread(from: dto)
+            }
+            Self.cachedPeersById.merge(peers) { _, new in new }
+            return threads
+        }
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else { return [] }
         return try context.fetch(FetchDescriptor<MessageThreadEntity>(
             sortBy: [SortDescriptor(\.lastMessageAt, order: .reverse)]
         ))
@@ -17,13 +32,49 @@ final class MessageRepository {
     }
 
     func fetchMessages(threadId: String) async throws -> [MessageEntity] {
-        try context.fetch(FetchDescriptor<MessageEntity>(
+        if KaiXBackend.token != nil {
+            let messages = try await KaiXAPIClient.shared.messages(threadId)
+            var mediaByMessage: [String: [MediaEntity]] = [:]
+            let entities = messages.map { dto -> MessageEntity in
+                let mappedMedia = Self.mediaItems(from: dto)
+                mediaByMessage[dto.id] = mappedMedia
+                let entity = Self.message(from: dto, mediaIds: mappedMedia.map(\.id))
+                return entity
+            }
+            Self.cachedMediaByConversationId[threadId] = mediaByMessage
+            return entities
+        }
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else { return [] }
+        return try context.fetch(FetchDescriptor<MessageEntity>(
             predicate: #Predicate { $0.threadId == threadId },
             sortBy: [SortDescriptor(\.createdAt)]
         ))
     }
 
+    func fetchMedia(threadId: String, messageIds: Set<String>) async throws -> [String: [MediaEntity]] {
+        if KaiXBackend.token != nil {
+            let cached = Self.cachedMediaByConversationId[threadId] ?? [:]
+            return cached.filter { messageIds.contains($0.key) }
+        }
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else { return [:] }
+        guard !messageIds.isEmpty else { return [:] }
+        let idList = Array(messageIds)
+        let media = try context.fetch(FetchDescriptor<MediaEntity>(
+            predicate: #Predicate { idList.contains($0.postId) },
+            sortBy: [SortDescriptor(\.createdAt)]
+        ))
+        return Dictionary(grouping: media, by: \.postId)
+    }
+
     func getOrCreateThread(currentUserId: String, peerUserId: String) async throws -> MessageThreadEntity {
+        if KaiXBackend.token != nil {
+            let dto = try await KaiXAPIClient.shared.openConversation(with: peerUserId)
+            if let peer = dto.peer {
+                Self.cachedPeersById[peer.id] = UserRepository.entity(from: peer)
+            }
+            return Self.thread(from: dto)
+        }
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else { throw RepositoryError.authenticationRequired }
         let threads = try context.fetch(FetchDescriptor<MessageThreadEntity>(
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         ))
@@ -54,6 +105,35 @@ final class MessageRepository {
     ) async throws -> MessageEntity {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.isEmpty == false || mediaDrafts.isEmpty == false else { throw RepositoryError.validationFailed }
+
+        if KaiXBackend.token != nil {
+            var attachmentIds: [String] = []
+            for draft in mediaDrafts {
+                guard let data = try? Data(contentsOf: draft.localURL) else { continue }
+                let purpose = draft.type == .video ? "message_video" : "message_image"
+                let uploaded = try await KaiXAPIClient.shared.uploadFile(
+                    data: data,
+                    mime: draft.contentType,
+                    fileName: draft.fileName,
+                    purpose: purpose,
+                    entityType: "message",
+                    threadId: thread.id,
+                    width: Int(draft.width.rounded()),
+                    height: Int(draft.height.rounded()),
+                    duration: draft.duration
+                )
+                attachmentIds.append(uploaded.file.id)
+            }
+            let dto = try await KaiXAPIClient.shared.sendMessage(thread.id, content: trimmed, attachmentIds: attachmentIds)
+            let mappedMedia = Self.mediaItems(from: dto)
+            Self.cachedMediaByConversationId[thread.id, default: [:]][dto.id] = mappedMedia
+            let message = Self.message(from: dto, mediaIds: mappedMedia.map(\.id))
+            thread.lastMessage = Self.previewText(content: trimmed, mediaTypes: mappedMedia.map(\.type))
+            thread.lastMessageAt = message.createdAt
+            thread.updatedAt = .now
+            return message
+        }
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else { throw RepositoryError.authenticationRequired }
 
         let message = MessageEntity(
             threadId: thread.id,
@@ -86,60 +166,39 @@ final class MessageRepository {
 
         message.status = .sent
         try context.save()
-        // Mirror to unified backend so the recipient sees the message
-        // on Web in real-time via SSE.
-        if KaiXBackend.token != nil {
-            let participants = thread.participantIds
-            let peerId = participants.first(where: { $0 != senderId })
-            let messageText = trimmed
-            if let peerId {
-                let mediaPaths: [(MediaType, URL, String, String, Double, Double, Double)] = mediaDrafts.map {
-                    ($0.type, $0.localURL, $0.contentType, $0.fileName, $0.width, $0.height, $0.duration)
-                }
-                Task.detached {
-                    do {
-                        let conv = try await KaiXAPIClient.shared.openConversation(with: peerId)
-                        var remoteAttachmentIds: [String] = []
-                        for (type, url, contentType, fileName, width, height, duration) in mediaPaths {
-                            guard let data = try? Data(contentsOf: url) else { continue }
-                            let purpose = type == .video ? "message_video" : "message_image"
-                            if let uploaded = try? await KaiXAPIClient.shared.uploadFile(
-                                data: data,
-                                mime: contentType,
-                                fileName: fileName,
-                                purpose: purpose,
-                                entityType: "message",
-                                threadId: conv.id,
-                                width: Int(width.rounded()),
-                                height: Int(height.rounded()),
-                                duration: duration
-                            ) {
-                                remoteAttachmentIds.append(uploaded.file.id)
-                            }
-                        }
-                        _ = try? await KaiXAPIClient.shared.sendMessage(conv.id, content: messageText, attachmentIds: remoteAttachmentIds)
-                    } catch {
-                        // Best-effort; local message is already saved.
-                    }
-                }
-            }
-        }
         return message
     }
 
     func markThreadRead(_ thread: MessageThreadEntity) async throws {
+        if KaiXBackend.token != nil {
+            try await KaiXAPIClient.shared.markConversationRead(thread.id)
+            thread.unreadCount = 0
+            return
+        }
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else { throw RepositoryError.authenticationRequired }
         thread.unreadCount = 0
         thread.updatedAt = .now
         try context.save()
     }
 
     func markThreadUnread(_ thread: MessageThreadEntity) async throws {
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            thread.unreadCount = max(1, thread.unreadCount)
+            thread.updatedAt = .now
+            return
+        }
         thread.unreadCount = max(1, thread.unreadCount)
         thread.updatedAt = .now
         try context.save()
     }
 
     func deleteThread(_ thread: MessageThreadEntity) async throws {
+        if KaiXBackend.token != nil {
+            try await KaiXAPIClient.shared.deleteConversation(thread.id)
+            Self.cachedMediaByConversationId[thread.id] = nil
+            return
+        }
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else { throw RepositoryError.authenticationRequired }
         let threadId = thread.id
         let messages = try context.fetch(FetchDescriptor<MessageEntity>(
             predicate: #Predicate { $0.threadId == threadId }
@@ -155,6 +214,12 @@ final class MessageRepository {
     }
 
     func deleteMessage(_ message: MessageEntity, in thread: MessageThreadEntity) async throws {
+        if KaiXBackend.token != nil {
+            try await KaiXAPIClient.shared.deleteMessage(message.id)
+            Self.cachedMediaByConversationId[thread.id]?[message.id] = nil
+            return
+        }
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else { throw RepositoryError.authenticationRequired }
         let messageId = message.id
         let media = try context.fetch(FetchDescriptor<MediaEntity>(
             predicate: #Predicate { $0.postId == messageId }
@@ -180,6 +245,100 @@ final class MessageRepository {
 
     func peerUserId(in thread: MessageThreadEntity, currentUserId: String) -> String? {
         thread.participantIds.first { $0 != currentUserId }
+    }
+
+    func cachedPeers() -> [String: UserEntity] {
+        Self.cachedPeersById
+    }
+
+    private static func thread(from dto: KaiXConversationDTO) -> MessageThreadEntity {
+        let last = dto.last_message
+        let lastMedia = last.map(mediaItems(from:)) ?? []
+        return MessageThreadEntity(
+            id: dto.id,
+            participantIds: dto.participants.isEmpty ? [dto.participant_a, dto.participant_b] : dto.participants,
+            lastMessage: previewText(content: last?.content ?? "", mediaTypes: lastMedia.map(\.type)),
+            lastMessageAt: parseDate(last?.created_at) ?? parseDate(dto.updated_at) ?? .now,
+            unreadCount: dto.unread_count,
+            updatedAt: parseDate(dto.updated_at) ?? .now,
+            remoteId: dto.id,
+            syncStatus: .synced
+        )
+    }
+
+    private static func message(from dto: KaiXMessageDTO, mediaIds: [String]) -> MessageEntity {
+        MessageEntity(
+            id: dto.id,
+            threadId: dto.conversation_id,
+            senderId: dto.sender_id,
+            content: dto.content,
+            mediaItemIds: mediaIds,
+            createdAt: parseDate(dto.created_at) ?? .now,
+            updatedAt: parseDate(dto.created_at) ?? .now,
+            status: .sent,
+            remoteId: dto.id,
+            syncStatus: .synced
+        )
+    }
+
+    private static func mediaItems(from dto: KaiXMessageDTO) -> [MediaEntity] {
+        let legacy = (dto.media ?? []).map { media -> MediaEntity in
+            MediaEntity(
+                id: media.id,
+                postId: dto.id,
+                type: media.normalizedType == "video" ? .video : .image,
+                remoteURL: media.sourceURLString,
+                mediumURL: media.mediumURLString,
+                originalURL: media.sourceURLString,
+                thumbnailURL: media.posterURLString.isEmpty ? media.thumbnailURLString : media.posterURLString,
+                width: Double(media.width ?? 0),
+                height: Double(media.height ?? 0),
+                duration: media.duration_seconds ?? media.durationSeconds ?? media.duration ?? 0,
+                fileSize: media.file_size ?? media.fileSize ?? media.byte_size ?? 0,
+                mimeType: media.content_type ?? media.contentType ?? media.mime ?? "",
+                uploadState: .uploaded,
+                uploadProgress: 1,
+                createdAt: parseDate(media.created_at ?? media.createdAt) ?? .now,
+                remoteId: media.id,
+                syncStatus: .synced
+            )
+        }
+        let attachments = (dto.attachments ?? []).map { att -> MediaEntity in
+            let rawType = (att.attachment_type ?? att.type).lowercased()
+            let mediaType: MediaType = rawType == "video" ? .video : .image
+            let source = att.publicUrl ?? att.cdnUrl ?? att.url ?? ""
+            let thumb = att.posterUrl ?? att.poster_url ?? att.thumbnailUrl ?? att.thumbnail_url ?? att.thumbUrl ?? att.thumb_url ?? source
+            return MediaEntity(
+                id: att.id,
+                postId: dto.id,
+                type: mediaType,
+                remoteURL: source,
+                mediumURL: source,
+                originalURL: source,
+                thumbnailURL: thumb,
+                width: Double(att.width ?? 0),
+                height: Double(att.height ?? 0),
+                duration: att.duration_seconds ?? att.durationSeconds ?? att.duration ?? 0,
+                fileSize: att.file_size ?? att.fileSize ?? att.byte_size ?? 0,
+                mimeType: att.content_type ?? att.contentType ?? att.mime ?? "",
+                uploadState: .uploaded,
+                uploadProgress: 1,
+                createdAt: parseDate(att.created_at ?? att.createdAt) ?? .now,
+                remoteId: att.id,
+                syncStatus: .synced
+            )
+        }
+        return legacy + attachments
+    }
+
+    private static func parseDate(_ raw: String?) -> Date? {
+        guard let raw, !raw.isEmpty else { return nil }
+        let withFraction = ISO8601DateFormatter()
+        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = withFraction.date(from: raw) { return date }
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime]
+        return iso.date(from: raw)
     }
 
     private static func previewText(content: String, mediaTypes: [MediaType]) -> String {

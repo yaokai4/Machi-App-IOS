@@ -26,6 +26,28 @@ final class NotificationsViewModel: ObservableObject {
             notificationStore?.setLoadingState(.loading)
         }
         do {
+            if KaiXBackend.token != nil {
+                let response = try await KaiXAPIClient.shared.notifications(kind: "all")
+                notifications = response.items.map(Self.entity(from:))
+                rebuildGroupedNotifications()
+                notificationStore?.setNotifications(notifications)
+                notificationStore?.setUnreadCount(response.unread_count)
+                var actorMap: [String: UserEntity] = [:]
+                for dto in response.items.compactMap(\.actor) {
+                    actorMap[dto.id] = UserRepository.entity(from: dto)
+                }
+                let missingActorIds = Set(notifications.map(\.actorId)).subtracting(actorMap.keys)
+                if !missingActorIds.isEmpty {
+                    let users = try await UserRepository(context: context).fetchUsers(ids: missingActorIds)
+                    for user in users {
+                        actorMap[user.id] = user
+                    }
+                }
+                actors = actorMap
+                state = notifications.isEmpty ? .empty : .loaded
+                notificationStore?.setLoadingState(state)
+                return
+            }
             notifications = try await NotificationRepository(context: context).fetchNotifications()
             rebuildGroupedNotifications()
             notificationStore?.setNotifications(notifications)
@@ -50,11 +72,12 @@ final class NotificationsViewModel: ObservableObject {
         notifications.forEach { $0.isRead = true }
         rebuildGroupedNotifications()
         notificationStore?.setNotifications(notifications)
+        notificationStore?.setUnreadCount(0)
         do {
-            try await NotificationRepository(context: context).markAllRead()
-            // Mirror to the unified backend so the badge on Web disappears too.
             if KaiXBackend.token != nil {
-                Task.detached { try? await KaiXAPIClient.shared.markNotificationsRead(all: true) }
+                try await KaiXAPIClient.shared.markNotificationsRead(all: true)
+            } else {
+                try await NotificationRepository(context: context).markAllRead()
             }
         } catch {
             previous.forEach { $0.0.isRead = $0.1 }
@@ -144,6 +167,32 @@ final class NotificationsViewModel: ObservableObject {
         Task.detached {
             try? await KaiXAPIClient.shared.markNotificationsRead(ids: uniqueIds)
         }
+    }
+
+    private static func entity(from dto: KaiXNotificationDTO) -> NotificationEntity {
+        NotificationEntity(
+            id: dto.id,
+            type: NotificationType(rawValue: dto.type) ?? .system,
+            actorId: dto.actor?.id ?? dto.actor_id,
+            targetPostId: dto.target_post_id,
+            targetCommentId: dto.target_comment_id,
+            targetConversationId: dto.target_conversation_id,
+            content: dto.content ?? "",
+            isRead: dto.is_read,
+            createdAt: parseDate(dto.created_at) ?? .now,
+            remoteId: dto.id,
+            syncStatus: .synced
+        )
+    }
+
+    private static func parseDate(_ raw: String?) -> Date? {
+        guard let raw, !raw.isEmpty else { return nil }
+        let withFraction = ISO8601DateFormatter()
+        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = withFraction.date(from: raw) { return date }
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime]
+        return iso.date(from: raw)
     }
 }
 

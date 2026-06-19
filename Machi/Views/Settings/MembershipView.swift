@@ -276,7 +276,9 @@ struct MembershipView: View {
         VStack(spacing: 10) {
             Button {
                 if currentUser.isGuest { GuestGate.shared.requireLogin(); return }
-                Task { await store.purchase() }
+                Task {
+                    await store.purchase(appAccountToken: MembershipStore.appAccountToken(for: currentUser))
+                }
             } label: {
                 HStack {
                     if store.state == .purchasing || store.state == .verifying {

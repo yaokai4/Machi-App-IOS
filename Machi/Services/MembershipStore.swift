@@ -24,9 +24,16 @@ final class MembershipStore: ObservableObject {
     /// App Store Connect product ids. The backend may override these through
     /// `/api/membership/plan`, but the app keeps these fallbacks so a missing
     /// admin field never leaves the paywall unable to load products.
-    static let defaultProductID = "machi_verified_monthly_cny_10"
-    static let yearlyProductID = "machi_verified_yearly_cny_98"
-    static let allKnownProductIDs: Set<String> = [defaultProductID, yearlyProductID]
+    static let defaultProductID = "machi_yuedu_18"
+    static let yearlyProductID = "machi_1niandu_198"
+    static let legacyMonthlyProductID = "machi_verified_monthly_cny_10"
+    static let legacyYearlyProductID = "machi_verified_yearly_cny_98"
+    static let allKnownProductIDs: Set<String> = [
+        defaultProductID,
+        yearlyProductID,
+        legacyMonthlyProductID,
+        legacyYearlyProductID,
+    ]
 
     @Published private(set) var product: Product?
     @Published private(set) var plans: [KaiXMembershipPlanDTO] = []
@@ -34,7 +41,7 @@ final class MembershipStore: ObservableObject {
     @Published private(set) var state: PurchaseState = .idle
     @Published private(set) var membershipActive = false
     @Published private(set) var currentPeriodEnd: String = ""
-    /// Localized store price (e.g. "¥10.00"); falls back to the server plan.
+    /// Localized store price (e.g. "¥18.00"); falls back to the server plan.
     @Published private(set) var displayPrice: String = ""
 
     private var productID: String = MembershipStore.defaultProductID
@@ -124,11 +131,22 @@ final class MembershipStore: ObservableObject {
         }
     }
 
-    func purchase() async {
+    static func appAccountToken(for user: UserEntity) -> UUID? {
+        if let remote = user.remoteId, let uuid = UUID(uuidString: remote) {
+            return uuid
+        }
+        return UUID(uuidString: user.id)
+    }
+
+    func purchase(appAccountToken: UUID? = nil) async {
         guard let product else { state = .failed("product_unavailable"); return }
         state = .purchasing
         do {
-            let result = try await product.purchase()
+            var options: Set<Product.PurchaseOption> = []
+            if let appAccountToken {
+                options.insert(.appAccountToken(appAccountToken))
+            }
+            let result = try await product.purchase(options: options)
             switch result {
             case .success(let verification):
                 await handle(verification)
@@ -161,7 +179,7 @@ final class MembershipStore: ObservableObject {
 
         let restorableProductIDs = knownProductIDsForRestore()
         var restoredAny = false
-        for await result in Transaction.all {
+        for await result in Transaction.currentEntitlements {
             let transaction = transaction(from: result)
             guard restorableProductIDs.contains(transaction.productID) else { continue }
             restoredAny = true

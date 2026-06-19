@@ -293,11 +293,9 @@ final class PostStore: ObservableObject {
                 currentUserId: currentUserId,
                 countAlreadyUpdated: true
             )
-            // Mirror to the unified backend so Web sees it live. Only
-            // fire when we have a confirmed server id — otherwise the
-            // local UUID would 404 silently. A later refresh will
-            // reconcile pending-upload posts.
-            if KaiXBackend.token != nil, let remoteId = post.remoteId {
+            // Legacy local-fixture path only. Production writes already
+            // happen inside PostRepository and are never persisted locally.
+            if KaiXRuntimeFlags.allowLocalStoreFallback, KaiXBackend.token != nil, let remoteId = post.remoteId {
                 Task.detached {
                     if let dto = try? await KaiXAPIClient.shared.setLike(remoteId, isLiked) {
                         await MainActor.run {
@@ -338,7 +336,7 @@ final class PostStore: ObservableObject {
                 currentUserId: currentUserId,
                 countAlreadyUpdated: true
             )
-            if KaiXBackend.token != nil, let remoteId = post.remoteId {
+            if KaiXRuntimeFlags.allowLocalStoreFallback, KaiXBackend.token != nil, let remoteId = post.remoteId {
                 Task.detached {
                     if let dto = try? await KaiXAPIClient.shared.setBookmark(remoteId, isBookmarked) {
                         await MainActor.run {
@@ -392,7 +390,7 @@ final class PostStore: ObservableObject {
             } else if !isReposted {
                 removeOrdinaryRepostsLocally(originalPostId: postId, currentUserId: currentUserId)
             }
-            if KaiXBackend.token != nil, let remoteId = post.remoteId {
+            if KaiXRuntimeFlags.allowLocalStoreFallback, KaiXBackend.token != nil, let remoteId = post.remoteId {
                 Task.detached {
                     if let dto = try? await KaiXAPIClient.shared.setRepost(remoteId, isReposted) {
                         await MainActor.run {

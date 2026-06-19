@@ -23,6 +23,9 @@ enum GuestSession {
     /// failure it returns an in-memory guest so the app can still open.
     @MainActor
     static func ensureGuestUser(context: ModelContext) -> UserEntity {
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            return makeGuest()
+        }
         let targetId = guestID
         let descriptor = FetchDescriptor<UserEntity>(predicate: #Predicate { $0.id == targetId })
         if let existing = try? context.fetch(descriptor).first {
@@ -32,6 +35,22 @@ enum GuestSession {
             }
             return existing
         }
+        let guest = makeGuest()
+        context.insert(guest)
+        do {
+            try context.save()
+        } catch {
+            // Extremely rare (a synced account already holds the username):
+            // roll back and reuse whatever exists, else return the in-memory
+            // guest so the app still opens to browse.
+            context.rollback()
+            if let existing = try? context.fetch(descriptor).first { return existing }
+        }
+        return guest
+    }
+
+    @MainActor
+    private static func makeGuest() -> UserEntity {
         let guest = UserEntity(
             // Distinctive username so it can't clash with a real `@unique`
             // handle that may have synced into the local store.
@@ -49,16 +68,6 @@ enum GuestSession {
         guest.province = "tokyo"
         guest.city = "tokyo"
         guest.currentRegionCode = "jp.tokyo.tokyo"
-        context.insert(guest)
-        do {
-            try context.save()
-        } catch {
-            // Extremely rare (a synced account already holds the username):
-            // roll back and reuse whatever exists, else return the in-memory
-            // guest so the app still opens to browse.
-            context.rollback()
-            if let existing = try? context.fetch(descriptor).first { return existing }
-        }
         return guest
     }
 }

@@ -10,11 +10,25 @@ final class UserRepository {
     }
 
     func fetchUsers() async throws -> [UserEntity] {
-        try context.fetch(FetchDescriptor<UserEntity>(sortBy: [SortDescriptor(\.displayName)]))
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            return try await KaiXAPIClient.shared.trending().users
+                .map(Self.entity(from:))
+                .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
+        }
+        return try context.fetch(FetchDescriptor<UserEntity>(sortBy: [SortDescriptor(\.displayName)]))
     }
 
     func fetchUsers(ids: Set<String>) async throws -> [UserEntity] {
         guard !ids.isEmpty else { return [] }
+        var remoteUsers: [UserEntity] = []
+        for id in ids {
+            if let dto = try? await KaiXAPIClient.shared.userDetail(id) {
+                remoteUsers.append(Self.entity(from: dto))
+            }
+        }
+        if !remoteUsers.isEmpty || !KaiXRuntimeFlags.allowLocalStoreFallback {
+            return remoteUsers.sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
+        }
         let idList = Array(ids)
         return try context.fetch(FetchDescriptor<UserEntity>(
             predicate: #Predicate { idList.contains($0.id) },
@@ -23,6 +37,12 @@ final class UserRepository {
     }
 
     func fetchRecommendedUsers(excluding userId: String, limit: Int = 12) async throws -> [UserEntity] {
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            return Array(try await KaiXAPIClient.shared.trending().users
+                .map(Self.entity(from:))
+                .filter { $0.id != userId }
+                .prefix(limit))
+        }
         var descriptor = FetchDescriptor<UserEntity>(
             predicate: #Predicate { $0.id != userId },
             sortBy: [SortDescriptor(\.followerCount, order: .reverse), SortDescriptor(\.displayName)]
@@ -32,6 +52,9 @@ final class UserRepository {
     }
 
     func fetchUser(id: String) async throws -> UserEntity? {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
+            return Self.entity(from: try await KaiXAPIClient.shared.userDetail(id))
+        }
         var descriptor = FetchDescriptor<UserEntity>(predicate: #Predicate { $0.id == id })
         descriptor.fetchLimit = 1
         return try context.fetch(descriptor).first
@@ -87,22 +110,21 @@ final class UserRepository {
         let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedBio = bio.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedLocation = location.trimmingCharacters(in: .whitespacesAndNewlines)
+        if KaiXBackend.token != nil {
+            let updated = try await KaiXAPIClient.shared.updateMe([
+                "display_name": trimmedName,
+                "bio": trimmedBio,
+                "location": trimmedLocation,
+            ])
+            Self.apply(updated, to: user)
+            return
+        }
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else { throw RepositoryError.authenticationRequired }
         user.displayName = trimmedName
         user.bio = trimmedBio
         user.location = trimmedLocation
         user.updatedAt = .now
         try context.save()
-        // Persist to the unified backend so the Web client picks up the
-        // change on the next refresh.
-        if KaiXBackend.token != nil {
-            Task.detached {
-                _ = try? await KaiXAPIClient.shared.updateMe([
-                    "display_name": trimmedName,
-                    "bio": trimmedBio,
-                    "location": trimmedLocation,
-                ])
-            }
-        }
     }
 
     func updateUsername(user: UserEntity, username: String) async throws {
@@ -111,6 +133,13 @@ final class UserRepository {
             throw RepositoryError.validationFailed
         }
         guard normalized != user.username else { return }
+
+        if KaiXBackend.token != nil {
+            let updated = try await KaiXAPIClient.shared.updateMe(["handle": normalized])
+            Self.apply(updated, to: user)
+            return
+        }
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else { throw RepositoryError.authenticationRequired }
 
         var descriptor = FetchDescriptor<UserEntity>(predicate: #Predicate { $0.username == normalized })
         descriptor.fetchLimit = 1
@@ -122,14 +151,13 @@ final class UserRepository {
         user.updatedAt = .now
         try context.save()
 
-        if KaiXBackend.token != nil {
-            Task.detached {
-                _ = try? await KaiXAPIClient.shared.updateMe(["handle": normalized])
-            }
-        }
     }
 
     func isFollowing(followerId: String, followingId: String) async throws -> Bool {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
+            let dto = try await KaiXAPIClient.shared.userDetail(followingId)
+            return dto.is_following ?? dto.isFollowing ?? false
+        }
         var descriptor = FetchDescriptor<FollowEntity>(predicate: #Predicate {
             $0.followerId == followerId && $0.followingId == followingId
         })
@@ -138,6 +166,9 @@ final class UserRepository {
     }
 
     func followingIds(for userId: String) async throws -> Set<String> {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
+            return Set(try await KaiXAPIClient.shared.following(userId).map(\.id))
+        }
         let follows = try context.fetch(FetchDescriptor<FollowEntity>(
             predicate: #Predicate { $0.followerId == userId }
         ))
@@ -145,6 +176,16 @@ final class UserRepository {
     }
 
     func fetchFollowers(userId: String) async throws -> [UserEntity] {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
+            return try await KaiXAPIClient.shared.followers(userId)
+                .map(Self.entity(from:))
+                .sorted {
+                    if $0.followerCount == $1.followerCount {
+                        return $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending
+                    }
+                    return $0.followerCount > $1.followerCount
+                }
+        }
         let follows = try context.fetch(FetchDescriptor<FollowEntity>(
             predicate: #Predicate { $0.followingId == userId }
         ))
@@ -159,6 +200,16 @@ final class UserRepository {
     }
 
     func fetchFollowing(userId: String) async throws -> [UserEntity] {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
+            return try await KaiXAPIClient.shared.following(userId)
+                .map(Self.entity(from:))
+                .sorted {
+                    if $0.followerCount == $1.followerCount {
+                        return $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending
+                    }
+                    return $0.followerCount > $1.followerCount
+                }
+        }
         let follows = try context.fetch(FetchDescriptor<FollowEntity>(
             predicate: #Predicate { $0.followerId == userId }
         ))
@@ -175,6 +226,15 @@ final class UserRepository {
     func toggleFollow(currentUser: UserEntity, targetUser: UserEntity) async throws -> Bool {
         let followerId = currentUser.id
         let followingId = targetUser.id
+        if KaiXBackend.token != nil {
+            let alreadyFollowing = try await isFollowing(followerId: followerId, followingId: followingId)
+            let nextValue = !alreadyFollowing
+            try await KaiXAPIClient.shared.setFollow(followingId, nextValue)
+            currentUser.followingCount = max(0, currentUser.followingCount + (nextValue ? 1 : -1))
+            targetUser.followerCount = max(0, targetUser.followerCount + (nextValue ? 1 : -1))
+            return nextValue
+        }
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else { throw RepositoryError.authenticationRequired }
         var descriptor = FetchDescriptor<FollowEntity>(predicate: #Predicate {
             $0.followerId == followerId && $0.followingId == followingId
         })
@@ -211,7 +271,123 @@ final class UserRepository {
         return true
     }
 
+    static func entity(from dto: KaiXUserDTO) -> UserEntity {
+        let entity = UserEntity(
+            id: dto.id,
+            username: dto.handle,
+            displayName: dto.display_name,
+            email: dto.email ?? "",
+            avatarURL: dto.avatar_url ?? dto.avatarUrl ?? "",
+            coverURL: dto.cover_url ?? "",
+            bio: dto.bio ?? "",
+            location: dto.location ?? "",
+            joinDate: parseDate(dto.joined_at ?? dto.created_at ?? dto.createdAt) ?? .now,
+            isVerified: dto.is_verified ?? false,
+            role: UserRole(rawValue: dto.role ?? "") ?? .member,
+            followerCount: dto.follower_count ?? dto.followerCount ?? 0,
+            followingCount: dto.following_count ?? dto.followingCount ?? 0,
+            createdAt: parseDate(dto.created_at ?? dto.createdAt) ?? .now,
+            updatedAt: parseDate(dto.updated_at ?? dto.updatedAt) ?? .now,
+            passwordHash: "",
+            avatarSymbol: dto.avatar_symbol ?? "person.fill",
+            avatarColorName: dto.avatar_color ?? "indigo",
+            remoteId: dto.id,
+            syncStatus: .synced,
+            country: dto.country ?? "",
+            province: dto.province ?? "",
+            city: dto.city ?? "",
+            currentRegionCode: dto.current_region_code ?? "",
+            recentRegionCodesRaw: (dto.recent_region_codes ?? []).joined(separator: "|"),
+            membershipLevel: dto.membership_tier ?? "free",
+            totalHeat: dto.total_heat ?? 0,
+            creatorBadge: dto.creator_badge ?? "",
+            isOfficial: dto.is_official ?? dto.isOfficial ?? false,
+            officialRole: dto.official_role ?? dto.officialRole ?? "",
+            customTagsRaw: (dto.custom_tags ?? []).joined(separator: "|"),
+            listingCountsRaw: encodeListingCounts(dto.listing_counts ?? [:]),
+            isMerchant: dto.is_merchant ?? false,
+            merchantVerified: dto.merchant_verified ?? false,
+            profileViewCount: dto.profile_view_count ?? 0,
+            isVerifiedMember: dto.is_verified_member ?? dto.isVerifiedMember ?? false,
+            verifiedMemberUntil: parseDate(dto.verified_member_until ?? dto.verifiedMemberUntil),
+            membershipStatus: dto.membership_status ?? dto.membershipStatus ?? "inactive",
+            membershipPlanKey: dto.membership_plan_key ?? dto.membershipPlanKey ?? "",
+            appLanguage: dto.app_language ?? "",
+            contentLanguagePreference: dto.content_language_preference ?? "",
+            preferredContentLanguagesRaw: dto.preferred_content_languages ?? ""
+        )
+        entity.dmPrivacy = dto.dm_privacy ?? "everyone"
+        return entity
+    }
+
+    static func apply(_ dto: KaiXUserDTO, to user: UserEntity) {
+        let updated = entity(from: dto)
+        user.username = updated.username
+        user.displayName = updated.displayName
+        user.email = updated.email
+        user.avatarURL = updated.avatarURL
+        user.coverURL = updated.coverURL
+        user.bio = updated.bio
+        user.location = updated.location
+        user.isVerified = updated.isVerified
+        user.role = updated.role
+        user.followerCount = updated.followerCount
+        user.followingCount = updated.followingCount
+        user.avatarSymbol = updated.avatarSymbol
+        user.avatarColorName = updated.avatarColorName
+        user.country = updated.country
+        user.province = updated.province
+        user.city = updated.city
+        user.currentRegionCode = updated.currentRegionCode
+        user.recentRegionCodesRaw = updated.recentRegionCodesRaw
+        user.membershipLevel = updated.membershipLevel
+        user.totalHeat = updated.totalHeat
+        user.creatorBadge = updated.creatorBadge
+        user.isOfficial = updated.isOfficial
+        user.officialRole = updated.officialRole
+        user.customTagsRaw = updated.customTagsRaw
+        user.listingCountsRaw = updated.listingCountsRaw
+        user.isMerchant = updated.isMerchant
+        user.merchantVerified = updated.merchantVerified
+        user.profileViewCount = updated.profileViewCount
+        user.isVerifiedMember = updated.isVerifiedMember
+        user.verifiedMemberUntil = updated.verifiedMemberUntil
+        user.membershipStatus = updated.membershipStatus
+        user.membershipPlanKey = updated.membershipPlanKey
+        user.appLanguage = updated.appLanguage
+        user.contentLanguagePreference = updated.contentLanguagePreference
+        user.preferredContentLanguagesRaw = updated.preferredContentLanguagesRaw
+        user.dmPrivacy = updated.dmPrivacy
+        user.remoteId = dto.id
+        user.syncStatus = .synced
+        user.updatedAt = .now
+    }
+
+    private static func encodeListingCounts(_ value: [String: Int]) -> String {
+        guard !value.isEmpty, let data = try? JSONEncoder().encode(value) else { return "" }
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+
+    private static func parseDate(_ raw: String?) -> Date? {
+        guard let raw, !raw.isEmpty else { return nil }
+        let isoWithFraction = ISO8601DateFormatter()
+        isoWithFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = isoWithFraction.date(from: raw) { return date }
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime]
+        if let date = iso.date(from: raw) { return date }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter.date(from: raw)
+    }
+
     func deleteAccount(user: UserEntity) async throws {
+        if KaiXBackend.token != nil {
+            try await KaiXAPIClient.shared.deleteMe()
+            return
+        }
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else { throw RepositoryError.authenticationRequired }
         let userId = user.id
         let authoredPosts = try context.fetch(FetchDescriptor<PostEntity>(
             predicate: #Predicate { $0.authorId == userId }

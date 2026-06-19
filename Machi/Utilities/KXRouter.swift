@@ -317,9 +317,13 @@ private extension KXRoute {
             return KaiXRegionDirectory.resolve(regionCode: code) == nil || normalizedType.isEmpty
                 ? nil
                 : .cityListings(regionCode: code, type: normalizedType)
-        case .userListings:
-            // Internal-only route (opened from a profile tag), not deep-linkable.
-            return nil
+        case .userListings(let userId, let type, let title):
+            let id = userId.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalizedType = type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            return id.isEmpty || normalizedType.isEmpty
+                ? nil
+                : .userListings(userId: id, type: normalizedType, title: normalizedTitle.isEmpty ? normalizedType : normalizedTitle)
         case .cityListingDetail(let listingId):
             let id = listingId.trimmingCharacters(in: .whitespacesAndNewlines)
             return id.isEmpty ? nil : .cityListingDetail(listingId: id)

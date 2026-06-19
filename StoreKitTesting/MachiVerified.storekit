@@ -18,12 +18,12 @@
           "locale" : "en_US"
         }
       ],
-      "productID" : "machi_verified_monthly_cny_10",
-      "referenceName" : "Machi Verified Monthly Access",
+      "productID" : "machi_yuedu_18",
+      "referenceName" : "Machi月度会员",
       "type" : "NonRenewingSubscription"
     },
     {
-      "displayPrice" : "138.00",
+      "displayPrice" : "198.00",
       "duration" : "P1Y",
       "familyShareable" : false,
       "internalID" : "21490002",
@@ -39,8 +39,8 @@
           "locale" : "en_US"
         }
       ],
-      "productID" : "machi_verified_yearly_cny_98",
-      "referenceName" : "Machi Verified Annual Access",
+      "productID" : "machi_1niandu_198",
+      "referenceName" : "Machi年度会员",
       "type" : "NonRenewingSubscription"
     }
   ],

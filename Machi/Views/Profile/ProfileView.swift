@@ -242,10 +242,9 @@ struct ProfileView: View {
             // Pull the authoritative profile from the server first so identity
             // tags, custom tags and per-type listing counts are always fresh
             // (these only ride the user-detail endpoint, not feed payloads).
-            // Offline / failure quietly falls back to the local copy.
             if profileUserId != currentUser.id {
                 if let dto = try? await KaiXAPIClient.shared.userDetail(profileUserId) {
-                    _ = RemoteSyncService.shared.upsertUser(dto, context: modelContext)
+                    loadedProfileUser = UserRepository.entity(from: dto)
                 }
             }
             let resolvedUser: UserEntity?

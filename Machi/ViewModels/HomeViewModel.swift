@@ -15,8 +15,8 @@ final class HomeViewModel: ObservableObject {
 
     private var currentPage = 0
     // Server-side cursor for the unified-backend feed. Mirrors the Web
-    // client's infinite scroll: each "load more" pulls the NEXT remote page
-    // into SwiftData instead of endlessly re-reading the local cache.
+    // client's infinite scroll: each "load more" pulls the next API page
+    // instead of re-reading a local database window.
     private var remoteCursor: String?
     private var remoteHasMore = false
     // The page syncFromRemote just pulled, in server order. When present,
@@ -25,7 +25,7 @@ final class HomeViewModel: ObservableObject {
     // fallback. Paging a multi-source local cache by offset is what made
     // the home feed visibly repeat content: other tabs keep inserting
     // rows between windows, so window N+1 could re-serve window N's posts.
-    private var pendingRemoteIds: [String]?
+    private var pendingRemoteBundle: ServerEntityFactory.PostBundle?
     // Every post id currently in `posts` — appended pages are filtered
     // against this so a shifted local window can never show a duplicate.
     private var loadedIds = Set<String>()
@@ -40,7 +40,7 @@ final class HomeViewModel: ObservableObject {
         canLoadMore = true
         remoteCursor = nil
         remoteHasMore = false
-        pendingRemoteIds = nil
+        pendingRemoteBundle = nil
         loadedIds = []
         if clearExisting {
             posts = []
@@ -70,9 +70,8 @@ final class HomeViewModel: ObservableObject {
     func toggleLike(context: ModelContext, post: PostEntity, currentUser: UserEntity, postStore: PostStore) async {
         do {
             postStore.register(post)
-            // PostStore.toggleLike handles both the local SwiftData mutation
-            // and the unified-backend write-through (when token is present),
-            // so callers don't need to duplicate that here.
+            // PostStore.toggleLike handles the optimistic UI mutation and
+            // authoritative backend write-through in one place.
             try await postStore.toggleLike(context: context, postId: post.id, currentUser: currentUser)
         } catch {
             state = .error(error.kaixUserMessage)
@@ -136,18 +135,16 @@ final class HomeViewModel: ObservableObject {
         defer { isLoadingMore = false }
 
         do {
-            // When the unified backend is reachable (token present), pull the
-            // freshest feed from the API and upsert into SwiftData so iOS and
-            // Web stay in lockstep. The existing local query then reads from
-            // the same SwiftData store transparently. On reset that's page 1;
-            // on "load more" we advance the server cursor so infinite scroll
-            // keeps serving NEW content instead of recycling the local cache.
+            // Pull the freshest feed from the API so iOS and Web stay in
+            // lockstep. On reset that's page 1; on "load more" we advance
+            // the server cursor so infinite scroll keeps serving new content
+            // instead of recycling a local cache window.
             // Pull the public feed for EVERYONE, including guests. The
             // backend serves GET /api/feed unauthenticated (verified: 200
             // with content), and a logged-out browser landing on an empty
             // 首页 — while 发现 was full of city content — was the app's
             // worst first impression. Best-effort: syncFromRemote swallows
-            // failures and falls back to the local cache, so offline (and
+            // failures and falls back to repository handling, so offline (and
             // a guest's empty 关注 tab) degrade gracefully.
             if reset {
                 await syncFromRemote(context: context, cursor: nil)
@@ -158,15 +155,16 @@ final class HomeViewModel: ObservableObject {
             let repository = PostRepository(context: context)
             let page: [PostEntity]
             let usedRemotePage: Bool
-            if let remoteIds = pendingRemoteIds {
+            if let bundle = pendingRemoteBundle {
                 // Server-paged path: render exactly the page the cursor
-                // returned, in server order. The local store is just the
-                // entity cache here, never the paginator.
-                pendingRemoteIds = nil
+                // returned, in server order. The local store is not used as
+                // the paginator or source of truth in production.
+                pendingRemoteBundle = nil
                 usedRemotePage = true
-                let fetched = try await repository.fetchPosts(ids: Set(remoteIds), currentUserId: currentUser.id)
-                let byId = Dictionary(uniqueKeysWithValues: fetched.map { ($0.id, $0) })
-                page = remoteIds.compactMap { byId[$0] }
+                page = bundle.orderedPosts
+                authors.merge(bundle.authors) { _, fresh in fresh }
+                mediaByPostId.merge(bundle.mediaByPostId) { _, fresh in fresh }
+                postStore.register(bundle.allPosts)
             } else {
                 usedRemotePage = false
                 page = try await repository.fetchPage(mode: mode, currentUserId: currentUser.id, page: currentPage, pageSize: KaiXConfig.pageSize)
@@ -203,9 +201,9 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
-    /// Pull one page of the unified KaiX backend feed and upsert into
-    /// SwiftData, advancing the server cursor. Best-effort: a failure just
-    /// falls back to the local cache, so the App stays usable offline.
+    /// Pull one page of the unified KaiX backend feed and advance the server
+    /// cursor. Best-effort: a failure leaves the current on-screen content in
+    /// place instead of interrupting scrolling.
     private func syncFromRemote(context: ModelContext, cursor: String?) async {
         do {
             let apiMode: KaiXAPIClient.FeedMode
@@ -220,23 +218,22 @@ final class HomeViewModel: ObservableObject {
             // current city.
             let region = RegionStore.shared.current
             let cityScoped = mode == .local
-            let page = try await RemoteSyncService.shared.syncFeed(
+            let page = try await KaiXAPIClient.shared.feed(
                 mode: apiMode,
                 cursor: cursor,
                 regionCode: cityScoped ? region?.regionCode : nil,
                 country: region?.countryCode,
                 province: cityScoped ? (region?.provinceCode.isEmpty == true ? nil : region?.provinceCode) : nil,
-                city: cityScoped ? region?.cityCode : nil,
-                context: context
+                city: cityScoped ? region?.cityCode : nil
             )
-            remoteCursor = page.nextCursor
-            remoteHasMore = page.nextCursor != nil && !page.ids.isEmpty
-            pendingRemoteIds = page.ids.isEmpty ? nil : page.ids
+            remoteCursor = page.next_cursor
+            remoteHasMore = page.next_cursor != nil && !page.items.isEmpty
+            pendingRemoteBundle = page.items.isEmpty ? nil : ServerEntityFactory.postBundle(from: page.items)
         } catch {
             // Silent — the local fallback below still produces a usable
             // feed. Keep the previous cursor state so a transient network
             // error doesn't permanently stop remote pagination.
-            pendingRemoteIds = nil
+            pendingRemoteBundle = nil
         }
     }
 

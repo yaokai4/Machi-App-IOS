@@ -75,6 +75,23 @@ struct ConversationView: View {
     private func load() async {
         state = .loading
         do {
+            if KaiXBackend.token != nil {
+                let repository = MessageRepository(context: modelContext)
+                guard let loadedThread = try await repository.fetchThreads(currentUserId: currentUser.id).first(where: { $0.id == conversationId }) else {
+                    state = .empty
+                    return
+                }
+                thread = loadedThread
+                if let peerId = repository.peerUserId(in: loadedThread, currentUserId: currentUser.id) {
+                    if let cachedPeer = repository.cachedPeers()[peerId] {
+                        peer = cachedPeer
+                    } else {
+                        peer = try? await UserRepository(context: modelContext).fetchUser(id: peerId)
+                    }
+                }
+                state = .loaded
+                return
+            }
             var descriptor = FetchDescriptor<MessageThreadEntity>(
                 predicate: #Predicate { $0.id == conversationId }
             )

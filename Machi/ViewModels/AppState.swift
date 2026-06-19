@@ -17,11 +17,18 @@ final class AppState: ObservableObject {
         #endif
 
         do {
-            try await DatabaseSeeder.bootstrapIfNeeded(context: context)
-            #if DEBUG
             let processInfo = ProcessInfo.processInfo
-            let shouldAutoLoginForUITests = processInfo.environment["KAIX_UI_TEST_AUTO_LOGIN"] == "1"
+            #if DEBUG
+            let shouldUseLocalFixtures = processInfo.environment["KAIX_UI_TEST_LOCAL_AUTH"] == "1"
+                || processInfo.arguments.contains("-kaixUITestLocalAuth")
+                || processInfo.environment["KAIX_UI_TEST_AUTO_LOGIN"] == "1"
                 || processInfo.arguments.contains("-kaixUITestAutoLogin")
+            if shouldUseLocalFixtures {
+                try await DatabaseSeeder.bootstrapIfNeeded(context: context)
+            }
+            let shouldAutoLoginForUITests = shouldUseLocalFixtures
+                && (processInfo.environment["KAIX_UI_TEST_AUTO_LOGIN"] == "1"
+                    || processInfo.arguments.contains("-kaixUITestAutoLogin"))
             if shouldAutoLoginForUITests {
                 let repository = UserRepository(context: context)
                 let user: UserEntity
@@ -45,15 +52,20 @@ final class AppState: ObservableObject {
             #endif
             if currentUserId.isEmpty {
                 currentUser = nil
-            } else {
+            } else if currentUserId == GuestSession.guestID && KaiXBackend.token == nil {
+                currentUser = GuestSession.ensureGuestUser(context: context)
+            } else if KaiXBackend.token != nil {
                 currentUser = try await UserRepository(context: context).fetchUser(id: currentUserId)
                 if currentUser == nil {
                     AuthService.shared.logout()
                 }
+            } else {
+                AuthService.shared.logout()
+                currentUser = nil
             }
             state = currentUser == nil ? .empty : .loaded
         } catch {
-            state = .error("暂时无法打开本地内容，请稍后重试。")
+            state = .error("暂时无法连接服务器，请稍后重试。")
             #if DEBUG
             databaseRecoveryNotice = DatabaseRecoveryNotice(
                 mode: .ephemeral,

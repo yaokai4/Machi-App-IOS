@@ -284,30 +284,12 @@ private struct NewConversationView: View {
         do {
             let remoteUsers = try await KaiXAPIClient.shared.mutualMessageFriends(limit: 50)
             users = remoteUsers
-                .map { RemoteSyncService.shared.upsertUser($0, context: modelContext) }
+                .map(UserRepository.entity(from:))
                 .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
-            try? modelContext.save()
             state = users.isEmpty ? .empty : .loaded
         } catch {
-            do {
-                users = try await localMutualFriends()
-                state = users.isEmpty ? .empty : .loaded
-            } catch {
-                state = .error(error.kaixUserMessage)
-            }
+            state = .error(error.kaixUserMessage)
         }
-    }
-
-    private func localMutualFriends() async throws -> [UserEntity] {
-        let repository = UserRepository(context: modelContext)
-        let currentUserId = currentUser.id
-        let following = try await repository.followingIds(for: currentUserId)
-        let followers = try modelContext.fetch(FetchDescriptor<FollowEntity>(
-            predicate: #Predicate { $0.followingId == currentUserId }
-        ))
-        let mutualIds = following.intersection(Set(followers.map(\.followerId)))
-        return try await repository.fetchUsers(ids: mutualIds)
-            .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
     }
 }
 

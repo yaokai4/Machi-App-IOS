@@ -28,11 +28,6 @@ struct NotificationsView: View {
         .kxPageBackground()
         .toolbar(.hidden, for: .navigationBar)
         .task {
-            // Pull the freshest server notifications first so the list the
-            // user just opened isn't stale, then render from SwiftData.
-            if KaiXBackend.token != nil {
-                await RemoteSyncService.shared.syncNotifications(context: modelContext)
-            }
             await viewModel.load(context: modelContext, notificationStore: notificationStore)
         }
         .onAppear {

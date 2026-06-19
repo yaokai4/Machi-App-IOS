@@ -129,6 +129,10 @@ final class NotificationStore: ObservableObject {
         unreadCount = notifications.filter { !$0.isRead }.count
     }
 
+    func setUnreadCount(_ count: Int) {
+        unreadCount = max(0, count)
+    }
+
     func setLoadingState(_ state: ScreenState) {
         loadingState = state
     }

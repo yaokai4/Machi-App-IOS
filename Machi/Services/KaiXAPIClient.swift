@@ -479,6 +479,12 @@ final class KaiXAPIClient {
         _ = try await request("POST", "/api/users/\(id.encodedPathSegment)/report", body: ["reason": reason, "note": note ?? ""])
     }
 
+    func user(_ id: String) async throws -> KaiXUserDTO {
+        struct Wrapper: Codable { let user: KaiXUserDTO }
+        let data = try await request("GET", "/api/users/\(id.encodedPathSegment)")
+        return try decode(data) as Wrapper |> \.user
+    }
+
     /// Submit in-app feedback. Mirrors web `POST /api/feedback`; requires auth.
     func submitFeedback(category: String = "general", content: String) async throws {
         _ = try await request("POST", "/api/feedback", body: ["category": category, "content": content])
@@ -1508,8 +1514,12 @@ final class KaiXAPIClient {
         _ = try await request("DELETE", "/api/conversations/\(id.encodedPathSegment)")
     }
 
-    func messages(_ conversationId: String) async throws -> [KaiXMessageDTO] {
-        let data = try await request("GET", "/api/conversations/\(conversationId.encodedPathSegment)/messages")
+    func messages(_ conversationId: String, query: String = "", day: String? = nil) async throws -> [KaiXMessageDTO] {
+        var items: [URLQueryItem] = []
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { items.append(URLQueryItem(name: "q", value: trimmed)) }
+        if let day, !day.isEmpty { items.append(URLQueryItem(name: "day", value: day)) }
+        let data = try await request("GET", "/api/conversations/\(conversationId.encodedPathSegment)/messages", queryItems: items)
         let response: KaiXMessagesResponse = try decode(data)
         return response.items
     }
