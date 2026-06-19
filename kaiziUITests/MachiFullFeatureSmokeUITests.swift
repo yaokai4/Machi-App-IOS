@@ -81,7 +81,7 @@ final class MachiFullFeatureSmokeUITests: XCTestCase {
             .init("listing:rental", ["租房 · 住宿", "长租房源"]),
             .init("listing:stays", ["租房 · 住宿", "民宿"]),
             .init("listing:work", ["工作", "职位库"]),
-            .init("listing:local_service", ["商家与服务", "餐厅美食"]),
+            .init("listing:local_service", ["商家与服务", "餐厅"]),
             .init("listing:discount", ["优惠", "本地商家优惠"]),
             .init("create:secondhand", ["发布二手", "图片与视频"]),
             .init("create:rental", ["发布房源", "图片与视频"]),

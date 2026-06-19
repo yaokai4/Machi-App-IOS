@@ -911,17 +911,15 @@ struct LocalizationService {
         "membershipPlanFallback": [.zh: "会员权益", .ja: "メンバー特典", .en: "Membership access"],
         "membershipYearlyPlan": [.zh: "年度会员", .ja: "年額メンバー", .en: "Annual membership"],
         "membershipMonthlyPlan": [.zh: "月度会员", .ja: "月額メンバー", .en: "Monthly membership"],
-        // Auto-renewable subscription disclosure (App Store Review 3.1.2)
-        "membershipRenewalDisclosure": [
-            .zh: "订阅为自动续订。确认购买后将向你的 Apple ID 收费；除非在当前周期结束前至少 24 小时关闭自动续订，否则会按所选周期（按月或包年）自动续期并收费。",
-            .ja: "本サブスクリプションは自動更新です。購入確定時に Apple ID へ課金され、期間終了の24時間以上前に自動更新をオフにしない限り、選択した期間（月額または年額）で自動的に更新・課金されます。",
-            .en: "This subscription auto-renews. Your Apple ID is charged on confirmation and renews at the selected period (monthly or yearly) unless auto-renew is turned off at least 24 hours before the period ends."
+        "membershipPurchaseDisclosure": [
+            .zh: "这是一次性购买的会员有效期，不会自动续费。确认购买后将向你的 Apple ID 收费；月度套餐延长 1 个月，年度套餐延长 1 年。",
+            .ja: "これは自動更新されない有効期間の購入です。購入確定時に Apple ID へ課金され、月額プランは1か月、年額プランは1年分の有効期間が追加されます。",
+            .en: "This is a one-time purchase for a membership validity period. It does not auto-renew. Your Apple ID is charged on confirmation; monthly adds 1 month and annual adds 1 year."
         ],
-        "membershipManage": [.zh: "管理订阅", .ja: "サブスクリプションを管理", .en: "Manage subscription"],
-        "membershipCancelNote": [
-            .zh: "可随时在「设置 › Apple ID › 订阅」中取消，已付费的当前周期仍可继续使用至到期。",
-            .ja: "「設定 › Apple ID › サブスクリプション」からいつでも解約できます。お支払い済みの当該期間は満了まで利用できます。",
-            .en: "Cancel anytime in Settings › Apple ID › Subscriptions. Paid time remains usable until the current period ends."
+        "membershipPurchaseNote": [
+            .zh: "购买成功后会由 Machi 服务器校验并同步到当前账号；已购买的有效期可使用至到期，订单记录会保留在工作台。",
+            .ja: "購入後、Machi サーバーで確認され、このアカウントに同期されます。購入済みの有効期間は期限まで利用でき、注文履歴はワークベンチに保存されます。",
+            .en: "After purchase, Machi verifies it server-side and syncs access to this account. Paid validity remains usable until expiry, and order history is kept in Workbench."
         ],
         "membershipSettingsTitle": [.zh: "Machi 认证会员", .ja: "Machi 認証メンバー", .en: "Machi Verified"],
         "membershipSettingsSubtitle": [.zh: "蓝色认证标识与高信任内容发布权限", .ja: "認証バッジと信頼性の高い投稿権限", .en: "Verified badge and high-trust posting"],

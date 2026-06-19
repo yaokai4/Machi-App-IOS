@@ -2,7 +2,7 @@ import Combine
 import Foundation
 import StoreKit
 
-/// StoreKit 2 driver for the Machi Verified subscription.
+/// StoreKit 2 driver for Machi Verified purchases.
 ///
 /// The purchase is NEVER trusted on-device: after StoreKit returns a
 /// transaction we send its signed JWS to the backend
@@ -12,7 +12,8 @@ import StoreKit
 ///
 /// Per App Store rules the iOS app buys digital membership ONLY through
 /// IAP — it never shows WeChat/Alipay or any external payment for the
-/// in-app entitlement.
+/// in-app entitlement. Membership is treated as a paid validity period:
+/// buying one month extends one month, buying one year extends one year.
 @MainActor
 final class MembershipStore: ObservableObject {
     enum PurchaseState: Equatable {
@@ -20,7 +21,7 @@ final class MembershipStore: ObservableObject {
         case failed(String)
     }
 
-    /// Default product id; overridden by the server's configured id when
+    /// Default one-month product id; overridden by the server's configured id when
     /// `/api/membership/plan` is reachable.
     static let defaultProductID = "machi_verified_monthly_cny_10"
 
@@ -124,8 +125,9 @@ final class MembershipStore: ObservableObject {
         }
     }
 
-    /// Restore purchases: sync with the App Store, then re-verify every
-    /// current entitlement with the backend.
+    /// Restore purchases: sync with the App Store, then re-verify current
+    /// entitlements with the backend. The server remains the source of truth
+    /// for active/expired validity periods.
     func restore() async {
         state = .loading
         try? await AppStore.sync()

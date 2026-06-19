@@ -5,8 +5,9 @@ import Foundation
 /// The Web client and the iOS App both target the same Python-based
 /// unified backend (`web/server.py`). During development the backend
 /// defaults to the deployed host. The base URL is overridable via
-/// `Info.plist` (`KAIX_API_BASE`) or `UserDefaults` (`kaix.api.base`) so
-/// QA / staging can be flipped without rebuilding.
+/// `Info.plist` (`KAIX_API_BASE`) or, in debug builds only,
+/// `UserDefaults` (`kaix.api.base`) so QA / staging can be flipped without
+/// rebuilding while App Store builds stay pinned to a trusted production host.
 enum KaiXBackend {
     /// Default base URL used when no override is set.
     static let defaultBaseURL = URL(string: "https://machicity.com")!
@@ -37,15 +38,16 @@ enum KaiXBackend {
         return build.map { "\(appVersion) (\($0))" } ?? appVersion
     }
 
-    /// Effective base URL. The order of resolution is:
-    /// 1. `UserDefaults` `kaix.api.base`
-    /// 2. `Info.plist` `KAIX_API_BASE`
-    /// 3. `defaultBaseURL`
+    /// Effective base URL. Release device builds deliberately ignore the
+    /// mutable UserDefaults override so a production app cannot be redirected
+    /// to an arbitrary API host by stale QA defaults or device tampering.
     static var baseURL: URL {
+#if DEBUG
         if let stored = UserDefaults.standard.string(forKey: "kaix.api.base"),
            let url = validatedBaseURL(stored) {
             return url
         }
+#endif
         if let plist = Bundle.main.object(forInfoDictionaryKey: "KAIX_API_BASE") as? String,
            let url = validatedBaseURL(plist) {
             return url
@@ -53,24 +55,32 @@ enum KaiXBackend {
         return defaultBaseURL
     }
 
-    /// Persist a new base URL override (call from settings).
+    /// Persist a new base URL override (debug/QA only).
     static func setBaseURL(_ url: URL?) {
+#if DEBUG
         if let url {
             UserDefaults.standard.set(url.absoluteString, forKey: "kaix.api.base")
         } else {
             UserDefaults.standard.removeObject(forKey: "kaix.api.base")
         }
+#else
+        _ = url
+        UserDefaults.standard.removeObject(forKey: "kaix.api.base")
+#endif
     }
 
     private static func validatedBaseURL(_ value: String) -> URL? {
         guard let url = URL(string: value), let host = url.host?.lowercased() else { return nil }
-#if targetEnvironment(simulator)
-        return url
+#if DEBUG || targetEnvironment(simulator)
+        return url.scheme == "http" || url.scheme == "https" ? url : nil
 #else
+        guard url.scheme == "https" else { return nil }
         let loopbackHosts = ["localhost", "127.0.0.1", "0.0.0.0", "::1"]
         guard !loopbackHosts.contains(host), !host.hasPrefix("127.") else {
             return nil
         }
+        let trustedHosts = ["machicity.com", "www.machicity.com", "api.machicity.com"]
+        guard trustedHosts.contains(host) else { return nil }
         return url
 #endif
     }

@@ -24,13 +24,20 @@ final class kaiziUITests: XCTestCase {
 
     @MainActor
     func testExample() throws {
-        // UI tests must launch the application that they test.
         let app = XCUIApplication()
+        app.launchArguments += ["-appLanguageCode", "zh", "-kaixUITestLocalAuth", "-kaixUITestAutoLogin", "-kaixUITestEphemeralStore"]
+        app.launchEnvironment["KAIX_UI_TEST_LOCAL_AUTH"] = "1"
+        app.launchEnvironment["KAIX_UI_TEST_AUTO_LOGIN"] = "1"
+        app.launchEnvironment["KAIX_UI_TEST_EPHEMERAL_STORE"] = "1"
         app.launch()
 
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-        // XCUIAutomation Documentation
-        // https://developer.apple.com/documentation/xcuiautomation
+        try ensureAuthenticated(app)
+
+        XCTAssertTrue(
+            app.buttons["tabbar.home"].waitForExistence(timeout: 12) ||
+                app.staticTexts["Machi"].waitForExistence(timeout: 2),
+            "The app should reach the authenticated home surface."
+        )
     }
 
     @MainActor

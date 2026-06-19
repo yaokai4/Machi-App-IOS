@@ -1,7 +1,7 @@
 import SwiftData
 import SwiftUI
 
-/// Machi Verified membership page (iOS). Buys the subscription through
+/// Machi Verified membership page (iOS). Buys membership access through
 /// Apple IAP only (no external payment shown — App Store compliance). The
 /// server verifies the transaction and is the source of truth; this view
 /// mirrors that status and persists it onto the local user so the blue
@@ -39,7 +39,7 @@ struct MembershipView: View {
                 benefits
                 memberLibraryEntry
                 if !isActive { purchaseControls }
-                subscriptionDisclosure
+                purchaseDisclosure
                 safetyNotice
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
@@ -311,23 +311,19 @@ struct MembershipView: View {
         }
     }
 
-    /// Auto-renewable subscription disclosure required by App Store Review
-    /// Guideline 3.1.2: renewal terms, cancel instructions, a manage-subscription
-    /// link, and functional Privacy Policy + Terms of Use links on the paywall.
-    private var subscriptionDisclosure: some View {
+    /// Non-renewing purchase disclosure: clear validity rules plus functional
+    /// Privacy Policy + Terms of Use links on the paywall.
+    private var purchaseDisclosure: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(L("membershipRenewalDisclosure", language))
+            Text(L("membershipPurchaseDisclosure", language))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text(L("membershipCancelNote", language))
+            Text(L("membershipPurchaseNote", language))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 16) {
-                if let manage = URL(string: "https://apps.apple.com/account/subscriptions") {
-                    Link(L("membershipManage", language), destination: manage)
-                }
                 Link(L("termsOfService", language), destination: KaiXBackend.termsOfServiceURL)
                 Link(L("privacyPolicy", language), destination: KaiXBackend.privacyPolicyURL)
             }

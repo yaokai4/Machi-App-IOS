@@ -1,6 +1,49 @@
 {
   "identifier" : "B2F1C0A4-2E10-4D33-9A77-MACHIVERIFIED1",
-  "nonRenewingSubscriptions" : [],
+  "nonRenewingSubscriptions" : [
+    {
+      "displayPrice" : "10.00",
+      "duration" : "P1M",
+      "familyShareable" : false,
+      "internalID" : "21490001",
+      "localizations" : [
+        {
+          "description" : "Machi 认证会员月度有效期，蓝色认证标识与高信任内容发布权限。",
+          "displayName" : "Machi 认证会员 · 月度",
+          "locale" : "zh_CN"
+        },
+        {
+          "description" : "Machi Verified monthly access — a blue badge and high-trust posting.",
+          "displayName" : "Machi Verified Monthly",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "machi_verified_monthly_cny_10",
+      "referenceName" : "Machi Verified Monthly Access",
+      "type" : "NonRenewingSubscription"
+    },
+    {
+      "displayPrice" : "98.00",
+      "duration" : "P1Y",
+      "familyShareable" : false,
+      "internalID" : "21490002",
+      "localizations" : [
+        {
+          "description" : "Machi 认证会员年度有效期，蓝色认证标识与高信任内容发布权限。",
+          "displayName" : "Machi 认证会员 · 年度",
+          "locale" : "zh_CN"
+        },
+        {
+          "description" : "Machi Verified annual access — a blue badge and high-trust posting.",
+          "displayName" : "Machi Verified Annual",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "machi_verified_yearly_cny_98",
+      "referenceName" : "Machi Verified Annual Access",
+      "type" : "NonRenewingSubscription"
+    }
+  ],
   "products" : [],
   "settings" : {
     "_applicationInternalID" : "machicity",
@@ -11,67 +54,7 @@
     "_storefront" : "CHN",
     "_storeKitErrors" : []
   },
-  "subscriptionGroups" : [
-    {
-      "id" : "21490000",
-      "localizations" : [],
-      "name" : "Machi Verified",
-      "subscriptions" : [
-        {
-          "adHocOffers" : [],
-          "codeOffers" : [],
-          "displayPrice" : "10.00",
-          "familyShareable" : false,
-          "groupNumber" : 1,
-          "internalID" : "21490001",
-          "introductoryOffer" : null,
-          "localizations" : [
-            {
-              "description" : "Machi 认证会员，蓝色认证标识与高信任内容发布权限。",
-              "displayName" : "Machi 认证会员",
-              "locale" : "zh_CN"
-            },
-            {
-              "description" : "Machi Verified — a blue badge and high-trust posting.",
-              "displayName" : "Machi Verified",
-              "locale" : "en_US"
-            }
-          ],
-          "productID" : "machi_verified_monthly_cny_10",
-          "recurringSubscriptionPeriod" : "P1M",
-          "referenceName" : "Machi Verified Monthly",
-          "subscriptionGroupID" : "21490000",
-          "type" : "RecurringSubscription"
-        },
-        {
-          "adHocOffers" : [],
-          "codeOffers" : [],
-          "displayPrice" : "98.00",
-          "familyShareable" : false,
-          "groupNumber" : 1,
-          "internalID" : "21490002",
-          "introductoryOffer" : null,
-          "localizations" : [
-            {
-              "description" : "Machi 认证会员包年套餐，蓝色认证标识与高信任内容发布权限。",
-              "displayName" : "Machi 认证会员 · 包年",
-              "locale" : "zh_CN"
-            },
-            {
-              "description" : "Machi Verified yearly subscription.",
-              "displayName" : "Machi Verified Yearly",
-              "locale" : "en_US"
-            }
-          ],
-          "productID" : "machi_verified_yearly_cny_98",
-          "recurringSubscriptionPeriod" : "P1Y",
-          "referenceName" : "Machi Verified Yearly",
-          "subscriptionGroupID" : "21490000",
-          "type" : "RecurringSubscription"
-        }
-      ]
-    }
-  ],
+  "subscriptionGroups" : [],
   "version" : {
     "major" : 3,
     "minor" : 0
