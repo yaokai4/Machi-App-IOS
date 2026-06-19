@@ -52,6 +52,11 @@ final class KaiXAPIClient {
         if !queryItems.isEmpty { components.queryItems = queryItems }
         var req = URLRequest(url: components.url!)
         req.httpMethod = method
+        // JSON API calls are small; cap the wait at 25s (vs the 60s default)
+        // so a stalled mobile connection surfaces a retry/error quickly
+        // instead of spinning for a full minute. Matches the Web client's
+        // 20s budget. File uploads use a separate path and are unaffected.
+        req.timeoutInterval = 25
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         if let token = KaiXBackend.token {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")

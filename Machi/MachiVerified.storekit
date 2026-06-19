@@ -2,7 +2,7 @@
   "identifier" : "B2F1C0A4-2E10-4D33-9A77-MACHIVERIFIED1",
   "nonRenewingSubscriptions" : [
     {
-      "displayPrice" : "10.00",
+      "displayPrice" : "18.00",
       "duration" : "P1M",
       "familyShareable" : false,
       "internalID" : "21490001",
@@ -23,7 +23,7 @@
       "type" : "NonRenewingSubscription"
     },
     {
-      "displayPrice" : "98.00",
+      "displayPrice" : "138.00",
       "duration" : "P1Y",
       "familyShareable" : false,
       "internalID" : "21490002",

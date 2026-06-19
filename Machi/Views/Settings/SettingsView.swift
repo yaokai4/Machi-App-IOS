@@ -56,16 +56,6 @@ struct SettingsView: View {
                 .padding(.bottom, 96)
             }
             .kxPageBackground()
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                KXColor.pageBackground
-                    .frame(height: 24)
-            }
-            .overlay(alignment: .bottom) {
-                KXColor.pageBackground
-                    .frame(height: 92)
-                    .ignoresSafeArea(edges: .bottom)
-                    .allowsHitTesting(false)
-            }
             .toolbar(.hidden, for: .navigationBar)
         }
         .task {

@@ -88,7 +88,14 @@ struct ContentView: View {
             // from the device's current city so the user never has to pick one by
             // hand. Skips silently if location was denied; a manual picker (with a
             // "使用当前位置" button) remains available either way.
-            if RegionStore.shared.current == nil, !LocationService.shared.isDenied {
+            //
+            // Gated on an actual user (logged in or guest) so the OS location
+            // prompt is never thrown up over the logged-out auth screen — guests
+            // already default to Tokyo and signed-in accounts carry a region, so
+            // this only fires in-context for an account that still lacks one.
+            if appState.currentUser != nil,
+               RegionStore.shared.current == nil,
+               !LocationService.shared.isDenied {
                 if let region = await LocationService.shared.detectRegion() {
                     RegionStore.shared.setCurrent(region)
                 }

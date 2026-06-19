@@ -95,7 +95,13 @@ struct PostCardView: View, Equatable {
 
                     HStack(alignment: .top, spacing: KXSpacing.sm) {
                         Button(action: onAuthor) {
-                            if authorPresentation.isOfficial {
+                            // Seed/curated posts are attributed to a synthetic
+                            // editorial persona with no real account, so they
+                            // keep the Machi "M" brand mark. A genuine official
+                            // account (e.g. admin) shows its own uploaded avatar —
+                            // KXAvatar/AvatarView still falls back to the "M" mark
+                            // when that account hasn't set a custom avatar.
+                            if authorPresentation.isOfficial && contentPost.isSeedContent {
                                 MachiOfficialAvatarView(size: 38)
                             } else {
                                 KXAvatar(user: contentAuthor, size: 38)
