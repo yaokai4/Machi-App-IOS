@@ -12,6 +12,7 @@ struct SettingsView: View {
     @AppStorage("blockedUserIds") private var blockedUserIdsRaw = ""
     @StateObject private var viewModel = ProfileViewModel()
     @State private var showLogoutConfirm = false
+    @State private var didEnter = false
 
     let currentUser: UserEntity
     var onLogout: (() -> Void)?
@@ -22,16 +23,21 @@ struct SettingsView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 15) {
                     topBar
+                        .kxSettingsEntrance(didEnter, index: 0)
                     SettingsAccountCard(
                         user: currentUser,
                         postCount: viewModel.postCount,
                         draftCount: viewModel.draftCount,
                         bookmarkCount: viewModel.bookmarkCount
                     )
+                    .kxSettingsEntrance(didEnter, index: 1)
 
                     accountSection
+                        .kxSettingsEntrance(didEnter, index: 2)
                     contentSection
+                        .kxSettingsEntrance(didEnter, index: 3)
                     serviceSection
+                        .kxSettingsEntrance(didEnter, index: 4)
 
                     Button {
                         showLogoutConfirm = true
@@ -45,11 +51,13 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.plain)
                     .padding(.top, 4)
+                    .kxSettingsEntrance(didEnter, index: 5)
 
                     Text("Machi \(KaiXBackend.appVersion)")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
+                        .kxSettingsEntrance(didEnter, index: 6)
                 }
                 .padding(.horizontal, KaiXTheme.horizontalPadding)
                 .padding(.top, 12)
@@ -60,6 +68,11 @@ struct SettingsView: View {
         }
         .task {
             await viewModel.load(context: modelContext, user: currentUser, postStore: postStore)
+        }
+        .onAppear {
+            withAnimation(.snappy(duration: 0.38)) {
+                didEnter = true
+            }
         }
         .confirmationDialog(L("logoutConfirm", language), isPresented: $showLogoutConfirm, titleVisibility: .visible) {
             Button(L("logout", language), role: .destructive) {
@@ -192,6 +205,15 @@ struct SettingsView: View {
     private var securityEmailValue: String? {
         let email = currentUser.email.isEmpty ? accountEmail : currentUser.email
         return email.isEmpty ? nil : email
+    }
+}
+
+private extension View {
+    func kxSettingsEntrance(_ active: Bool, index: Int) -> some View {
+        self
+            .opacity(active ? 1 : 0)
+            .offset(y: active ? 0 : 12)
+            .animation(.snappy(duration: 0.38).delay(Double(index) * 0.035), value: active)
     }
 }
 

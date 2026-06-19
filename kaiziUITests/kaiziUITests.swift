@@ -60,6 +60,30 @@ final class kaiziUITests: XCTestCase {
     }
 
     @MainActor
+    func testProfileWorkbenchButtonOpensWithoutCrash() throws {
+        let app = XCUIApplication()
+        app.launchArguments += ["-appLanguageCode", "zh", "-kaixUITestLocalAuth", "-kaixUITestAutoLogin", "-kaixUITestEphemeralStore"]
+        app.launchEnvironment["KAIX_UI_TEST_LOCAL_AUTH"] = "1"
+        app.launchEnvironment["KAIX_UI_TEST_AUTO_LOGIN"] = "1"
+        app.launchEnvironment["KAIX_UI_TEST_EPHEMERAL_STORE"] = "1"
+        app.launch()
+
+        try ensureAuthenticated(app)
+        tapBottomTab(.profile, in: app)
+
+        let workbenchButton = app.buttons["profile.workbench"]
+        XCTAssertTrue(workbenchButton.waitForExistence(timeout: 8), "Profile workbench button should be visible for the signed-in user.")
+        workbenchButton.tap()
+
+        XCTAssertTrue(
+            app.staticTexts["我的工作台"].waitForExistence(timeout: 8) ||
+                app.navigationBars["我的工作台"].waitForExistence(timeout: 2),
+            "Workbench should open from Profile without crashing."
+        )
+        XCTAssertTrue(app.buttons["workbench.close"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
     private func ensureAuthenticated(_ app: XCUIApplication) throws {
         if !app.buttons["auth.mode.register"].waitForExistence(timeout: 2) {
             settleForUITest(2_000)
@@ -100,6 +124,13 @@ final class kaiziUITests: XCTestCase {
 
     @MainActor
     private func tapBottomTab(_ tab: AppTabIndex, in app: XCUIApplication) {
+        let tabButton = app.buttons["tabbar.\(tab.accessibilityID)"]
+        if tabButton.waitForExistence(timeout: 4), tabButton.isHittable {
+            tabButton.tap()
+            settleForUITest(1_200)
+            return
+        }
+
         let totalTabs: CGFloat = 5
         let x = (CGFloat(tab.rawValue) + 0.5) / totalTabs
         app.coordinate(withNormalizedOffset: CGVector(dx: x, dy: 0.94)).tap()
@@ -117,6 +148,16 @@ final class kaiziUITests: XCTestCase {
         case guide = 2
         case messages = 3
         case profile = 4
+
+        var accessibilityID: String {
+            switch self {
+            case .home: "home"
+            case .search: "search"
+            case .guide: "guide"
+            case .messages: "messages"
+            case .profile: "profile"
+            }
+        }
     }
 
     @MainActor

@@ -21,9 +21,12 @@ final class MembershipStore: ObservableObject {
         case failed(String)
     }
 
-    /// Default one-month product id; overridden by the server's configured id when
-    /// `/api/membership/plan` is reachable.
+    /// App Store Connect product ids. The backend may override these through
+    /// `/api/membership/plan`, but the app keeps these fallbacks so a missing
+    /// admin field never leaves the paywall unable to load products.
     static let defaultProductID = "machi_verified_monthly_cny_10"
+    static let yearlyProductID = "machi_verified_yearly_cny_98"
+    static let allKnownProductIDs: Set<String> = [defaultProductID, yearlyProductID]
 
     @Published private(set) var product: Product?
     @Published private(set) var plans: [KaiXMembershipPlanDTO] = []
@@ -58,6 +61,7 @@ final class MembershipStore: ObservableObject {
 
     func loadProductAndStatus() async {
         // Prefer the server-configured Apple product id + plan price.
+        state = state == .idle ? .loading : state
         if let planResp = try? await KaiXAPIClient.shared.membershipPlan() {
             let remotePlans = planResp.plans ?? planResp.items ?? planResp.plan.map { [$0] } ?? []
             if !remotePlans.isEmpty {
@@ -67,21 +71,31 @@ final class MembershipStore: ObservableObject {
                 }
             }
             if let selected = selectedPlan {
-                productID = selected.appleProductID
+                productID = resolvedProductID(for: selected)
                 displayPrice = selected.displayPriceLabel
             } else if let pid = planResp.apple_product_id, !pid.isEmpty {
                 productID = pid
             }
         }
         do {
-            let ids = Set((plans.map { $0.appleProductID } + [productID]).filter { !$0.isEmpty })
+            let ids = Set((plans.map { resolvedProductID(for: $0) } + [productID] + Array(Self.allKnownProductIDs)).filter { !$0.isEmpty })
             let products = try await Product.products(for: Array(ids))
             productsByID = Dictionary(uniqueKeysWithValues: products.map { ($0.id, $0) })
-            product = productsByID[productID] ?? products.first
-            if let p = product { displayPrice = p.displayPrice }
+            let selectedProductID = selectedPlan.map { resolvedProductID(for: $0) } ?? productID
+            product = productsByID[selectedProductID] ?? fallbackProduct(for: selectedPlan) ?? products.first
+            productID = product?.id ?? selectedProductID
+            if let p = product {
+                displayPrice = p.displayPrice
+                if state == .loading { state = .idle }
+            } else if state == .loading {
+                state = .failed("product_unavailable")
+            }
         } catch {
             // Leave product nil — the UI still shows the plan price and a
             // disabled buy button rather than crashing.
+            if state == .loading {
+                state = .failed("product_unavailable")
+            }
         }
         await refreshMembership()
     }
@@ -92,9 +106,14 @@ final class MembershipStore: ObservableObject {
 
     func selectPlan(_ plan: KaiXMembershipPlanDTO) {
         selectedPlanKey = plan.canonicalPlanKey
-        productID = plan.appleProductID
+        productID = resolvedProductID(for: plan)
         product = productsByID[productID]
         displayPrice = product?.displayPrice ?? plan.displayPriceLabel
+        if product == nil {
+            state = .failed("product_unavailable")
+        } else if case .failed(let code) = state, code == "product_unavailable" {
+            state = .idle
+        }
     }
 
     /// Pull the authoritative membership status from the backend.
@@ -130,24 +149,79 @@ final class MembershipStore: ObservableObject {
     /// for active/expired validity periods.
     func restore() async {
         state = .loading
-        try? await AppStore.sync()
-        for await result in Transaction.currentEntitlements {
+        do {
+            // This is Apple's real restore/authentication surface. Simulator
+            // StoreKit testing may show a local test account UI; TestFlight and
+            // App Store builds use the user's Apple media account.
+            try await AppStore.sync()
+        } catch {
+            state = .failed("restore_sync_failed")
+            return
+        }
+
+        let restorableProductIDs = knownProductIDsForRestore()
+        var restoredAny = false
+        for await result in Transaction.all {
+            let transaction = transaction(from: result)
+            guard restorableProductIDs.contains(transaction.productID) else { continue }
+            restoredAny = true
             await handle(result, finishTransaction: false)
         }
         await refreshMembership()
-        state = membershipActive ? .success : .idle
+        if membershipActive {
+            state = .success
+        } else if restoredAny {
+            state = .idle
+        } else {
+            state = .failed("restore_no_purchases")
+        }
     }
 
     // MARK: - private
 
+    private func resolvedProductID(for plan: KaiXMembershipPlanDTO) -> String {
+        if let explicit = plan.explicitAppleProductID {
+            return explicit
+        }
+
+        let key = plan.canonicalPlanKey.lowercased()
+        if key == "machi_verified_yearly" || key == "machi_verified_annual" || key.contains("year") || key.contains("annual") {
+            return Self.yearlyProductID
+        }
+        if key == "machi_verified_monthly" || key.contains("month") {
+            return Self.defaultProductID
+        }
+
+        let period = (plan.billingPeriod ?? plan.billing_period ?? plan.billing_cycle ?? "").lowercased()
+        if period == "yearly" || period == "annual" || plan.intervalCount == 12 || plan.interval_count == 12 {
+            return Self.yearlyProductID
+        }
+        return Self.defaultProductID
+    }
+
+    private func fallbackProduct(for plan: KaiXMembershipPlanDTO?) -> Product? {
+        guard let plan else { return productsByID[Self.defaultProductID] }
+        let fallbackID = resolvedProductID(for: plan)
+        return productsByID[fallbackID]
+    }
+
+    private func knownProductIDsForRestore() -> Set<String> {
+        Set(productsByID.keys)
+            .union(Self.allKnownProductIDs)
+            .union(plans.map { resolvedProductID(for: $0) })
+    }
+
+    private func transaction(from verification: VerificationResult<Transaction>) -> Transaction {
+        switch verification {
+        case .verified(let transaction), .unverified(let transaction, _):
+            return transaction
+        }
+    }
+
     private func handle(_ verification: VerificationResult<Transaction>, finishTransaction: Bool = true) async {
         // Send the signed JWS regardless of local verification — the
         // server re-verifies and is the source of truth.
-        let transaction: Transaction
-        switch verification {
-        case .verified(let t): transaction = t
-        case .unverified(let t, _): transaction = t
-        }
+        let transaction = transaction(from: verification)
         state = .verifying
         do {
             let resp = try await KaiXAPIClient.shared.verifyAppleTransaction(

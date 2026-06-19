@@ -19,6 +19,7 @@ struct ProfileView: View {
     @State private var isFollowWorking = false
     @State private var menuMessage: String?
     @State private var isShowingSettings = false
+    @State private var isShowingWorkbench = false
     @State private var followListKind: FollowListKind?
     @State private var isRefreshingProfile = false
     @State private var scheduledProfileRefreshTask: Task<Void, Never>?
@@ -137,55 +138,7 @@ struct ProfileView: View {
     }
 
     var body: some View {
-        Group {
-            if isCurrentUser && currentUser.isGuest {
-                guestProfilePrompt
-            } else {
-            switch profileLoadState {
-            case .idle, .loading:
-                LoadingView()
-            case .error(let message):
-                ErrorStateView(message: message) {
-                    Task { await loadProfileAndContent() }
-                }
-            case .empty:
-                EmptyStateView(title: L("unknownUser", language), subtitle: L("noContent", language), systemImage: "person.crop.circle")
-            case .loaded:
-                VStack(spacing: 0) {
-                    topBar
-                        .padding(.horizontal, KaiXTheme.horizontalPadding)
-                        .padding(.top, KXSpacing.sm)
-                        .padding(.bottom, KXSpacing.md)
-                        .kxGlassBar(ignoresTopSafeArea: true)
-                        .overlay(alignment: .bottom) {
-                            Divider().opacity(0.35)
-                        }
-
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: KXSpacing.md) {
-                            profileHeader
-                            // "成就 / 活跃城市 / Top 话题" all moved
-                            // off the primary profile view per UX
-                            // feedback — the page now leads straight
-                            // into the post tabs so the actual content
-                            // is the first thing you see below the
-                            // header card.
-                            PersonalProfileTabPicker(tabs: availableTabs, selection: $profileTab)
-                                .padding(.horizontal, 2)
-
-                            stateContent
-                        }
-                        .padding(.horizontal, KaiXTheme.horizontalPadding)
-                        .padding(.top, KXSpacing.sm)
-                        .padding(.bottom, showsBackButton ? 28 : chrome.bottomContentPadding)
-                    }
-                    .refreshable {
-                        await loadProfileAndContent(showLoading: false)
-                    }
-                }
-            }
-            }
-        }
+        profileBodyContent
         .kxPageBackground()
         .toolbar(.hidden, for: .navigationBar)
         .task(id: profileUserId) {
@@ -214,31 +167,62 @@ struct ProfileView: View {
             scheduledProfileRefreshTask?.cancel()
             scheduledProfileRefreshTask = nil
         }
-        .alert(L("ok", language), isPresented: Binding(
-            get: { menuMessage != nil },
-            set: { if !$0 { menuMessage = nil } }
-        )) {
-            Button(L("ok", language), role: .cancel) {}
-        } message: {
-            Text(menuMessage ?? "")
+        .modifier(ProfileAlertsModifier(menuMessage: $menuMessage, transientError: $viewModel.transientError, language: language))
+        .modifier(ProfilePresentationModifier(
+            isShowingSettings: $isShowingSettings,
+            isShowingWorkbench: $isShowingWorkbench,
+            followListKind: $followListKind,
+            currentUser: currentUser,
+            profileUser: profileUser,
+            onLogout: onLogout,
+            onSwitchAccount: onSwitchAccount
+        ))
+    }
+
+    private var profileBodyContent: AnyView {
+        if isCurrentUser && currentUser.isGuest {
+            return AnyView(guestProfilePrompt)
         }
-        .alert(L("error", language), isPresented: Binding(
-            get: { viewModel.transientError != nil },
-            set: { if !$0 { viewModel.transientError = nil } }
-        )) {
-            Button(L("ok", language), role: .cancel) {}
-        } message: {
-            Text(viewModel.transientError ?? "")
+
+        switch profileLoadState {
+        case .idle, .loading:
+            return AnyView(LoadingView())
+        case .error(let message):
+            return AnyView(ErrorStateView(message: message) {
+                Task { await loadProfileAndContent() }
+            })
+        case .empty:
+            return AnyView(EmptyStateView(title: L("unknownUser", language), subtitle: L("noContent", language), systemImage: "person.crop.circle"))
+        case .loaded:
+            return AnyView(loadedProfileContent)
         }
-        .fullScreenCover(isPresented: $isShowingSettings) {
-            SettingsView(currentUser: currentUser, onLogout: onLogout, onSwitchAccount: onSwitchAccount)
-        }
-        .sheet(item: $followListKind) { kind in
-            NavigationStack {
-                FollowListView(profileUser: profileUser, currentUser: currentUser, kind: kind)
+    }
+
+    private var loadedProfileContent: some View {
+        VStack(spacing: 0) {
+            topBar
+                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.top, KXSpacing.sm)
+                .padding(.bottom, KXSpacing.md)
+                .kxGlassBar(ignoresTopSafeArea: true)
+                .overlay(alignment: .bottom) {
+                    Divider().opacity(0.35)
+                }
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: KXSpacing.md) {
+                    profileHeader
+                    PersonalProfileTabPicker(tabs: availableTabs, selection: $profileTab)
+                        .padding(.horizontal, 2)
+                    stateContent
+                }
+                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.top, KXSpacing.sm)
+                .padding(.bottom, showsBackButton ? 28 : chrome.bottomContentPadding)
             }
-            .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
+            .refreshable {
+                await loadProfileAndContent(showLoading: false)
+            }
         }
     }
 
@@ -326,8 +310,8 @@ struct ProfileView: View {
                 }
                 .buttonStyle(.plain)
             } else if isCurrentUser {
-                NavigationLink {
-                    MyWorkbenchView(currentUser: currentUser)
+                Button {
+                    isShowingWorkbench = true
                 } label: {
                     Image(systemName: "rectangle.grid.2x2.fill")
                         .font(.headline.weight(.semibold))
@@ -911,6 +895,104 @@ struct ProfileView: View {
         switch profileUser.role {
         case .admin, .creator: return L("creator", language)
         case .member: return L("regularUser", language)
+        }
+    }
+}
+
+private struct ProfileAlertsModifier: ViewModifier {
+    @Binding var menuMessage: String?
+    @Binding var transientError: String?
+    let language: AppLanguage
+
+    func body(content: Content) -> some View {
+        content
+            .alert(L("ok", language), isPresented: menuMessagePresented) {
+                Button(L("ok", language), role: .cancel) {}
+            } message: {
+                Text(menuMessage ?? "")
+            }
+            .alert(L("error", language), isPresented: transientErrorPresented) {
+                Button(L("ok", language), role: .cancel) {}
+            } message: {
+                Text(transientError ?? "")
+            }
+    }
+
+    private var menuMessagePresented: Binding<Bool> {
+        Binding(
+            get: { menuMessage != nil },
+            set: { if !$0 { menuMessage = nil } }
+        )
+    }
+
+    private var transientErrorPresented: Binding<Bool> {
+        Binding(
+            get: { transientError != nil },
+            set: { if !$0 { transientError = nil } }
+        )
+    }
+}
+
+private struct ProfilePresentationModifier: ViewModifier {
+    @Binding var isShowingSettings: Bool
+    @Binding var isShowingWorkbench: Bool
+    @Binding var followListKind: FollowListKind?
+
+    let currentUser: UserEntity
+    let profileUser: UserEntity
+    let onLogout: (() -> Void)?
+    let onSwitchAccount: ((UserEntity) -> Void)?
+
+    func body(content: Content) -> some View {
+        content
+            .fullScreenCover(isPresented: $isShowingSettings) {
+                SettingsView(currentUser: currentUser, onLogout: onLogout, onSwitchAccount: onSwitchAccount)
+            }
+            .fullScreenCover(isPresented: $isShowingWorkbench) {
+                WorkbenchFullScreenView(isPresented: $isShowingWorkbench, currentUser: currentUser)
+            }
+            .sheet(item: $followListKind) { kind in
+                NavigationStack {
+                    FollowListView(profileUser: profileUser, currentUser: currentUser, kind: kind)
+                }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+    }
+}
+
+private struct WorkbenchFullScreenView: View {
+    @Binding var isPresented: Bool
+    let currentUser: UserEntity
+    @State private var didEnter = false
+
+    var body: some View {
+        NavigationStack {
+            MyWorkbenchView(currentUser: currentUser)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            isPresented = false
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(.primary)
+                                .frame(width: 36, height: 36)
+                                .kxGlassCircle()
+                        }
+                        .buttonStyle(KXPressableStyle(scale: 0.94, dim: 0.88))
+                        .accessibilityIdentifier("workbench.close")
+                    }
+                }
+                .toolbarBackground(.hidden, for: .navigationBar)
+        }
+        .kxPageBackground()
+        .opacity(didEnter ? 1 : 0)
+        .scaleEffect(didEnter ? 1 : 0.985)
+        .onAppear {
+            withAnimation(.snappy(duration: 0.32)) {
+                didEnter = true
+            }
         }
     }
 }

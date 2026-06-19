@@ -28,6 +28,9 @@ struct MembershipView: View {
     ]
 
     private var isActive: Bool { store.membershipActive || currentUser.isVerifiedMember }
+    private var isPaymentBusy: Bool {
+        store.state == .loading || store.state == .purchasing || store.state == .verifying
+    }
 
     var body: some View {
         ScrollView {
@@ -289,25 +292,51 @@ struct MembershipView: View {
                 .foregroundStyle(.white)
                 .background(Capsule().fill(KXColor.accent))
             }
-            .disabled(store.product == nil || store.state == .purchasing || store.state == .verifying)
+            .disabled(store.product == nil || isPaymentBusy)
             .opacity(store.product == nil ? 0.6 : 1)
 
             Button {
                 Task { await store.restore() }
             } label: {
-                Text(L("membershipRestore", language))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(KXColor.accent)
+                HStack(spacing: 6) {
+                    if store.state == .loading {
+                        KXSpinner(size: 14, lineWidth: 1.8)
+                    }
+                    Text(L("membershipRestore", language))
+                        .font(.subheadline.weight(.semibold))
+                }
+                .foregroundStyle(KXColor.accent)
             }
+            .disabled(isPaymentBusy)
 
             if store.state == .pending {
                 Text(L("membershipPurchasePending", language))
                     .font(.caption).foregroundStyle(.secondary)
             }
-            if case .failed = store.state {
-                Text(L("membershipPurchaseFailed", language))
+            if let failure = paymentFailureMessage {
+                Text(failure)
                     .font(.caption).foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+            } else if store.product == nil {
+                Text(L("membershipProductUnavailable", language))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
+        }
+    }
+
+    private var paymentFailureMessage: String? {
+        guard case .failed(let code) = store.state else { return nil }
+        switch code {
+        case "product_unavailable":
+            return L("membershipProductUnavailable", language)
+        case "restore_sync_failed":
+            return L("membershipRestoreFailed", language)
+        case "restore_no_purchases":
+            return L("membershipRestoreNoPurchases", language)
+        default:
+            return L("membershipPurchaseFailed", language)
         }
     }
 

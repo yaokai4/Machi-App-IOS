@@ -56,6 +56,7 @@ struct SettingsSectionCard<Content: View>: View {
 
 struct SettingsRowLink<Destination: View>: View {
     @Environment(\.appLanguage) private var language
+    @Namespace private var transitionNamespace
     @State private var isShowingStatusMessage = false
 
     let icon: String
@@ -92,13 +93,16 @@ struct SettingsRowLink<Destination: View>: View {
     }
 
     var body: some View {
+        let transitionID = "\(icon)-\(title)"
         Group {
             if status.isInteractive {
                 NavigationLink {
                     destination
                         .toolbar(revealsNavBar ? .visible : .hidden, for: .navigationBar)
+                        .kxZoomTransition(sourceID: transitionID, in: transitionNamespace)
                 } label: {
                     SettingsRowContent(icon: icon, tint: tint, title: title, value: value, subtitle: subtitle, status: status)
+                        .kxMatchedTransitionSource(id: transitionID, in: transitionNamespace)
                 }
             } else {
                 Button {

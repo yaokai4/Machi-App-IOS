@@ -6,6 +6,7 @@ struct MyWorkbenchView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var postStore: PostStore
     @StateObject private var viewModel = ProfileViewModel()
+    @State private var didEnter = false
 
     let currentUser: UserEntity
 
@@ -24,10 +25,15 @@ struct MyWorkbenchView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 15) {
                 hero
+                    .kxWorkbenchEntrance(didEnter, index: 0)
                 publishSection
+                    .kxWorkbenchEntrance(didEnter, index: 1)
                 contentSection
+                    .kxWorkbenchEntrance(didEnter, index: 2)
                 membershipSection
+                    .kxWorkbenchEntrance(didEnter, index: 3)
                 serviceSection
+                    .kxWorkbenchEntrance(didEnter, index: 4)
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
             .padding(.top, 12)
@@ -38,6 +44,11 @@ struct MyWorkbenchView: View {
         .kxPageBackground()
         .task {
             await viewModel.load(context: modelContext, user: currentUser, postStore: postStore)
+        }
+        .onAppear {
+            withAnimation(.snappy(duration: 0.38)) {
+                didEnter = true
+            }
         }
     }
 
@@ -150,6 +161,15 @@ struct MyWorkbenchView: View {
                 CreateCityListingView(listingType: "discount", citySlug: currentRegionCode, currentUser: currentUser)
             }
         }
+    }
+}
+
+private extension View {
+    func kxWorkbenchEntrance(_ active: Bool, index: Int) -> some View {
+        self
+            .opacity(active ? 1 : 0)
+            .offset(y: active ? 0 : 10)
+            .animation(.snappy(duration: 0.36).delay(Double(index) * 0.035), value: active)
     }
 }
 

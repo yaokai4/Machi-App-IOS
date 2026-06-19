@@ -715,8 +715,13 @@ struct KaiXMembershipPlanDTO: Codable, Equatable {
         if let label = priceLabel ?? price_label, !label.isEmpty { return label }
         return KaiXPriceFormatter.format(price ?? amount, currency: currency, billingPeriod: billingPeriod ?? billing_period ?? billing_cycle)
     }
+    var explicitAppleProductID: String? {
+        [appleProductId, apple_product_id, iosIapProductId, ios_iap_product_id]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
+    }
     var appleProductID: String {
-        appleProductId ?? apple_product_id ?? iosIapProductId ?? ios_iap_product_id ?? canonicalPlanKey
+        explicitAppleProductID ?? canonicalPlanKey
     }
     var recommended: Bool { isRecommended ?? is_recommended ?? false }
 }
