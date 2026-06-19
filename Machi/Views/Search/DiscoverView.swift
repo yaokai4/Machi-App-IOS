@@ -6003,6 +6003,8 @@ struct CreateCityListingView: View {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             isSubmitting = false
             try? await Task.sleep(for: .milliseconds(550))
+            dismiss()
+            try? await Task.sleep(for: .milliseconds(140))
             router.open(.cityListingDetail(listingId: result.id))
         } catch {
             if let failed = mediaDrafts.first(where: {

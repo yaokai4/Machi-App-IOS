@@ -88,45 +88,47 @@ struct LoadingView: View {
 struct KXSplashView: View {
     @Environment(\.appLanguage) private var language
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var pulse = false
-    @State private var shimmer: CGFloat = -1
+    @State private var appeared = false
+    @State private var breathing = false
+    @State private var shimmer: CGFloat = -1.2
 
     var body: some View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color(red: 0.91, green: 0.93, blue: 0.99),
-                    Color(red: 0.96, green: 0.97, blue: 0.99),
+                    KXColor.pageBackground,
+                    Color(red: 0.974, green: 0.985, blue: 0.980),
                     KXColor.pageBackground,
                 ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing,
+                startPoint: .top,
+                endPoint: .bottom,
             )
             .ignoresSafeArea()
 
-            VStack(spacing: 18) {
+            VStack(spacing: 16) {
                 ZStack {
-                    // Halo rings animate opacity + scale (transform-only,
-                    // no layout) instead of resizing frames.
-                    Circle()
-                        .fill(KXColor.accent.opacity(0.14))
-                        .frame(width: 132, height: 132)
-                        .scaleEffect(pulse ? 1.0 : 0.86)
-                        .opacity(pulse ? 1 : 0.6)
-                    Circle()
-                        .fill(KXColor.accent.opacity(0.22))
-                        .frame(width: 100, height: 100)
-                        .scaleEffect(pulse ? 1.0 : 0.9)
-                        .opacity(pulse ? 1 : 0.7)
                     RoundedRectangle(cornerRadius: 26, style: .continuous)
-                        .fill(LinearGradient(colors: [Color.indigo, Color.purple, Color.blue], startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .frame(width: 72, height: 72)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 0.08, green: 0.68, blue: 0.54),
+                                    Color(red: 0.02, green: 0.48, blue: 0.42),
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 78, height: 78)
                         .overlay(
                             Text("M")
-                                .font(.system(size: 36, weight: .black, design: .rounded))
+                                .font(.system(size: 38, weight: .black, design: .rounded))
                                 .foregroundStyle(.white),
                         )
-                        .shadow(color: KXColor.accent.opacity(0.45), radius: 22, y: 12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                                .stroke(.white.opacity(0.34), lineWidth: 1.0)
+                        )
+                        .shadow(color: KXColor.accent.opacity(0.20), radius: 20, y: 10)
                         .overlay(
                             // Sheen sweeping across the logo.
                             RoundedRectangle(cornerRadius: 26, style: .continuous)
@@ -139,26 +141,77 @@ struct KXSplashView: View {
                                 )
                                 .blendMode(.plusLighter)
                                 .mask(RoundedRectangle(cornerRadius: 26, style: .continuous))
-                                .offset(x: shimmer * 80),
+                                .offset(x: shimmer * 92),
                         )
+
+                    Circle()
+                        .fill(Color(red: 1.0, green: 0.63, blue: 0.18))
+                        .frame(width: 10, height: 10)
+                        .overlay(Circle().stroke(.white, lineWidth: 2))
+                        .offset(x: 29, y: -29)
                 }
-                .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: pulse)
+                .scaleEffect(breathing ? 1.0 : 0.985)
+                .opacity(appeared ? 1 : 0)
 
                 Text("Machi")
-                    .font(.system(size: 28, weight: .black, design: .rounded))
+                    .font(.system(size: 30, weight: .black, design: .rounded))
                     .foregroundStyle(.primary)
+                    .opacity(appeared ? 1 : 0)
                 Text(L("splashTagline", language))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
+                    .opacity(appeared ? 1 : 0)
+
+                KXSplashDots()
+                    .padding(.top, 6)
+                    .opacity(appeared ? 1 : 0)
+            }
+            .padding(.horizontal, 36)
+            .offset(y: -8)
+        }
+        .onAppear {
+            if reduceMotion || KXRuntime.isUITesting {
+                appeared = true
+                breathing = true
+                shimmer = 1
+                return
+            }
+            withAnimation(.spring(response: 0.48, dampingFraction: 0.84)) {
+                appeared = true
+            }
+            withAnimation(.easeInOut(duration: 1.65).repeatForever(autoreverses: true)) {
+                breathing = true
+            }
+            withAnimation(.easeInOut(duration: 1.8).delay(0.16).repeatForever(autoreverses: false)) {
+                shimmer = 1.2
+            }
+        }
+    }
+}
+
+private struct KXSplashDots: View {
+    @State private var active = false
+
+    var body: some View {
+        HStack(spacing: 7) {
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .fill(KXColor.accent.opacity(active ? 0.72 : 0.28))
+                    .frame(width: 6, height: 6)
+                    .scaleEffect(active ? 1.0 : 0.72)
+                    .animation(
+                        .easeInOut(duration: 0.62)
+                            .delay(Double(index) * 0.16)
+                            .repeatForever(autoreverses: true),
+                        value: active
+                    )
             }
         }
         .onAppear {
-            guard !reduceMotion, !KXRuntime.isUITesting else { return }
-            pulse = true
-            withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: false)) {
-                shimmer = 1
-            }
+            guard !KXRuntime.isUITesting else { return }
+            active = true
         }
+        .accessibilityHidden(true)
     }
 }
 

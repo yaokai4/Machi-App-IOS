@@ -32,8 +32,9 @@ struct MessagesView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .kxPageBackground()
         .toolbar(.hidden, for: .navigationBar)
-        .task {
-            await viewModel.load(context: modelContext, currentUser: currentUser, messageStore: messageStore)
+        .task(id: currentUser.id) {
+            await refreshInbox()
+            await pollInboxLoop()
         }
         .task(id: mode) {
             if mode == .contacts {
@@ -71,6 +72,19 @@ struct MessagesView: View {
                 NotificationsView(currentUser: currentUser)
                     .kxRouteDestinations(currentUser: currentUser)
             }
+        }
+    }
+
+    private func refreshInbox() async {
+        await viewModel.load(context: modelContext, currentUser: currentUser, messageStore: messageStore)
+    }
+
+    private func pollInboxLoop() async {
+        guard KaiXBackend.token != nil else { return }
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(8))
+            guard !Task.isCancelled, mode == .conversations else { continue }
+            await refreshInbox()
         }
     }
 

@@ -171,10 +171,13 @@ struct ChatView: View {
                 )
             }
         }
-        .task {
-            await viewModel.load(context: modelContext, thread: thread, messageStore: messageStore)
-            try? await MessageRepository(context: modelContext).markThreadRead(thread)
-            messageStore.setUnreadCount(0, conversationId: thread.id)
+        .task(id: thread.id) {
+            await loadAndMarkRead()
+            await pollMessagesLoop()
+        }
+        .onChange(of: messageStore.conversationsById[thread.id]?.lastMessageAt) { _, _ in
+            guard !viewModel.hasActiveFilters else { return }
+            Task { await loadAndMarkRead() }
         }
         .onChange(of: pickerItems) { _, newValue in
             Task {
@@ -191,6 +194,22 @@ struct ChatView: View {
                 Task { await deleteThread() }
             }
             Button(L("cancel", language), role: .cancel) {}
+        }
+    }
+
+    private func loadAndMarkRead() async {
+        await viewModel.load(context: modelContext, thread: thread, messageStore: messageStore)
+        guard !viewModel.hasActiveFilters else { return }
+        try? await MessageRepository(context: modelContext).markThreadRead(thread)
+        messageStore.setUnreadCount(0, conversationId: thread.id)
+    }
+
+    private func pollMessagesLoop() async {
+        guard KaiXBackend.token != nil else { return }
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled, !viewModel.hasActiveFilters else { continue }
+            await loadAndMarkRead()
         }
     }
 
@@ -310,17 +329,43 @@ struct ChatView: View {
                         )
                         .id(message.id)
                     }
+                    Color.clear
+                        .frame(height: 1)
+                        .id(ChatBottomAnchor.id)
                 }
                 .padding(.horizontal, KaiXTheme.horizontalPadding)
                 .padding(.vertical, 10)
-                .padding(.bottom, 34)
+                .padding(.bottom, 88)
             }
             .scrollDismissesKeyboard(.interactively)
-            .onChange(of: viewModel.messages.count) { _, _ in
-                if let lastId = viewModel.messages.last?.id {
-                    withAnimation { proxy.scrollTo(lastId, anchor: .bottom) }
-                }
+            .onAppear {
+                scrollToLatest(proxy, animated: false)
             }
+            .onChange(of: viewModel.messages.count) { _, _ in
+                scrollToLatest(proxy, animated: true)
+            }
+            .onChange(of: viewModel.mediaDrafts.count) { _, _ in
+                scrollToLatest(proxy, animated: true)
+            }
+        }
+    }
+
+    private func scrollToLatest(_ proxy: ScrollViewProxy, animated: Bool) {
+        guard !viewModel.messages.isEmpty else { return }
+        let action = {
+            proxy.scrollTo(ChatBottomAnchor.id, anchor: .bottom)
+        }
+        DispatchQueue.main.async {
+            if animated {
+                withAnimation(.snappy(duration: 0.22)) {
+                    action()
+                }
+            } else {
+                action()
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            action()
         }
     }
 
@@ -459,7 +504,7 @@ struct KXMessageBubble: View {
             VStack(alignment: isMine ? .trailing : .leading, spacing: 5) {
                 if !mediaItems.isEmpty {
                     MediaGridView(mediaItems: mediaItems)
-                        .frame(maxWidth: 216)
+                        .frame(maxWidth: contentType == .video ? 236 : 216)
                         .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
                         .overlay {
                             if message.status == .sending {
@@ -534,22 +579,19 @@ private struct ChatInputBar: View {
         let hasVideo = mediaDrafts.contains { $0.type == .video }
         let imageCount = mediaDrafts.filter { $0.type == .image }.count
         let remainingImageSlots = Swift.max(1, KaiXConfig.maxImageItemsPerPost - imageCount)
-        HStack(spacing: 8) {
+        HStack(alignment: .bottom, spacing: 8) {
             PhotosPicker(selection: $pickerItems, maxSelectionCount: remainingImageSlots, matching: .images) {
-                Image(systemName: "photo")
-                    .font(.headline.weight(.semibold))
-                    .frame(width: 34, height: 34)
+                ChatInputToolIcon(systemImage: "photo", disabled: hasVideo || imageCount >= KaiXConfig.maxImageItemsPerPost)
             }
             .disabled(hasVideo || imageCount >= KaiXConfig.maxImageItemsPerPost)
 
             PhotosPicker(selection: $pickerItems, maxSelectionCount: KaiXConfig.maxVideoItemsPerPost, matching: .videos) {
-                Image(systemName: "video")
-                    .font(.headline.weight(.semibold))
-                    .frame(width: 34, height: 34)
+                ChatInputToolIcon(systemImage: "video", disabled: !mediaDrafts.isEmpty)
             }
             .disabled(!mediaDrafts.isEmpty)
 
             TextField(L("messagePlaceholder", language), text: $text, axis: .vertical)
+                .textFieldStyle(.plain)
                 .lineLimit(1...4)
                 .submitLabel(.send)
                 .onSubmit {
@@ -557,33 +599,68 @@ private struct ChatInputBar: View {
                         send()
                     }
                 }
-                .padding(.horizontal, 13)
-                .padding(.vertical, 8)
-                .background(Color(.secondarySystemGroupedBackground), in: Capsule())
+                .font(.body)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .frame(minHeight: 42)
+                .background(KXColor.cardBackground.opacity(0.92), in: RoundedRectangle(cornerRadius: 21, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 21, style: .continuous)
+                        .stroke(KXColor.separator.opacity(0.8), lineWidth: 0.7)
+                )
 
-            Button(action: send) {
+            Button {
+                guard canSend, !isSending else { return }
+                send()
+            } label: {
                 if isSending {
-                    KXSpinner(size: 18, lineWidth: 2.2, tint: .white)
+                    KXSpinner(size: 18, lineWidth: 2.2, tint: canSend ? .white : KXColor.accent)
                 } else {
                     Image(systemName: "paperplane.fill")
                         .font(.subheadline.weight(.semibold))
                 }
             }
-            .frame(width: 36, height: 36)
-            .foregroundStyle(canSend ? .white : .secondary)
+            .frame(width: 42, height: 42)
+            .foregroundStyle(canSend ? .white : KXColor.accent.opacity(0.42))
             .background {
                 Circle()
-                    .fill(canSend ? KXColor.accent : Color(.tertiarySystemGroupedBackground))
+                    .fill(canSend ? KXColor.accent : KXColor.accent.opacity(0.08))
             }
             .clipShape(Circle())
-            .overlay(Circle().stroke(KXColor.separator, lineWidth: canSend ? 0 : 0.6))
+            .overlay(Circle().stroke(canSend ? Color.clear : KXColor.accent.opacity(0.10), lineWidth: 0.7))
+            .shadow(color: canSend ? KXColor.accent.opacity(0.18) : .clear, radius: 10, y: 4)
             .disabled(!canSend || isSending)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .kxGlassBar()
-        .overlay(alignment: .top) {
-            Divider().opacity(0.35)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background {
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 30, style: .continuous)
+                        .stroke(KXColor.glassStroke.opacity(0.58), lineWidth: 0.8)
+                )
+                .shadow(color: KXColor.glassShadow.opacity(1.2), radius: 18, y: 8)
         }
+        .padding(.horizontal, 10)
+        .padding(.top, 7)
+        .padding(.bottom, 8)
+    }
+}
+
+private enum ChatBottomAnchor {
+    static let id = "chat-bottom-anchor"
+}
+
+private struct ChatInputToolIcon: View {
+    let systemImage: String
+    let disabled: Bool
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(.headline.weight(.semibold))
+            .foregroundStyle(disabled ? KXColor.livingMuted.opacity(0.42) : KXColor.accent)
+            .frame(width: 38, height: 42)
+            .contentShape(Rectangle())
     }
 }

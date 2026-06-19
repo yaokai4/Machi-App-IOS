@@ -43,7 +43,6 @@ struct BottomTabBarView: View {
                                 .frame(width: 74, height: 54)
                         }
                     }
-                    .clipShape(Capsule())
                     .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
@@ -108,16 +107,21 @@ private struct TabUnreadBadge: View {
 
     var body: some View {
         Text(count > 99 ? "99+" : "\(count)")
-            .font(.system(size: count > 9 ? 7.5 : 8.5, weight: .black))
+            .font(.system(size: count > 99 ? 7 : count > 9 ? 7.5 : 8.5, weight: .black))
             .foregroundStyle(.white)
             .lineLimit(1)
-            .minimumScaleFactor(0.75)
-            .frame(minWidth: 16, minHeight: 16)
-            .padding(.horizontal, count > 9 ? 3 : 0)
+            .minimumScaleFactor(0.72)
+            .frame(width: badgeWidth, height: 17)
             .background(Color(red: 0.93, green: 0.16, blue: 0.34), in: Capsule())
             .overlay(Capsule().stroke(Color.white.opacity(0.9), lineWidth: 1.2))
             .shadow(color: Color(red: 0.93, green: 0.16, blue: 0.34).opacity(0.18), radius: 4, y: 1.5)
             .accessibilityHidden(true)
+    }
+
+    private var badgeWidth: CGFloat {
+        if count > 99 { return 27 }
+        if count > 9 { return 22 }
+        return 17
     }
 }
 

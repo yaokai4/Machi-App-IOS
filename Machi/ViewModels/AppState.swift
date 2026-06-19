@@ -9,7 +9,24 @@ final class AppState: ObservableObject {
     @Published var databaseRecoveryNotice: DatabaseRecoveryNotice?
 
     func bootstrap(context: ModelContext, currentUserId: String) async {
-        state = .loading
+        // `.task` can be cancelled and restarted when the app returns from
+        // the background. If the user is already inside the app, keep the
+        // current screen on display and refresh the session quietly instead
+        // of flashing the full cold-start splash again.
+        let shouldShowBlockingLoader: Bool = {
+            if currentUser != nil, state == .loaded { return false }
+            switch state {
+            case .idle, .loading, .error:
+                return true
+            case .empty:
+                return !currentUserId.isEmpty
+            case .loaded:
+                return currentUser == nil
+            }
+        }()
+        if shouldShowBlockingLoader {
+            state = .loading
+        }
         #if DEBUG
         databaseRecoveryNotice = DatabaseRecoveryNoticeStore.load()
         #else

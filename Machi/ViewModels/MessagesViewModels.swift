@@ -136,11 +136,6 @@ final class ChatViewModel: ObservableObject {
                 state = messages.isEmpty ? .empty : .loaded
                 return
             }
-            guard data.count <= KaiXConfig.maxMessageVideoBytes else {
-                errorMessage = L("mediaTooLarge", language)
-                state = messages.isEmpty ? .empty : .loaded
-                return
-            }
         } else {
             guard !hasVideo else {
                 errorMessage = L("mediaMixNotAllowed", language)
@@ -152,16 +147,17 @@ final class ChatViewModel: ObservableObject {
                 state = messages.isEmpty ? .empty : .loaded
                 return
             }
-            guard data.count <= KaiXConfig.maxMessageImageBytes else {
-                errorMessage = L("mediaTooLarge", language)
-                state = messages.isEmpty ? .empty : .loaded
-                return
-            }
         }
         do {
             let draft = isVideo
                 ? try await UploadService.shared.prepareVideo(data: data, contentType: contentType)
                 : try await UploadService.shared.prepareImage(data: data)
+            let uploadLimit = isVideo ? KaiXConfig.maxMessageVideoBytes : KaiXConfig.maxMessageImageBytes
+            guard draft.uploadFileSize <= uploadLimit else {
+                errorMessage = L("mediaTooLarge", language)
+                state = messages.isEmpty ? .empty : .loaded
+                return
+            }
             mediaDrafts.append(draft)
             messageStore?.enqueueUpload(draft)
             if case .idle = state {

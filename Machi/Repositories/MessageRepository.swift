@@ -6,6 +6,12 @@ final class MessageRepository {
     private let context: ModelContext
     private static var cachedPeersById: [String: UserEntity] = [:]
     private static var cachedMediaByConversationId: [String: [String: [MediaEntity]]] = [:]
+    private static var signedAttachmentURLCache: [String: SignedAttachmentURLCacheItem] = [:]
+
+    private struct SignedAttachmentURLCacheItem {
+        let url: String
+        let expiresAt: Date
+    }
 
     init(context: ModelContext) {
         self.context = context
@@ -35,11 +41,12 @@ final class MessageRepository {
         if KaiXBackend.token != nil {
             let messages = try await KaiXAPIClient.shared.messages(threadId, query: query, day: day)
             var mediaByMessage: [String: [MediaEntity]] = [:]
-            let entities = messages.map { dto -> MessageEntity in
-                let mappedMedia = Self.mediaItems(from: dto)
+            var entities: [MessageEntity] = []
+            for dto in messages {
+                let mappedMedia = await Self.resolvedMediaItems(from: dto)
                 mediaByMessage[dto.id] = mappedMedia
                 let entity = Self.message(from: dto, mediaIds: mappedMedia.map(\.id))
-                return entity
+                entities.append(entity)
             }
             Self.cachedMediaByConversationId[threadId] = mediaByMessage
             return entities
@@ -109,9 +116,9 @@ final class MessageRepository {
         if KaiXBackend.token != nil {
             var attachmentIds: [String] = []
             for draft in mediaDrafts {
-                guard let data = try? await Task.detached(priority: .utility, operation: {
+                let data = try await Task.detached(priority: .utility, operation: {
                     try Data(contentsOf: draft.localURL)
-                }).value else { continue }
+                }).value
                 let purpose = draft.type == .video ? "message_video" : "message_image"
                 let uploaded = try await KaiXAPIClient.shared.uploadFile(
                     data: data,
@@ -127,7 +134,7 @@ final class MessageRepository {
                 attachmentIds.append(uploaded.file.id)
             }
             let dto = try await KaiXAPIClient.shared.sendMessage(thread.id, content: trimmed, attachmentIds: attachmentIds)
-            let mappedMedia = Self.mediaItems(from: dto)
+            let mappedMedia = await Self.resolvedMediaItems(from: dto)
             Self.cachedMediaByConversationId[thread.id, default: [:]][dto.id] = mappedMedia
             let message = Self.message(from: dto, mediaIds: mappedMedia.map(\.id))
             thread.lastMessage = Self.previewText(content: trimmed, mediaTypes: mappedMedia.map(\.type))
@@ -255,7 +262,7 @@ final class MessageRepository {
 
     private static func thread(from dto: KaiXConversationDTO) -> MessageThreadEntity {
         let last = dto.last_message
-        let lastMedia = last.map(mediaItems(from:)) ?? []
+        let lastMedia = last.map { mediaItems(from: $0) } ?? []
         return MessageThreadEntity(
             id: dto.id,
             participantIds: dto.participants.isEmpty ? [dto.participant_a, dto.participant_b] : dto.participants,
@@ -283,7 +290,36 @@ final class MessageRepository {
         )
     }
 
-    private static func mediaItems(from dto: KaiXMessageDTO) -> [MediaEntity] {
+    private static func resolvedMediaItems(from dto: KaiXMessageDTO) async -> [MediaEntity] {
+        guard let attachments = dto.attachments, !attachments.isEmpty else {
+            return mediaItems(from: dto)
+        }
+        var signedURLs: [String: String] = [:]
+        let now = Date()
+        for attachment in attachments {
+            let publicSource = attachment.publicUrl ?? attachment.cdnUrl ?? attachment.url ?? ""
+            let needsSignedURL = attachment.needsSignedUrl == true || publicSource.isEmpty
+            guard needsSignedURL else { continue }
+            let cacheKey = "\(dto.id):\(attachment.id)"
+            if let cached = signedAttachmentURLCache[cacheKey], cached.expiresAt > now {
+                signedURLs[attachment.id] = cached.url
+                continue
+            }
+            if let signedURL = try? await KaiXAPIClient.shared.messageAttachmentViewUrl(
+                messageId: dto.id,
+                attachmentId: attachment.id
+            ), !signedURL.isEmpty {
+                signedURLs[attachment.id] = signedURL
+                signedAttachmentURLCache[cacheKey] = SignedAttachmentURLCacheItem(
+                    url: signedURL,
+                    expiresAt: now.addingTimeInterval(240)
+                )
+            }
+        }
+        return mediaItems(from: dto, signedAttachmentURLs: signedURLs)
+    }
+
+    private static func mediaItems(from dto: KaiXMessageDTO, signedAttachmentURLs: [String: String] = [:]) -> [MediaEntity] {
         let legacy = (dto.media ?? []).map { media -> MediaEntity in
             MediaEntity(
                 id: media.id,
@@ -308,8 +344,11 @@ final class MessageRepository {
         let attachments = (dto.attachments ?? []).map { att -> MediaEntity in
             let rawType = (att.attachment_type ?? att.type).lowercased()
             let mediaType: MediaType = rawType == "video" ? .video : .image
-            let source = att.publicUrl ?? att.cdnUrl ?? att.url ?? ""
-            let thumb = att.posterUrl ?? att.poster_url ?? att.thumbnailUrl ?? att.thumbnail_url ?? att.thumbUrl ?? att.thumb_url ?? source
+            let signedSource = signedAttachmentURLs[att.id] ?? ""
+            let publicSource = att.publicUrl ?? att.cdnUrl ?? att.url ?? ""
+            let source = signedSource.isEmpty ? publicSource : signedSource
+            let poster = att.posterUrl ?? att.poster_url ?? att.thumbnailUrl ?? att.thumbnail_url ?? att.thumbUrl ?? att.thumb_url ?? ""
+            let thumb = mediaType == .video ? poster : (poster.isEmpty ? source : poster)
             return MediaEntity(
                 id: att.id,
                 postId: dto.id,

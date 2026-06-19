@@ -23,7 +23,17 @@ struct MediaGridView: View {
                         selectedMedia = item
                     } label: {
                         ZStack {
-                            if let url = item.displayURL ?? item.mediumSourceURL ?? item.sourceURL {
+                            if item.type == .video, let posterURL = item.displayURL {
+                                MediaImageView(
+                                    url: posterURL,
+                                    targetPixelSize: count == 1 ? 960 : 640,
+                                    contentMode: .fill
+                                )
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                    .clipped()
+                            } else if item.type == .video {
+                                MediaPlaceholderTile(item: item, height: nil)
+                            } else if let url = item.displayURL ?? item.mediumSourceURL ?? item.sourceURL {
                                 MediaImageView(
                                     url: url,
                                     targetPixelSize: count == 1 ? 960 : 640,
