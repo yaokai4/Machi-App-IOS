@@ -409,15 +409,19 @@ private enum ProfileCollectionDestination: Identifiable, Hashable {
 }
 
 struct LanguageSettingsView: View {
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
     @AppStorage("appLanguageCode") private var appLanguageCode = AppLanguage.system.rawValue
+    @State private var message: String?
+
+    let currentUser: UserEntity
 
     var body: some View {
         Form {
             Section(L("currentLanguage", language)) {
                 ForEach(AppLanguage.allCases) { option in
                     Button {
-                        appLanguageCode = option.rawValue
+                        persistAppLanguage(option)
                     } label: {
                         HStack {
                             Text(option == .system ? L("systemAppearance", language) : option.title)
@@ -431,7 +435,48 @@ struct LanguageSettingsView: View {
                     .buttonStyle(.plain)
                 }
             }
+            if let message {
+                Section {
+                    Text(message)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         .navigationTitle(L("language", language))
+    }
+
+    private func persistAppLanguage(_ option: AppLanguage) {
+        appLanguageCode = option.rawValue
+        let serverValue = serverLanguageCode(for: option)
+        currentUser.appLanguage = serverValue
+        try? modelContext.save()
+        guard KaiXBackend.token != nil else { return }
+
+        Task {
+            do {
+                let dto = try await KaiXAPIClient.shared.updateRegionLanguage(["app_language": serverValue])
+                await MainActor.run {
+                    UserRepository.apply(dto, to: currentUser)
+                    try? modelContext.save()
+                    message = nil
+                }
+            } catch {
+                await MainActor.run {
+                    message = error.kaixUserMessage
+                }
+            }
+        }
+    }
+
+    private func serverLanguageCode(for option: AppLanguage) -> String {
+        let resolved = option == .system
+            ? AppLanguage.resolved(from: AppLanguage.system.rawValue)
+            : option
+        switch resolved {
+        case .zh, .system: return "zh-Hans"
+        case .ja: return "ja"
+        case .en: return "en"
+        }
     }
 }

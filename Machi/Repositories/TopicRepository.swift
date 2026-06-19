@@ -42,6 +42,7 @@ final class TopicRepository {
     }
 
     func rebuildFromPosts() async throws {
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else { return }
         let published = PostStatus.published.rawValue
         let active = PostStatus.active.rawValue
         let posts = try context.fetch(FetchDescriptor<PostEntity>(

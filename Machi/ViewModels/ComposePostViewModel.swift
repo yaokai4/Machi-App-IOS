@@ -458,11 +458,10 @@ final class ComposePostViewModel: ObservableObject {
                 region: selectedRegion,
                 contentType: contentType,
                 attributes: attributes,
-                language: selectedLanguage.serverTag
+                language: selectedLanguage.serverTag,
+                uploadedMediaByDraftID: uploadedMediaByDraftID
             )
-            let uploaded = uploadedMediaByDraftID
             resetDraft(keepError: false)
-            await deleteUploadedMedia(uploaded)
             state = .loaded
             return true
         } catch {

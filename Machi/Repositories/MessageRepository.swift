@@ -191,11 +191,13 @@ final class MessageRepository {
     }
 
     func markThreadUnread(_ thread: MessageThreadEntity) async throws {
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+        if KaiXBackend.token != nil {
+            try await KaiXAPIClient.shared.markConversationRead(thread.id, isRead: false)
             thread.unreadCount = max(1, thread.unreadCount)
             thread.updatedAt = .now
             return
         }
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else { throw RepositoryError.authenticationRequired }
         thread.unreadCount = max(1, thread.unreadCount)
         thread.updatedAt = .now
         try context.save()

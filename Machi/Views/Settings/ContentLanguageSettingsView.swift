@@ -9,6 +9,7 @@ struct ContentLanguageSettingsView: View {
     @Environment(\.appLanguage) private var language
     @Environment(\.modelContext) private var modelContext
     @ObservedObject private var languageManager = LanguageManager.shared
+    @State private var message: String?
 
     let currentUser: UserEntity
 
@@ -24,9 +25,7 @@ struct ContentLanguageSettingsView: View {
             Section {
                 ForEach(primaryOptions) { option in
                     Button {
-                        languageManager.preferred = option
-                        currentUser.contentLanguagePreference = option.rawValue
-                        try? modelContext.save()
+                        persistContentLanguage(preferred: option, fallbacks: languageManager.fallbacks)
                     } label: {
                         HStack {
                             Text(option.title(language))
@@ -58,9 +57,7 @@ struct ContentLanguageSettingsView: View {
                             } else {
                                 current.removeAll { $0 == option }
                             }
-                            languageManager.fallbacks = current
-                            currentUser.preferredContentLanguages = current.map(\.rawValue)
-                            try? modelContext.save()
+                            persistContentLanguage(preferred: languageManager.preferred, fallbacks: current)
                         }
                     )
                     Toggle(option.title(language), isOn: isOn)
@@ -70,7 +67,47 @@ struct ContentLanguageSettingsView: View {
             } footer: {
                 Text(L("contentLanguageFallbackHint", language))
             }
+
+            if let message {
+                Section {
+                    Text(message)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         .navigationTitle(L("contentLanguage", language))
+    }
+
+    private func persistContentLanguage(preferred: ContentLanguage, fallbacks: [ContentLanguage]) {
+        var normalizedFallbacks: [ContentLanguage] = []
+        for fallback in fallbacks where !normalizedFallbacks.contains(fallback) {
+            normalizedFallbacks.append(fallback)
+        }
+        languageManager.preferred = preferred
+        languageManager.fallbacks = normalizedFallbacks
+        currentUser.contentLanguagePreference = preferred.rawValue
+        currentUser.preferredContentLanguages = normalizedFallbacks.map(\.rawValue)
+        try? modelContext.save()
+        guard KaiXBackend.token != nil else { return }
+
+        let patch = [
+            "content_language_preference": preferred.rawValue,
+            "preferred_content_languages": normalizedFallbacks.map(\.rawValue).joined(separator: "|")
+        ]
+        Task {
+            do {
+                let dto = try await KaiXAPIClient.shared.updateRegionLanguage(patch)
+                await MainActor.run {
+                    UserRepository.apply(dto, to: currentUser)
+                    try? modelContext.save()
+                    message = nil
+                }
+            } catch {
+                await MainActor.run {
+                    message = error.kaixUserMessage
+                }
+            }
+        }
     }
 }

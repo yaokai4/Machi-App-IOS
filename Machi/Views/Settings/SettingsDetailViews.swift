@@ -691,7 +691,7 @@ struct RegionLanguageSettingsView: View {
             }
             SettingsDivider()
             SettingsRowLink(icon: "globe", tint: .blue, title: L("language", language), value: AppLanguage.resolved(from: UserDefaults.standard.string(forKey: "appLanguageCode") ?? AppLanguage.system.rawValue).title, subtitle: L("currentLanguage", language)) {
-                LanguageSettingsView()
+                LanguageSettingsView(currentUser: currentUser)
             }
             SettingsDivider()
             SettingsRowLink(icon: "captions.bubble", tint: .purple, title: L("contentLanguage", language), value: LanguageManager.shared.preferred.title(language), subtitle: L("contentLanguageSubtitle", language)) {

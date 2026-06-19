@@ -352,8 +352,9 @@ final class PostRepository {
     }
 
     func fetchDrafts(authorId: String) async throws -> [PostEntity] {
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
-            return []
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
+            guard KaiXBackend.token != nil else { throw RepositoryError.authenticationRequired }
+            return try await KaiXAPIClient.shared.drafts().map { Self.draftEntity(from: $0, authorId: authorId) }
         }
         let draft = PostStatus.draft.rawValue
         return try context.fetch(FetchDescriptor<PostEntity>(
@@ -532,9 +533,13 @@ final class PostRepository {
                 city: region?.cityCode,
                 regionCode: region?.regionCode,
                 contentType: contentType.rawValue,
-                attributes: attributes.isEmpty ? nil : attributes
+                attributes: attributes.isEmpty ? nil : attributes,
+                language: language.isEmpty ? nil : language
             )
             return ServerEntityFactory.post(from: remote)
+        }
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            throw RepositoryError.authenticationRequired
         }
 
         let post = PostEntity(
@@ -608,6 +613,68 @@ final class PostRepository {
         return str
     }
 
+    private static let draftMediaIdsAttributeKey = "__server_draft_media_ids"
+
+    private static func draftEntity(from dto: KaiXDraftDTO, authorId: String) -> PostEntity {
+        let updatedAt = parseDate(dto.updated_at) ?? .now
+        return PostEntity(
+            id: dto.id,
+            authorId: authorId,
+            content: dto.content,
+            createdAt: updatedAt,
+            updatedAt: updatedAt,
+            status: .draft,
+            hashtags: dto.tags,
+            remoteId: dto.id,
+            syncStatus: .synced,
+            country: dto.country ?? "",
+            province: dto.province ?? "",
+            city: dto.city ?? "",
+            regionCode: dto.region_code ?? "",
+            contentType: (dto.content_type.flatMap(ContentType.init(rawValue:)) ?? .dynamic),
+            attributesRaw: draftAttributesRaw(attributes: dto.attributes, mediaIds: dto.media_ids),
+            language: dto.language ?? ""
+        )
+    }
+
+    private static func draftMediaIds(from post: PostEntity) -> [String] {
+        guard let values = post.attributes[draftMediaIdsAttributeKey] as? [String] else {
+            return []
+        }
+        return values
+    }
+
+    private static func draftPublicAttributes(from post: PostEntity) -> [String: KaiXAttributeValue] {
+        guard !post.attributesRaw.isEmpty,
+              let data = post.attributesRaw.data(using: .utf8),
+              var values = try? JSONDecoder().decode([String: KaiXAttributeValue].self, from: data) else {
+            return [:]
+        }
+        values.removeValue(forKey: draftMediaIdsAttributeKey)
+        return values
+    }
+
+    private static func draftAttributesRaw(attributes: [String: KaiXAttributeValue]?, mediaIds: [String]) -> String {
+        var plain: [String: Any] = [:]
+        for (key, value) in attributes ?? [:] where key != draftMediaIdsAttributeKey {
+            switch value.kind {
+            case .string(let s): plain[key] = s
+            case .double(let n): plain[key] = n
+            case .bool(let b):   plain[key] = b
+            case .json(let j):   plain[key] = j.foundationObject
+            case .null:          continue
+            }
+        }
+        if !mediaIds.isEmpty {
+            plain[draftMediaIdsAttributeKey] = mediaIds
+        }
+        guard !plain.isEmpty,
+              let data = try? JSONSerialization.data(withJSONObject: plain, options: [.sortedKeys]) else {
+            return ""
+        }
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+
     func saveDraft(
         authorId: String,
         content: String,
@@ -616,12 +683,60 @@ final class PostRepository {
         region: KaiXRegionDirectory.Region? = nil,
         contentType: ContentType = .dynamic,
         attributes: [String: KaiXAttributeValue] = [:],
-        language: String = ""
+        language: String = "",
+        uploadedMediaByDraftID: [String: KaiXMediaDTO] = [:]
     ) async throws -> PostEntity {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         let storedHashtags = hashtags.normalizedDisplayHashtags.isEmpty ? trimmed.extractedHashtags : hashtags.normalizedDisplayHashtags
         guard trimmed.isEmpty == false || mediaDrafts.isEmpty == false || storedHashtags.isEmpty == false || attributes.isEmpty == false else {
             throw RepositoryError.validationFailed
+        }
+
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
+            guard KaiXBackend.token != nil else { throw RepositoryError.authenticationRequired }
+            var mediaIds: [String] = []
+            mediaIds.reserveCapacity(mediaDrafts.count)
+            for draft in mediaDrafts {
+                if let uploaded = uploadedMediaByDraftID[draft.id] {
+                    mediaIds.append(uploaded.id)
+                    continue
+                }
+                let uploaded = try await UploadService.shared.upload(
+                    draft: draft,
+                    purpose: draft.type == .video ? "post_video" : "post_image",
+                    entityType: "post"
+                )
+                mediaIds.append(uploaded.id)
+            }
+            let draftId = try await KaiXAPIClient.shared.saveDraft(
+                content: trimmed,
+                mediaIds: mediaIds,
+                tags: storedHashtags,
+                country: region?.countryCode,
+                province: region?.provinceCode.isEmpty == true ? nil : region?.provinceCode,
+                city: region?.cityCode,
+                regionCode: region?.regionCode,
+                contentType: contentType.rawValue,
+                attributes: attributes.isEmpty ? nil : attributes,
+                language: language
+            )
+            return Self.draftEntity(
+                from: KaiXDraftDTO(
+                    id: draftId,
+                    content: trimmed,
+                    media_ids: mediaIds,
+                    tags: storedHashtags,
+                    country: region?.countryCode,
+                    province: region?.provinceCode,
+                    city: region?.cityCode,
+                    region_code: region?.regionCode,
+                    content_type: contentType.rawValue,
+                    attributes: attributes,
+                    language: language,
+                    updated_at: ISO8601DateFormatter().string(from: .now)
+                ),
+                authorId: authorId
+            )
         }
 
         let post = PostEntity(
@@ -662,6 +777,31 @@ final class PostRepository {
 
     func updateDraft(post: PostEntity, content: String) async throws {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
+            guard KaiXBackend.token != nil else { throw RepositoryError.authenticationRequired }
+            guard trimmed.isEmpty == false || post.hashtags.isEmpty == false || Self.draftMediaIds(from: post).isEmpty == false else {
+                throw RepositoryError.validationFailed
+            }
+            let nextTags = trimmed.extractedHashtags.isEmpty ? post.hashtags : trimmed.extractedHashtags
+            let draftAttributes = Self.draftPublicAttributes(from: post)
+            _ = try await KaiXAPIClient.shared.saveDraft(
+                id: post.remoteId ?? post.id,
+                content: trimmed,
+                mediaIds: Self.draftMediaIds(from: post),
+                tags: nextTags,
+                country: post.country.isEmpty ? nil : post.country,
+                province: post.province.isEmpty ? nil : post.province,
+                city: post.city.isEmpty ? nil : post.city,
+                regionCode: post.regionCode.isEmpty ? nil : post.regionCode,
+                contentType: post.contentTypeRaw,
+                attributes: draftAttributes.isEmpty ? nil : draftAttributes,
+                language: post.language.isEmpty ? nil : post.language
+            )
+            post.content = trimmed
+            post.hashtags = nextTags
+            post.updatedAt = .now
+            return
+        }
         let postId = post.id
         var mediaDescriptor = FetchDescriptor<MediaEntity>(
             predicate: #Predicate { $0.postId == postId }
@@ -676,6 +816,25 @@ final class PostRepository {
     }
 
     func publishDraft(post: PostEntity) async throws {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
+            guard KaiXBackend.token != nil else { throw RepositoryError.authenticationRequired }
+            let mediaIds = Self.draftMediaIds(from: post)
+            let draftAttributes = Self.draftPublicAttributes(from: post)
+            _ = try await KaiXAPIClient.shared.createPost(
+                content: post.content,
+                mediaIds: mediaIds,
+                tags: post.hashtags,
+                country: post.country.isEmpty ? nil : post.country,
+                province: post.province.isEmpty ? nil : post.province,
+                city: post.city.isEmpty ? nil : post.city,
+                regionCode: post.regionCode.isEmpty ? nil : post.regionCode,
+                contentType: post.contentTypeRaw,
+                attributes: draftAttributes.isEmpty ? nil : draftAttributes,
+                language: post.language.isEmpty ? nil : post.language
+            )
+            try await KaiXAPIClient.shared.deleteDraft(post.remoteId ?? post.id)
+            return
+        }
         post.status = .published
         post.updatedAt = .now
         heatService.refresh(post)
@@ -684,6 +843,10 @@ final class PostRepository {
     }
 
     func incrementView(post: PostEntity) async throws {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
+            try await KaiXAPIClient.shared.viewPost(post.remoteId ?? post.id)
+            return
+        }
         let previousHeat = post.heatScore
         post.viewCount += 1
         try refreshHeatAndTopics(for: post, previousHeat: previousHeat)
@@ -968,6 +1131,10 @@ final class PostRepository {
 
     func deletePost(post: PostEntity) async throws {
         if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
+            if post.status == .draft {
+                try await KaiXAPIClient.shared.deleteDraft(post.remoteId ?? post.id)
+                return
+            }
             try await KaiXAPIClient.shared.deletePost(post.remoteId ?? post.id)
             return
         }
@@ -1124,6 +1291,20 @@ final class PostRepository {
             boostedUntil: post.boostedUntil,
             createdAt: post.createdAt
         )
+    }
+
+    private static func parseDate(_ raw: String?) -> Date? {
+        guard let raw, !raw.isEmpty else { return nil }
+        let withFraction = ISO8601DateFormatter()
+        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = withFraction.date(from: raw) { return date }
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime]
+        if let date = iso.date(from: raw) { return date }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter.date(from: raw)
     }
 
     private func rebuildTopics() throws {

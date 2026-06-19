@@ -25,7 +25,7 @@ final class NotificationRepository {
 
     func markAllRead() async throws {
         guard KaiXRuntimeFlags.allowLocalStoreFallback else {
-            guard KaiXBackend.token != nil else { return }
+            guard KaiXBackend.token != nil else { throw RepositoryError.authenticationRequired }
             try await KaiXAPIClient.shared.markNotificationsRead(all: true)
             return
         }
@@ -36,9 +36,9 @@ final class NotificationRepository {
 
     func markRead(_ notification: NotificationEntity) async throws {
         guard KaiXRuntimeFlags.allowLocalStoreFallback else {
-            notification.isRead = true
-            guard KaiXBackend.token != nil else { return }
+            guard KaiXBackend.token != nil else { throw RepositoryError.authenticationRequired }
             try await KaiXAPIClient.shared.markNotificationsRead(ids: [notification.remoteId ?? notification.id])
+            notification.isRead = true
             return
         }
         notification.isRead = true
@@ -47,9 +47,9 @@ final class NotificationRepository {
 
     func markRead(_ notifications: [NotificationEntity]) async throws {
         guard KaiXRuntimeFlags.allowLocalStoreFallback else {
-            notifications.forEach { $0.isRead = true }
-            guard KaiXBackend.token != nil else { return }
+            guard KaiXBackend.token != nil else { throw RepositoryError.authenticationRequired }
             try await KaiXAPIClient.shared.markNotificationsRead(ids: notifications.map { $0.remoteId ?? $0.id })
+            notifications.forEach { $0.isRead = true }
             return
         }
         notifications.forEach { $0.isRead = true }
@@ -58,6 +58,11 @@ final class NotificationRepository {
 
     func markUnread(_ notifications: [NotificationEntity]) async throws {
         guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+            guard KaiXBackend.token != nil else { throw RepositoryError.authenticationRequired }
+            try await KaiXAPIClient.shared.markNotificationsRead(
+                ids: notifications.map { $0.remoteId ?? $0.id },
+                isRead: false
+            )
             notifications.forEach { $0.isRead = false }
             return
         }
@@ -67,7 +72,7 @@ final class NotificationRepository {
 
     func delete(_ notification: NotificationEntity) async throws {
         guard KaiXRuntimeFlags.allowLocalStoreFallback else {
-            guard KaiXBackend.token != nil else { return }
+            guard KaiXBackend.token != nil else { throw RepositoryError.authenticationRequired }
             try await KaiXAPIClient.shared.deleteNotification(notification.remoteId ?? notification.id)
             return
         }
@@ -77,7 +82,7 @@ final class NotificationRepository {
 
     func delete(_ notifications: [NotificationEntity]) async throws {
         guard KaiXRuntimeFlags.allowLocalStoreFallback else {
-            guard KaiXBackend.token != nil else { return }
+            guard KaiXBackend.token != nil else { throw RepositoryError.authenticationRequired }
             for notification in notifications {
                 try await KaiXAPIClient.shared.deleteNotification(notification.remoteId ?? notification.id)
             }

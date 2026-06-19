@@ -577,7 +577,8 @@ final class KaiXAPIClient {
         city: String? = nil,
         regionCode: String? = nil,
         contentType: String? = nil,
-        attributes: [String: KaiXAttributeValue]? = nil
+        attributes: [String: KaiXAttributeValue]? = nil,
+        language: String? = nil
     ) async throws -> KaiXPostDTO {
         struct Body: Encodable {
             let content: String
@@ -590,6 +591,7 @@ final class KaiXAPIClient {
             let region_code: String?
             let content_type: String?
             let attributes: [String: KaiXAttributeValue]?
+            let language: String?
         }
         struct Wrapper: Codable { let post: KaiXPostDTO }
         let data = try await request("POST", "/api/posts",
@@ -602,7 +604,8 @@ final class KaiXAPIClient {
                                                 city: city,
                                                 region_code: regionCode,
                                                 content_type: contentType,
-                                                attributes: attributes),
+                                                attributes: attributes,
+                                                language: language),
                                      idempotencyKey: "post-create-\(UUID().uuidString)")
         return try decode(data) as Wrapper |> \.post
     }
@@ -611,6 +614,62 @@ final class KaiXAPIClient {
         struct Wrapper: Codable { let post: KaiXPostDTO }
         let data = try await request("GET", "/api/posts/\(id.encodedPathSegment)")
         return try decode(data) as Wrapper |> \.post
+    }
+
+    func drafts() async throws -> [KaiXDraftDTO] {
+        let data = try await request("GET", "/api/drafts")
+        let response: KaiXDraftsResponse = try decode(data)
+        return response.items
+    }
+
+    @discardableResult
+    func saveDraft(
+        id: String? = nil,
+        content: String,
+        mediaIds: [String],
+        tags: [String],
+        country: String? = nil,
+        province: String? = nil,
+        city: String? = nil,
+        regionCode: String? = nil,
+        contentType: String = ContentType.dynamic.rawValue,
+        attributes: [String: KaiXAttributeValue]? = nil,
+        language: String? = nil
+    ) async throws -> String {
+        struct Body: Encodable {
+            let id: String?
+            let content: String
+            let media_ids: [String]
+            let tags: [String]
+            let country: String?
+            let province: String?
+            let city: String?
+            let region_code: String?
+            let content_type: String
+            let attributes: [String: KaiXAttributeValue]?
+            let language: String?
+        }
+        let data = try await request("POST", "/api/drafts",
+                                     body: Body(
+                                        id: id,
+                                        content: content,
+                                        media_ids: mediaIds,
+                                        tags: tags,
+                                        country: country,
+                                        province: province,
+                                        city: city,
+                                        region_code: regionCode,
+                                        content_type: contentType,
+                                        attributes: attributes,
+                                        language: language
+                                     ),
+                                     idempotencyKey: "draft-save-\(id ?? UUID().uuidString)")
+        let response: KaiXSaveDraftResponse = try decode(data)
+        return response.id
+    }
+
+    func deleteDraft(_ id: String) async throws {
+        _ = try await request("DELETE", "/api/drafts/\(id.encodedPathSegment)")
     }
 
     // MARK: - structured city listings
@@ -1555,9 +1614,9 @@ final class KaiXAPIClient {
         return try decode(data)
     }
 
-    func markNotificationsRead(ids: [String]? = nil, all: Bool = false) async throws {
-        struct Body: Encodable { let ids: [String]?; let all: Bool }
-        _ = try await request("POST", "/api/notifications/read", body: Body(ids: ids, all: all))
+    func markNotificationsRead(ids: [String]? = nil, all: Bool = false, isRead: Bool = true) async throws {
+        struct Body: Encodable { let ids: [String]?; let all: Bool; let is_read: Bool }
+        _ = try await request("POST", "/api/notifications/read", body: Body(ids: ids, all: all, is_read: isRead))
     }
 
     func deleteNotification(_ id: String) async throws {
@@ -1636,8 +1695,9 @@ final class KaiXAPIClient {
         _ = try await request("DELETE", "/api/messages/\(id.encodedPathSegment)")
     }
 
-    func markConversationRead(_ id: String) async throws {
-        _ = try await request("POST", "/api/conversations/\(id.encodedPathSegment)/read")
+    func markConversationRead(_ id: String, isRead: Bool = true) async throws {
+        struct Body: Encodable { let is_read: Bool }
+        _ = try await request("POST", "/api/conversations/\(id.encodedPathSegment)/read", body: Body(is_read: isRead))
     }
 
     // MARK: - media / S3 uploads

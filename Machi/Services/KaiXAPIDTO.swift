@@ -1023,6 +1023,29 @@ struct KaiXPostDTO: Codable, Equatable {
     }
 }
 
+struct KaiXDraftDTO: Codable, Identifiable, Equatable {
+    let id: String
+    let content: String
+    let media_ids: [String]
+    let tags: [String]
+    let country: String?
+    let province: String?
+    let city: String?
+    let region_code: String?
+    let content_type: String?
+    let attributes: [String: KaiXAttributeValue]?
+    let language: String?
+    let updated_at: String
+}
+
+struct KaiXDraftsResponse: Codable {
+    let items: [KaiXDraftDTO]
+}
+
+struct KaiXSaveDraftResponse: Codable {
+    let id: String
+}
+
 struct KaiXCommentDTO: Codable, Equatable {
     let id: String
     let post_id: String
