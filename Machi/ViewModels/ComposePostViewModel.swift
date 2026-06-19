@@ -101,7 +101,10 @@ final class ComposePostViewModel: ObservableObject {
     }
     func intBinding(_ key: String) -> Binding<String> {
         Binding(
-            get: { self.attributes[key]?.doubleValue.map { "\(Int($0))" } ?? "" },
+            get: {
+                guard let number = self.attributes[key]?.doubleValue else { return "" }
+                return "\(Int(number))"
+            },
             set: { newValue in
                 let trimmed = newValue.trimmingCharacters(in: .whitespaces)
                 if trimmed.isEmpty {
