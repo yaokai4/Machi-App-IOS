@@ -124,6 +124,37 @@ final class MachiWalkthroughUITests: XCTestCase {
         snap("17_merchant_form_bottom")
     }
 
+    /// Regression for the workbench freeze: the profile top-left workbench
+    /// button opens a fullScreenCover that must come up fully rendered (the
+    /// earlier bug left the whole cover at opacity 0 — a blank/frozen screen
+    /// with no visible close button). Logs in as a real (non-guest) user so
+    /// the profile shows the workbench entry, taps it, and screenshots the
+    /// cover for visual confirmation that content is actually visible.
+    @MainActor
+    func testProfileWorkbenchOpensWithoutFreeze() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-appLanguageCode", "zh", "-kaixUITestLocalAuth", "-kaixUITestAutoLogin", "-kaixUITestEphemeralStore"]
+        app.launch()
+
+        _ = app.buttons["tabbar.profile"].waitForExistence(timeout: 30)
+        tapTab(app, "tabbar.profile")
+        pause(2)
+
+        let workbench = app.buttons["profile.workbench"]
+        XCTAssertTrue(workbench.waitForExistence(timeout: 12), "profile workbench button not found")
+        forceTap(workbench)
+        pause(2.5)
+        snap("60_workbench_after_fix")
+
+        // The cover must actually present (close button reachable). The PNG
+        // snapshot above is the visual proof the content isn't blank.
+        let close = app.buttons["workbench.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 8), "workbench cover did not present")
+        forceTap(close)
+        pause(1)
+        snap("61_workbench_closed_back_to_profile")
+    }
+
     /// Tap via frame-center coordinate — bypasses `isHittable`, which is
     /// false for buttons under `glassEffect` overlays (tab bar, glass
     /// circles) even though real taps land fine.

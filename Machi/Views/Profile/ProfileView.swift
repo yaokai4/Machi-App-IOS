@@ -964,7 +964,6 @@ private struct ProfilePresentationModifier: ViewModifier {
 private struct WorkbenchFullScreenView: View {
     @Binding var isPresented: Bool
     let currentUser: UserEntity
-    @State private var didEnter = false
 
     var body: some View {
         NavigationStack {
@@ -987,13 +986,6 @@ private struct WorkbenchFullScreenView: View {
                 .toolbarBackground(.hidden, for: .navigationBar)
         }
         .kxPageBackground()
-        .opacity(didEnter ? 1 : 0)
-        .scaleEffect(didEnter ? 1 : 0.985)
-        .onAppear {
-            withAnimation(.snappy(duration: 0.32)) {
-                didEnter = true
-            }
-        }
     }
 }
 
