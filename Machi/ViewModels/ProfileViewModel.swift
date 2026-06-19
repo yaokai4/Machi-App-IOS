@@ -33,6 +33,11 @@ final class ProfileViewModel: ObservableObject {
         do {
             let userId = user.id
             let draftStatus = PostStatus.draft.rawValue
+            if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
+                if let remoteUser = try await UserRepository(context: context).fetchUser(id: userId) {
+                    UserRepository.apply(remoteUser, to: user)
+                }
+            }
             let repository = PostRepository(context: context)
             authoredPosts = try await repository.fetchPosts(authorId: user.id)
             repliedPosts = try await repository.fetchRepliedPosts(authorId: user.id)

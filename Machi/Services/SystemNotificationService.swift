@@ -102,7 +102,6 @@ final class SystemNotificationService: NSObject {
     /// Remove delivered banners once the user has read everything in-app.
     func clearDelivered() {
         center.removeAllDeliveredNotifications()
-        syncBadge(unreadCount: 0)
     }
 
     // MARK: - delivered-id persistence (ordered, capped)

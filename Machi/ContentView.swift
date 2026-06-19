@@ -121,10 +121,13 @@ struct ContentView: View {
             }
         }
         .onChange(of: notificationStore.unreadCount) { _, count in
-            SystemNotificationService.shared.syncBadge(unreadCount: count)
+            syncAppBadge()
             if count == 0 {
                 SystemNotificationService.shared.clearDelivered()
             }
+        }
+        .onReceive(messageStore.$unreadCounts) { _ in
+            syncAppBadge()
         }
         .onReceive(NotificationCenter.default.publisher(for: .kaiXSystemNotificationTapped)) { note in
             handleSystemNotificationTap(note)
@@ -177,10 +180,15 @@ struct ContentView: View {
     private func syncSystemNotifications() async {
         guard KaiXBackend.token != nil, let user = appState.currentUser, !user.isGuest else { return }
         do {
+            if let conversations = try? await MessageRepository(context: modelContext).fetchThreads(currentUserId: user.id) {
+                messageStore.setConversations(conversations)
+                syncAppBadge()
+            }
             let response = try await KaiXAPIClient.shared.notifications(kind: "all")
             let all = response.items.map(notificationEntity(from:))
             notificationStore.setNotifications(all)
             notificationStore.setUnreadCount(response.unread_count)
+            syncAppBadge()
             let wanted = all.filter {
                 !$0.isRead && NotificationPreferenceService.isEnabled($0.type, recipientUserId: user.id)
             }
@@ -204,6 +212,11 @@ struct ContentView: View {
         } catch {
             // Background polling should never interrupt foreground use.
         }
+    }
+
+    private func syncAppBadge() {
+        let totalUnread = notificationStore.unreadCount + messageStore.totalUnreadCount
+        SystemNotificationService.shared.syncBadge(unreadCount: totalUnread)
     }
 
     private func notificationEntity(from dto: KaiXNotificationDTO) -> NotificationEntity {

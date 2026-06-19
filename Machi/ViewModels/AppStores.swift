@@ -146,6 +146,10 @@ final class MessageStore: ObservableObject {
     @Published private(set) var sendingQueue: [MessageEntity] = []
     @Published private(set) var uploadQueue: [MediaDraft] = []
 
+    var totalUnreadCount: Int {
+        unreadCounts.values.reduce(0) { $0 + max(0, $1) }
+    }
+
     func setConversations(_ conversations: [MessageThreadEntity]) {
         conversationsById = Dictionary(uniqueKeysWithValues: conversations.map { ($0.id, $0) })
         unreadCounts = Dictionary(uniqueKeysWithValues: conversations.map { ($0.id, $0.unreadCount) })

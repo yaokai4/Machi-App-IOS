@@ -13,6 +13,7 @@ actor UploadService {
         case writeFailed
         case thumbnailFailed
         case mediaTooLarge
+        case uploadFailed
     }
 
     func prepareImage(data: Data) async throws -> MediaDraft {

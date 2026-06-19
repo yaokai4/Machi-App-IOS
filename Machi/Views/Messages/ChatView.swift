@@ -129,6 +129,10 @@ struct ChatView: View {
     var body: some View {
         VStack(spacing: 0) {
             chatHeader
+            if viewModel.isShowingSearchTools {
+                chatSearchTools
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
 
             Group {
                 switch viewModel.state {
@@ -224,6 +228,20 @@ struct ChatView: View {
             }
 
             Spacer()
+
+            Button {
+                withAnimation(.snappy(duration: 0.18)) {
+                    viewModel.isShowingSearchTools.toggle()
+                }
+            } label: {
+                Image(systemName: viewModel.isShowingSearchTools ? "magnifyingglass.circle.fill" : "magnifyingglass")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(viewModel.hasActiveFilters ? KXColor.accent : .primary)
+                    .frame(width: 38, height: 38)
+                    .kxGlassCircle()
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L("chatSearch", language))
 
             Menu {
                 Button {
@@ -335,6 +353,75 @@ struct ChatView: View {
                 .padding(.vertical, 8)
             }
             .kxGlassBar()
+        }
+    }
+
+    private var chatSearchTools: some View {
+        VStack(spacing: 9) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField(L("chatSearchPlaceholder", language), text: $viewModel.searchQuery)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .submitLabel(.search)
+                    .onSubmit {
+                        Task { await viewModel.load(context: modelContext, thread: thread, messageStore: messageStore) }
+                    }
+                if !viewModel.searchQuery.isEmpty {
+                    Button {
+                        viewModel.searchQuery = ""
+                        Task { await viewModel.load(context: modelContext, thread: thread, messageStore: messageStore) }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(L("clear", language))
+                }
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 40)
+            .kxGlassCapsule()
+
+            HStack(spacing: 10) {
+                DatePicker(
+                    L("chatJumpToDate", language),
+                    selection: Binding(
+                        get: { viewModel.selectedDay ?? Date() },
+                        set: { date in
+                            viewModel.selectedDay = date
+                            Task { await viewModel.load(context: modelContext, thread: thread, messageStore: messageStore) }
+                        }
+                    ),
+                    displayedComponents: .date
+                )
+                .datePickerStyle(.compact)
+                .font(.caption.weight(.semibold))
+
+                Spacer()
+
+                if viewModel.hasActiveFilters {
+                    Button {
+                        viewModel.clearFilters()
+                        Task { await viewModel.load(context: modelContext, thread: thread, messageStore: messageStore) }
+                    } label: {
+                        Text(L("clearFilters", language))
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(KXColor.accent)
+                            .padding(.horizontal, 10)
+                            .frame(height: 30)
+                            .kxGlassCapsule()
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .kxGlassBar()
+        .overlay(alignment: .bottom) {
+            Divider().opacity(0.24)
         }
     }
 }

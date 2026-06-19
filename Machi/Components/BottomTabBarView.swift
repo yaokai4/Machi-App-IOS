@@ -3,6 +3,8 @@ import SwiftUI
 struct BottomTabBarView: View {
     @Environment(\.appLanguage) private var language
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @EnvironmentObject private var messageStore: MessageStore
+    @EnvironmentObject private var notificationStore: NotificationStore
     @Binding var selection: AppTab
     var currentUser: UserEntity?
 
@@ -18,6 +20,12 @@ struct BottomTabBarView: View {
                     VStack(spacing: 2) {
                         tabIcon(tab, isSelected: isSelected)
                             .frame(width: 34, height: 30, alignment: .center)
+                            .overlay(alignment: .topTrailing) {
+                                if let count = badgeCount(for: tab), count > 0 {
+                                    TabUnreadBadge(count: count)
+                                        .offset(x: 10, y: -5)
+                                }
+                            }
 
                         Text(tab.title(language))
                             .font(.system(size: 10, weight: isSelected ? .bold : .semibold))
@@ -67,6 +75,17 @@ struct BottomTabBarView: View {
         .accessibilityIdentifier("main.bottomTabBar")
     }
 
+    private func badgeCount(for tab: AppTab) -> Int? {
+        switch tab {
+        case .messages:
+            return messageStore.totalUnreadCount
+        case .profile:
+            return notificationStore.unreadCount
+        default:
+            return nil
+        }
+    }
+
     @ViewBuilder
     private func tabIcon(_ tab: AppTab, isSelected: Bool) -> some View {
         if tab == .profile {
@@ -83,6 +102,24 @@ struct BottomTabBarView: View {
                 .symbolRenderingMode(.monochrome)
                 .frame(width: 30, height: 30, alignment: .center)
         }
+    }
+}
+
+private struct TabUnreadBadge: View {
+    let count: Int
+
+    var body: some View {
+        Text(count > 99 ? "99+" : "\(count)")
+            .font(.system(size: count > 9 ? 8 : 9, weight: .black))
+            .foregroundStyle(.white)
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .frame(minWidth: 17, minHeight: 17)
+            .padding(.horizontal, count > 9 ? 3 : 0)
+            .background(Color.red, in: Capsule())
+            .overlay(Capsule().stroke(Color.white.opacity(0.9), lineWidth: 1.2))
+            .shadow(color: Color.red.opacity(0.22), radius: 5, y: 2)
+            .accessibilityHidden(true)
     }
 }
 

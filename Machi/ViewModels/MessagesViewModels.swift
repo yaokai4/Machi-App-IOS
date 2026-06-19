@@ -80,12 +80,19 @@ final class ChatViewModel: ObservableObject {
     @Published var mediaByMessageId: [String: [MediaEntity]] = [:]
     @Published var mediaDrafts: [MediaDraft] = []
     @Published var inputText = ""
+    @Published var searchQuery = ""
+    @Published var selectedDay: Date?
+    @Published var isShowingSearchTools = false
     @Published var state: ScreenState = .idle
     @Published var isSending = false
     @Published var errorMessage: String?
 
     var canSend: Bool {
         !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !mediaDrafts.isEmpty
+    }
+
+    var hasActiveFilters: Bool {
+        !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || selectedDay != nil
     }
 
     func load(context: ModelContext, thread: MessageThreadEntity, messageStore: MessageStore? = nil) async {
@@ -95,7 +102,11 @@ final class ChatViewModel: ObservableObject {
         }
         do {
             let repository = MessageRepository(context: context)
-            messages = try await repository.fetchMessages(threadId: thread.id)
+            messages = try await repository.fetchMessages(
+                threadId: thread.id,
+                query: searchQuery,
+                day: selectedDay.map(Self.serverDayString)
+            )
             messageStore?.setMessages(messages, conversationId: thread.id)
             let ids = Set(messages.map(\.id))
             mediaByMessageId = try await repository.fetchMedia(threadId: thread.id, messageIds: ids)
@@ -108,6 +119,11 @@ final class ChatViewModel: ObservableObject {
                 state = .error(error.kaixUserMessage)
             }
         }
+    }
+
+    func clearFilters() {
+        searchQuery = ""
+        selectedDay = nil
     }
 
     func addMedia(data: Data, isVideo: Bool, contentType: UTType? = nil, language: AppLanguage, messageStore: MessageStore? = nil) async {
@@ -236,5 +252,14 @@ final class ChatViewModel: ObservableObject {
             message.status = previousStatus
             errorMessage = error.kaixUserMessage
         }
+    }
+
+    private static func serverDayString(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
     }
 }

@@ -31,9 +31,9 @@ final class MessageRepository {
         .filter { $0.participantIds.contains(currentUserId) }
     }
 
-    func fetchMessages(threadId: String) async throws -> [MessageEntity] {
+    func fetchMessages(threadId: String, query: String = "", day: String? = nil) async throws -> [MessageEntity] {
         if KaiXBackend.token != nil {
-            let messages = try await KaiXAPIClient.shared.messages(threadId)
+            let messages = try await KaiXAPIClient.shared.messages(threadId, query: query, day: day)
             var mediaByMessage: [String: [MediaEntity]] = [:]
             let entities = messages.map { dto -> MessageEntity in
                 let mappedMedia = Self.mediaItems(from: dto)

@@ -2172,7 +2172,7 @@ struct DeveloperInfoView: View {
         SettingsFormPage(title: L("developerInfo", language)) {
             Text(L("architecture", language))
                 .font(.headline.weight(.semibold))
-            Text("MVVM + Repository + SwiftData + Services")
+            Text("MVVM + Repository + Server API + Ephemeral Cache")
                 .foregroundStyle(.secondary)
             Text(L("developerArchitectureText", language))
                 .foregroundStyle(.secondary)

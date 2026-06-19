@@ -362,7 +362,10 @@ struct EditProfileView: View {
             ?? uploaded.file.url
             ?? uploaded.file.thumbnailUrl
             ?? uploaded.media.sourceURLString
-        return remote.isEmpty ? trimmed : remote
+        guard !remote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw UploadService.UploadError.uploadFailed
+        }
+        return remote
     }
 
     @MainActor

@@ -76,8 +76,7 @@ struct PostCardView: View, Equatable {
         let contentPost = isQuoteRepost ? post : (originalPost ?? post)
         let contentAuthor = isQuoteRepost ? author : (originalAuthor ?? author)
         let contentMedia = isQuoteRepost ? mediaItems : (originalPost == nil ? mediaItems : originalMediaItems)
-        let inlineHashtags = Set(contentPost.previewText.extractedHashtags)
-        let visibleHashtags = visibleHashtags(for: contentPost, inlineHashtags: inlineHashtags)
+        let visibleHashtags = visibleHashtags(for: contentPost)
         let authorPresentation = officialAuthorPresentation(for: contentPost, author: contentAuthor)
 
         return Group {
@@ -353,11 +352,11 @@ struct PostCardView: View, Equatable {
         }
     }
 
-    private func visibleHashtags(for post: PostEntity, inlineHashtags: Set<String>) -> [String] {
+    private func visibleHashtags(for post: PostEntity) -> [String] {
         let redundantTags = redundantContentTags(for: post)
         return post.hashtags.filter { tag in
             let normalized = tag.normalizedTopicName
-            return !inlineHashtags.contains(normalized) && !redundantTags.contains(normalized)
+            return !redundantTags.contains(normalized)
         }
     }
 

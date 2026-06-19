@@ -10,6 +10,10 @@ final class TopicRepository {
     }
 
     func fetchTrending(limit: Int = 20) async throws -> [TopicEntity] {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
+            let response = try await KaiXAPIClient.shared.exploreTopics(region: RegionStore.shared.current, limit: limit)
+            return response.orderedTopics.map(ServerEntityFactory.topic(from:))
+        }
         var descriptor = FetchDescriptor<TopicEntity>(
             sortBy: [SortDescriptor(\.heatScore, order: .reverse), SortDescriptor(\.updatedAt, order: .reverse)]
         )
@@ -20,6 +24,15 @@ final class TopicRepository {
     func fetchTopic(name: String) async throws -> TopicEntity? {
         let normalized = name.normalizedTopicName
         guard normalized.isEmpty == false else { return nil }
+
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
+            let posts = try await KaiXAPIClient.shared.topic(normalized)
+            return TopicEntity(
+                name: normalized,
+                postCount: posts.count,
+                heatScore: posts.reduce(0) { $0 + ($1.heatScore ?? $1.heat_score) }
+            )
+        }
 
         var descriptor = FetchDescriptor<TopicEntity>(
             predicate: #Predicate { $0.name == normalized }

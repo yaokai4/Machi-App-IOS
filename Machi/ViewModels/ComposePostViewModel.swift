@@ -402,7 +402,7 @@ final class ComposePostViewModel: ObservableObject {
                 authorId: currentUser.id,
                 content: content,
                 mediaDrafts: mediaDrafts,
-                hashtags: selectedTopics,
+                hashtags: publishHashtags,
                 region: selectedRegion,
                 contentType: contentType,
                 attributes: attributes,
@@ -454,7 +454,7 @@ final class ComposePostViewModel: ObservableObject {
                 authorId: currentUser.id,
                 content: content,
                 mediaDrafts: mediaDrafts,
-                hashtags: selectedTopics,
+                hashtags: publishHashtags,
                 region: selectedRegion,
                 contentType: contentType,
                 attributes: attributes,
@@ -475,6 +475,10 @@ final class ComposePostViewModel: ObservableObject {
     private func deterministicSuggestedTopics(from topics: [String]) -> [String] {
         let normalized = topics.normalizedDisplayHashtags
         return Array(normalized.prefix(8))
+    }
+
+    private var publishHashtags: [String] {
+        (selectedTopics + content.extractedHashtags).normalizedDisplayHashtags
     }
 
     func resetDraft(keepError: Bool = false) {

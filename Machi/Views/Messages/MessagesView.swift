@@ -8,7 +8,11 @@ struct MessagesView: View {
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var messageStore: MessageStore
     @StateObject private var viewModel = MessagesViewModel()
+    @State private var mode = MessageInboxMode.conversations
     @State private var isShowingNewConversation = false
+    @State private var contacts: [UserEntity] = []
+    @State private var contactsQuery = ""
+    @State private var contactsState: ScreenState = .idle
 
     let currentUser: UserEntity
 
@@ -18,6 +22,8 @@ struct MessagesView: View {
                 isShowingNewConversation = true
             }
 
+            inboxModePicker
+
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
@@ -26,6 +32,11 @@ struct MessagesView: View {
         .toolbar(.hidden, for: .navigationBar)
         .task {
             await viewModel.load(context: modelContext, currentUser: currentUser, messageStore: messageStore)
+        }
+        .task(id: mode) {
+            if mode == .contacts {
+                await loadContacts()
+            }
         }
         .alert(L("error", language), isPresented: Binding(
             get: { viewModel.transientError != nil },
@@ -56,6 +67,15 @@ struct MessagesView: View {
 
     @ViewBuilder
     private var content: some View {
+        if mode == .contacts {
+            contactsContent
+        } else {
+            conversationContent
+        }
+    }
+
+    @ViewBuilder
+    private var conversationContent: some View {
         switch viewModel.state {
         case .loading, .idle:
             LoadingView()
@@ -74,6 +94,109 @@ struct MessagesView: View {
                 conversationList
             }
         }
+    }
+
+    private var inboxModePicker: some View {
+        HStack(spacing: 8) {
+            ForEach(MessageInboxMode.allCases) { item in
+                Button {
+                    withAnimation(.snappy(duration: 0.2)) {
+                        mode = item
+                    }
+                } label: {
+                    Label(item.title(language), systemImage: item.icon)
+                        .font(.subheadline.weight(.bold))
+                        .labelStyle(.titleAndIcon)
+                        .foregroundStyle(mode == item ? .white : .primary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 38)
+                        .background(mode == item ? KXColor.accent : Color.clear, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(4)
+        .background(KXColor.cardBackground.opacity(0.78), in: Capsule())
+        .overlay(Capsule().stroke(KXColor.separator, lineWidth: 0.7))
+        .padding(.horizontal, KXSpacing.screen)
+        .padding(.vertical, 10)
+    }
+
+    @ViewBuilder
+    private var contactsContent: some View {
+        switch contactsState {
+        case .loading, .idle:
+            LoadingView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .empty:
+            contactsEmptyContent
+        case .error(let message):
+            ErrorStateView(message: message) {
+                Task { await loadContacts() }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .loaded:
+            contactsList
+        }
+    }
+
+    private var contactsList: some View {
+        ScrollView {
+            LazyVStack(spacing: KXSpacing.sm) {
+                HStack(spacing: KXSpacing.sm) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    TextField(L("searchPlaceholderShort", language), text: $contactsQuery)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .submitLabel(.search)
+                        .onSubmit { Task { await loadContacts() } }
+                    if !contactsQuery.isEmpty {
+                        Button {
+                            contactsQuery = ""
+                            Task { await loadContacts() }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(L("clear", language))
+                    }
+                }
+                .padding(.horizontal, KXSpacing.md)
+                .frame(height: 42)
+                .kxGlassCapsule()
+                .padding(.bottom, 2)
+
+                ForEach(contacts) { user in
+                    Button {
+                        openConversation(with: user)
+                    } label: {
+                        MessageContactCard(user: user)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.top, KXSpacing.sm)
+            .padding(.bottom, chrome.bottomContentPadding)
+        }
+        .refreshable { await loadContacts() }
+    }
+
+    private var contactsEmptyContent: some View {
+        ScrollView {
+            KXStatePanel(
+                title: L("mutualFriendsEmptyTitle", language),
+                subtitle: L("mutualFriendsOnly", language),
+                systemImage: "person.2",
+                accent: KXColor.accent
+            )
+            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.top, 34)
+            .padding(.bottom, chrome.bottomContentPadding)
+        }
+        .refreshable { await loadContacts() }
     }
 
     private var conversationList: some View {
@@ -140,6 +263,55 @@ struct MessagesView: View {
             return nil
         }
         return viewModel.peers[id]
+    }
+
+    private func loadContacts() async {
+        contactsState = contacts.isEmpty ? .loading : .loaded
+        do {
+            let remoteUsers = try await KaiXAPIClient.shared.mutualMessageFriends(query: contactsQuery, limit: 100)
+            contacts = remoteUsers
+                .map(UserRepository.entity(from:))
+                .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
+            contactsState = contacts.isEmpty ? .empty : .loaded
+        } catch {
+            contactsState = .error(error.kaixUserMessage)
+        }
+    }
+
+    private func openConversation(with user: UserEntity) {
+        Task {
+            do {
+                let thread = try await MessageRepository(context: modelContext).getOrCreateThread(
+                    currentUserId: currentUser.id,
+                    peerUserId: user.id
+                )
+                await viewModel.load(context: modelContext, currentUser: currentUser, messageStore: messageStore)
+                router.open(.conversation(conversationId: thread.id))
+            } catch {
+                viewModel.transientError = error.kaixUserMessage
+            }
+        }
+    }
+}
+
+private enum MessageInboxMode: String, CaseIterable, Identifiable {
+    case conversations
+    case contacts
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .conversations: "bubble.left.and.bubble.right"
+        case .contacts: "person.2"
+        }
+    }
+
+    func title(_ language: AppLanguage) -> String {
+        switch self {
+        case .conversations: L("messageConversations", language)
+        case .contacts: L("messageContacts", language)
+        }
     }
 }
 
@@ -216,6 +388,19 @@ private struct NewConversationView: View {
                                 TextField(L("searchPlaceholder", language), text: $query)
                                     .textInputAutocapitalization(.never)
                                     .autocorrectionDisabled()
+                                    .submitLabel(.search)
+                                    .onSubmit { Task { await load() } }
+                                if !query.isEmpty {
+                                    Button {
+                                        query = ""
+                                        Task { await load() }
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel(L("clear", language))
+                                }
                             }
                             .padding(.horizontal, KXSpacing.md)
                             .frame(height: 42)
@@ -282,7 +467,7 @@ private struct NewConversationView: View {
     private func load() async {
         state = .loading
         do {
-            let remoteUsers = try await KaiXAPIClient.shared.mutualMessageFriends(limit: 50)
+            let remoteUsers = try await KaiXAPIClient.shared.mutualMessageFriends(query: query, limit: 50)
             users = remoteUsers
                 .map(UserRepository.entity(from:))
                 .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
@@ -290,6 +475,42 @@ private struct NewConversationView: View {
         } catch {
             state = .error(error.kaixUserMessage)
         }
+    }
+}
+
+private struct MessageContactCard: View {
+    @Environment(\.appLanguage) private var language
+    let user: UserEntity
+
+    var body: some View {
+        HStack(spacing: KXSpacing.md) {
+            AvatarView(user: user, size: 48)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 5) {
+                    Text(user.displayName)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    KXUserBadge(user: user)
+                }
+                Text("@\(user.username)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            Text(L("mutualFriendBadge", language))
+                .font(.caption2.weight(.black))
+                .foregroundStyle(KXColor.accent)
+                .padding(.horizontal, 8)
+                .frame(height: 24)
+                .background(KXColor.accent.opacity(0.10), in: Capsule())
+            Image(systemName: "bubble.left.and.bubble.right.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(KXColor.accent)
+        }
+        .padding(KXSpacing.md)
+        .kxGlassSurface(radius: KXRadius.md)
     }
 }
 

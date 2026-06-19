@@ -1485,8 +1485,28 @@ struct TopicDetailView: View {
     }
 
     private var topicScopePicker: some View {
-        KXSegmentedControl(TopicDetailScope.allCases, selection: $scope) { item in
-            Text(item.title(language))
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(TopicDetailScope.allCases) { item in
+                    Button {
+                        withAnimation(.snappy(duration: 0.18)) {
+                            scope = item
+                        }
+                    } label: {
+                        Text(item.title(language))
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(scope == item ? .white : .primary)
+                            .padding(.horizontal, 13)
+                            .frame(height: 34)
+                            .background(scope == item ? KXColor.accent : Color.clear, in: Capsule())
+                            .overlay(Capsule().stroke(scope == item ? Color.clear : KXColor.separator, lineWidth: 0.75))
+                    }
+                    .buttonStyle(.plain)
+                    .fixedSize(horizontal: true, vertical: false)
+                }
+            }
+            .padding(.horizontal, 2)
+            .padding(.vertical, 2)
         }
     }
 

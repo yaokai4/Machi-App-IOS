@@ -322,6 +322,12 @@ final class UserRepository {
 
     static func apply(_ dto: KaiXUserDTO, to user: UserEntity) {
         let updated = entity(from: dto)
+        apply(updated, to: user)
+        user.remoteId = dto.id
+        user.syncStatus = .synced
+    }
+
+    static func apply(_ updated: UserEntity, to user: UserEntity) {
         user.username = updated.username
         user.displayName = updated.displayName
         user.email = updated.email
@@ -358,7 +364,7 @@ final class UserRepository {
         user.contentLanguagePreference = updated.contentLanguagePreference
         user.preferredContentLanguagesRaw = updated.preferredContentLanguagesRaw
         user.dmPrivacy = updated.dmPrivacy
-        user.remoteId = dto.id
+        user.remoteId = updated.remoteId
         user.syncStatus = .synced
         user.updatedAt = .now
     }
