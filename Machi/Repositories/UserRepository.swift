@@ -10,7 +10,7 @@ final class UserRepository {
     }
 
     func fetchUsers() async throws -> [UserEntity] {
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
             return try await KaiXAPIClient.shared.trending().users
                 .map(Self.entity(from:))
                 .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
@@ -27,7 +27,8 @@ final class UserRepository {
             }
         }
         if !remoteUsers.isEmpty || !KaiXRuntimeFlags.allowLocalStoreFallback {
-            return remoteUsers.sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
+            return Self.uniqueUsers(remoteUsers)
+                .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
         }
         let idList = Array(ids)
         return try context.fetch(FetchDescriptor<UserEntity>(
@@ -37,7 +38,7 @@ final class UserRepository {
     }
 
     func fetchRecommendedUsers(excluding userId: String, limit: Int = 12) async throws -> [UserEntity] {
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
             return Array(try await KaiXAPIClient.shared.trending().users
                 .map(Self.entity(from:))
                 .filter { $0.id != userId }
@@ -177,9 +178,10 @@ final class UserRepository {
 
     func fetchFollowers(userId: String) async throws -> [UserEntity] {
         if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
-            return try await KaiXAPIClient.shared.followers(userId)
+            return Self.uniqueUsers(try await KaiXAPIClient.shared.followers(userId)
                 .map(Self.entity(from:))
-                .sorted {
+            )
+            .sorted {
                     if $0.followerCount == $1.followerCount {
                         return $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending
                     }
@@ -201,9 +203,10 @@ final class UserRepository {
 
     func fetchFollowing(userId: String) async throws -> [UserEntity] {
         if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
-            return try await KaiXAPIClient.shared.following(userId)
+            return Self.uniqueUsers(try await KaiXAPIClient.shared.following(userId)
                 .map(Self.entity(from:))
-                .sorted {
+            )
+            .sorted {
                     if $0.followerCount == $1.followerCount {
                         return $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending
                     }
@@ -249,10 +252,6 @@ final class UserRepository {
             currentUser.updatedAt = .now
             targetUser.updatedAt = .now
             try context.save()
-            // Mirror to the unified backend so the Web client sees it too.
-            if KaiXBackend.token != nil {
-                Task.detached { try? await KaiXAPIClient.shared.setFollow(followingId, false) }
-            }
             return false
         }
 
@@ -265,9 +264,6 @@ final class UserRepository {
             context.insert(NotificationEntity(type: .follow, actorId: followerId, content: "开始关注你"))
         }
         try context.save()
-        if KaiXBackend.token != nil {
-            Task.detached { try? await KaiXAPIClient.shared.setFollow(followingId, true) }
-        }
         return true
     }
 
@@ -318,6 +314,11 @@ final class UserRepository {
         )
         entity.dmPrivacy = dto.dm_privacy ?? "everyone"
         return entity
+    }
+
+    static func uniqueUsers(_ users: [UserEntity]) -> [UserEntity] {
+        var seen = Set<String>()
+        return users.filter { seen.insert($0.id).inserted }
     }
 
     static func apply(_ dto: KaiXUserDTO, to user: UserEntity) {

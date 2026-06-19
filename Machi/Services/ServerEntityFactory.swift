@@ -5,6 +5,9 @@ enum KaiXRuntimeFlags {
         #if DEBUG
         let env = ProcessInfo.processInfo.environment
         let args = ProcessInfo.processInfo.arguments
+        if env["XCTestConfigurationFilePath"] != nil {
+            return true
+        }
         return env["KAIX_UI_TEST_LOCAL_AUTH"] == "1"
             || env["KAIX_ALLOW_LOCAL_STORE"] == "1"
             || args.contains("-kaixUITestLocalAuth")

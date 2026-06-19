@@ -85,6 +85,17 @@ enum AppError: Equatable, LocalizedError {
 
 extension Error {
     var kaixUserMessage: String {
-        AppError(self).userMessage
+        if let apiError = self as? KaiXAPIError {
+            return apiError.error.message
+        }
+        if let urlError = self as? URLError {
+            switch urlError.code {
+            case .notConnectedToInternet, .networkConnectionLost, .timedOut:
+                return "网络连接不稳定，请稍后重试。"
+            default:
+                break
+            }
+        }
+        return AppError(self).userMessage
     }
 }

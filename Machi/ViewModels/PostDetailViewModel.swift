@@ -48,6 +48,7 @@ final class PostDetailViewModel: ObservableObject {
             postStore.register(loadedPost)
             post = loadedPost
             state = .loaded
+            let canonicalPostId = loadedPost.id
 
             try? await postRepository.incrementView(post: loadedPost)
 
@@ -58,7 +59,7 @@ final class PostDetailViewModel: ObservableObject {
             }
 
             do {
-                media = try await postRepository.fetchMedia(postId: postId)
+                media = try await postRepository.fetchMedia(postId: canonicalPostId)
             } catch {
                 if !hasCachedPost {
                     media = []
@@ -80,14 +81,14 @@ final class PostDetailViewModel: ObservableObject {
                 commentState = .loading
             }
             do {
-                comments = try await CommentRepository(context: context).fetchComments(postId: postId)
+                comments = try await CommentRepository(context: context).fetchComments(postId: canonicalPostId)
                 commentState = CommentLoadState.resolved(commentCount: loadedPost.commentCount, loadedComments: comments)
-                commentStore?.setComments(comments, postId: postId, expectedCount: loadedPost.commentCount)
+                commentStore?.setComments(comments, postId: canonicalPostId, expectedCount: loadedPost.commentCount)
                 let users = try await UserRepository(context: context).fetchUsers(ids: Set(comments.map(\.authorId)).union([loadedPost.authorId]))
                 commentAuthors = Dictionary(uniqueKeysWithValues: users.map { ($0.id, $0) })
             } catch {
                 commentState = .failed(error.kaixUserMessage)
-                commentStore?.setLoadingState(commentState, postId: postId)
+                commentStore?.setLoadingState(commentState, postId: canonicalPostId)
             }
         } catch {
             if hasCachedPost {

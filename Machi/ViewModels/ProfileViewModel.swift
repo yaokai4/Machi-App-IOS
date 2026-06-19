@@ -30,76 +30,113 @@ final class ProfileViewModel: ObservableObject {
         if !hasCachedContent {
             state = .loading
         }
-        do {
-            let userId = user.id
-            let draftStatus = PostStatus.draft.rawValue
-            if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
-                if let remoteUser = try await UserRepository(context: context).fetchUser(id: userId) {
-                    UserRepository.apply(remoteUser, to: user)
-                }
-            }
-            let repository = PostRepository(context: context)
-            authoredPosts = try await repository.fetchPosts(authorId: user.id)
-            repliedPosts = try await repository.fetchRepliedPosts(authorId: user.id)
-            likedPosts = try await repository.fetchLikedPosts()
-            bookmarkedPosts = try await repository.fetchBookmarkedPosts()
-            postStore?.register(authoredPosts + repliedPosts + likedPosts + bookmarkedPosts)
-            let authoredMedia = try await repository.fetchMedia(for: authoredPosts)
-            mediaPosts = authoredPosts.filter { authoredMedia[$0.id]?.isEmpty == false }
+        transientError = nil
 
-            postCount = authoredPosts.count
-            totalHeat = authoredPosts.reduce(0) { $0 + $1.heatScore }
-            contentTypeCounts = Dictionary(grouping: authoredPosts, by: \.contentType)
-                .mapValues(\.count)
-            savedByOthersCount = authoredPosts.reduce(0) { $0 + $1.bookmarkCount }
-            likeCount = likedPosts.count
-            bookmarkCount = bookmarkedPosts.count
-            mediaCount = authoredMedia.values.reduce(0) { $0 + $1.count }
-            replyCount = try context.fetch(FetchDescriptor<CommentEntity>(
-                predicate: #Predicate { $0.authorId == userId && $0.deletedAt == nil }
-            )).count
-            draftCount = try context.fetch(FetchDescriptor<PostEntity>(
-                predicate: #Predicate { $0.authorId == userId && $0.statusRaw == draftStatus }
-            )).count
+        let userId = user.id
+        let repository = PostRepository(context: context)
+        var sectionErrors: [String] = []
 
-            switch segment {
-            case .posts:
-                posts = authoredPosts
-            case .replies:
-                posts = repliedPosts
-            case .media:
-                posts = mediaPosts
-            case .likes:
-                posts = likedPosts
-            case .bookmarks:
-                posts = bookmarkedPosts
-            }
-            var hydratedById: [String: PostEntity] = [:]
-            for post in authoredPosts + repliedPosts + likedPosts + bookmarkedPosts + mediaPosts {
-                hydratedById[post.id] = post
-            }
-            let originalPosts = try await repository.fetchPosts(
-                ids: Set(hydratedById.values.compactMap(\.repostOfPostId)),
-                currentUserId: user.id
-            )
-            for post in originalPosts {
-                hydratedById[post.id] = post
-            }
-            let hydratedPosts = Array(hydratedById.values)
-            postStore?.register(hydratedPosts)
-            postStore?.setProfilePosts(authoredPosts, userId: user.id)
-            let users = try await UserRepository(context: context).fetchUsers(ids: Set(hydratedPosts.map(\.authorId)).union([user.id]))
-            authors = Dictionary(uniqueKeysWithValues: users.map { ($0.id, $0) })
-            mediaByPostId = try await repository.fetchMedia(for: hydratedPosts)
-            state = posts.isEmpty ? .empty : .loaded
-        } catch {
-            if hasCachedContent {
-                transientError = error.kaixUserMessage
-                state = .loaded
-            } else {
-                state = .error(error.kaixUserMessage)
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
+            if let remoteUser = try? await UserRepository(context: context).fetchUser(id: userId) {
+                UserRepository.apply(remoteUser, to: user)
             }
         }
+
+        do {
+            authoredPosts = Self.uniquePosts(try await repository.fetchPosts(authorId: userId))
+        } catch {
+            if !hasCachedContent { authoredPosts = [] }
+            sectionErrors.append(error.kaixUserMessage)
+        }
+
+        do {
+            repliedPosts = Self.uniquePosts(try await repository.fetchRepliedPosts(authorId: userId))
+        } catch {
+            if !hasCachedContent { repliedPosts = [] }
+            sectionErrors.append(error.kaixUserMessage)
+        }
+
+        do {
+            mediaPosts = Self.uniquePosts(try await repository.fetchMediaPosts(authorId: userId))
+        } catch {
+            if !hasCachedContent { mediaPosts = [] }
+            sectionErrors.append(error.kaixUserMessage)
+        }
+
+        let authenticatedCurrentUserId = AuthService.shared.currentUserId
+        let canLoadPrivateProfileData = KaiXBackend.token != nil && !authenticatedCurrentUserId.isEmpty && authenticatedCurrentUserId == userId
+        do {
+            likedPosts = Self.uniquePosts(try await repository.fetchLikedPosts(userId: userId))
+        } catch {
+            if !hasCachedContent { likedPosts = [] }
+            sectionErrors.append(error.kaixUserMessage)
+        }
+
+        if canLoadPrivateProfileData {
+            do {
+                bookmarkedPosts = Self.uniquePosts(try await repository.fetchBookmarkedPosts())
+            } catch {
+                if !hasCachedContent { bookmarkedPosts = [] }
+                sectionErrors.append(error.kaixUserMessage)
+            }
+        } else {
+            bookmarkedPosts = []
+        }
+
+        var hydratedById: [String: PostEntity] = [:]
+        for post in authoredPosts + repliedPosts + likedPosts + bookmarkedPosts + mediaPosts {
+            hydratedById[post.id] = post
+        }
+
+        if !hydratedById.isEmpty {
+            let originalIds = Set(hydratedById.values.compactMap(\.repostOfPostId))
+            if let originalPosts = try? await repository.fetchPosts(ids: originalIds, currentUserId: userId) {
+                for post in originalPosts {
+                    hydratedById[post.id] = post
+                }
+            }
+        }
+
+        let hydratedPosts = Array(hydratedById.values)
+        postStore?.register(hydratedPosts)
+        postStore?.setProfilePosts(authoredPosts, userId: userId)
+
+        let fetchedUsers = (try? await UserRepository(context: context).fetchUsers(ids: Set(hydratedPosts.map(\.authorId)).union([userId]))) ?? [user]
+        var nextAuthors: [String: UserEntity] = [user.id: user]
+        for fetchedUser in fetchedUsers {
+            nextAuthors[fetchedUser.id] = fetchedUser
+        }
+        authors = nextAuthors
+
+        var nextMediaByPostId = (try? await repository.fetchMedia(for: hydratedPosts)) ?? [:]
+        for mediaPost in mediaPosts where nextMediaByPostId[mediaPost.id] == nil {
+            nextMediaByPostId[mediaPost.id] = []
+        }
+        mediaByPostId = nextMediaByPostId
+        if mediaPosts.isEmpty {
+            mediaPosts = authoredPosts.filter { !(mediaByPostId[$0.id] ?? []).isEmpty }
+        }
+
+        postCount = authoredPosts.count
+        totalHeat = authoredPosts.reduce(0) { $0 + $1.heatScore }
+        contentTypeCounts = Dictionary(grouping: authoredPosts, by: \.contentType)
+            .mapValues(\.count)
+        savedByOthersCount = authoredPosts.reduce(0) { $0 + $1.bookmarkCount }
+        likeCount = likedPosts.count
+        bookmarkCount = bookmarkedPosts.count
+        mediaCount = mediaItemCount(in: mediaPosts)
+        replyCount = repliedPosts.count
+        if canLoadPrivateProfileData, let drafts = try? await repository.fetchDrafts(authorId: userId) {
+            draftCount = drafts.count
+        } else {
+            draftCount = 0
+        }
+
+        refreshSelectedPosts()
+        if let firstError = sectionErrors.first {
+            transientError = firstError
+        }
+        state = posts.isEmpty ? .empty : .loaded
     }
 
     func toggleLike(context: ModelContext, post: PostEntity, currentUser: UserEntity, profileUser: UserEntity, postStore: PostStore? = nil) async {
@@ -189,7 +226,7 @@ final class ProfileViewModel: ObservableObject {
             }
         }
 
-        if profileUser.id == currentUser.id, let insertedPost {
+        if profileUser.id == currentUser.id, let insertedPost, insertedPost.id != changedPost.id {
             postStore?.register(insertedPost)
             prependIfNeeded(insertedPost, to: &authoredPosts)
             authors[currentUser.id] = currentUser
@@ -204,8 +241,14 @@ final class ProfileViewModel: ObservableObject {
         likeCount = likedPosts.count
         bookmarkCount = bookmarkedPosts.count
         mediaPosts = authoredPosts.filter { mediaByPostId[$0.id]?.isEmpty == false }
-        mediaCount = mediaByPostId.values.reduce(0) { $0 + $1.count }
+        mediaCount = mediaItemCount(in: mediaPosts)
 
+        refreshSelectedPosts()
+        postStore?.setProfilePosts(authoredPosts, userId: profileUser.id)
+        state = .loaded
+    }
+
+    private func refreshSelectedPosts() {
         switch segment {
         case .posts:
             posts = authoredPosts
@@ -218,12 +261,22 @@ final class ProfileViewModel: ObservableObject {
         case .bookmarks:
             posts = bookmarkedPosts
         }
-        postStore?.setProfilePosts(authoredPosts, userId: profileUser.id)
-        state = .loaded
     }
 
     private func prependIfNeeded(_ post: PostEntity, to posts: inout [PostEntity]) {
         posts.removeAll { $0.id == post.id }
         posts.insert(post, at: 0)
+    }
+
+    private func mediaItemCount(in posts: [PostEntity]) -> Int {
+        posts.reduce(0) { total, post in
+            let count = mediaByPostId[post.id]?.count ?? 0
+            return total + max(count, 1)
+        }
+    }
+
+    private static func uniquePosts(_ posts: [PostEntity]) -> [PostEntity] {
+        var seen = Set<String>()
+        return posts.filter { seen.insert($0.id).inserted }
     }
 }

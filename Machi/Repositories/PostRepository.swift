@@ -55,7 +55,7 @@ final class PostRepository {
     }
 
     func fetchPage(mode: TimelineMode, currentUserId: String, page: Int, pageSize: Int) async throws -> [PostEntity] {
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
             let apiMode: KaiXAPIClient.FeedMode
             switch mode {
             case .recommend: apiMode = .recommend
@@ -209,7 +209,7 @@ final class PostRepository {
         page: Int,
         pageSize: Int
     ) async throws -> [PostEntity] {
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
             let response = try await KaiXAPIClient.shared.feed(
                 mode: channel == .hot ? .hot : .recommend,
                 regionCode: region.regionCode,
@@ -293,7 +293,7 @@ final class PostRepository {
     }
 
     func fetchPost(id: String, currentUserId: String? = nil) async throws -> PostEntity? {
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
             return ServerEntityFactory.post(from: try await KaiXAPIClient.shared.post(id))
         }
         var descriptor = FetchDescriptor<PostEntity>(predicate: #Predicate { $0.id == id })
@@ -307,7 +307,7 @@ final class PostRepository {
 
     func fetchPosts(ids: Set<String>, currentUserId: String? = nil) async throws -> [PostEntity] {
         guard !ids.isEmpty else { return [] }
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
             var result: [PostEntity] = []
             for id in ids {
                 if let post = try? await fetchPost(id: id, currentUserId: currentUserId) {
@@ -329,7 +329,7 @@ final class PostRepository {
     }
 
     func fetchPosts(authorId: String) async throws -> [PostEntity] {
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
             let page = try await KaiXAPIClient.shared.userPosts(authorId, segment: .posts)
             return ServerEntityFactory.postBundle(from: page.items).orderedPosts
         }
@@ -339,6 +339,16 @@ final class PostRepository {
             predicate: #Predicate { $0.authorId == authorId && ($0.statusRaw == published || $0.statusRaw == active) },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         ))
+    }
+
+    func fetchMediaPosts(authorId: String) async throws -> [PostEntity] {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
+            let page = try await KaiXAPIClient.shared.userPosts(authorId, segment: .media)
+            return ServerEntityFactory.postBundle(from: page.items).orderedPosts
+        }
+        let authored = try await fetchPosts(authorId: authorId)
+        let authoredMedia = try await fetchMedia(for: authored)
+        return authored.filter { authoredMedia[$0.id]?.isEmpty == false }
     }
 
     func fetchDrafts(authorId: String) async throws -> [PostEntity] {
@@ -355,7 +365,7 @@ final class PostRepository {
     func fetchPosts(topic: String) async throws -> [PostEntity] {
         let normalized = topic.normalizedTopicName
         guard !normalized.isEmpty else { return [] }
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
             return ServerEntityFactory.postBundle(from: try await KaiXAPIClient.shared.topic(normalized)).orderedPosts
         }
         let published = PostStatus.published.rawValue
@@ -370,8 +380,8 @@ final class PostRepository {
     }
 
     func fetchRepliedPosts(authorId: String) async throws -> [PostEntity] {
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
-            let page = try await KaiXAPIClient.shared.userPosts(authorId, segment: .replies)
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
+            let page = try await KaiXAPIClient.shared.userReplyPosts(authorId)
             return ServerEntityFactory.postBundle(from: page.items).orderedPosts
         }
         let comments = try context.fetch(FetchDescriptor<CommentEntity>(
@@ -396,8 +406,11 @@ final class PostRepository {
     }
 
     func fetchLikedPosts() async throws -> [PostEntity] {
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
-            let userId = AuthService.shared.currentUserId
+        try await fetchLikedPosts(userId: AuthService.shared.currentUserId)
+    }
+
+    func fetchLikedPosts(userId: String) async throws -> [PostEntity] {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
             guard !userId.isEmpty else { return [] }
             let page = try await KaiXAPIClient.shared.userPosts(userId, segment: .likes)
             return ServerEntityFactory.postBundle(from: page.items).orderedPosts
@@ -411,7 +424,7 @@ final class PostRepository {
     }
 
     func fetchBookmarkedPosts() async throws -> [PostEntity] {
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
             let userId = AuthService.shared.currentUserId
             guard !userId.isEmpty else { return [] }
             let page = try await KaiXAPIClient.shared.userPosts(userId, segment: .bookmarks)
@@ -426,7 +439,7 @@ final class PostRepository {
     }
 
     func fetchMedia(postId: String) async throws -> [MediaEntity] {
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
             let dto = try await KaiXAPIClient.shared.post(postId)
             return ServerEntityFactory.media(from: dto.media, postId: dto.id)
         }
@@ -439,7 +452,7 @@ final class PostRepository {
     func fetchMedia(for posts: [PostEntity]) async throws -> [String: [MediaEntity]] {
         let ids = Set(posts.map(\.id))
         guard !ids.isEmpty else { return [:] }
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
             var result: [String: [MediaEntity]] = [:]
             for id in ids {
                 result[id] = (try? await fetchMedia(postId: id)) ?? []
@@ -687,8 +700,8 @@ final class PostRepository {
         currentUserId: String,
         countAlreadyUpdated: Bool = false
     ) async throws {
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
-            ServerEntityFactory.apply(try await KaiXAPIClient.shared.setLike(post.id, isLiked), to: post)
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
+            ServerEntityFactory.apply(try await KaiXAPIClient.shared.setLike(post.remoteId ?? post.id, isLiked), to: post)
             return
         }
         let likeDelta = isLiked ? 1 : -1
@@ -718,8 +731,8 @@ final class PostRepository {
         currentUserId: String,
         countAlreadyUpdated: Bool = false
     ) async throws {
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
-            ServerEntityFactory.apply(try await KaiXAPIClient.shared.setBookmark(post.id, isBookmarked), to: post)
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
+            ServerEntityFactory.apply(try await KaiXAPIClient.shared.setBookmark(post.remoteId ?? post.id, isBookmarked), to: post)
             return
         }
         let bookmarkDelta = isBookmarked ? 1 : -1
@@ -740,8 +753,8 @@ final class PostRepository {
     }
 
     func repost(post: PostEntity, currentUserId: String) async throws -> PostEntity {
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
-            ServerEntityFactory.apply(try await KaiXAPIClient.shared.setRepost(post.id, true), to: post)
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
+            ServerEntityFactory.apply(try await KaiXAPIClient.shared.setRepost(post.remoteId ?? post.id, true), to: post)
             return post
         }
         let existing = try existingReposts(for: post, currentUserId: currentUserId)
@@ -775,8 +788,8 @@ final class PostRepository {
     ) async throws -> PostEntity {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw RepositoryError.validationFailed }
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
-            let quote = try await KaiXAPIClient.shared.quoteRepost(post.id, content: trimmed)
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
+            let quote = try await KaiXAPIClient.shared.quoteRepost(post.remoteId ?? post.id, content: trimmed)
             return ServerEntityFactory.post(from: quote)
         }
 
@@ -811,8 +824,8 @@ final class PostRepository {
         currentUserId: String,
         countAlreadyUpdated: Bool = false
     ) async throws -> PostEntity? {
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
-            ServerEntityFactory.apply(try await KaiXAPIClient.shared.setRepost(post.id, isReposted), to: post)
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
+            ServerEntityFactory.apply(try await KaiXAPIClient.shared.setRepost(post.remoteId ?? post.id, isReposted), to: post)
             return nil
         }
         let existing = try existingReposts(for: post, currentUserId: currentUserId)
@@ -880,13 +893,15 @@ final class PostRepository {
     ) async throws -> CommentEntity {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.isEmpty == false else { throw RepositoryError.validationFailed }
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
             let dto = try await KaiXAPIClient.shared.createComment(
-                postId: post.id,
+                postId: post.remoteId ?? post.id,
                 content: trimmed,
                 parentId: parentCommentId
             )
-            post.commentCount += 1
+            if !commentCountAlreadyUpdated {
+                post.commentCount += 1
+            }
             return ServerEntityFactory.comment(from: dto)
         }
 
@@ -922,26 +937,11 @@ final class PostRepository {
         }
 
         try context.save()
-        // Mirror the comment to the unified backend. Best-effort: if
-        // the server later rejects, the next refresh will reconcile by
-        // remote upsert. Only fire when we have a confirmed remote id
-        // — otherwise the request would 404 with our local UUID and
-        // the comment would silently disappear from Web's view.
-        if KaiXBackend.token != nil, let remotePostId = post.remoteId {
-            let parentId = parentCommentId
-            Task.detached {
-                _ = try? await KaiXAPIClient.shared.createComment(
-                    postId: remotePostId,
-                    content: trimmed,
-                    parentId: parentId,
-                )
-            }
-        }
         return comment
     }
 
     func deleteComment(comment: CommentEntity, commentCountAlreadyUpdated: Bool = false) async throws {
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
             try await KaiXAPIClient.shared.deleteComment(comment.id)
             return
         }
@@ -967,12 +967,11 @@ final class PostRepository {
     }
 
     func deletePost(post: PostEntity) async throws {
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
             try await KaiXAPIClient.shared.deletePost(post.remoteId ?? post.id)
             return
         }
         let postId = post.id
-        let remoteId = post.remoteId
         let reposts = try context.fetch(FetchDescriptor<PostEntity>(
             predicate: #Predicate { $0.repostOfPostId == postId }
         ))
@@ -994,32 +993,22 @@ final class PostRepository {
         context.delete(post)
         try rebuildTopics()
         try context.save()
-        // Only forward the delete when we have the server's id —
-        // posts that never synced (no token, or sync still pending)
-        // exist purely locally and don't need a remote round-trip.
-        if KaiXBackend.token != nil, let remoteId {
-            Task.detached { try? await KaiXAPIClient.shared.deletePost(remoteId) }
-        }
     }
 
     func updatePost(post: PostEntity, content: String) async throws {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.isEmpty == false else { throw RepositoryError.validationFailed }
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
             ServerEntityFactory.apply(try await KaiXAPIClient.shared.editPost(post.remoteId ?? post.id, content: trimmed), to: post)
             return
         }
 
-        let remoteId = post.remoteId
         post.content = trimmed
         post.hashtags = trimmed.extractedHashtags
         post.updatedAt = .now
         heatService.refresh(post)
         try rebuildTopics()
         try context.save()
-        if KaiXBackend.token != nil, let remoteId {
-            Task.detached { _ = try? await KaiXAPIClient.shared.editPost(remoteId, content: trimmed) }
-        }
     }
 
     private func followingIds(for userId: String) throws -> Set<String> {

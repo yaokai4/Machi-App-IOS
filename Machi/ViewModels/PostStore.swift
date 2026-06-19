@@ -293,18 +293,6 @@ final class PostStore: ObservableObject {
                 currentUserId: currentUserId,
                 countAlreadyUpdated: true
             )
-            // Legacy local-fixture path only. Production writes already
-            // happen inside PostRepository and are never persisted locally.
-            if KaiXRuntimeFlags.allowLocalStoreFallback, KaiXBackend.token != nil, let remoteId = post.remoteId {
-                Task.detached {
-                    if let dto = try? await KaiXAPIClient.shared.setLike(remoteId, isLiked) {
-                        await MainActor.run {
-                            RemoteSyncService.shared.upsertPost(dto, context: context)
-                            try? context.save()
-                        }
-                    }
-                }
-            }
         } catch {
             post.isLikedByCurrentUser = oldIsLiked
             post.likeCount = oldCount
@@ -336,16 +324,6 @@ final class PostStore: ObservableObject {
                 currentUserId: currentUserId,
                 countAlreadyUpdated: true
             )
-            if KaiXRuntimeFlags.allowLocalStoreFallback, KaiXBackend.token != nil, let remoteId = post.remoteId {
-                Task.detached {
-                    if let dto = try? await KaiXAPIClient.shared.setBookmark(remoteId, isBookmarked) {
-                        await MainActor.run {
-                            RemoteSyncService.shared.upsertPost(dto, context: context)
-                            try? context.save()
-                        }
-                    }
-                }
-            }
         } catch {
             post.isBookmarkedByCurrentUser = oldIsBookmarked
             post.bookmarkCount = oldCount
@@ -389,16 +367,6 @@ final class PostStore: ObservableObject {
                 insertPostLocally(repost, currentUserId: currentUserId)
             } else if !isReposted {
                 removeOrdinaryRepostsLocally(originalPostId: postId, currentUserId: currentUserId)
-            }
-            if KaiXRuntimeFlags.allowLocalStoreFallback, KaiXBackend.token != nil, let remoteId = post.remoteId {
-                Task.detached {
-                    if let dto = try? await KaiXAPIClient.shared.setRepost(remoteId, isReposted) {
-                        await MainActor.run {
-                            RemoteSyncService.shared.upsertPost(dto, context: context)
-                            try? context.save()
-                        }
-                    }
-                }
             }
             return repost
         } catch {

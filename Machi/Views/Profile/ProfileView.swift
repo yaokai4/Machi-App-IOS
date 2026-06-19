@@ -21,6 +21,7 @@ struct ProfileView: View {
     @State private var isShowingSettings = false
     @State private var isShowingWorkbench = false
     @State private var followListKind: FollowListKind?
+    @State private var mutualCount: Int?
     @State private var isRefreshingProfile = false
     @State private var scheduledProfileRefreshTask: Task<Void, Never>?
 
@@ -81,12 +82,12 @@ struct ProfileView: View {
         case .posts: viewModel.authoredPosts
         case .replies: viewModel.repliedPosts
         case .media: viewModel.mediaPosts
-        case .likes: isCurrentUser ? viewModel.likedPosts : []
+        case .likes: viewModel.likedPosts
         }
     }
 
     private var availableTabs: [PersonalProfileTab] {
-        isCurrentUser ? PersonalProfileTab.allCases : [.posts, .replies, .media]
+        PersonalProfileTab.allCases
     }
 
     private var isProfileVisibleForRefresh: Bool {
@@ -218,7 +219,7 @@ struct ProfileView: View {
                 }
                 .padding(.horizontal, KaiXTheme.horizontalPadding)
                 .padding(.top, KXSpacing.sm)
-                .padding(.bottom, showsBackButton ? 28 : chrome.bottomContentPadding)
+                .padding(.bottom, (showsBackButton ? KXSpacing.xl : chrome.bottomContentPadding) + 24)
             }
             .refreshable {
                 await loadProfileAndContent(showLoading: false)
@@ -234,9 +235,6 @@ struct ProfileView: View {
         let hadLoadedProfile = profileLoadState == .loaded && loadedProfileUser != nil
         if showLoading || !hadLoadedProfile {
             profileLoadState = .loading
-        }
-        if !isCurrentUser, profileTab == .likes {
-            profileTab = .posts
         }
         do {
             // Pull the authoritative profile from the server first so identity
@@ -270,6 +268,7 @@ struct ProfileView: View {
             profileLoadState = .loaded
             await viewModel.load(context: modelContext, user: resolvedUser, postStore: postStore)
             await refreshFollowState()
+            await refreshMutualCountIfNeeded()
         } catch {
             if hadLoadedProfile {
                 profileLoadState = .loaded
@@ -497,6 +496,9 @@ struct ProfileView: View {
             FlowLayout(spacing: 14) {
                 followMetricButton(kind: .following)
                 followMetricButton(kind: .followers)
+                if isCurrentUser {
+                    followMetricButton(kind: .mutual)
+                }
                 ProfileMetricInline(value: NumberFormatterUtils.compact(viewModel.postCount), title: L("posts", language))
                 ProfileMetricInline(value: NumberFormatterUtils.compact(viewModel.likeCount), title: L("likes", language))
             }
@@ -766,8 +768,16 @@ struct ProfileView: View {
     }
 
     private func followMetricButton(kind: FollowListKind) -> some View {
-        let value = kind == .following ? displayedFollowingCount : displayedFollowerCount
-        let title = kind == .following ? L("followingCount", language) : L("followers", language)
+        let value: Int
+        switch kind {
+        case .following:
+            value = displayedFollowingCount
+        case .followers:
+            value = displayedFollowerCount
+        case .mutual:
+            value = mutualCount ?? 0
+        }
+        let title = kind.metricTitle(language)
 
         return Button {
             followListKind = kind
@@ -844,6 +854,19 @@ struct ProfileView: View {
         userStore.updateCounts(userId: profileUser.id, followers: profileUser.followerCount, following: profileUser.followingCount)
     }
 
+    private func refreshMutualCountIfNeeded() async {
+        guard isCurrentUser else {
+            mutualCount = nil
+            return
+        }
+        do {
+            let users = try await KaiXAPIClient.shared.mutualMessageFriends(limit: 100)
+            mutualCount = UserRepository.uniqueUsers(users.map(UserRepository.entity(from:))).count
+        } catch {
+            mutualCount = mutualCount ?? 0
+        }
+    }
+
     private func toggleFollow() async {
         guard !isCurrentUser, !isFollowWorking else { return }
         isFollowWorking = true
@@ -905,30 +928,16 @@ private struct ProfileAlertsModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .alert(L("ok", language), isPresented: menuMessagePresented) {
-                Button(L("ok", language), role: .cancel) {}
-            } message: {
-                Text(menuMessage ?? "")
+            .overlay(alignment: .top) {
+                if let message = transientError ?? menuMessage {
+                    KXInlineNotice(message: message) {
+                        transientError = nil
+                        menuMessage = nil
+                    }
+                    .padding(.top, 76)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
             }
-            .alert(L("error", language), isPresented: transientErrorPresented) {
-                Button(L("ok", language), role: .cancel) {}
-            } message: {
-                Text(transientError ?? "")
-            }
-    }
-
-    private var menuMessagePresented: Binding<Bool> {
-        Binding(
-            get: { menuMessage != nil },
-            set: { if !$0 { menuMessage = nil } }
-        )
-    }
-
-    private var transientErrorPresented: Binding<Bool> {
-        Binding(
-            get: { transientError != nil },
-            set: { if !$0 { transientError = nil } }
-        )
     }
 }
 
@@ -991,6 +1000,7 @@ private struct WorkbenchFullScreenView: View {
 private enum FollowListKind: String, Identifiable {
     case followers
     case following
+    case mutual
 
     var id: String { rawValue }
 
@@ -998,6 +1008,15 @@ private enum FollowListKind: String, Identifiable {
         switch self {
         case .followers: L("followersList", language)
         case .following: L("followingList", language)
+        case .mutual: KXListingCopy.pickText(language, "互关好友", "相互フォロー", "Mutual friends")
+        }
+    }
+
+    func metricTitle(_ language: AppLanguage) -> String {
+        switch self {
+        case .followers: L("followers", language)
+        case .following: L("followingCount", language)
+        case .mutual: KXListingCopy.pickText(language, "互关", "相互", "Mutual")
         }
     }
 
@@ -1005,6 +1024,7 @@ private enum FollowListKind: String, Identifiable {
         switch self {
         case .followers: L("emptyFollowers", language)
         case .following: L("emptyFollowing", language)
+        case .mutual: KXListingCopy.pickText(language, "还没有互关好友", "相互フォローはまだありません", "No mutual friends yet")
         }
     }
 
@@ -1012,6 +1032,7 @@ private enum FollowListKind: String, Identifiable {
         switch self {
         case .followers: "person.2"
         case .following: "person.crop.circle.badge.checkmark"
+        case .mutual: "person.2.wave.2"
         }
     }
 }
@@ -1078,9 +1099,13 @@ private struct FollowListView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
+    @EnvironmentObject private var chrome: AppChromeState
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var userStore: UserStore
     @State private var users: [UserEntity] = []
     @State private var state: ScreenState = .idle
+    @State private var workingUserIds: Set<String> = []
+    @State private var transientMessage: String?
 
     let profileUser: UserEntity
     let currentUser: UserEntity
@@ -1100,41 +1125,46 @@ private struct FollowListView: View {
                 }
                 .padding(KaiXTheme.horizontalPadding)
             case .loaded:
-                List(users) { user in
-                    Button {
-                        dismiss()
-                        router.open(.profile(userId: user.id))
-                    } label: {
-                        HStack(spacing: KXSpacing.md) {
-                            AvatarView(user: user, size: 42)
-                            VStack(alignment: .leading, spacing: 3) {
-                                HStack(spacing: 5) {
-                                    Text(user.displayName)
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(.primary)
-                                        .lineLimit(1)
-                                    KXUserBadge(user: user)
-                                }
-                                Text("@\(user.username)")
-                                    .font(KXTypography.meta)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
+                ScrollView {
+                    LazyVStack(spacing: 10) {
+                        ForEach(users) { user in
+                            FollowUserCard(
+                                user: user,
+                                isCurrentUser: user.id == currentUser.id,
+                                isFollowing: userStore.followStateByUserId[user.id] ?? false,
+                                isWorking: workingUserIds.contains(user.id),
+                                language: language
+                            ) {
+                                dismiss()
+                                router.open(.profile(userId: user.id))
+                            } onMessage: {
+                                Task { await openMessage(with: user) }
+                            } onToggleFollow: {
+                                Task { await toggleFollow(user) }
                             }
-                            Spacer()
-                            Text(NumberFormatterUtils.compact(user.followerCount))
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.secondary)
                         }
-                        .padding(.vertical, 4)
                     }
-                    .buttonStyle(.plain)
+                    .padding(.horizontal, KaiXTheme.horizontalPadding)
+                    .padding(.top, KXSpacing.md)
+                    .padding(.bottom, 28)
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
+                .refreshable {
+                    await load()
+                }
             }
         }
         .kxPageBackground()
         .navigationTitle(kind.title(language))
+        .overlay(alignment: .top) {
+            if let transientMessage {
+                KXInlineNotice(message: transientMessage) {
+                    self.transientMessage = nil
+                }
+                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.top, 8)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(L("ok", language)) {
@@ -1156,11 +1186,152 @@ private struct FollowListView: View {
                 users = try await repository.fetchFollowers(userId: profileUser.id)
             case .following:
                 users = try await repository.fetchFollowing(userId: profileUser.id)
+            case .mutual:
+                users = try await fetchMutualUsers(repository: repository)
             }
+            users = UserRepository.uniqueUsers(users).filter { $0.deletedAt == nil }
+            userStore.register(users)
+            await refreshFollowStates()
             state = users.isEmpty ? .empty : .loaded
         } catch {
             state = .error(error.kaixUserMessage)
         }
+    }
+
+    private func fetchMutualUsers(repository: UserRepository) async throws -> [UserEntity] {
+        if profileUser.id == currentUser.id {
+            let remoteUsers = try await KaiXAPIClient.shared.mutualMessageFriends(limit: 100)
+            return remoteUsers.map(UserRepository.entity(from:))
+        }
+        let profileId = profileUser.id
+        let followerUsers = try await repository.fetchFollowers(userId: profileId)
+        let followingUsers = try await repository.fetchFollowing(userId: profileId)
+        let followingIds = Set(followingUsers.map(\.id))
+        return followerUsers.filter { followingIds.contains($0.id) }
+    }
+
+    private func refreshFollowStates() async {
+        let repository = UserRepository(context: modelContext)
+        for user in users where user.id != currentUser.id {
+            if let isFollowing = try? await repository.isFollowing(followerId: currentUser.id, followingId: user.id) {
+                userStore.setFollowing(isFollowing, userId: user.id)
+            }
+        }
+    }
+
+    private func openMessage(with user: UserEntity) async {
+        guard user.id != currentUser.id else { return }
+        do {
+            let thread = try await MessageRepository(context: modelContext)
+                .getOrCreateThread(currentUserId: currentUser.id, peerUserId: user.id)
+            dismiss()
+            chrome.select(.messages)
+            router.setActiveTab(.messages)
+            router.open(.conversation(conversationId: thread.id), in: .messages)
+        } catch {
+            transientMessage = error.kaixUserMessage
+        }
+    }
+
+    private func toggleFollow(_ user: UserEntity) async {
+        guard user.id != currentUser.id, !workingUserIds.contains(user.id) else { return }
+        workingUserIds.insert(user.id)
+        defer { workingUserIds.remove(user.id) }
+        do {
+            let isFollowing = try await UserRepository(context: modelContext)
+                .toggleFollow(currentUser: currentUser, targetUser: user)
+            userStore.register([currentUser, user])
+            userStore.setFollowing(isFollowing, userId: user.id)
+            userStore.updateCounts(userId: currentUser.id, followers: currentUser.followerCount, following: currentUser.followingCount)
+            userStore.updateCounts(userId: user.id, followers: user.followerCount, following: user.followingCount)
+            if kind == .mutual && !isFollowing {
+                withAnimation(.snappy(duration: 0.2)) {
+                    users.removeAll { $0.id == user.id }
+                }
+                if users.isEmpty {
+                    state = .empty
+                }
+            }
+        } catch {
+            transientMessage = error.kaixUserMessage
+        }
+    }
+}
+
+private struct FollowUserCard: View {
+    let user: UserEntity
+    let isCurrentUser: Bool
+    let isFollowing: Bool
+    let isWorking: Bool
+    let language: AppLanguage
+    let onOpenProfile: () -> Void
+    let onMessage: () -> Void
+    let onToggleFollow: () -> Void
+
+    var body: some View {
+        HStack(spacing: KXSpacing.md) {
+            Button(action: onOpenProfile) {
+                AvatarView(user: user, size: 48)
+            }
+            .buttonStyle(.plain)
+
+            Button(action: onOpenProfile) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(user.displayName)
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        KXUserBadge(user: user)
+                    }
+                    Text("@\(user.username)")
+                        .font(KXTypography.meta)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Text("\(NumberFormatterUtils.compact(user.followerCount)) \(L("followers", language))")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+
+            if !isCurrentUser {
+                HStack(spacing: 8) {
+                    Button(action: onMessage) {
+                        Image(systemName: "envelope")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(KXColor.accent)
+                            .frame(width: 34, height: 34)
+                            .background(KXColor.accent.opacity(0.08), in: Circle())
+                    }
+                    .buttonStyle(KXPressableStyle(scale: 0.94))
+
+                    Button(action: onToggleFollow) {
+                        Text(isFollowing ? L("followed", language) : L("follow", language))
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(isFollowing ? Color.primary : .white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.82)
+                            .padding(.horizontal, 12)
+                            .frame(height: 34)
+                            .background(isFollowing ? Color(.secondarySystemBackground) : KXColor.accent, in: Capsule())
+                            .overlay(Capsule().strokeBorder(Color.primary.opacity(isFollowing ? 0.08 : 0), lineWidth: 1))
+                    }
+                    .disabled(isWorking)
+                    .opacity(isWorking ? 0.55 : 1)
+                    .buttonStyle(KXPressableStyle(scale: 0.96))
+                }
+            }
+        }
+        .padding(12)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
     }
 }
 

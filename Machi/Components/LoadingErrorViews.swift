@@ -189,6 +189,41 @@ struct ErrorStateView: View {
     }
 }
 
+struct KXInlineNotice: View {
+    let message: String
+    var systemImage: String = "exclamationmark.circle.fill"
+    var tint: Color = KXColor.accent
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: KXSpacing.sm) {
+            Image(systemName: systemImage)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(tint)
+                .frame(width: 28, height: 28)
+                .background(tint.opacity(0.10), in: Circle())
+
+            Text(message)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, KXSpacing.md)
+        .padding(.vertical, 10)
+        .kxGlassSurface(radius: KXRadius.md, elevated: true)
+        .padding(.horizontal, KXSpacing.screen)
+    }
+}
+
 struct EmptyStateView: View {
     let title: String
     let subtitle: String

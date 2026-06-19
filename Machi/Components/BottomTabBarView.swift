@@ -79,8 +79,6 @@ struct BottomTabBarView: View {
         switch tab {
         case .messages:
             return messageStore.totalUnreadCount
-        case .profile:
-            return notificationStore.unreadCount
         default:
             return nil
         }
@@ -110,15 +108,15 @@ private struct TabUnreadBadge: View {
 
     var body: some View {
         Text(count > 99 ? "99+" : "\(count)")
-            .font(.system(size: count > 9 ? 8 : 9, weight: .black))
+            .font(.system(size: count > 9 ? 7.5 : 8.5, weight: .black))
             .foregroundStyle(.white)
             .lineLimit(1)
             .minimumScaleFactor(0.75)
-            .frame(minWidth: 17, minHeight: 17)
+            .frame(minWidth: 16, minHeight: 16)
             .padding(.horizontal, count > 9 ? 3 : 0)
-            .background(Color.red, in: Capsule())
+            .background(Color(red: 0.93, green: 0.16, blue: 0.34), in: Capsule())
             .overlay(Capsule().stroke(Color.white.opacity(0.9), lineWidth: 1.2))
-            .shadow(color: Color.red.opacity(0.22), radius: 5, y: 2)
+            .shadow(color: Color(red: 0.93, green: 0.16, blue: 0.34).opacity(0.18), radius: 4, y: 1.5)
             .accessibilityHidden(true)
     }
 }

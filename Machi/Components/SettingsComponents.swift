@@ -69,7 +69,7 @@ struct SettingsRowLink<Destination: View>: View {
     /// user doesn't see two stacked back buttons. Defaults to revealing the
     /// nav bar for the common case of plain list/detail destinations.
     var revealsNavBar: Bool = true
-    let destination: Destination
+    let destination: () -> Destination
 
     init(
         icon: String,
@@ -79,7 +79,7 @@ struct SettingsRowLink<Destination: View>: View {
         subtitle: String,
         status: KXSettingsRowStatus = .implemented,
         revealsNavBar: Bool = true,
-        @ViewBuilder destination: () -> Destination
+        @ViewBuilder destination: @escaping () -> Destination
     ) {
         self.icon = icon
         self.tint = tint
@@ -88,14 +88,14 @@ struct SettingsRowLink<Destination: View>: View {
         self.subtitle = subtitle
         self.status = status
         self.revealsNavBar = revealsNavBar
-        self.destination = destination()
+        self.destination = destination
     }
 
     var body: some View {
         Group {
             if status.isInteractive {
                 NavigationLink {
-                    destination
+                    destination()
                         .toolbar(revealsNavBar ? .visible : .hidden, for: .navigationBar)
                 } label: {
                     SettingsRowContent(icon: icon, tint: tint, title: title, value: value, subtitle: subtitle, status: status)

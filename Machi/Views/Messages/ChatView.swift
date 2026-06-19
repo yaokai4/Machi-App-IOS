@@ -116,6 +116,7 @@ struct ChatView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
     @EnvironmentObject private var chrome: AppChromeState
+    @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var messageStore: MessageStore
     @StateObject private var viewModel = ChatViewModel()
     @State private var pickerItems: [PhotosPickerItem] = []
@@ -151,6 +152,14 @@ struct ChatView: View {
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
+                if let noticeMessage = actionMessage ?? viewModel.errorMessage {
+                    KXInlineNotice(message: noticeMessage) {
+                        actionMessage = nil
+                        viewModel.errorMessage = nil
+                    }
+                    .padding(.bottom, 6)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
                 draftMediaPreview
                 ChatInputBar(
                     pickerItems: $pickerItems,
@@ -183,22 +192,6 @@ struct ChatView: View {
             }
             Button(L("cancel", language), role: .cancel) {}
         }
-        .alert(L("ok", language), isPresented: Binding(
-            get: { actionMessage != nil },
-            set: { if !$0 { actionMessage = nil } }
-        )) {
-            Button(L("ok", language), role: .cancel) {}
-        } message: {
-            Text(actionMessage ?? "")
-        }
-        .alert(L("error", language), isPresented: Binding(
-            get: { viewModel.errorMessage != nil },
-            set: { if !$0 { viewModel.errorMessage = nil } }
-        )) {
-            Button(L("ok", language), role: .cancel) {}
-        } message: {
-            Text(viewModel.errorMessage ?? "")
-        }
     }
 
     private var chatHeader: some View {
@@ -214,18 +207,26 @@ struct ChatView: View {
             }
             .buttonStyle(.plain)
 
-            AvatarView(user: peer, size: 38)
-
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Text(peer?.displayName ?? L("messages", language))
-                        .font(.headline.weight(.semibold))
-                    KXUserBadge(user: peer)
+            Button {
+                if let peer {
+                    router.open(.profile(userId: peer.id))
                 }
-                Text("@\(peer?.username ?? L("unknownUser", language))")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+            } label: {
+                HStack(spacing: 10) {
+                    AvatarView(user: peer, size: 38)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 4) {
+                            Text(peer?.displayName ?? L("messages", language))
+                                .font(.headline.weight(.semibold))
+                            KXUserBadge(user: peer)
+                        }
+                        Text("@\(peer?.username ?? L("unknownUser", language))")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
+            .buttonStyle(.plain)
 
             Spacer()
 
@@ -300,6 +301,11 @@ struct ChatView: View {
                             },
                             onRetry: {
                                 Task { await viewModel.retryMessage(context: modelContext, thread: thread, message: message, messageStore: messageStore) }
+                            },
+                            onOpenPeer: {
+                                if let peer {
+                                    router.open(.profile(userId: peer.id))
+                                }
                             }
                         )
                         .id(message.id)
@@ -307,8 +313,9 @@ struct ChatView: View {
                 }
                 .padding(.horizontal, KaiXTheme.horizontalPadding)
                 .padding(.vertical, 10)
-                .padding(.bottom, KXSpacing.lg)
+                .padding(.bottom, 34)
             }
+            .scrollDismissesKeyboard(.interactively)
             .onChange(of: viewModel.messages.count) { _, _ in
                 if let lastId = viewModel.messages.last?.id {
                     withAnimation { proxy.scrollTo(lastId, anchor: .bottom) }
@@ -434,6 +441,7 @@ struct KXMessageBubble: View {
     let peer: UserEntity?
     let onDelete: () -> Void
     let onRetry: () -> Void
+    let onOpenPeer: () -> Void
 
     var body: some View {
         let contentType = message.resolvedType(mediaItems: mediaItems)
@@ -442,7 +450,10 @@ struct KXMessageBubble: View {
             if isMine { Spacer(minLength: 52) }
 
             if !isMine {
-                AvatarView(user: peer, size: 32)
+                Button(action: onOpenPeer) {
+                    AvatarView(user: peer, size: 32)
+                }
+                .buttonStyle(.plain)
             }
 
             VStack(alignment: isMine ? .trailing : .leading, spacing: 5) {
@@ -540,6 +551,12 @@ private struct ChatInputBar: View {
 
             TextField(L("messagePlaceholder", language), text: $text, axis: .vertical)
                 .lineLimit(1...4)
+                .submitLabel(.send)
+                .onSubmit {
+                    if canSend && !isSending {
+                        send()
+                    }
+                }
                 .padding(.horizontal, 13)
                 .padding(.vertical, 8)
                 .background(Color(.secondarySystemGroupedBackground), in: Capsule())

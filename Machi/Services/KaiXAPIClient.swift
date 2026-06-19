@@ -445,6 +445,45 @@ final class KaiXAPIClient {
         return try decode(data)
     }
 
+    /// `/api/users/:id/replies` is shared with Web and returns comment rows
+    /// with a nested `post`. The iOS profile wants the replied-to posts, so
+    /// decode that shape explicitly. The decoder also accepts a direct post
+    /// item to stay compatible if the server later normalizes the endpoint.
+    func userReplyPosts(_ id: String, cursor: String? = nil) async throws -> KaiXPageDTO<KaiXPostDTO> {
+        struct ReplyItem: Codable {
+            let post: KaiXPostDTO?
+
+            enum CodingKeys: String, CodingKey {
+                case post
+            }
+
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                if container.contains(.post) {
+                    post = try container.decodeIfPresent(KaiXPostDTO.self, forKey: .post)
+                } else {
+                    post = try? KaiXPostDTO(from: decoder)
+                }
+            }
+
+            func encode(to encoder: Encoder) throws {
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                try container.encodeIfPresent(post, forKey: .post)
+            }
+        }
+
+        struct ReplyPage: Codable {
+            let items: [ReplyItem]
+            let next_cursor: String?
+        }
+
+        var q: [URLQueryItem] = []
+        if let cursor { q.append(URLQueryItem(name: "cursor", value: cursor)) }
+        let data = try await request("GET", "/api/users/\(id.encodedPathSegment)/replies", queryItems: q)
+        let page: ReplyPage = try decode(data)
+        return KaiXPageDTO(items: page.items.compactMap(\.post), next_cursor: page.next_cursor)
+    }
+
     func setFollow(_ id: String, _ on: Bool) async throws {
         _ = try await request(on ? "POST" : "DELETE", "/api/users/\(id.encodedPathSegment)/follow")
     }

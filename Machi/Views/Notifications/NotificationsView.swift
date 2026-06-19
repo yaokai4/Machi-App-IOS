@@ -2,6 +2,7 @@ import SwiftData
 import SwiftUI
 
 struct NotificationsView: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
     @EnvironmentObject private var chrome: AppChromeState
@@ -37,13 +38,14 @@ struct NotificationsView: View {
         .onDisappear {
             SystemNotificationService.shared.suppressBanners = false
         }
-        .alert(L("error", language), isPresented: Binding(
-            get: { viewModel.transientError != nil },
-            set: { if !$0 { viewModel.transientError = nil } }
-        )) {
-            Button(L("ok", language), role: .cancel) {}
-        } message: {
-            Text(viewModel.transientError ?? "")
+        .overlay(alignment: .top) {
+            if let message = viewModel.transientError {
+                KXInlineNotice(message: message, tint: .orange) {
+                    viewModel.transientError = nil
+                }
+                .padding(.top, 76)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
         }
     }
 
@@ -102,11 +104,13 @@ struct NotificationsView: View {
                         notification: item,
                         actors: viewModel.actors,
                         onOpenProfile: { actorId in
+                            dismiss()
                             router.open(.profile(userId: actorId))
                         },
                         onOpenTarget: {
                             Task { await viewModel.markRead(context: modelContext, aggregate: item, notificationStore: notificationStore) }
                             if let route = route(for: item) {
+                                dismiss()
                                 router.open(route)
                             } else {
                                 router.routeErrorMessage = L("postDeletedHelp", language)
@@ -127,12 +131,14 @@ struct NotificationsView: View {
                         }
                     }
                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                        Button {
-                            Task { await viewModel.toggleRead(context: modelContext, aggregate: item, notificationStore: notificationStore) }
-                        } label: {
-                            Label(item.isRead ? L("markUnread", language) : L("markRead", language), systemImage: item.isRead ? "envelope.badge" : "envelope.open")
+                        if !item.isRead {
+                            Button {
+                                Task { await viewModel.markRead(context: modelContext, aggregate: item, notificationStore: notificationStore) }
+                            } label: {
+                                Label(L("markRead", language), systemImage: "envelope.open")
+                            }
+                            .tint(.blue)
                         }
-                        .tint(.blue)
                     }
                 }
             }
@@ -140,7 +146,7 @@ struct NotificationsView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .contentMargins(.top, KXSpacing.xs, for: .scrollContent)
-        .contentMargins(.bottom, chrome.bottomContentPadding, for: .scrollContent)
+        .contentMargins(.bottom, chrome.bottomContentPadding + 24, for: .scrollContent)
         .refreshable {
             await viewModel.load(context: modelContext, notificationStore: notificationStore)
         }
@@ -156,7 +162,7 @@ struct NotificationsView: View {
             )
             .padding(.horizontal, KaiXTheme.horizontalPadding)
             .padding(.top, 34)
-            .padding(.bottom, chrome.bottomContentPadding)
+            .padding(.bottom, chrome.bottomContentPadding + 24)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .refreshable {
@@ -250,34 +256,29 @@ private struct NotificationCard: View {
             }
             .buttonStyle(.plain)
 
-            markReadControl
+            readIndicator
         }
         .padding(KXSpacing.md)
         .kxGlassSurface(radius: KXRadius.md)
     }
 
     @ViewBuilder
-    private var markReadControl: some View {
+    private var readIndicator: some View {
         if notification.isRead {
-            Label(L("markViewed", language), systemImage: "checkmark.circle.fill")
-                .font(.caption2.weight(.bold))
-                .labelStyle(.titleAndIcon)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 9)
-                .frame(height: 30)
-                .background(.thinMaterial, in: Capsule())
+            Image(systemName: "checkmark.circle.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary.opacity(0.7))
+                .frame(width: 30, height: 30)
+                .accessibilityLabel(L("markViewed", language))
         } else {
             Button(action: onMarkRead) {
-                Label(L("markViewed", language), systemImage: "checkmark.circle")
-                    .font(.caption2.weight(.bold))
-                    .labelStyle(.titleAndIcon)
-                    .foregroundStyle(KXColor.accent)
-                    .padding(.horizontal, 9)
-                    .frame(height: 30)
-                    .background(KXColor.accent.opacity(0.10), in: Capsule())
+                Circle()
+                    .fill(KXColor.accent)
+                    .frame(width: 10, height: 10)
+                    .frame(width: 30, height: 30)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(L("markViewed", language))
+            .accessibilityLabel(L("markRead", language))
         }
     }
 

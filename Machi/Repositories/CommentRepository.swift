@@ -10,7 +10,7 @@ final class CommentRepository {
     }
 
     func fetchComments(postId: String) async throws -> [CommentEntity] {
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
             return try await KaiXAPIClient.shared.comments(postId: postId).map(ServerEntityFactory.comment(from:))
         }
         return try context.fetch(FetchDescriptor<CommentEntity>(
@@ -23,7 +23,7 @@ final class CommentRepository {
     }
 
     func toggleLike(comment: CommentEntity) async throws {
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
             let next = !comment.isLikedByCurrentUser
             try await KaiXAPIClient.shared.setCommentLike(comment.id, next)
             comment.isLikedByCurrentUser = next

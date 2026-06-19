@@ -7,9 +7,11 @@ struct MessagesView: View {
     @EnvironmentObject private var chrome: AppChromeState
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var messageStore: MessageStore
+    @EnvironmentObject private var notificationStore: NotificationStore
     @StateObject private var viewModel = MessagesViewModel()
     @State private var mode = MessageInboxMode.conversations
     @State private var isShowingNewConversation = false
+    @State private var isShowingNotifications = false
     @State private var contacts: [UserEntity] = []
     @State private var contactsQuery = ""
     @State private var contactsState: ScreenState = .idle
@@ -18,8 +20,8 @@ struct MessagesView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            MessagesHeaderView(title: L("messages", language)) {
-                isShowingNewConversation = true
+            MessagesHeaderView(title: L("messages", language), unreadCount: notificationStore.unreadCount) {
+                isShowingNotifications = true
             }
 
             inboxModePicker
@@ -38,13 +40,14 @@ struct MessagesView: View {
                 await loadContacts()
             }
         }
-        .alert(L("error", language), isPresented: Binding(
-            get: { viewModel.transientError != nil },
-            set: { if !$0 { viewModel.transientError = nil } }
-        )) {
-            Button(L("ok", language), role: .cancel) {}
-        } message: {
-            Text(viewModel.transientError ?? "")
+        .overlay(alignment: .top) {
+            if let message = viewModel.transientError {
+                KXInlineNotice(message: message) {
+                    viewModel.transientError = nil
+                }
+                .padding(.top, 70)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
         }
         .sheet(isPresented: $isShowingNewConversation) {
             NewConversationView(currentUser: currentUser) { user in
@@ -61,6 +64,12 @@ struct MessagesView: View {
                         viewModel.transientError = error.kaixUserMessage
                     }
                 }
+            }
+        }
+        .sheet(isPresented: $isShowingNotifications) {
+            NavigationStack {
+                NotificationsView(currentUser: currentUser)
+                    .kxRouteDestinations(currentUser: currentUser)
             }
         }
     }
@@ -179,7 +188,7 @@ struct MessagesView: View {
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
             .padding(.top, KXSpacing.sm)
-            .padding(.bottom, chrome.bottomContentPadding)
+            .padding(.bottom, chrome.bottomContentPadding + 24)
         }
         .refreshable { await loadContacts() }
     }
@@ -194,7 +203,7 @@ struct MessagesView: View {
             )
             .padding(.horizontal, KaiXTheme.horizontalPadding)
             .padding(.top, 34)
-            .padding(.bottom, chrome.bottomContentPadding)
+            .padding(.bottom, chrome.bottomContentPadding + 24)
         }
         .refreshable { await loadContacts() }
     }
@@ -204,12 +213,16 @@ struct MessagesView: View {
             Section {
                 ForEach(viewModel.threads) { thread in
                     let peer = peer(for: thread)
-                    Button {
-                        router.open(.conversation(conversationId: thread.id))
-                    } label: {
-                        MessageConversationCard(thread: thread, peer: peer)
-                    }
-                    .buttonStyle(.plain)
+                    MessageConversationCard(
+                        thread: thread,
+                        peer: peer,
+                        onOpenThread: {
+                            router.open(.conversation(conversationId: thread.id))
+                        },
+                        onOpenProfile: { userId in
+                            router.open(.profile(userId: userId))
+                        }
+                    )
                     .listRowInsets(EdgeInsets(top: 6, leading: KXSpacing.screen, bottom: 6, trailing: KXSpacing.screen))
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
@@ -234,7 +247,7 @@ struct MessagesView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .contentMargins(.top, KXSpacing.md, for: .scrollContent)
-        .contentMargins(.bottom, chrome.bottomContentPadding, for: .scrollContent)
+        .contentMargins(.bottom, chrome.bottomContentPadding + 24, for: .scrollContent)
         .refreshable {
             await viewModel.load(context: modelContext, currentUser: currentUser, messageStore: messageStore)
         }
@@ -250,7 +263,7 @@ struct MessagesView: View {
             )
             .padding(.horizontal, KaiXTheme.horizontalPadding)
             .padding(.top, 34)
-            .padding(.bottom, chrome.bottomContentPadding)
+            .padding(.bottom, chrome.bottomContentPadding + 24)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .refreshable {
@@ -269,12 +282,16 @@ struct MessagesView: View {
         contactsState = contacts.isEmpty ? .loading : .loaded
         do {
             let remoteUsers = try await KaiXAPIClient.shared.mutualMessageFriends(query: contactsQuery, limit: 100)
-            contacts = remoteUsers
-                .map(UserRepository.entity(from:))
+            contacts = UserRepository.uniqueUsers(remoteUsers.map(UserRepository.entity(from:)))
                 .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
             contactsState = contacts.isEmpty ? .empty : .loaded
         } catch {
-            contactsState = .error(error.kaixUserMessage)
+            if contacts.isEmpty {
+                contactsState = .error(error.kaixUserMessage)
+            } else {
+                contactsState = .loaded
+                viewModel.transientError = error.kaixUserMessage
+            }
         }
     }
 
@@ -318,22 +335,35 @@ private enum MessageInboxMode: String, CaseIterable, Identifiable {
 private struct MessagesHeaderView: View {
     @Environment(\.appLanguage) private var language
     let title: String
-    let onCompose: () -> Void
+    let unreadCount: Int
+    let onOpenNotifications: () -> Void
 
     var body: some View {
         HStack {
             Text(title)
                 .font(.system(size: 32, weight: .semibold))
             Spacer()
-            Button(action: onCompose) {
-                Image(systemName: "square.and.pencil")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .frame(width: 38, height: 38)
-                    .kxGlassCircle()
+            Button(action: onOpenNotifications) {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: unreadCount > 0 ? "bell.badge.fill" : "bell")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 40, height: 40)
+                        .kxGlassCircle()
+                    if unreadCount > 0 {
+                        Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
+                            .font(.system(size: unreadCount > 9 ? 7.5 : 8.5, weight: .black))
+                            .foregroundStyle(.white)
+                            .frame(minWidth: 16, minHeight: 16)
+                            .padding(.horizontal, unreadCount > 9 ? 3 : 0)
+                            .background(Color(red: 0.93, green: 0.16, blue: 0.34), in: Capsule())
+                            .overlay(Capsule().stroke(Color.white.opacity(0.92), lineWidth: 1.1))
+                            .offset(x: 4, y: -3)
+                    }
+                }
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(L("newMessage", language))
+            .accessibilityLabel(L("notifications", language))
         }
         .padding(.horizontal, KXSpacing.screen)
         .padding(.top, 8)
@@ -468,8 +498,7 @@ private struct NewConversationView: View {
         state = .loading
         do {
             let remoteUsers = try await KaiXAPIClient.shared.mutualMessageFriends(query: query, limit: 50)
-            users = remoteUsers
-                .map(UserRepository.entity(from:))
+            users = UserRepository.uniqueUsers(remoteUsers.map(UserRepository.entity(from:)))
                 .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
             state = users.isEmpty ? .empty : .loaded
         } catch {
@@ -518,48 +547,69 @@ private struct MessageConversationCard: View {
     @Environment(\.appLanguage) private var language
     let thread: MessageThreadEntity
     let peer: UserEntity?
+    let onOpenThread: () -> Void
+    let onOpenProfile: (String) -> Void
 
     var body: some View {
         HStack(spacing: 11) {
-            AvatarView(user: peer, size: 48)
-                .overlay(alignment: .bottomTrailing) {
-                    Circle()
-                        .fill(.green)
-                        .frame(width: 9, height: 9)
-                        .overlay(Circle().stroke(Color(.systemBackground).opacity(0.78), lineWidth: 2))
+            Button {
+                if let id = peer?.id {
+                    onOpenProfile(id)
+                } else {
+                    onOpenThread()
                 }
-
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 5) {
-                    Text(peer?.displayName ?? L("unknownUser", language))
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-                    KXUserBadge(user: peer)
-                    Spacer()
-                    Text(DateFormatterUtils.relativeText(from: thread.lastMessageAt, language: language))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-
-                HStack(spacing: 6) {
-                    if let previewIcon {
-                        Image(systemName: previewIcon)
+            } label: {
+                AvatarView(user: peer, size: 48)
+                    .overlay(alignment: .bottomTrailing) {
+                        Circle()
+                            .fill(.green)
+                            .frame(width: 9, height: 9)
+                            .overlay(Circle().stroke(Color(.systemBackground).opacity(0.78), lineWidth: 2))
                     }
-                    Text(previewText)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+            }
+            .buttonStyle(.plain)
+
+            Button(action: onOpenThread) {
+                HStack(spacing: 11) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 5) {
+                            Text(peer?.displayName ?? L("unknownUser", language))
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                            KXUserBadge(user: peer)
+                            Spacer()
+                            Text(DateFormatterUtils.relativeText(from: thread.lastMessageAt, language: language))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+
+                        HStack(spacing: 6) {
+                            if let previewIcon {
+                                Image(systemName: previewIcon)
+                            }
+                            Text(previewText)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+
+                    if thread.unreadCount > 0 {
+                        Text("\(thread.unreadCount)")
+                            .font(.caption2.weight(.black))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                            .frame(minWidth: 20, minHeight: 20)
+                            .padding(.horizontal, thread.unreadCount > 9 ? 5 : 0)
+                            .background(KXColor.accent, in: Capsule())
+                            .overlay(Capsule().stroke(Color.white.opacity(0.82), lineWidth: 1))
+                            .shadow(color: KXColor.accent.opacity(0.18), radius: 4, y: 1.5)
+                    }
                 }
             }
-
-            if thread.unreadCount > 0 {
-                Text("\(thread.unreadCount)")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 24, height: 24)
-                    .background(.blue)
-                    .clipShape(Circle())
-            }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
