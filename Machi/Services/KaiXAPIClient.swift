@@ -154,6 +154,12 @@ final class KaiXAPIClient {
         try JSONDecoder().decode(T.self, from: data)
     }
 
+    private func requirePathIdentifier(_ value: String) throws -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw RepositoryError.validationFailed }
+        return trimmed
+    }
+
     // MARK: - auth
 
     /// Fetch an image-captcha challenge for `scene` ("login" / "register").
@@ -434,14 +440,16 @@ final class KaiXAPIClient {
 
     func userDetail(_ id: String) async throws -> KaiXUserDTO {
         struct Wrapper: Codable { let user: KaiXUserDTO }
-        let data = try await request("GET", "/api/users/\(id.encodedPathSegment)")
+        let userId = try requirePathIdentifier(id)
+        let data = try await request("GET", "/api/users/\(userId.encodedPathSegment)")
         return try decode(data) as Wrapper |> \.user
     }
 
     func userPosts(_ id: String, segment: ProfileSegment = .posts, cursor: String? = nil) async throws -> KaiXPageDTO<KaiXPostDTO> {
+        let userId = try requirePathIdentifier(id)
         var q: [URLQueryItem] = []
         if let cursor { q.append(URLQueryItem(name: "cursor", value: cursor)) }
-        let data = try await request("GET", "/api/users/\(id.encodedPathSegment)/\(segment.rawValue)", queryItems: q)
+        let data = try await request("GET", "/api/users/\(userId.encodedPathSegment)/\(segment.rawValue)", queryItems: q)
         return try decode(data)
     }
 
@@ -450,6 +458,7 @@ final class KaiXAPIClient {
     /// decode that shape explicitly. The decoder also accepts a direct post
     /// item to stay compatible if the server later normalizes the endpoint.
     func userReplyPosts(_ id: String, cursor: String? = nil) async throws -> KaiXPageDTO<KaiXPostDTO> {
+        let userId = try requirePathIdentifier(id)
         struct ReplyItem: Codable {
             let post: KaiXPostDTO?
 
@@ -479,17 +488,19 @@ final class KaiXAPIClient {
 
         var q: [URLQueryItem] = []
         if let cursor { q.append(URLQueryItem(name: "cursor", value: cursor)) }
-        let data = try await request("GET", "/api/users/\(id.encodedPathSegment)/replies", queryItems: q)
+        let data = try await request("GET", "/api/users/\(userId.encodedPathSegment)/replies", queryItems: q)
         let page: ReplyPage = try decode(data)
         return KaiXPageDTO(items: page.items.compactMap(\.post), next_cursor: page.next_cursor)
     }
 
     func setFollow(_ id: String, _ on: Bool) async throws {
-        _ = try await request(on ? "POST" : "DELETE", "/api/users/\(id.encodedPathSegment)/follow")
+        let userId = try requirePathIdentifier(id)
+        _ = try await request(on ? "POST" : "DELETE", "/api/users/\(userId.encodedPathSegment)/follow")
     }
 
     func setBlock(_ id: String, _ on: Bool) async throws {
-        _ = try await request(on ? "POST" : "DELETE", "/api/users/\(id.encodedPathSegment)/block")
+        let userId = try requirePathIdentifier(id)
+        _ = try await request(on ? "POST" : "DELETE", "/api/users/\(userId.encodedPathSegment)/block")
     }
 
     /// Server-side list of users the current account has blocked. Mirrors
@@ -515,12 +526,14 @@ final class KaiXAPIClient {
     }
 
     func reportUser(_ id: String, reason: String, note: String? = nil) async throws {
-        _ = try await request("POST", "/api/users/\(id.encodedPathSegment)/report", body: ["reason": reason, "note": note ?? ""])
+        let userId = try requirePathIdentifier(id)
+        _ = try await request("POST", "/api/users/\(userId.encodedPathSegment)/report", body: ["reason": reason, "note": note ?? ""])
     }
 
     func user(_ id: String) async throws -> KaiXUserDTO {
         struct Wrapper: Codable { let user: KaiXUserDTO }
-        let data = try await request("GET", "/api/users/\(id.encodedPathSegment)")
+        let userId = try requirePathIdentifier(id)
+        let data = try await request("GET", "/api/users/\(userId.encodedPathSegment)")
         return try decode(data) as Wrapper |> \.user
     }
 
@@ -531,13 +544,15 @@ final class KaiXAPIClient {
 
     func followers(_ id: String) async throws -> [KaiXUserDTO] {
         struct Wrapper: Codable { let items: [KaiXUserDTO] }
-        let data = try await request("GET", "/api/users/\(id.encodedPathSegment)/followers")
+        let userId = try requirePathIdentifier(id)
+        let data = try await request("GET", "/api/users/\(userId.encodedPathSegment)/followers")
         return try decode(data) as Wrapper |> \.items
     }
 
     func following(_ id: String) async throws -> [KaiXUserDTO] {
         struct Wrapper: Codable { let items: [KaiXUserDTO] }
-        let data = try await request("GET", "/api/users/\(id.encodedPathSegment)/following")
+        let userId = try requirePathIdentifier(id)
+        let data = try await request("GET", "/api/users/\(userId.encodedPathSegment)/following")
         return try decode(data) as Wrapper |> \.items
     }
 

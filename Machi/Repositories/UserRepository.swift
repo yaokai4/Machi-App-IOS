@@ -19,9 +19,10 @@ final class UserRepository {
     }
 
     func fetchUsers(ids: Set<String>) async throws -> [UserEntity] {
-        guard !ids.isEmpty else { return [] }
+        let normalizedIds = Self.nonEmptyIds(ids)
+        guard !normalizedIds.isEmpty else { return [] }
         var remoteUsers: [UserEntity] = []
-        for id in ids {
+        for id in normalizedIds {
             if let dto = try? await KaiXAPIClient.shared.userDetail(id) {
                 remoteUsers.append(Self.entity(from: dto))
             }
@@ -30,7 +31,7 @@ final class UserRepository {
             return Self.uniqueUsers(remoteUsers)
                 .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
         }
-        let idList = Array(ids)
+        let idList = normalizedIds
         return try context.fetch(FetchDescriptor<UserEntity>(
             predicate: #Predicate { idList.contains($0.id) },
             sortBy: [SortDescriptor(\.displayName)]
@@ -53,10 +54,12 @@ final class UserRepository {
     }
 
     func fetchUser(id: String) async throws -> UserEntity? {
+        let userId = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !userId.isEmpty else { return nil }
         if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
-            return Self.entity(from: try await KaiXAPIClient.shared.userDetail(id))
+            return Self.entity(from: try await KaiXAPIClient.shared.userDetail(userId))
         }
-        var descriptor = FetchDescriptor<UserEntity>(predicate: #Predicate { $0.id == id })
+        var descriptor = FetchDescriptor<UserEntity>(predicate: #Predicate { $0.id == userId })
         descriptor.fetchLimit = 1
         return try context.fetch(descriptor).first
     }
@@ -155,30 +158,36 @@ final class UserRepository {
     }
 
     func isFollowing(followerId: String, followingId: String) async throws -> Bool {
+        let targetId = followingId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !targetId.isEmpty else { return false }
         if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
-            let dto = try await KaiXAPIClient.shared.userDetail(followingId)
+            let dto = try await KaiXAPIClient.shared.userDetail(targetId)
             return dto.is_following ?? dto.isFollowing ?? false
         }
         var descriptor = FetchDescriptor<FollowEntity>(predicate: #Predicate {
-            $0.followerId == followerId && $0.followingId == followingId
+            $0.followerId == followerId && $0.followingId == targetId
         })
         descriptor.fetchLimit = 1
         return try context.fetch(descriptor).isEmpty == false
     }
 
     func followingIds(for userId: String) async throws -> Set<String> {
+        let id = userId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !id.isEmpty else { return [] }
         if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
-            return Set(try await KaiXAPIClient.shared.following(userId).map(\.id))
+            return Set(try await KaiXAPIClient.shared.following(id).map(\.id))
         }
         let follows = try context.fetch(FetchDescriptor<FollowEntity>(
-            predicate: #Predicate { $0.followerId == userId }
+            predicate: #Predicate { $0.followerId == id }
         ))
         return Set(follows.map(\.followingId))
     }
 
     func fetchFollowers(userId: String) async throws -> [UserEntity] {
+        let id = userId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !id.isEmpty else { return [] }
         if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
-            return Self.uniqueUsers(try await KaiXAPIClient.shared.followers(userId)
+            return Self.uniqueUsers(try await KaiXAPIClient.shared.followers(id)
                 .map(Self.entity(from:))
             )
             .sorted {
@@ -189,7 +198,7 @@ final class UserRepository {
                 }
         }
         let follows = try context.fetch(FetchDescriptor<FollowEntity>(
-            predicate: #Predicate { $0.followingId == userId }
+            predicate: #Predicate { $0.followingId == id }
         ))
         let ids = Set(follows.map(\.followerId))
         return try await fetchUsers(ids: ids)
@@ -202,8 +211,10 @@ final class UserRepository {
     }
 
     func fetchFollowing(userId: String) async throws -> [UserEntity] {
+        let id = userId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !id.isEmpty else { return [] }
         if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
-            return Self.uniqueUsers(try await KaiXAPIClient.shared.following(userId)
+            return Self.uniqueUsers(try await KaiXAPIClient.shared.following(id)
                 .map(Self.entity(from:))
             )
             .sorted {
@@ -214,7 +225,7 @@ final class UserRepository {
                 }
         }
         let follows = try context.fetch(FetchDescriptor<FollowEntity>(
-            predicate: #Predicate { $0.followerId == userId }
+            predicate: #Predicate { $0.followerId == id }
         ))
         let ids = Set(follows.map(\.followingId))
         return try await fetchUsers(ids: ids)
@@ -227,8 +238,9 @@ final class UserRepository {
     }
 
     func toggleFollow(currentUser: UserEntity, targetUser: UserEntity) async throws -> Bool {
-        let followerId = currentUser.id
-        let followingId = targetUser.id
+        let followerId = currentUser.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        let followingId = targetUser.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !followerId.isEmpty, !followingId.isEmpty else { throw RepositoryError.validationFailed }
         if KaiXBackend.token != nil {
             let alreadyFollowing = try await isFollowing(followerId: followerId, followingId: followingId)
             let nextValue = !alreadyFollowing
@@ -319,6 +331,14 @@ final class UserRepository {
     static func uniqueUsers(_ users: [UserEntity]) -> [UserEntity] {
         var seen = Set<String>()
         return users.filter { seen.insert($0.id).inserted }
+    }
+
+    static func nonEmptyIds(_ ids: Set<String>) -> [String] {
+        var seen = Set<String>()
+        return ids
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+            .sorted()
     }
 
     static func apply(_ dto: KaiXUserDTO, to user: UserEntity) {

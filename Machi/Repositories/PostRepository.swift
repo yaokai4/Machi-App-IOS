@@ -329,36 +329,42 @@ final class PostRepository {
     }
 
     func fetchPosts(authorId: String) async throws -> [PostEntity] {
+        let normalizedAuthorId = authorId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedAuthorId.isEmpty else { return [] }
         if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
-            let page = try await KaiXAPIClient.shared.userPosts(authorId, segment: .posts)
+            let page = try await KaiXAPIClient.shared.userPosts(normalizedAuthorId, segment: .posts)
             return ServerEntityFactory.postBundle(from: page.items).orderedPosts
         }
         let published = PostStatus.published.rawValue
         let active = PostStatus.active.rawValue
         return try context.fetch(FetchDescriptor<PostEntity>(
-            predicate: #Predicate { $0.authorId == authorId && ($0.statusRaw == published || $0.statusRaw == active) },
+            predicate: #Predicate { $0.authorId == normalizedAuthorId && ($0.statusRaw == published || $0.statusRaw == active) },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         ))
     }
 
     func fetchMediaPosts(authorId: String) async throws -> [PostEntity] {
+        let normalizedAuthorId = authorId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedAuthorId.isEmpty else { return [] }
         if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
-            let page = try await KaiXAPIClient.shared.userPosts(authorId, segment: .media)
+            let page = try await KaiXAPIClient.shared.userPosts(normalizedAuthorId, segment: .media)
             return ServerEntityFactory.postBundle(from: page.items).orderedPosts
         }
-        let authored = try await fetchPosts(authorId: authorId)
+        let authored = try await fetchPosts(authorId: normalizedAuthorId)
         let authoredMedia = try await fetchMedia(for: authored)
         return authored.filter { authoredMedia[$0.id]?.isEmpty == false }
     }
 
     func fetchDrafts(authorId: String) async throws -> [PostEntity] {
+        let normalizedAuthorId = authorId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedAuthorId.isEmpty else { return [] }
         if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
             guard KaiXBackend.token != nil else { throw RepositoryError.authenticationRequired }
-            return try await KaiXAPIClient.shared.drafts().map { Self.draftEntity(from: $0, authorId: authorId) }
+            return try await KaiXAPIClient.shared.drafts().map { Self.draftEntity(from: $0, authorId: normalizedAuthorId) }
         }
         let draft = PostStatus.draft.rawValue
         return try context.fetch(FetchDescriptor<PostEntity>(
-            predicate: #Predicate { $0.authorId == authorId && $0.statusRaw == draft },
+            predicate: #Predicate { $0.authorId == normalizedAuthorId && $0.statusRaw == draft },
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         ))
     }
@@ -381,12 +387,14 @@ final class PostRepository {
     }
 
     func fetchRepliedPosts(authorId: String) async throws -> [PostEntity] {
+        let normalizedAuthorId = authorId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedAuthorId.isEmpty else { return [] }
         if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
-            let page = try await KaiXAPIClient.shared.userReplyPosts(authorId)
+            let page = try await KaiXAPIClient.shared.userReplyPosts(normalizedAuthorId)
             return ServerEntityFactory.postBundle(from: page.items).orderedPosts
         }
         let comments = try context.fetch(FetchDescriptor<CommentEntity>(
-            predicate: #Predicate { $0.authorId == authorId && $0.deletedAt == nil },
+            predicate: #Predicate { $0.authorId == normalizedAuthorId && $0.deletedAt == nil },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         ))
         var seen = Set<String>()

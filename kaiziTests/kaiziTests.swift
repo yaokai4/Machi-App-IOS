@@ -145,6 +145,12 @@ struct kaiziTests {
         #expect((RepositoryError.validationFailed as Error).kaixUserMessage == "内容不完整，请检查后重试。")
     }
 
+    @Test func userRepositoryFiltersBlankAndDuplicateServerIds() async throws {
+        let ids = UserRepository.nonEmptyIds(["  user-b  ", "", "user-a", "user-a", "\n\t"])
+
+        #expect(ids == ["user-a", "user-b"])
+    }
+
     @Test func productionBootstrapDoesNotCreateDemoContent() async throws {
         let context = try makeContext()
 
