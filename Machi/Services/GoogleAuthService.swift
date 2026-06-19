@@ -54,7 +54,13 @@ final class GoogleAuthService: NSObject, ASWebAuthenticationPresentationContextP
     }
 
     private func authenticate(url: URL) async throws -> URL {
-        try await withCheckedThrowingContinuation { continuation in
+        guard currentPresentationAnchor() != nil else {
+            throw KaiXAPIError(error: .init(
+                code: "google_no_presentation_window",
+                message: "无法打开 Google 登录窗口，请确认 App 处于前台后重试。"
+            ))
+        }
+        return try await withCheckedThrowingContinuation { continuation in
             let authSession = ASWebAuthenticationSession(url: url, callbackURLScheme: "machi") { [weak self] callbackURL, error in
                 Task { @MainActor in
                     self?.session = nil
@@ -76,6 +82,10 @@ final class GoogleAuthService: NSObject, ASWebAuthenticationPresentationContextP
     }
 
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        currentPresentationAnchor() ?? ASPresentationAnchor(frame: UIScreen.main.bounds)
+    }
+
+    private func currentPresentationAnchor() -> ASPresentationAnchor? {
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         if let keyWindow = scenes.flatMap(\.windows).first(where: { $0.isKeyWindow }) {
             return keyWindow
@@ -83,10 +93,7 @@ final class GoogleAuthService: NSObject, ASWebAuthenticationPresentationContextP
         if let existingWindow = scenes.first?.windows.first {
             return existingWindow
         }
-        guard let windowScene = scenes.first else {
-            preconditionFailure("Google authentication requires an active window scene.")
-        }
-        return ASPresentationAnchor(windowScene: windowScene)
+        return nil
     }
 }
 

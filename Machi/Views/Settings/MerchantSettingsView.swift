@@ -516,7 +516,9 @@ struct MerchantSettingsView: View {
             for url in urls.prefix(10) {
                 let scoped = url.startAccessingSecurityScopedResource()
                 defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                let data = try Data(contentsOf: url)
+                let data = try await Task.detached(priority: .utility) {
+                    try Data(contentsOf: url)
+                }.value
                 let mime = mimeType(for: url)
                 let uploaded = try await KaiXAPIClient.shared.uploadFile(
                     data: data,

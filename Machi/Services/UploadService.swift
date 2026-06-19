@@ -159,7 +159,7 @@ actor UploadService {
         if draft.type == .video {
             let thumbnailData: Data
             do {
-                thumbnailData = try Data(contentsOf: draft.thumbnailURL)
+                thumbnailData = try await loadFileData(at: draft.thumbnailURL)
             } catch {
                 throw UploadError.thumbnailFailed
             }
@@ -181,7 +181,7 @@ actor UploadService {
 
         let data: Data
         do {
-            data = try Data(contentsOf: draft.localURL)
+            data = try await loadFileData(at: draft.localURL)
         } catch {
             throw UploadError.writeFailed
         }
@@ -212,6 +212,12 @@ actor UploadService {
         let directory = base.appendingPathComponent("KaiXMedia", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
+    }
+
+    private func loadFileData(at url: URL) async throws -> Data {
+        try await Task.detached(priority: .utility) {
+            try Data(contentsOf: url)
+        }.value
     }
 
     private func encodedJPEG(from data: Data, maxPixel: CGFloat, quality: CGFloat) -> (data: Data, size: CGSize)? {

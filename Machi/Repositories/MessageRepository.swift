@@ -109,7 +109,9 @@ final class MessageRepository {
         if KaiXBackend.token != nil {
             var attachmentIds: [String] = []
             for draft in mediaDrafts {
-                guard let data = try? Data(contentsOf: draft.localURL) else { continue }
+                guard let data = try? await Task.detached(priority: .utility, operation: {
+                    try Data(contentsOf: draft.localURL)
+                }).value else { continue }
                 let purpose = draft.type == .video ? "message_video" : "message_image"
                 let uploaded = try await KaiXAPIClient.shared.uploadFile(
                     data: data,
