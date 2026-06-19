@@ -88,9 +88,11 @@ struct LoadingView: View {
 struct KXSplashView: View {
     @Environment(\.appLanguage) private var language
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var reveal = false
     @State private var appeared = false
     @State private var breathing = false
     @State private var shimmer: CGFloat = -1.2
+    @State private var progressActive = false
 
     var body: some View {
         ZStack {
@@ -105,76 +107,44 @@ struct KXSplashView: View {
             )
             .ignoresSafeArea()
 
-            VStack(spacing: 16) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color(red: 0.08, green: 0.68, blue: 0.54),
-                                    Color(red: 0.02, green: 0.48, blue: 0.42),
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 78, height: 78)
-                        .overlay(
-                            Text("M")
-                                .font(.system(size: 38, weight: .black, design: .rounded))
-                                .foregroundStyle(.white),
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                                .stroke(.white.opacity(0.34), lineWidth: 1.0)
-                        )
-                        .shadow(color: KXColor.accent.opacity(0.20), radius: 20, y: 10)
-                        .overlay(
-                            // Sheen sweeping across the logo.
-                            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                                .fill(
-                                    LinearGradient(
-                                        colors: [.clear, .white.opacity(0.35), .clear],
-                                        startPoint: .leading,
-                                        endPoint: .trailing,
-                                    ),
-                                )
-                                .blendMode(.plusLighter)
-                                .mask(RoundedRectangle(cornerRadius: 26, style: .continuous))
-                                .offset(x: shimmer * 92),
-                        )
+            if reveal {
+                VStack(spacing: 18) {
+                    KXSplashLogoMark(shimmer: shimmer)
+                        .scaleEffect(breathing ? 1.0 : 0.982)
+                        .opacity(appeared ? 1 : 0)
 
-                    Circle()
-                        .fill(Color(red: 1.0, green: 0.63, blue: 0.18))
-                        .frame(width: 10, height: 10)
-                        .overlay(Circle().stroke(.white, lineWidth: 2))
-                        .offset(x: 29, y: -29)
+                    VStack(spacing: 7) {
+                        Text("Machi")
+                            .font(.system(size: 32, weight: .black, design: .rounded))
+                            .foregroundStyle(.primary)
+                        Text(L("splashTagline", language))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .opacity(appeared ? 1 : 0)
+
+                    KXSplashProgressRail(isActive: progressActive)
+                        .padding(.top, 4)
+                        .opacity(appeared ? 1 : 0)
                 }
-                .scaleEffect(breathing ? 1.0 : 0.985)
-                .opacity(appeared ? 1 : 0)
-
-                Text("Machi")
-                    .font(.system(size: 30, weight: .black, design: .rounded))
-                    .foregroundStyle(.primary)
-                    .opacity(appeared ? 1 : 0)
-                Text(L("splashTagline", language))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .opacity(appeared ? 1 : 0)
-
-                KXSplashDots()
-                    .padding(.top, 6)
-                    .opacity(appeared ? 1 : 0)
+                .padding(.horizontal, 36)
+                .offset(y: -10)
+                .transition(.opacity.combined(with: .scale(scale: 0.985)))
             }
-            .padding(.horizontal, 36)
-            .offset(y: -8)
         }
-        .onAppear {
+        .task {
             if reduceMotion || KXRuntime.isUITesting {
+                reveal = true
                 appeared = true
                 breathing = true
                 shimmer = 1
+                progressActive = true
                 return
+            }
+            try? await Task.sleep(nanoseconds: 180_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.22)) {
+                reveal = true
             }
             withAnimation(.spring(response: 0.48, dampingFraction: 0.84)) {
                 appeared = true
@@ -185,32 +155,90 @@ struct KXSplashView: View {
             withAnimation(.easeInOut(duration: 1.8).delay(0.16).repeatForever(autoreverses: false)) {
                 shimmer = 1.2
             }
+            withAnimation(.easeInOut(duration: 1.15).repeatForever(autoreverses: true)) {
+                progressActive = true
+            }
         }
     }
 }
 
-private struct KXSplashDots: View {
-    @State private var active = false
+private struct KXSplashLogoMark: View {
+    let shimmer: CGFloat
 
     var body: some View {
-        HStack(spacing: 7) {
-            ForEach(0..<3, id: \.self) { index in
-                Circle()
-                    .fill(KXColor.accent.opacity(active ? 0.72 : 0.28))
-                    .frame(width: 6, height: 6)
-                    .scaleEffect(active ? 1.0 : 0.72)
-                    .animation(
-                        .easeInOut(duration: 0.62)
-                            .delay(Double(index) * 0.16)
-                            .repeatForever(autoreverses: true),
-                        value: active
+        ZStack {
+            RoundedRectangle(cornerRadius: 34, style: .continuous)
+                .fill(KXColor.accent.opacity(0.10))
+                .frame(width: 108, height: 108)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 34, style: .continuous)
+                        .stroke(KXColor.accent.opacity(0.12), lineWidth: 1)
+                )
+
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.11, green: 0.72, blue: 0.56),
+                            Color(red: 0.04, green: 0.48, blue: 0.42),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
                     )
-            }
+                )
+                .frame(width: 78, height: 78)
+                .overlay(
+                    Text("M")
+                        .font(.system(size: 38, weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .stroke(.white.opacity(0.34), lineWidth: 1.0)
+                )
+                .shadow(color: KXColor.accent.opacity(0.20), radius: 20, y: 10)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [.clear, .white.opacity(0.30), .clear],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .blendMode(.plusLighter)
+                        .mask(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                        .offset(x: shimmer * 92)
+                )
+
+            Circle()
+                .fill(Color(red: 1.0, green: 0.63, blue: 0.18))
+                .frame(width: 11, height: 11)
+                .overlay(Circle().stroke(.white, lineWidth: 2))
+                .shadow(color: Color(red: 1.0, green: 0.63, blue: 0.18).opacity(0.22), radius: 8, y: 3)
+                .offset(x: 31, y: -31)
         }
-        .onAppear {
-            guard !KXRuntime.isUITesting else { return }
-            active = true
+        .accessibilityHidden(true)
+    }
+}
+
+private struct KXSplashProgressRail: View {
+    let isActive: Bool
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            Capsule()
+                .fill(KXColor.accent.opacity(0.10))
+                .overlay(alignment: .leading) {
+                    Capsule()
+                        .fill(KXColor.accent.opacity(0.54))
+                        .frame(width: 42, height: 4)
+                        .offset(x: isActive ? max(width - 42, 0) : 0)
+                }
         }
+        .frame(width: 118, height: 4)
+        .clipShape(Capsule())
         .accessibilityHidden(true)
     }
 }
