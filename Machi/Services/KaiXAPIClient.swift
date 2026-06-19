@@ -754,16 +754,55 @@ final class KaiXAPIClient {
         return response.items
     }
 
-    /// The caller's OWN listings of one type, regardless of city — includes
-    /// non-published states so sellers can manage everything they posted.
-    func myListings(type: String) async throws -> [KaiXCityListingDTO] {
-        let q: [URLQueryItem] = [
+    /// One server page of the caller's OWN listings of one type, regardless
+    /// of city — includes non-published states so sellers can manage
+    /// everything they posted.
+    func myListingsPage(type: String, cursor: String? = nil, limit: Int = 60) async throws -> ListingsPage {
+        var q: [URLQueryItem] = [
             URLQueryItem(name: "type", value: type),
             URLQueryItem(name: "mine", value: "1"),
+            URLQueryItem(name: "limit", value: String(limit)),
         ]
+        if let cursor, !cursor.isEmpty {
+            q.append(URLQueryItem(name: "cursor", value: cursor))
+        }
         let data = try await request("GET", "/api/listings", queryItems: q)
         let response: KaiXListingsResponse = try decode(data)
-        return response.items
+        return ListingsPage(items: response.items, nextCursor: response.next_cursor)
+    }
+
+    /// The caller's complete listing inventory for one type. Keep this
+    /// method exhaustive so management screens do not silently show only the
+    /// first page once a seller has many active/draft/reviewing listings.
+    func myListings(type: String) async throws -> [KaiXCityListingDTO] {
+        try await collectListings { cursor in
+            try await myListingsPage(type: type, cursor: cursor)
+        }
+    }
+
+    /// A seller-scoped public inventory used by profile count tags. It walks
+    /// the same cursor protocol as marketplace channels so profile shortcuts
+    /// never produce a "missing after 50 rows" false empty state.
+    func sellerListings(type: String, sellerId: String, limit: Int = 60) async throws -> [KaiXCityListingDTO] {
+        try await collectListings { cursor in
+            try await listingsPage(type: type, sellerId: sellerId, cursor: cursor, limit: limit)
+        }
+    }
+
+    private func collectListings(_ pageLoader: (String?) async throws -> ListingsPage) async throws -> [KaiXCityListingDTO] {
+        var cursor: String?
+        var allItems: [KaiXCityListingDTO] = []
+        var seen = Set<String>()
+        var pageCount = 0
+        repeat {
+            let page = try await pageLoader(cursor)
+            for item in page.items where seen.insert(item.id).inserted {
+                allItems.append(item)
+            }
+            cursor = page.nextCursor
+            pageCount += 1
+        } while cursor != nil && pageCount < 20
+        return allItems
     }
 
     func cityListing(_ id: String) async throws -> KaiXCityListingDTO {

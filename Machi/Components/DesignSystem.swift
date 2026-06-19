@@ -659,7 +659,7 @@ private struct KXShimmerModifier: ViewModifier {
         content
             .opacity(reduceMotion ? 1 : (dimmed ? 0.55 : 1))
             .onAppear {
-                guard !reduceMotion else { return }
+                guard !reduceMotion, !KXRuntime.isUITesting else { return }
                 withAnimation(.easeInOut(duration: 1.05).repeatForever(autoreverses: true)) {
                     dimmed = true
                 }

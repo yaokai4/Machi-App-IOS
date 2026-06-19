@@ -1,5 +1,24 @@
 import SwiftUI
 
+/// Tiny runtime probe. `isUITesting` is true only when the app was launched
+/// by XCUITest (one of the `-kaixUITest*` / `-KXAutoGuest` launch args is
+/// present). We use it to suppress `repeatForever` animations during UI
+/// tests: a perpetual Core Animation keeps the app from ever reaching the
+/// "idle" state XCUITest waits on, so every accessibility query times out
+/// ("Failed to get matching snapshots: Timed out while evaluating UI query").
+/// These launch args are never passed to a real App Store / TestFlight
+/// build, so production visuals are completely unchanged.
+enum KXRuntime {
+    static let isUITesting: Bool = {
+        let args = ProcessInfo.processInfo.arguments
+        return args.contains("-kaixUITestEphemeralStore")
+            || args.contains("-kaixUITestLocalAuth")
+            || args.contains("-kaixUITestAutoLogin")
+            || args.contains("-KXAutoGuest")
+            || ProcessInfo.processInfo.environment["KAIX_UI_TESTING"] == "1"
+    }()
+}
+
 /// Brand spinner — a comet-tail arc that rotates continuously.
 ///
 /// The previous loader pulsed circle *sizes* (28→44pt), which forces a
@@ -34,7 +53,7 @@ struct KXSpinner: View {
         }
         .frame(width: size, height: size)
         .onAppear {
-            guard !reduceMotion else { return }
+            guard !reduceMotion, !KXRuntime.isUITesting else { return }
             withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
                 isSpinning = true
             }
@@ -134,7 +153,7 @@ struct KXSplashView: View {
             }
         }
         .onAppear {
-            guard !reduceMotion else { return }
+            guard !reduceMotion, !KXRuntime.isUITesting else { return }
             pulse = true
             withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: false)) {
                 shimmer = 1

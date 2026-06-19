@@ -3112,6 +3112,7 @@ struct UserListingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var chrome: AppChromeState
     let userId: String
     let listingType: String
     let title: String
@@ -3134,7 +3135,11 @@ struct UserListingsView: View {
                 } else if let errorMessage {
                     ErrorStateView(message: errorMessage) { Task { await load() } }
                 } else if items.isEmpty {
-                    KXEmptyState(title: "暂无发布", subtitle: "TA 还没有发布该类型的内容。", systemImage: "tray")
+                    KXEmptyState(
+                        title: KXListingCopy.pickText(language, "暂无发布", "まだ投稿がありません", "No listings yet"),
+                        subtitle: KXListingCopy.pickText(language, "TA 还没有发布该类型的内容。", "この種類の投稿はまだありません。", "This person has not published this type of listing yet."),
+                        systemImage: "tray"
+                    )
                 } else {
                     resultsList
                 }
@@ -3214,7 +3219,7 @@ struct UserListingsView: View {
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
             .padding(.top, 14)
-            .padding(.bottom, 28)
+            .padding(.bottom, chrome.bottomContentPadding + 24)
         }
     }
 
@@ -3224,17 +3229,24 @@ struct UserListingsView: View {
         do {
             // job tag covers both job + hiring; fetch both and merge.
             if listingType == "job" {
-                async let jobs = KaiXAPIClient.shared.listingsPage(type: "job", sellerId: userId, limit: 50)
-                async let hiring = KaiXAPIClient.shared.listingsPage(type: "hiring", sellerId: userId, limit: 50)
-                items = (try await jobs).items + (try await hiring).items
+                async let jobs = KaiXAPIClient.shared.sellerListings(type: "job", sellerId: userId)
+                async let hiring = KaiXAPIClient.shared.sellerListings(type: "hiring", sellerId: userId)
+                items = sortListings((try await jobs) + (try await hiring))
             } else {
-                items = try await KaiXAPIClient.shared.listingsPage(type: listingType, sellerId: userId, limit: 50).items
+                items = sortListings(try await KaiXAPIClient.shared.sellerListings(type: listingType, sellerId: userId))
             }
             isLoading = false
         } catch {
             errorMessage = error.kaixUserMessage
             isLoading = false
         }
+    }
+
+    private func sortListings(_ listings: [KaiXCityListingDTO]) -> [KaiXCityListingDTO] {
+        var seen = Set<String>()
+        return listings
+            .filter { seen.insert($0.id).inserted }
+            .sorted { ($0.updated_at ?? $0.updatedAt ?? "") > ($1.updated_at ?? $1.updatedAt ?? "") }
     }
 }
 
