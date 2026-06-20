@@ -104,14 +104,11 @@ struct NotificationsView: View {
                         notification: item,
                         actors: viewModel.actors,
                         onOpenProfile: { actorId in
-                            dismiss()
-                            router.open(.profile(userId: actorId))
+                            openNotification(item, route: .profile(userId: actorId))
                         },
                         onOpenTarget: {
-                            Task { await viewModel.markRead(context: modelContext, aggregate: item, notificationStore: notificationStore) }
                             if let route = route(for: item) {
-                                dismiss()
-                                router.open(route)
+                                openNotification(item, route: route)
                             } else {
                                 router.routeErrorMessage = L("postDeletedHelp", language)
                             }
@@ -196,6 +193,14 @@ struct NotificationsView: View {
         }
         return nil
     }
+
+    private func openNotification(_ item: AggregatedNotification, route: KXRoute) {
+        Task {
+            await viewModel.markRead(context: modelContext, aggregate: item, notificationStore: notificationStore)
+            dismiss()
+            router.open(route)
+        }
+    }
 }
 
 private struct NotificationCard: View {
@@ -265,17 +270,22 @@ private struct NotificationCard: View {
     @ViewBuilder
     private var readIndicator: some View {
         if notification.isRead {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary.opacity(0.7))
-                .frame(width: 30, height: 30)
+            Label(L("markViewed", language), systemImage: "checkmark")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(Capsule(style: .continuous).fill(KXColor.softBackground.opacity(0.76)))
                 .accessibilityLabel(L("markViewed", language))
         } else {
             Button(action: onMarkRead) {
-                Circle()
-                    .fill(KXColor.accent)
-                    .frame(width: 10, height: 10)
-                    .frame(width: 30, height: 30)
+                Label(L("markUnviewed", language), systemImage: "checkmark")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(KXColor.accent)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(Capsule(style: .continuous).fill(KXColor.accent.opacity(0.10)))
+                    .overlay(Capsule(style: .continuous).stroke(KXColor.accent.opacity(0.20), lineWidth: 0.8))
             }
             .buttonStyle(.plain)
             .accessibilityLabel(L("markRead", language))
