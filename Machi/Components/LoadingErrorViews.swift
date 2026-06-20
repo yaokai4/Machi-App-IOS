@@ -99,21 +99,22 @@ struct KXSplashView: View {
             LinearGradient(
                 colors: [
                     KXColor.pageBackground,
-                    Color(red: 0.974, green: 0.985, blue: 0.980),
+                    Color(red: 0.968, green: 0.982, blue: 0.976),
+                    Color(red: 0.988, green: 0.988, blue: 0.982),
                     KXColor.pageBackground,
                 ],
-                startPoint: .top,
-                endPoint: .bottom,
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing,
             )
             .ignoresSafeArea()
 
             if reveal {
-                VStack(spacing: 18) {
+                VStack(spacing: 20) {
                     KXSplashLogoMark(shimmer: shimmer)
-                        .scaleEffect(breathing ? 1.0 : 0.982)
+                        .scaleEffect(breathing ? 1.0 : 0.986)
                         .opacity(appeared ? 1 : 0)
 
-                    VStack(spacing: 7) {
+                    VStack(spacing: 8) {
                         Text("Machi")
                             .font(.system(size: 32, weight: .black, design: .rounded))
                             .foregroundStyle(.primary)
@@ -166,9 +167,16 @@ private struct KXSplashLogoMark: View {
     let shimmer: CGFloat
 
     var body: some View {
+        let pulse = max(0, min(1, (shimmer + 1.2) / 2.4))
+
         ZStack {
+            RoundedRectangle(cornerRadius: 42, style: .continuous)
+                .stroke(KXColor.accent.opacity(0.10 * (1 - pulse)), lineWidth: 1)
+                .frame(width: 126, height: 126)
+                .scaleEffect(1 + pulse * 0.055)
+
             RoundedRectangle(cornerRadius: 34, style: .continuous)
-                .fill(KXColor.accent.opacity(0.10))
+                .fill(KXColor.accent.opacity(0.095))
                 .frame(width: 108, height: 108)
                 .overlay(
                     RoundedRectangle(cornerRadius: 34, style: .continuous)
@@ -187,6 +195,13 @@ private struct KXSplashLogoMark: View {
                     )
                 )
                 .frame(width: 78, height: 78)
+                .overlay(alignment: .topLeading) {
+                    Circle()
+                        .fill(.white.opacity(0.20))
+                        .frame(width: 30, height: 30)
+                        .blur(radius: 8)
+                        .offset(x: 14, y: 10)
+                }
                 .overlay(
                     Text("M")
                         .font(.system(size: 38, weight: .black, design: .rounded))
@@ -197,19 +212,6 @@ private struct KXSplashLogoMark: View {
                         .stroke(.white.opacity(0.34), lineWidth: 1.0)
                 )
                 .shadow(color: KXColor.accent.opacity(0.20), radius: 20, y: 10)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [.clear, .white.opacity(0.30), .clear],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .blendMode(.plusLighter)
-                        .offset(x: shimmer * 92)
-                        .mask(RoundedRectangle(cornerRadius: 28, style: .continuous))
-                )
 
             Circle()
                 .fill(Color(red: 1.0, green: 0.63, blue: 0.18))
@@ -232,12 +234,12 @@ private struct KXSplashProgressRail: View {
                 .fill(KXColor.accent.opacity(0.10))
                 .overlay(alignment: .leading) {
                     Capsule()
-                        .fill(KXColor.accent.opacity(0.54))
-                        .frame(width: 42, height: 4)
-                        .offset(x: isActive ? max(width - 42, 0) : 0)
+                        .fill(KXColor.accent.opacity(0.46))
+                        .frame(width: 36, height: 3)
+                        .offset(x: isActive ? max(width - 36, 0) : 0)
                 }
         }
-        .frame(width: 118, height: 4)
+        .frame(width: 112, height: 3)
         .clipShape(Capsule())
         .accessibilityHidden(true)
     }

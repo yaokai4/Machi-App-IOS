@@ -594,7 +594,7 @@ private struct ChatInputBar: View {
         let imageCount = mediaDrafts.filter { $0.type == .image }.count
         let remainingImageSlots = Swift.max(1, KaiXConfig.maxImageItemsPerPost - imageCount)
         HStack(alignment: .bottom, spacing: 8) {
-            HStack(spacing: 4) {
+            HStack(spacing: 3) {
                 PhotosPicker(selection: $pickerItems, maxSelectionCount: remainingImageSlots, matching: .images) {
                     ChatInputToolIcon(systemImage: "photo", disabled: hasVideo || imageCount >= KaiXConfig.maxImageItemsPerPost)
                 }
@@ -605,15 +605,7 @@ private struct ChatInputBar: View {
                 }
                 .disabled(!mediaDrafts.isEmpty)
             }
-            .padding(3)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(KXColor.softBackground.opacity(0.72))
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .stroke(KXColor.separator.opacity(0.28), lineWidth: 0.7)
-            )
+            .frame(height: 42)
 
             TextField(L("messagePlaceholder", language), text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
@@ -625,16 +617,16 @@ private struct ChatInputBar: View {
                     }
                 }
                 .font(.body)
-                .padding(.horizontal, 14)
+                .padding(.horizontal, 13)
                 .padding(.vertical, 10)
                 .frame(minHeight: 42)
                 .background(
                     RoundedRectangle(cornerRadius: 21, style: .continuous)
-                        .fill(KXColor.cardBackground.opacity(0.94))
+                        .fill(KXColor.softBackground.opacity(0.72))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 21, style: .continuous)
-                        .stroke(KXColor.separator.opacity(0.30), lineWidth: 0.7)
+                        .stroke(KXColor.separator.opacity(0.18), lineWidth: 0.7)
                 )
 
             Button {
@@ -659,12 +651,24 @@ private struct ChatInputBar: View {
             .shadow(color: canSend ? KXColor.accent.opacity(0.18) : .clear, radius: 10, y: 4)
             .disabled(!canSend || isSending)
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 8)
-        .padding(.bottom, 10)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .background {
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .fill(KXColor.cardBackground.opacity(0.82))
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 30, style: .continuous)
+                        .stroke(KXColor.separator.opacity(0.24), lineWidth: 0.7)
+                )
+                .shadow(color: KXColor.glassShadow.opacity(0.48), radius: 18, y: 8)
+        }
+        .padding(.horizontal, 10)
+        .padding(.top, 7)
+        .padding(.bottom, 8)
         .background {
             Rectangle()
-                .fill(KXColor.pageBackground.opacity(0.74))
+                .fill(KXColor.pageBackground.opacity(0.62))
                 .background(.ultraThinMaterial)
                 .ignoresSafeArea(edges: .bottom)
         }
@@ -691,12 +695,12 @@ private struct ChatInputToolIcon: View {
         Image(systemName: systemImage)
             .font(.subheadline.weight(.bold))
             .foregroundStyle(disabled ? KXColor.livingMuted.opacity(0.42) : KXColor.accent)
-            .frame(width: 32, height: 34)
+            .frame(width: 34, height: 38)
             .background {
                 Circle()
-                    .fill(disabled ? KXColor.softBackground.opacity(0.38) : KXColor.accent.opacity(0.10))
+                    .fill(disabled ? KXColor.softBackground.opacity(0.28) : KXColor.accent.opacity(0.09))
             }
-            .overlay(Circle().stroke(KXColor.separator.opacity(disabled ? 0.12 : 0.26), lineWidth: 0.7))
+            .overlay(Circle().stroke(KXColor.separator.opacity(disabled ? 0.10 : 0.18), lineWidth: 0.7))
             .contentShape(Circle())
     }
 }
