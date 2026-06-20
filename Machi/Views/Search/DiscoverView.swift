@@ -3308,14 +3308,20 @@ struct CityListingDetailView: View {
                 receipt: receipt,
                 onOpenRecords: {
                     inquiryReceipt = nil
-                    router.setActiveTab(.profile)
+                    // Must switch the *visible* tab via chrome.select (which keeps
+                    // router.activeTab in sync). Using router.setActiveTab alone left
+                    // the visible tab on Search while activeTab moved to Profile, so
+                    // the button looked dead AND every later router.open went to the
+                    // hidden Profile stack — which is why Discover entries stopped
+                    // responding after submitting an inquiry.
+                    chrome.select(.profile)
                     router.popToRoot(.profile)
                     router.open(.myInquiries, in: .profile)
                 },
                 onOpenConversation: {
                     guard !receipt.conversationId.isEmpty else { return }
                     inquiryReceipt = nil
-                    router.setActiveTab(.messages)
+                    chrome.select(.messages)
                     router.open(.conversation(conversationId: receipt.conversationId), in: .messages)
                 },
                 onClose: {

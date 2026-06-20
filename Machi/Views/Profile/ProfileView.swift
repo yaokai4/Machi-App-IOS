@@ -999,6 +999,17 @@ private struct WorkbenchFullScreenView: View {
                 .toolbarBackground(.hidden, for: .navigationBar)
         }
         .kxPageBackground()
+        .onChange(of: router.routeRevision) { _, _ in
+            // Workbench sub-views (e.g. 咨询管理 / 我的咨询) navigate with
+            // router.open(...), which targets a TAB navigation stack that lives
+            // *behind* this fullScreenCover — so "查看详情" / "补充沟通" pushed a
+            // destination the user could never see and the buttons looked dead.
+            // Dismiss the cover whenever a route is pushed so the destination
+            // becomes visible on its tab. Internal workbench navigation uses
+            // NavigationLink (the cover's own stack) and does NOT bump
+            // routeRevision, so this only fires for genuine external routes.
+            if isPresented { isPresented = false }
+        }
     }
 
     private func openPublishedListingFromWorkbench(_ listingId: String) {
