@@ -65,6 +65,21 @@ final class ProfileViewModel: ObservableObject {
             }
         }
 
+        let canLoadPrivateProfileData = KaiXBackend.token != nil
+            && !AuthService.shared.currentUserId.isEmpty
+            && AuthService.shared.currentUserId == userId
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
+            await loadRemoteProfileSections(
+                context: context,
+                user: user,
+                repository: repository,
+                postStore: postStore,
+                canLoadPrivateProfileData: canLoadPrivateProfileData,
+                hasCachedContent: hasCachedContent
+            )
+            return
+        }
+
         do {
             authoredPosts = Self.uniquePosts(try await repository.fetchPosts(authorId: userId))
         } catch {
@@ -86,8 +101,6 @@ final class ProfileViewModel: ObservableObject {
             sectionErrors.append(error.kaixUserMessage)
         }
 
-        let authenticatedCurrentUserId = AuthService.shared.currentUserId
-        let canLoadPrivateProfileData = KaiXBackend.token != nil && !authenticatedCurrentUserId.isEmpty && authenticatedCurrentUserId == userId
         do {
             likedPosts = Self.uniquePosts(try await repository.fetchLikedPosts(userId: userId))
         } catch {
@@ -156,10 +169,128 @@ final class ProfileViewModel: ObservableObject {
         }
 
         refreshSelectedPosts()
-        if let firstError = sectionErrors.first {
+        let hasAnyProfileContent = !authoredPosts.isEmpty || !repliedPosts.isEmpty || !likedPosts.isEmpty || !bookmarkedPosts.isEmpty || !mediaPosts.isEmpty
+        if let firstError = sectionErrors.first, !hasAnyProfileContent {
             transientError = firstError
+        } else {
+            transientError = nil
         }
-        state = posts.isEmpty ? .empty : .loaded
+        state = hasAnyProfileContent ? .loaded : .empty
+    }
+
+    private func loadRemoteProfileSections(
+        context: ModelContext,
+        user: UserEntity,
+        repository: PostRepository,
+        postStore: PostStore?,
+        canLoadPrivateProfileData: Bool,
+        hasCachedContent: Bool
+    ) async {
+        let userId = user.id
+        var sectionErrors: [String] = []
+        var bundles: [ServerEntityFactory.PostBundle] = []
+
+        func loadBundle(_ segment: KaiXAPIClient.ProfileSegment) async -> ServerEntityFactory.PostBundle? {
+            do {
+                let bundle = try await repository.fetchProfileBundle(userId: userId, segment: segment)
+                bundles.append(bundle)
+                return bundle
+            } catch {
+                sectionErrors.append(error.kaixUserMessage)
+                return nil
+            }
+        }
+
+        if let bundle = await loadBundle(.posts) {
+            authoredPosts = Self.uniquePosts(bundle.orderedPosts)
+        } else if !hasCachedContent {
+            authoredPosts = []
+        }
+
+        if let bundle = await loadBundle(.replies) {
+            repliedPosts = Self.uniquePosts(bundle.orderedPosts)
+        } else if !hasCachedContent {
+            repliedPosts = []
+        }
+
+        if let bundle = await loadBundle(.media) {
+            mediaPosts = Self.uniquePosts(bundle.orderedPosts)
+        } else if !hasCachedContent {
+            mediaPosts = []
+        }
+
+        if let bundle = await loadBundle(.likes) {
+            likedPosts = Self.uniquePosts(bundle.orderedPosts)
+        } else if !hasCachedContent {
+            likedPosts = []
+        }
+
+        if canLoadPrivateProfileData, let bundle = await loadBundle(.bookmarks) {
+            bookmarkedPosts = Self.uniquePosts(bundle.orderedPosts)
+        } else if !canLoadPrivateProfileData || !hasCachedContent {
+            bookmarkedPosts = []
+        }
+
+        var hydratedById: [String: PostEntity] = [:]
+        var nextMediaByPostId: [String: [MediaEntity]] = [:]
+        var nextAuthors: [String: UserEntity] = [user.id: user]
+
+        for bundle in bundles {
+            for post in bundle.allPosts {
+                hydratedById[post.id] = post
+            }
+            for (postId, media) in bundle.mediaByPostId {
+                nextMediaByPostId[postId] = media
+            }
+            for (userId, author) in bundle.authors {
+                nextAuthors[userId] = author
+            }
+        }
+
+        let hydratedPosts = Array(hydratedById.values)
+        postStore?.register(hydratedPosts)
+        postStore?.setProfilePosts(authoredPosts, userId: userId)
+
+        let missingAuthorIds = Set(hydratedPosts.map(\.authorId)).subtracting(nextAuthors.keys)
+        if !missingAuthorIds.isEmpty,
+           let fetchedUsers = try? await UserRepository(context: context).fetchUsers(ids: missingAuthorIds) {
+            for fetchedUser in fetchedUsers {
+                nextAuthors[fetchedUser.id] = fetchedUser
+            }
+        }
+        authors = nextAuthors
+
+        for mediaPost in mediaPosts where nextMediaByPostId[mediaPost.id] == nil {
+            nextMediaByPostId[mediaPost.id] = []
+        }
+        mediaByPostId = nextMediaByPostId
+        if mediaPosts.isEmpty {
+            mediaPosts = authoredPosts.filter { !(mediaByPostId[$0.id] ?? []).isEmpty }
+        }
+
+        postCount = authoredPosts.count
+        totalHeat = authoredPosts.reduce(0) { $0 + $1.heatScore }
+        contentTypeCounts = Dictionary(grouping: authoredPosts, by: \.contentType)
+            .mapValues(\.count)
+        savedByOthersCount = authoredPosts.reduce(0) { $0 + $1.bookmarkCount }
+        likeCount = likedPosts.count
+        bookmarkCount = bookmarkedPosts.count
+        mediaCount = mediaItemCount(in: mediaPosts)
+        replyCount = repliedPosts.count
+        if canLoadPrivateProfileData, let drafts = try? await repository.fetchDrafts(authorId: userId) {
+            draftCount = drafts.count
+        } else {
+            draftCount = 0
+        }
+
+        refreshSelectedPosts()
+        let hasAnyProfileContent = !authoredPosts.isEmpty || !repliedPosts.isEmpty || !likedPosts.isEmpty || !bookmarkedPosts.isEmpty || !mediaPosts.isEmpty
+        if let firstError = sectionErrors.first, !hasAnyProfileContent {
+            transientError = firstError
+        } else {
+            transientError = nil
+        }
+        state = hasAnyProfileContent ? .loaded : .empty
     }
 
     func toggleLike(context: ModelContext, post: PostEntity, currentUser: UserEntity, profileUser: UserEntity, postStore: PostStore? = nil) async {

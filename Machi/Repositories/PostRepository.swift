@@ -343,6 +343,44 @@ final class PostRepository {
         ))
     }
 
+    func fetchProfileBundle(userId: String, segment: KaiXAPIClient.ProfileSegment) async throws -> ServerEntityFactory.PostBundle {
+        let normalizedUserId = userId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedUserId.isEmpty else {
+            return ServerEntityFactory.PostBundle(orderedPosts: [], allPosts: [], authors: [:], mediaByPostId: [:])
+        }
+
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
+            let page: KaiXPageDTO<KaiXPostDTO>
+            if segment == .replies {
+                page = try await KaiXAPIClient.shared.userReplyPosts(normalizedUserId)
+            } else {
+                page = try await KaiXAPIClient.shared.userPosts(normalizedUserId, segment: segment)
+            }
+            return ServerEntityFactory.postBundle(from: page.items)
+        }
+
+        let posts: [PostEntity]
+        switch segment {
+        case .posts:
+            posts = try await fetchPosts(authorId: normalizedUserId)
+        case .replies:
+            posts = try await fetchRepliedPosts(authorId: normalizedUserId)
+        case .media:
+            posts = try await fetchMediaPosts(authorId: normalizedUserId)
+        case .likes:
+            posts = try await fetchLikedPosts(userId: normalizedUserId)
+        case .bookmarks:
+            posts = try await fetchBookmarkedPosts()
+        }
+        let mediaByPostId = try await fetchMedia(for: posts)
+        return ServerEntityFactory.PostBundle(
+            orderedPosts: posts,
+            allPosts: posts,
+            authors: [:],
+            mediaByPostId: mediaByPostId
+        )
+    }
+
     func fetchMediaPosts(authorId: String) async throws -> [PostEntity] {
         let normalizedAuthorId = authorId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedAuthorId.isEmpty else { return [] }
