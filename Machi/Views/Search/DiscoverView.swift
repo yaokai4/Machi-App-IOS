@@ -4864,13 +4864,44 @@ struct CreateCityListingView: View {
     @State private var isSubmitting = false
     @State private var message: String?
     @State private var listingTaxonomyCategories: [KaiXListingTaxonomyCategoryDTO] = []
+    // 发布地区 = the structured region the listing is filed under (drives the
+    // top region filter + city channel). Distinct from `location` (展示位置),
+    // which is the free-text business location the user types. Seeded from the
+    // passed citySlug / current browsing region, then user-changeable.
+    @State private var selectedRegion: KaiXRegionDirectory.Region?
+    @State private var isShowingRegionPicker = false
 
     private var region: KaiXRegionDirectory.Region? {
+        if let selectedRegion { return selectedRegion }
         if let citySlug,
            let region = KaiXRegionDirectory.resolve(regionCode: citySlug) {
             return region
         }
         return RegionStore.shared.current ?? KaiXRegionDirectory.resolve(regionCode: "jp.tokyo.tokyo")
+    }
+
+    /// Channel-specific label for the free-text 展示位置 field (the business
+    /// location), kept separate from the structured 发布地区 above.
+    private var locationFieldTitle: String {
+        switch listingType {
+        case "secondhand": return KXListingCopy.pickText(language, "交易地点 / 最近车站", "受け渡し場所 / 最寄り駅", "Meetup / nearest station")
+        case "rental": return KXListingCopy.pickText(language, "房源位置", "物件の場所", "Property location")
+        case "job", "hiring": return KXListingCopy.pickText(language, "工作地点", "勤務地", "Work location")
+        case "jobseeker": return KXListingCopy.pickText(language, "希望工作地区", "希望勤務エリア", "Preferred work area")
+        case "local_service", "discount": return KXListingCopy.pickText(language, "店铺地址 / 服务范围", "店舗住所 / 対応エリア", "Address / service area")
+        default: return KXListingCopy.pickText(language, "展示位置", "表示する場所", "Display location")
+        }
+    }
+
+    private var locationFieldPlaceholder: String {
+        switch listingType {
+        case "secondhand": return KXListingCopy.pickText(language, "例如 川崎站东口 / 武藏小杉 / 可邮寄", "例：川崎駅東口 / 武蔵小杉 / 郵送可", "e.g. Kawasaki Stn east / Musashi-Kosugi / shippable")
+        case "rental": return KXListingCopy.pickText(language, "例如 中野站步行 8 分钟", "例：中野駅 徒歩8分", "e.g. 8 min walk from Nakano Stn")
+        case "job", "hiring": return KXListingCopy.pickText(language, "例如 新宿店 / 最近车站 / 可远程", "例：新宿店 / 最寄り駅 / リモート可", "e.g. Shinjuku branch / nearest stn / remote ok")
+        case "jobseeker": return KXListingCopy.pickText(language, "例如 23 区内 / 可通勤 1 小时 / 可远程", "例：23区内 / 通勤1時間可 / リモート可", "e.g. within 23 wards / 1h commute / remote ok")
+        case "local_service", "discount": return KXListingCopy.pickText(language, "例如 涩谷店 / 上门范围 / 线上预约", "例：渋谷店 / 出張範囲 / オンライン予約", "e.g. Shibuya store / on-site area / online")
+        default: return KXListingCopy.pickText(language, "填写具体位置或服务范围", "具体的な場所や対応範囲", "Specific place or service area")
+        }
     }
 
     private var isEditing: Bool { existingListing != nil }
@@ -5221,6 +5252,7 @@ struct CreateCityListingView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     createHero
+                    publishRegionCard
                     photoSection
                     basicInfoSection
                     typeFields
@@ -5256,6 +5288,88 @@ struct CreateCityListingView: View {
         }
         .task(id: taxonomyRequestType) {
             await loadListingTaxonomy()
+        }
+        .onAppear {
+            // Seed 发布地区 from the editing listing, the passed citySlug, or the
+            // current browsing region — so the card always shows a concrete region.
+            if selectedRegion == nil {
+                if let existingListing,
+                   let r = KaiXRegionDirectory.resolve(regionCode: existingListing.region_code ?? existingListing.regionCode ?? "") {
+                    selectedRegion = r
+                } else if let citySlug, let r = KaiXRegionDirectory.resolve(regionCode: citySlug) {
+                    selectedRegion = r
+                } else {
+                    selectedRegion = RegionStore.shared.current
+                }
+            }
+        }
+        .sheet(isPresented: $isShowingRegionPicker) {
+            RegionSelectorView(
+                initialCountry: region?.countryCode ?? RegionStore.shared.current?.countryCode ?? "jp",
+                allowsAnyCountry: false
+            ) { picked in
+                selectedRegion = picked
+            }
+        }
+    }
+
+    /// 发布地区 card — the structured region this listing files under. Shows the
+    /// flag + 都道府县 · 市区町村, explains it drives the top region filter / city
+    /// channel, and lets the user keep the current location or change cities.
+    /// Deliberately distinct from the free-text 展示位置 field below (车站/地址…).
+    private var publishRegionCard: some View {
+        KXListingSection(title: KXListingCopy.pickText(language, "发布地区", "公開エリア", "Publish area"), icon: "mappin.circle.fill") {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    Text(region?.countryEmoji ?? "🌐")
+                        .font(.system(size: 30))
+                        .frame(width: 46, height: 46)
+                        .background(KXColor.softBackground.opacity(0.9), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(region.map { KaiXRegionDirectory.localizedHeaderLabel($0, language: language) }
+                             ?? KXListingCopy.pickText(language, "尚未选择城市", "都市が未選択", "No city selected"))
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                        Text(KXListingCopy.pickText(language,
+                                                    "发布后会进入该城市频道，并可被顶部地区筛选命中。",
+                                                    "投稿後はこの都市チャンネルに入り、上部のエリア絞り込みに表示されます。",
+                                                    "Files into this city channel and shows up in the top region filter."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
+                }
+                HStack(spacing: 10) {
+                    Button {
+                        selectedRegion = RegionStore.shared.current ?? selectedRegion
+                    } label: {
+                        Label(KXListingCopy.pickText(language, "使用当前位置", "現在地を使う", "Use current"), systemImage: "location.fill")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(KXColor.accent)
+                            .padding(.horizontal, 14)
+                            .frame(height: 38)
+                            .frame(maxWidth: .infinity)
+                            .background(KXColor.accent.opacity(0.10), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    Button {
+                        isShowingRegionPicker = true
+                    } label: {
+                        Label(KXListingCopy.pickText(language, "更换城市", "都市を変更", "Change city"), systemImage: "arrow.left.arrow.right")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.primary)
+                            .padding(.horizontal, 14)
+                            .frame(height: 38)
+                            .frame(maxWidth: .infinity)
+                            .background(KXColor.softBackground.opacity(0.9), in: Capsule())
+                            .overlay(Capsule().stroke(KXColor.separator.opacity(0.6), lineWidth: 0.7))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
     }
 
@@ -5462,7 +5576,10 @@ struct CreateCityListingView: View {
                 KXListingFormField(title: KXListingCopy.pickText(language, "分类", "カテゴリ", "Category"), placeholder: KXListingCopy.categoryPlaceholder(for: listingType, language), icon: "square.grid.2x2", text: categoryBinding)
                 listingCategorySelector
                 KXListingFormField(title: listingType == "rental" ? KXListingCopy.pickText(language, "租金", "家賃", "Rent") : KXListingCopy.pickText(language, "价格", "価格", "Price"), placeholder: KXListingCopy.pricePlaceholder(for: listingType, language), icon: "yensign.circle", text: $price, keyboard: .decimalPad)
-                KXListingFormField(title: KXListingCopy.pickText(language, "地区 / 车站 / 交易地点", "エリア / 駅 / 受け渡し場所", "Area / station / meetup"), placeholder: KXListingCopy.pickText(language, "例如 新宿站附近、池袋、线上咨询", "例：新宿駅近く、池袋、オンライン相談", "e.g. near Shinjuku Station, Ikebukuro, online"), icon: "location", text: $location)
+                // 展示位置 (business location, free text) — NOT the publish region.
+                // Channel-specific label so it reads as a real-world spot, not an
+                // area filter. The structured region lives in the 发布地区 card above.
+                KXListingFormField(title: locationFieldTitle, placeholder: locationFieldPlaceholder, icon: "mappin.and.ellipse", text: $location)
                 KXListingFormField(title: KXListingCopy.pickText(language, "描述", "説明", "Description"), placeholder: KXListingCopy.descriptionPlaceholder(for: listingType, language), icon: "text.alignleft", text: $description, lineLimit: 4...8)
             }
         }
