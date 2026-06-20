@@ -478,16 +478,47 @@ struct KaiXBusinessPublicResponse: Codable {
 struct KaiXListingInquiryDTO: Codable, Identifiable, Equatable {
     let id: String
     let listing_id: String?
+    let listingId: String?
     let type: String?
     let message: String?
     let status: String?
     let conversation_id: String?
+    let conversationId: String?
     let details: [[String: String]]?
     let metadata: [String: KaiXAttributeValue]?
     let created_at: String?
+    let createdAt: String?
+    let updated_at: String?
+    let updatedAt: String?
     let listing: KaiXCityListingDTO?
     let from_user: KaiXUserDTO?
+    let fromUser: KaiXUserDTO?
     let to_user: KaiXUserDTO?
+    let toUser: KaiXUserDTO?
+
+    var resolvedListingId: String {
+        listing_id ?? listingId ?? ""
+    }
+
+    var resolvedConversationId: String {
+        conversation_id ?? conversationId ?? ""
+    }
+
+    var resolvedCreatedAt: String {
+        created_at ?? createdAt ?? ""
+    }
+
+    var resolvedUpdatedAt: String {
+        updated_at ?? updatedAt ?? ""
+    }
+
+    var resolvedFromUser: KaiXUserDTO? {
+        from_user ?? fromUser
+    }
+
+    var resolvedToUser: KaiXUserDTO? {
+        to_user ?? toUser
+    }
 }
 
 struct KaiXListingInquiryReceiptDTO: Codable, Equatable {

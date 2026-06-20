@@ -1072,6 +1072,14 @@ final class KaiXAPIClient {
         return response.inquiry
     }
 
+    @discardableResult
+    func deleteListingInquiry(_ id: String) async throws -> KaiXListingInquiryDTO {
+        struct Response: Decodable { let inquiry: KaiXListingInquiryDTO }
+        let data = try await request("DELETE", "/api/listing-inquiries/\(id.encodedPathSegment)")
+        let response: Response = try decode(data)
+        return response.inquiry
+    }
+
     // MARK: - Listing reviews（星级点评）+ 认证商家目录
 
     func listingReviews(_ listingId: String) async throws -> KaiXListingReviewsResponse {

@@ -80,7 +80,7 @@ struct MyInquiriesView: View {
     }
 
     private func row(_ inquiry: KaiXListingInquiryDTO) -> some View {
-        let counterpart = role == .received ? inquiry.from_user : inquiry.to_user
+        let counterpart = role == .received ? inquiry.resolvedFromUser : inquiry.resolvedToUser
         let details = normalizedDetails(inquiry)
         let cleanMessage = clean(inquiry.message)
         return VStack(alignment: .leading, spacing: 12) {
@@ -112,8 +112,9 @@ struct MyInquiriesView: View {
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
-                        if let created = inquiry.created_at, !created.isEmpty {
-                            Text(formattedDate(created))
+                        let timestamp = inquiry.resolvedUpdatedAt.isEmpty ? inquiry.resolvedCreatedAt : inquiry.resolvedUpdatedAt
+                        if !timestamp.isEmpty {
+                            Text(formattedDate(timestamp))
                                 .font(.caption2.weight(.medium))
                                 .foregroundStyle(.tertiary)
                         }
@@ -167,8 +168,16 @@ struct MyInquiriesView: View {
                         statusAction(inquiry, status: "rescheduled", title: LabeledCopy.reschedule(language), icon: "calendar.badge.clock")
                         statusAction(inquiry, status: "rejected", title: LabeledCopy.reject(language), icon: "xmark.seal.fill")
                         statusAction(inquiry, status: "completed", title: LabeledCopy.complete(language), icon: "flag.checkered")
+                        statusAction(inquiry, status: "closed", title: LabeledCopy.close(language), icon: "archivebox.fill")
                     }
                     .padding(.vertical, 1)
+                }
+            } else {
+                HStack(spacing: 8) {
+                    statusAction(inquiry, status: "withdrawn", title: LabeledCopy.withdraw(language), icon: "arrow.uturn.backward.circle.fill")
+                    destructiveAction(title: LabeledCopy.closeRecord(language), icon: "archivebox.fill") {
+                        Task { await deleteInquiry(inquiry) }
+                    }
                 }
             }
         }
@@ -208,7 +217,7 @@ struct MyInquiriesView: View {
 
     private func statusAction(_ inquiry: KaiXListingInquiryDTO, status: String, title: String, icon: String) -> some View {
         let current = inquiry.status ?? "submitted"
-        let disabled = updatingInquiryId != nil || current == status || ["rejected", "completed", "closed"].contains(current)
+        let disabled = updatingInquiryId != nil || current == status || ["rejected", "withdrawn", "completed", "closed", "spam", "reported"].contains(current)
         return Button {
             Task { await updateInquiry(inquiry, status: status) }
         } label: {
@@ -232,6 +241,24 @@ struct MyInquiriesView: View {
         .opacity(disabled && current != status ? 0.5 : 1)
     }
 
+    private func destructiveAction(title: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.caption2.weight(.black))
+                Text(title)
+                    .font(.caption2.weight(.black))
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .frame(height: 30)
+            .background(Color.secondary.opacity(0.10), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(updatingInquiryId != nil)
+        .opacity(updatingInquiryId != nil ? 0.5 : 1)
+    }
+
     @MainActor
     private func updateInquiry(_ inquiry: KaiXListingInquiryDTO, status: String) async {
         guard updatingInquiryId == nil else { return }
@@ -250,8 +277,27 @@ struct MyInquiriesView: View {
         }
     }
 
+    @MainActor
+    private func deleteInquiry(_ inquiry: KaiXListingInquiryDTO) async {
+        guard updatingInquiryId == nil else { return }
+        updatingInquiryId = inquiry.id
+        defer { updatingInquiryId = nil }
+        do {
+            let updated = try await KaiXAPIClient.shared.deleteListingInquiry(inquiry.id)
+            var items = itemsByRole[role] ?? []
+            if let index = items.firstIndex(where: { $0.id == updated.id }) {
+                items[index] = updated
+            }
+            itemsByRole[role] = items
+            state = items.isEmpty ? .empty : .loaded
+        } catch {
+            state = .error(error.kaixUserMessage)
+        }
+    }
+
     private func openConversation(_ inquiry: KaiXListingInquiryDTO) {
-        if let conversationId = inquiry.conversation_id, !conversationId.isEmpty {
+        let conversationId = inquiry.resolvedConversationId
+        if !conversationId.isEmpty {
             router.open(.conversation(conversationId: conversationId))
         } else {
             openListing(inquiry)
@@ -259,7 +305,8 @@ struct MyInquiriesView: View {
     }
 
     private func openListing(_ inquiry: KaiXListingInquiryDTO) {
-        if let listingId = inquiry.listing_id, !listingId.isEmpty {
+        let listingId = inquiry.resolvedListingId
+        if !listingId.isEmpty {
             router.open(.cityListingDetail(listingId: listingId))
         }
     }
@@ -358,6 +405,18 @@ private enum LabeledCopy {
 
     static func complete(_ language: AppLanguage) -> String {
         pick(language, "完成", "完了", "Complete")
+    }
+
+    static func close(_ language: AppLanguage) -> String {
+        pick(language, "关闭", "終了", "Close")
+    }
+
+    static func withdraw(_ language: AppLanguage) -> String {
+        pick(language, "撤回", "取り下げ", "Withdraw")
+    }
+
+    static func closeRecord(_ language: AppLanguage) -> String {
+        pick(language, "关闭记录", "記録を閉じる", "Close record")
     }
 
     static func applicant(_ name: String, _ language: AppLanguage) -> String {
