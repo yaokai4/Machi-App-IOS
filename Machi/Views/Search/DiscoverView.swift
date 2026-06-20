@@ -3308,21 +3308,31 @@ struct CityListingDetailView: View {
                 receipt: receipt,
                 onOpenRecords: {
                     inquiryReceipt = nil
-                    // Must switch the *visible* tab via chrome.select (which keeps
-                    // router.activeTab in sync). Using router.setActiveTab alone left
-                    // the visible tab on Search while activeTab moved to Profile, so
-                    // the button looked dead AND every later router.open went to the
-                    // hidden Profile stack — which is why Discover entries stopped
-                    // responding after submitting an inquiry.
-                    chrome.select(.profile)
-                    router.popToRoot(.profile)
-                    router.open(.myInquiries, in: .profile)
+                    // Two things were broken here:
+                    // 1. Switch the *visible* tab via chrome.select (which keeps
+                    //    router.activeTab in sync). router.setActiveTab alone left the
+                    //    visible tab on Search while activeTab moved to Profile, so the
+                    //    button looked dead AND later router.open calls went to the
+                    //    hidden Profile stack (Discover entries stopped responding).
+                    // 2. Defer the tab switch + push until AFTER the sheet finishes
+                    //    dismissing. Doing it in the same runloop tick as the dismiss
+                    //    makes SwiftUI drop the navigation — the actual reason the
+                    //    buttons did nothing.
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(350))
+                        chrome.select(.profile)
+                        router.popToRoot(.profile)
+                        router.open(.myInquiries, in: .profile)
+                    }
                 },
                 onOpenConversation: {
                     guard !receipt.conversationId.isEmpty else { return }
                     inquiryReceipt = nil
-                    chrome.select(.messages)
-                    router.open(.conversation(conversationId: receipt.conversationId), in: .messages)
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(350))
+                        chrome.select(.messages)
+                        router.open(.conversation(conversationId: receipt.conversationId), in: .messages)
+                    }
                 },
                 onClose: {
                     inquiryReceipt = nil
