@@ -23,51 +23,61 @@ final class NotificationRepository {
         return try context.fetch(descriptor)
     }
 
-    func markAllRead() async throws {
+    /// All mark/unread methods return the server's authoritative `unread_count`
+    /// (nil in the local-store fallback path) so the ViewModel can calibrate the
+    /// badge to the server instead of a locally-derived count.
+    @discardableResult
+    func markAllRead() async throws -> Int? {
         guard KaiXRuntimeFlags.allowLocalStoreFallback else {
             guard KaiXBackend.token != nil else { throw RepositoryError.authenticationRequired }
-            try await KaiXAPIClient.shared.markNotificationsRead(all: true)
-            return
+            return try await KaiXAPIClient.shared.markNotificationsRead(all: true)
         }
         let notifications = try context.fetch(FetchDescriptor<NotificationEntity>())
         notifications.forEach { $0.isRead = true }
         try context.save()
+        return nil
     }
 
-    func markRead(_ notification: NotificationEntity) async throws {
+    @discardableResult
+    func markRead(_ notification: NotificationEntity) async throws -> Int? {
         guard KaiXRuntimeFlags.allowLocalStoreFallback else {
             guard KaiXBackend.token != nil else { throw RepositoryError.authenticationRequired }
-            try await KaiXAPIClient.shared.markNotificationsRead(ids: [notification.remoteId ?? notification.id])
+            let unread = try await KaiXAPIClient.shared.markNotificationsRead(ids: [notification.remoteId ?? notification.id])
             notification.isRead = true
-            return
+            return unread
         }
         notification.isRead = true
         try context.save()
+        return nil
     }
 
-    func markRead(_ notifications: [NotificationEntity]) async throws {
+    @discardableResult
+    func markRead(_ notifications: [NotificationEntity]) async throws -> Int? {
         guard KaiXRuntimeFlags.allowLocalStoreFallback else {
             guard KaiXBackend.token != nil else { throw RepositoryError.authenticationRequired }
-            try await KaiXAPIClient.shared.markNotificationsRead(ids: notifications.map { $0.remoteId ?? $0.id })
+            let unread = try await KaiXAPIClient.shared.markNotificationsRead(ids: notifications.map { $0.remoteId ?? $0.id })
             notifications.forEach { $0.isRead = true }
-            return
+            return unread
         }
         notifications.forEach { $0.isRead = true }
         try context.save()
+        return nil
     }
 
-    func markUnread(_ notifications: [NotificationEntity]) async throws {
+    @discardableResult
+    func markUnread(_ notifications: [NotificationEntity]) async throws -> Int? {
         guard KaiXRuntimeFlags.allowLocalStoreFallback else {
             guard KaiXBackend.token != nil else { throw RepositoryError.authenticationRequired }
-            try await KaiXAPIClient.shared.markNotificationsRead(
+            let unread = try await KaiXAPIClient.shared.markNotificationsRead(
                 ids: notifications.map { $0.remoteId ?? $0.id },
                 isRead: false
             )
             notifications.forEach { $0.isRead = false }
-            return
+            return unread
         }
         notifications.forEach { $0.isRead = false }
         try context.save()
+        return nil
     }
 
     func delete(_ notification: NotificationEntity) async throws {

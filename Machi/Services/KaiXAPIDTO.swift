@@ -2056,3 +2056,66 @@ struct KaiXWorkbenchSummaryDTO: Decodable {
     /// Total items needing attention today (drives the 今日待处理 banner).
     var pendingTotal: Int { newInquiries + newApplications + newBookings + pendingReview }
 }
+
+// MARK: - Discover hot board (热榜)
+
+/// One ranked topic on the local trend board. The server owns the ranking and
+/// the explainable `reason`; iOS only renders. Decoding is fully defensive so a
+/// server that adds/renames fields can never crash the Discover tab.
+struct KaiXDiscoverHotItemDTO: Decodable, Identifiable {
+    let id: String
+    var kind: String
+    var title: String
+    var subtitle: String
+    var reason: String
+    var scope: String
+    var scopeLabel: String
+    var timeWindow: String
+    var rank: Int
+    var rankDelta: Int
+    var trend: String          // "up" | "down" | "flat"
+    var heatScore: Int
+    var relatedPosts: Int
+    var routeType: String
+    var routeID: String
+
+    private enum CodingKeys: String, CodingKey {
+        case id, kind, title, subtitle, reason, scope, scopeLabel
+        case timeWindow, rank, rankDelta, trend, heatScore, relatedPosts, route
+    }
+    private enum RouteKeys: String, CodingKey { case type, id }
+
+    init(from decoder: Decoder) throws {
+        let c = try? decoder.container(keyedBy: CodingKeys.self)
+        id = (try? c?.decodeIfPresent(String.self, forKey: .id) ?? nil) ?? UUID().uuidString
+        kind = (try? c?.decodeIfPresent(String.self, forKey: .kind) ?? nil) ?? "topic"
+        title = (try? c?.decodeIfPresent(String.self, forKey: .title) ?? nil) ?? ""
+        subtitle = (try? c?.decodeIfPresent(String.self, forKey: .subtitle) ?? nil) ?? ""
+        reason = (try? c?.decodeIfPresent(String.self, forKey: .reason) ?? nil) ?? ""
+        scope = (try? c?.decodeIfPresent(String.self, forKey: .scope) ?? nil) ?? "city"
+        scopeLabel = (try? c?.decodeIfPresent(String.self, forKey: .scopeLabel) ?? nil) ?? ""
+        timeWindow = (try? c?.decodeIfPresent(String.self, forKey: .timeWindow) ?? nil) ?? "24h"
+        rank = (try? c?.decodeIfPresent(Int.self, forKey: .rank) ?? nil) ?? 0
+        rankDelta = (try? c?.decodeIfPresent(Int.self, forKey: .rankDelta) ?? nil) ?? 0
+        trend = (try? c?.decodeIfPresent(String.self, forKey: .trend) ?? nil) ?? "flat"
+        heatScore = (try? c?.decodeIfPresent(Int.self, forKey: .heatScore) ?? nil) ?? 0
+        relatedPosts = (try? c?.decodeIfPresent(Int.self, forKey: .relatedPosts) ?? nil) ?? 0
+        let route = try? c?.nestedContainer(keyedBy: RouteKeys.self, forKey: .route)
+        routeType = (try? route?.decodeIfPresent(String.self, forKey: .type) ?? nil) ?? ""
+        routeID = (try? route?.decodeIfPresent(String.self, forKey: .id) ?? nil) ?? ""
+    }
+}
+
+struct KaiXDiscoverHotResponse: Decodable {
+    var items: [KaiXDiscoverHotItemDTO]
+    var scope: String
+    var timeWindow: String
+
+    private enum CodingKeys: String, CodingKey { case items, scope, timeWindow }
+    init(from decoder: Decoder) throws {
+        let c = try? decoder.container(keyedBy: CodingKeys.self)
+        items = (try? c?.decodeIfPresent([KaiXDiscoverHotItemDTO].self, forKey: .items) ?? nil) ?? []
+        scope = (try? c?.decodeIfPresent(String.self, forKey: .scope) ?? nil) ?? "city"
+        timeWindow = (try? c?.decodeIfPresent(String.self, forKey: .timeWindow) ?? nil) ?? "24h"
+    }
+}

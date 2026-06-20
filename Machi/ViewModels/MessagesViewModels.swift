@@ -9,6 +9,9 @@ final class MessagesViewModel: ObservableObject {
     @Published var peers: [String: UserEntity] = [:]
     @Published var state: ScreenState = .idle
     @Published var transientError: String?
+    /// False while the app is backgrounded so the 8s inbox poll skips network
+    /// work (battery + server load). Mirrors ChatViewModel.isForeground.
+    var isForeground = true
 
     func load(context: ModelContext, currentUser: UserEntity, messageStore: MessageStore? = nil) async {
         let hasCachedContent = !threads.isEmpty
@@ -85,6 +88,9 @@ final class ChatViewModel: ObservableObject {
     @Published var isShowingSearchTools = false
     @Published var state: ScreenState = .idle
     @Published var isSending = false
+    /// Set false when the app leaves the foreground so the chat's 3s poll loop
+    /// skips network work while backgrounded (battery + server load).
+    var isForeground = true
     /// Overall 0…1 progress while a message's media is uploading to S3, or
     /// nil when there is no in-flight media upload. Drives the ring on the
     /// draft thumbnails.
@@ -217,20 +223,44 @@ final class ChatViewModel: ObservableObject {
     }
 
     func send(context: ModelContext, thread: MessageThreadEntity, currentUser: UserEntity, messageStore: MessageStore? = nil) async {
-        guard canSend else { return }
+        // `!isSending` blocks a double-tap / double-submit from spawning two
+        // server inserts (the button + onSubmit can both fire under fat-finger).
+        guard canSend, !isSending else { return }
         let drafts = mediaDrafts
+        let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         isSending = true
         sendUploadProgress = drafts.isEmpty ? nil : 0
         defer {
             isSending = false
             sendUploadProgress = nil
         }
+
+        // Optimistic pending bubble for text-only sends: the message shows
+        // instantly as `.sending`, then reconciles to the server row (`.sent`)
+        // or flips to `.failed` (tap-to-retry). Media sends keep their draft
+        // preview + upload-progress ring as their live feedback instead.
+        var optimisticId: String?
+        if drafts.isEmpty {
+            let pending = MessageEntity(
+                threadId: thread.id,
+                senderId: currentUser.id,
+                content: trimmed,
+                status: .sending
+            )
+            optimisticId = pending.id
+            messages.append(pending)
+            mediaByMessageId[pending.id] = []
+            inputText = ""
+            state = .loaded
+            messageStore?.setMessages(messages, conversationId: thread.id)
+        }
+
         do {
             let repository = MessageRepository(context: context)
             let message = try await repository.sendMessage(
                 thread: thread,
                 senderId: currentUser.id,
-                content: inputText,
+                content: trimmed,
                 mediaDrafts: drafts,
                 onProgress: { [weak self] fraction in
                     Task { @MainActor in
@@ -240,12 +270,19 @@ final class ChatViewModel: ObservableObject {
                 }
             )
             messageStore?.enqueueSending(message)
-            inputText = ""
-            mediaDrafts = []
+            if drafts.isEmpty == false {
+                inputText = ""
+                mediaDrafts = []
+            }
             let messageId = message.id
             let sentMediaById = (try? await MessageRepository(context: context).fetchMedia(threadId: thread.id, messageIds: [messageId])) ?? [:]
             let media = sentMediaById[messageId] ?? []
-            messages.append(message)
+            if let optimisticId, let idx = messages.firstIndex(where: { $0.id == optimisticId }) {
+                messages[idx] = message
+                mediaByMessageId[optimisticId] = nil
+            } else {
+                messages.append(message)
+            }
             mediaByMessageId[message.id] = media
             state = .loaded
             messageStore?.setMessages(messages, conversationId: thread.id)
@@ -256,6 +293,13 @@ final class ChatViewModel: ObservableObject {
                 await refreshFromServer(repository: repository, thread: thread, currentUser: currentUser, messageStore: messageStore)
             }
         } catch {
+            // Keep the bubble visible but mark it failed so the user can retry,
+            // instead of silently dropping the text they typed.
+            if let optimisticId, let idx = messages.firstIndex(where: { $0.id == optimisticId }) {
+                messages[idx].status = .failed
+                messages = messages   // republish: MessageEntity is a reference type
+                messageStore?.setMessages(messages, conversationId: thread.id)
+            }
             errorMessage = error.kaixUserMessage
             state = messages.isEmpty ? .empty : .loaded
         }
@@ -280,11 +324,47 @@ final class ChatViewModel: ObservableObject {
     }
 
     func retryMessage(context: ModelContext, thread: MessageThreadEntity, message: MessageEntity, messageStore: MessageStore? = nil) async {
+        guard message.status == .failed else { return }
+
+        // Server-backed retry: re-send the failed text bubble through the API
+        // and reconcile it in place. (Media failures keep their draft in the
+        // composer, so "retry" there is just pressing send again.)
+        if KaiXBackend.token != nil {
+            let text = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty, !isSending else { return }
+            let failedId = message.id
+            isSending = true
+            defer { isSending = false }
+            if let idx = messages.firstIndex(where: { $0.id == failedId }) {
+                messages[idx].status = .sending
+                messages = messages
+            }
+            do {
+                let repository = MessageRepository(context: context)
+                let sent = try await repository.sendMessage(thread: thread, senderId: message.senderId, content: text, mediaDrafts: [])
+                if let idx = messages.firstIndex(where: { $0.id == failedId }) {
+                    messages[idx] = sent
+                    mediaByMessageId[failedId] = nil
+                } else {
+                    messages.append(sent)
+                }
+                mediaByMessageId[sent.id] = []
+                state = .loaded
+                messageStore?.setMessages(messages, conversationId: thread.id)
+            } catch {
+                if let idx = messages.firstIndex(where: { $0.id == failedId }) {
+                    messages[idx].status = .failed
+                    messages = messages
+                }
+                errorMessage = error.kaixUserMessage
+            }
+            return
+        }
+
         guard KaiXRuntimeFlags.allowLocalStoreFallback else {
             errorMessage = RepositoryError.authenticationRequired.kaixUserMessage
             return
         }
-        guard message.status == .failed else { return }
         let previousStatus = message.status
         message.status = .sending
         isSending = true

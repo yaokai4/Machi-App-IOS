@@ -4,6 +4,7 @@ import SwiftUI
 struct MessagesView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var chrome: AppChromeState
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var messageStore: MessageStore
@@ -44,6 +45,10 @@ struct MessagesView: View {
         .onReceive(NotificationCenter.default.publisher(for: .kaiXConversationShouldRefresh)) { _ in
             guard mode == .conversations else { return }
             Task { await refreshInbox() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            viewModel.isForeground = (phase == .active)
+            if phase == .active, mode == .conversations { Task { await refreshInbox() } }
         }
         .overlay(alignment: .top) {
             if let message = viewModel.transientError {
@@ -87,7 +92,8 @@ struct MessagesView: View {
         guard KaiXBackend.token != nil else { return }
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(8))
-            guard !Task.isCancelled, mode == .conversations else { continue }
+            // Only poll the live conversation list while foregrounded.
+            guard !Task.isCancelled, mode == .conversations, viewModel.isForeground else { continue }
             await refreshInbox()
         }
     }
@@ -614,13 +620,14 @@ private struct MessageConversationCard: View {
                     }
 
                     if thread.unreadCount > 0 {
-                        Text("\(thread.unreadCount)")
+                        let unreadText = thread.unreadCount > 99 ? "99+" : "\(thread.unreadCount)"
+                        Text(unreadText)
                             .font(.caption2.weight(.black))
                             .foregroundStyle(.white)
                             .lineLimit(1)
                             .minimumScaleFactor(0.75)
                             .frame(minWidth: 20, minHeight: 20)
-                            .padding(.horizontal, thread.unreadCount > 9 ? 5 : 0)
+                            .padding(.horizontal, unreadText.count > 1 ? 5 : 0)
                             .background(KXColor.accent, in: Capsule())
                             .overlay(Capsule().stroke(Color.white.opacity(0.82), lineWidth: 1))
                             .shadow(color: KXColor.accent.opacity(0.18), radius: 4, y: 1.5)

@@ -83,6 +83,17 @@ struct DiscoverView: View {
         Array(sortedPosts.prefix(12))
     }
 
+    /// Pure-recency feed for the 正在发生 radar: the newest server happening
+    /// posts in the current region, freshest first. Deliberately NOT heat-ranked
+    /// — this answers "what's happening right now", which is a different product
+    /// from the 热榜 trend board (heat-ranked, server-owned).
+    private var happeningRadarPosts: [PostEntity] {
+        let source = viewModel.happeningPosts.isEmpty ? viewModel.hotPosts : viewModel.happeningPosts
+        let regional = source.filter { $0.matches(region: currentRegion) }
+        let base = regional.isEmpty ? source : regional
+        return Array(base.sorted { $0.createdAt > $1.createdAt }.prefix(20))
+    }
+
     private var recommendedUsers: [UserEntity] {
         var uniqueUsers: [String: UserEntity] = [:]
         for user in viewModel.suggestedUsers + Array(viewModel.authors.values) where user.id != currentUser.id {
@@ -178,10 +189,22 @@ struct DiscoverView: View {
                     DiscoverSegmentedTabs(selection: $selectedSegment)
                     switch selectedSegment {
                     case .recommend:
-                        contentListSection
+                        HappeningSection(
+                            region: currentRegion,
+                            posts: happeningRadarPosts,
+                            authors: viewModel.authors,
+                            language: language,
+                            onOpenPost: openPost,
+                            onRefresh: { Task { await load() } }
+                        )
                     case .ranking:
-                        DiscoverHotScopePicker(selection: $selectedHotScope, region: currentRegion)
-                        contentListSection
+                        // Server owns the ranking, the explainable reason, and the
+                        // scope/window switching — iOS never hand-rolls a board.
+                        HotBoardSection(
+                            region: currentRegion,
+                            language: language,
+                            onOpenTopic: { router.open(.topic(tag: $0)) }
+                        )
                     case .topics, .users:
                         contentListSection
                     }
@@ -1231,46 +1254,413 @@ private struct DiscoverSegmentedTabs: View {
     }
 }
 
-private struct DiscoverHotScopePicker: View {
-    @Environment(\.appLanguage) private var language
-    @Binding var selection: DiscoverHotScope
+// MARK: - 热榜 trend board (server-ranked topics)
+
+private enum HotBoardScope: String, CaseIterable, Identifiable {
+    case city, metro, national
+    var id: String { rawValue }
+    func label(_ language: AppLanguage) -> String {
+        switch self {
+        case .city: return language == .ja ? "市内" : language == .en ? "City" : "本市"
+        case .metro: return language == .ja ? "都市圏" : language == .en ? "Metro" : "都市圈"
+        case .national: return language == .ja ? "全国" : language == .en ? "National" : "全国"
+        }
+    }
+}
+
+private enum HotBoardWindow: String, CaseIterable, Identifiable {
+    case h2 = "2h", h24 = "24h", d7 = "7d"
+    var id: String { rawValue }
+    func label(_ language: AppLanguage) -> String {
+        switch self {
+        case .h2: return language == .ja ? "2時間" : language == .en ? "2h" : "2小时"
+        case .h24: return language == .ja ? "24時間" : language == .en ? "24h" : "24小时"
+        case .d7: return language == .ja ? "7日間" : language == .en ? "7d" : "7天"
+        }
+    }
+}
+
+/// Local trend board. Topics + ranking + the "why it's hot" reason all come
+/// from `GET /api/discover/hot` — iOS never hand-rolls a ranking. Scope
+/// (本市/都市圈/全国) and time window (2h/24h/7d) re-query the server.
+private struct HotBoardSection: View {
     let region: KaiXRegionDirectory.Region?
+    let language: AppLanguage
+    let onOpenTopic: (String) -> Void
+
+    @State private var scope: HotBoardScope = .city
+    @State private var window: HotBoardWindow = .h24
+    @State private var items: [KaiXDiscoverHotItemDTO] = []
+    @State private var isLoading = false
+    @State private var didFail = false
+
+    private var reloadKey: String { "\(scope.rawValue)|\(window.rawValue)|\(region?.regionCode ?? "")" }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "flame.fill")
-                    .foregroundStyle(KXColor.heat)
-                Text(L("hot", language))
-                    .font(.subheadline.weight(.bold))
-                Spacer()
-                Text(language == .ja ? "直近7日" : language == .en ? "Last 7 days" : "最近 7 天")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8)
-                    .frame(height: 22)
-                    .background(KXColor.softBackground, in: Capsule())
+        VStack(alignment: .leading, spacing: 12) {
+            switchers
+            content
+        }
+        .task(id: reloadKey) { await reload() }
+    }
+
+    private var switchers: some View {
+        VStack(spacing: 8) {
+            HotPillRow(ids: HotBoardScope.allCases.map(\.id),
+                       labels: HotBoardScope.allCases.map { $0.label(language) },
+                       selected: scope.id) { id in
+                if let next = HotBoardScope(rawValue: id) { withAnimation(.snappy(duration: 0.16)) { scope = next } }
             }
-            HStack(spacing: 8) {
-                ForEach(DiscoverHotScope.allCases) { scope in
-                    Button {
-                        withAnimation(.snappy(duration: 0.18)) {
-                            selection = scope
-                        }
-                    } label: {
-                        Text(scope.title(region: region, language: language))
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(selection == scope ? Color.white : .primary)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 36)
-                            .background(selection == scope ? KXColor.accent : KXColor.softBackground, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
+            HotPillRow(ids: HotBoardWindow.allCases.map(\.id),
+                       labels: HotBoardWindow.allCases.map { $0.label(language) },
+                       selected: window.id, compact: true) { id in
+                if let next = HotBoardWindow(rawValue: id) { withAnimation(.snappy(duration: 0.16)) { window = next } }
             }
         }
-        .padding(KXSpacing.md)
-        .kxGlassSurface(radius: KXRadius.lg, elevated: true)
+    }
+
+    @ViewBuilder private var content: some View {
+        if isLoading && items.isEmpty {
+            VStack(spacing: 0) {
+                ForEach(0..<5, id: \.self) { _ in HotBoardSkeletonRow() }
+            }
+            .kxGlassSurface(radius: KXRadius.lg, elevated: true)
+        } else if items.isEmpty {
+            DiscoverSoftEmptyRow(text: didFail
+                ? (language == .ja ? "読み込みに失敗しました。引っ張って再試行" : language == .en ? "Couldn't load. Pull to retry." : "热榜加载失败，下拉重试")
+                : (language == .ja ? "この範囲はまだ話題がありません" : language == .en ? "No trends in this range yet" : "当前范围暂无热榜内容"))
+                .kxGlassSurface(radius: KXRadius.lg, elevated: true)
+        } else {
+            VStack(spacing: 0) {
+                ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
+                    Button {
+                        let tag = item.routeID.isEmpty
+                            ? item.title.replacingOccurrences(of: "#", with: "")
+                            : item.routeID
+                        onOpenTopic(tag)
+                    } label: {
+                        HotBoardRow(item: item, language: language)
+                    }
+                    .buttonStyle(.plain)
+                    if idx != items.count - 1 {
+                        Divider().opacity(0.14).padding(.leading, 56)
+                    }
+                }
+            }
+            .kxGlassSurface(radius: KXRadius.lg, elevated: true)
+        }
+    }
+
+    @MainActor private func reload() async {
+        isLoading = true
+        didFail = false
+        do {
+            let resp = try await KaiXAPIClient.shared.discoverHot(
+                scope: scope.rawValue, window: window.rawValue, regionCode: region?.regionCode ?? "")
+            items = resp.items
+        } catch {
+            didFail = true
+            items = []
+        }
+        isLoading = false
+    }
+}
+
+private struct HotPillRow: View {
+    let ids: [String]
+    let labels: [String]
+    let selected: String
+    var compact: Bool = false
+    let onSelect: (String) -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(Array(zip(ids, labels)), id: \.0) { id, label in
+                let isOn = id == selected
+                Button { onSelect(id) } label: {
+                    Text(label)
+                        .font((compact ? Font.caption2 : Font.caption).weight(.bold))
+                        .foregroundStyle(isOn ? Color.white : .primary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: compact ? 30 : 36)
+                        .background(isOn ? KXColor.accent : KXColor.softBackground, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+private struct HotBoardRow: View {
+    let item: KaiXDiscoverHotItemDTO
+    let language: AppLanguage
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text("\(item.rank)")
+                .font(.title3.weight(.heavy))
+                .foregroundStyle(item.rank <= 3 ? KXColor.heat : Color.secondary)
+                .frame(width: 30, alignment: .center)
+                .monospacedDigit()
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.title)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    if !item.reason.isEmpty {
+                        Text(item.reason)
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(KXColor.heat)
+                            .lineLimit(1)
+                    }
+                    if !item.subtitle.isEmpty {
+                        Text(item.subtitle)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+            }
+            Spacer(minLength: 8)
+            VStack(alignment: .trailing, spacing: 2) {
+                Label("\(item.heatScore)", systemImage: "flame.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(KXColor.heat)
+                    .labelStyle(.titleAndIcon)
+                    .monospacedDigit()
+                trendBadge
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder private var trendBadge: some View {
+        switch item.trend {
+        case "up":
+            Image(systemName: "arrow.up.right")
+                .font(.caption2.weight(.heavy))
+                .foregroundStyle(.green)
+        case "down":
+            Image(systemName: "arrow.down.right")
+                .font(.caption2.weight(.heavy))
+                .foregroundStyle(.secondary)
+        default:
+            EmptyView()
+        }
+    }
+}
+
+private struct HotBoardSkeletonRow: View {
+    var body: some View {
+        HStack(spacing: 12) {
+            Circle().fill(KXColor.softBackground).frame(width: 22, height: 22)
+            VStack(alignment: .leading, spacing: 6) {
+                RoundedRectangle(cornerRadius: 4).fill(KXColor.softBackground).frame(width: 140, height: 12)
+                RoundedRectangle(cornerRadius: 4).fill(KXColor.softBackground).frame(width: 90, height: 9)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .redacted(reason: .placeholder)
+    }
+}
+
+// MARK: - 正在发生 city event radar (real-time, recency-first)
+
+/// The 正在发生 feed is a *city event radar*, not a ranking board: it answers
+/// "what's happening in my city right now" with the freshest server posts —
+/// new listings / questions / jobs / services — each shown as an event with a
+/// type icon, who/where, and a freshness chip. A live poll surfaces a
+/// "有 N 条新动态" banner when newer server items appear. This is intentionally
+/// a different product from the heat-ranked 热榜 (`HotBoardSection`).
+private struct HappeningSection: View {
+    let region: KaiXRegionDirectory.Region?
+    let posts: [PostEntity]
+    let authors: [String: UserEntity]
+    let language: AppLanguage
+    let onOpenPost: (PostEntity) -> Void
+    let onRefresh: () -> Void
+
+    @State private var liveNewCount = 0
+
+    private var pollKey: String { region?.regionCode ?? "all" }
+
+    private var regionTitle: String {
+        region.map { "\((KaiXRegionDirectory.localizedMetroName(for: $0, language: language) ?? $0.cityName))\(language == .ja ? "の最新" : language == .en ? " · Live" : "正在发生")" }
+            ?? (language == .ja ? "いま起きていること" : language == .en ? "Happening now" : "正在发生")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            header
+            if liveNewCount > 0 {
+                newContentBanner
+            }
+            content
+        }
+        .task(id: pollKey) { await pollLoop() }
+        .onChange(of: posts.map(\.id)) { _, _ in
+            // New data flowed in from the parent (refresh / region change) —
+            // the user is now looking at the latest, so clear the nudge.
+            liveNewCount = 0
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            HappeningLiveDot()
+            Text(regionTitle)
+                .font(.headline.weight(.bold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            if !posts.isEmpty {
+                Text(language == .ja ? "\(posts.count) 件" : language == .en ? "\(posts.count)" : "\(posts.count) 条")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+        }
+        .padding(.horizontal, 2)
+    }
+
+    private var newContentBanner: some View {
+        Button {
+            liveNewCount = 0
+            onRefresh()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.up.circle.fill")
+                Text(language == .ja ? "新着 \(liveNewCount) 件 · タップで更新"
+                     : language == .en ? "\(liveNewCount) new · tap to refresh"
+                     : "有 \(liveNewCount) 条新动态，点击刷新")
+                    .lineLimit(1)
+            }
+            .font(.caption.weight(.bold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 14)
+            .frame(height: 34)
+            .frame(maxWidth: .infinity)
+            .background(KXColor.accent, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
+
+    @ViewBuilder private var content: some View {
+        if posts.isEmpty {
+            DiscoverSoftEmptyRow(text: language == .ja ? "この都市圏ではまだ新しい動きがありません"
+                                 : language == .en ? "No fresh activity in this area yet"
+                                 : "当前都市圈暂无新动态")
+                .kxGlassSurface(radius: KXRadius.lg, elevated: true)
+        } else {
+            VStack(spacing: 0) {
+                ForEach(Array(posts.enumerated()), id: \.element.id) { idx, post in
+                    Button { onOpenPost(post) } label: {
+                        HappeningRadarRow(post: post, author: authors[post.authorId], language: language)
+                    }
+                    .buttonStyle(.plain)
+                    if idx != posts.count - 1 {
+                        Divider().opacity(0.12).padding(.leading, 60)
+                    }
+                }
+            }
+            .kxGlassSurface(radius: KXRadius.lg, elevated: true)
+        }
+    }
+
+    private func pollLoop() async {
+        guard KaiXBackend.token != nil else { return }
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(45))
+            guard !Task.isCancelled else { break }
+            guard let resp = try? await KaiXAPIClient.shared.exploreHappening(region: region, limit: 30) else { continue }
+            let current = Set(posts.map(\.id))
+            let newOnes = resp.orderedPosts.map(\.id).filter { !current.contains($0) }
+            await MainActor.run {
+                withAnimation(.snappy(duration: 0.2)) { liveNewCount = newOnes.count }
+            }
+        }
+    }
+}
+
+/// One city event on the radar: type icon · what happened · who/where · how
+/// fresh. Reads at a glance, distinct from the numbered heat board.
+private struct HappeningRadarRow: View {
+    let post: PostEntity
+    let author: UserEntity?
+    let language: AppLanguage
+
+    var body: some View {
+        let spec = post.contentType.spec
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: spec.icon)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(spec.tint)
+                .frame(width: 38, height: 38)
+                .background(spec.tint.opacity(0.12), in: Circle())
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(post.discoverTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                HStack(spacing: 5) {
+                    Text(L(spec.titleKey, language))
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(spec.tint)
+                    Text("·").foregroundStyle(.secondary)
+                    Text(subtitle)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .font(.caption2)
+            }
+
+            Spacer(minLength: 6)
+
+            Text(DateFormatterUtils.relativeText(from: post.createdAt, language: language))
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .fixedSize()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .contentShape(Rectangle())
+    }
+
+    private var subtitle: String {
+        let who = author?.displayName ?? ""
+        let location = post.discoverLocationLabel
+        return [who, location].filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+}
+
+/// Small breathing dot that signals the radar is live (real-time).
+private struct HappeningLiveDot: View {
+    @State private var animate = false
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color.green.opacity(0.28))
+                .frame(width: 16, height: 16)
+                .scaleEffect(animate ? 1.0 : 0.5)
+                .opacity(animate ? 0 : 0.9)
+            Circle()
+                .fill(Color.green)
+                .frame(width: 8, height: 8)
+        }
+        .onAppear {
+            withAnimation(.easeOut(duration: 1.4).repeatForever(autoreverses: false)) {
+                animate = true
+            }
+        }
     }
 }
 

@@ -803,6 +803,18 @@ final class KaiXAPIClient {
         return try decode(data)
     }
 
+    /// Local trend board (热榜). Server owns the ranking + reason.
+    /// - scope: "city" | "metro" | "national"; window: "2h" | "24h" | "7d".
+    func discoverHot(scope: String, window: String, regionCode: String) async throws -> KaiXDiscoverHotResponse {
+        var items = [
+            URLQueryItem(name: "scope", value: scope),
+            URLQueryItem(name: "window", value: window),
+        ]
+        if !regionCode.isEmpty { items.append(URLQueryItem(name: "region_code", value: regionCode)) }
+        let data = try await request("GET", "/api/discover/hot", queryItems: items)
+        return try decode(data)
+    }
+
     func businessProfile() async throws -> KaiXBusinessProfileResponse {
         let data = try await request("GET", "/api/business/profile")
         return try decode(data)
@@ -1652,9 +1664,15 @@ final class KaiXAPIClient {
         return try decode(data)
     }
 
-    func markNotificationsRead(ids: [String]? = nil, all: Bool = false, isRead: Bool = true) async throws {
+    /// Returns the server's authoritative `unread_count` after the change so the
+    /// caller can calibrate the badge (instead of trusting a local count that can
+    /// drift from Web / from notifications that arrived mid-action).
+    @discardableResult
+    func markNotificationsRead(ids: [String]? = nil, all: Bool = false, isRead: Bool = true) async throws -> Int? {
         struct Body: Encodable { let ids: [String]?; let all: Bool; let is_read: Bool }
-        _ = try await request("POST", "/api/notifications/read", body: Body(ids: ids, all: all, is_read: isRead))
+        struct Resp: Decodable { let unread_count: Int? }
+        let data = try await request("POST", "/api/notifications/read", body: Body(ids: ids, all: all, is_read: isRead))
+        return (try? decode(data) as Resp)?.unread_count
     }
 
     func deleteNotification(_ id: String) async throws {

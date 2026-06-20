@@ -115,6 +115,7 @@ struct ChatView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var chrome: AppChromeState
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var messageStore: MessageStore
@@ -122,6 +123,11 @@ struct ChatView: View {
     @State private var pickerItems: [PhotosPickerItem] = []
     @State private var isShowingDeleteThreadConfirm = false
     @State private var actionMessage: String?
+    /// Unread count captured when the chat opens, before we mark it read — used
+    /// to place the "以下是新消息" divider above the first message that arrived
+    /// since the user last looked at this thread.
+    @State private var unreadAtOpen = 0
+    @State private var didCaptureUnread = false
 
     let thread: MessageThreadEntity
     let currentUser: UserEntity
@@ -172,8 +178,20 @@ struct ChatView: View {
             }
         }
         .task(id: thread.id) {
+            if !didCaptureUnread {
+                unreadAtOpen = messageStore.conversationsById[thread.id]?.unreadCount ?? thread.unreadCount
+                didCaptureUnread = true
+            }
             await loadAndMarkRead()
             await pollMessagesLoop()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            viewModel.isForeground = (phase == .active)
+            // Coming back to the foreground: pull once immediately instead of
+            // waiting up to 3s for the next poll tick.
+            if phase == .active, KaiXBackend.token != nil, !viewModel.hasActiveFilters {
+                Task { await loadAndMarkRead() }
+            }
         }
         .onChange(of: messageStore.conversationsById[thread.id]?.lastMessageAt) { _, _ in
             guard !viewModel.hasActiveFilters else { return }
@@ -229,7 +247,10 @@ struct ChatView: View {
         guard KaiXBackend.token != nil else { return }
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(3))
-            guard !Task.isCancelled, !viewModel.hasActiveFilters else { continue }
+            // Skip the network round-trip while backgrounded, while the user is
+            // filtering (search/date), or mid-send — polling during a send can
+            // momentarily clobber the optimistic pending bubble.
+            guard !Task.isCancelled, !viewModel.hasActiveFilters, viewModel.isForeground, !viewModel.isSending else { continue }
             await loadAndMarkRead()
         }
     }
@@ -330,25 +351,32 @@ struct ChatView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 8) {
-                    ForEach(viewModel.messages) { message in
-                        KXMessageBubble(
-                            message: message,
-                            mediaItems: viewModel.mediaByMessageId[message.id] ?? [],
-                            isMine: message.senderId == currentUser.id,
-                            peer: peer,
-                            onDelete: {
-                                Task { await viewModel.deleteMessage(context: modelContext, thread: thread, message: message, messageStore: messageStore) }
-                            },
-                            onRetry: {
-                                Task { await viewModel.retryMessage(context: modelContext, thread: thread, message: message, messageStore: messageStore) }
-                            },
-                            onOpenPeer: {
-                                if let peer {
-                                    router.open(.profile(userId: peer.id))
+                    ForEach(timelineItems) { item in
+                        switch item.kind {
+                        case .day(let date):
+                            ChatDaySeparator(date: date, language: language)
+                        case .newDivider:
+                            ChatNewMessagesDivider(language: language)
+                        case .message(let message):
+                            KXMessageBubble(
+                                message: message,
+                                mediaItems: viewModel.mediaByMessageId[message.id] ?? [],
+                                isMine: message.senderId == currentUser.id,
+                                peer: peer,
+                                onDelete: {
+                                    Task { await viewModel.deleteMessage(context: modelContext, thread: thread, message: message, messageStore: messageStore) }
+                                },
+                                onRetry: {
+                                    Task { await viewModel.retryMessage(context: modelContext, thread: thread, message: message, messageStore: messageStore) }
+                                },
+                                onOpenPeer: {
+                                    if let peer {
+                                        router.open(.profile(userId: peer.id))
+                                    }
                                 }
-                            }
-                        )
-                        .id(message.id)
+                            )
+                            .id(message.id)
+                        }
                     }
                     Color.clear
                         .frame(height: viewModel.mediaDrafts.isEmpty ? 92 : 176)
@@ -399,6 +427,39 @@ struct ChatView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
             action()
         }
+    }
+
+    /// First message that arrived since the user last read this thread, used to
+    /// anchor the "以下是新消息" divider. The unread count captured at open
+    /// points at the tail of the timeline; we only show the divider when that
+    /// message is from the peer (you never get a "new" banner for your own).
+    private var newMessageAnchorId: String? {
+        guard unreadAtOpen > 0, viewModel.messages.count >= unreadAtOpen else { return nil }
+        let candidate = viewModel.messages[viewModel.messages.count - unreadAtOpen]
+        guard candidate.senderId != currentUser.id else { return nil }
+        return candidate.id
+    }
+
+    /// Flattens the message array into a render list with day separators and
+    /// the new-message divider interleaved. Computed once per body pass; cheap
+    /// (a single linear walk, no per-row work in the bubble itself).
+    private var timelineItems: [ChatTimelineItem] {
+        var result: [ChatTimelineItem] = []
+        let calendar = Calendar.current
+        var lastDay: Date?
+        let anchor = newMessageAnchorId
+        for message in viewModel.messages {
+            let day = calendar.startOfDay(for: message.createdAt)
+            if lastDay != day {
+                result.append(ChatTimelineItem(kind: .day(day)))
+                lastDay = day
+            }
+            if let anchor, message.id == anchor {
+                result.append(ChatTimelineItem(kind: .newDivider))
+            }
+            result.append(ChatTimelineItem(kind: .message(message)))
+        }
+        return result
     }
 
     @ViewBuilder
@@ -546,6 +607,13 @@ struct KXMessageBubble: View {
     let onRetry: () -> Void
     let onOpenPeer: () -> Void
 
+    /// Cap long text bubbles at ~74% of the screen so they read like chat
+    /// bubbles and never run edge-to-edge.
+    private var bubbleMaxWidth: CGFloat { UIScreen.main.bounds.width * 0.74 }
+
+    private var retryLabel: String { language == .ja ? "再送信" : language == .en ? "Retry" : "点击重试" }
+    private var sendingLabel: String { language == .ja ? "送信中…" : language == .en ? "Sending…" : "发送中…" }
+
     var body: some View {
         let contentType = message.resolvedType(mediaItems: mediaItems)
 
@@ -607,16 +675,33 @@ struct KXMessageBubble: View {
                                 .stroke(isMine ? Color.clear : KXColor.separator, lineWidth: 0.6)
                         )
                         .shadow(color: isMine ? Color.clear : KXColor.glassShadow.opacity(0.65), radius: 5, y: 2)
+                        .frame(maxWidth: bubbleMaxWidth, alignment: isMine ? .trailing : .leading)
+                        .textSelection(.enabled)
                 }
 
                 HStack(spacing: 5) {
                     Text(DateFormatterUtils.relativeText(from: message.createdAt, language: language))
+                        .foregroundStyle(.secondary)
                     if isMine {
-                        Text(message.status == .failed ? L("sendFailed", language) : L("sent", language))
+                        switch message.status {
+                        case .failed:
+                            Button(action: onRetry) {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "exclamationmark.circle.fill")
+                                    Text(L("sendFailed", language))
+                                    Text(retryLabel).underline()
+                                }
+                                .foregroundStyle(.red)
+                            }
+                            .buttonStyle(.plain)
+                        case .sending:
+                            Text(sendingLabel).foregroundStyle(.secondary)
+                        default:
+                            Text(L("sent", language)).foregroundStyle(.secondary)
+                        }
                     }
                 }
                 .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
                 .padding(.horizontal, 4)
             }
 
@@ -639,23 +724,61 @@ private struct ChatInputBar: View {
     let canSend: Bool
     let send: () -> Void
 
+    @State private var isShowingAttachTray = false
+
     var body: some View {
         let hasVideo = mediaDrafts.contains { $0.type == .video }
         let imageCount = mediaDrafts.filter { $0.type == .image }.count
         let remainingImageSlots = Swift.max(1, KaiXConfig.maxImageItemsPerPost - imageCount)
-        HStack(alignment: .bottom, spacing: 9) {
-            HStack(spacing: 5) {
-                PhotosPicker(selection: $pickerItems, maxSelectionCount: remainingImageSlots, matching: .images) {
-                    ChatInputToolIcon(systemImage: "photo", disabled: hasVideo || imageCount >= KaiXConfig.maxImageItemsPerPost)
-                }
-                .disabled(hasVideo || imageCount >= KaiXConfig.maxImageItemsPerPost)
+        let imageDisabled = hasVideo || imageCount >= KaiXConfig.maxImageItemsPerPost
+        let videoDisabled = !mediaDrafts.isEmpty
 
-                PhotosPicker(selection: $pickerItems, maxSelectionCount: KaiXConfig.maxVideoItemsPerPost, matching: .videos) {
-                    ChatInputToolIcon(systemImage: "video", disabled: !mediaDrafts.isEmpty)
-                }
-                .disabled(!mediaDrafts.isEmpty)
+        VStack(spacing: 9) {
+            if isShowingAttachTray {
+                attachTray(remainingImageSlots: remainingImageSlots, imageDisabled: imageDisabled, videoDisabled: videoDisabled)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            .frame(height: 42)
+            inputRow
+        }
+        .onChange(of: mediaDrafts.count) { _, count in
+            // A draft landed — collapse the tray so the preview/composer is clean.
+            if count > 0, isShowingAttachTray {
+                withAnimation(.snappy(duration: 0.18)) { isShowingAttachTray = false }
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.top, 7)
+        .padding(.bottom, 8)
+        .background {
+            Rectangle()
+                .fill(KXColor.pageBackground.opacity(0.72))
+                .background(.ultraThinMaterial)
+                .ignoresSafeArea(edges: .bottom)
+        }
+        .overlay(alignment: .top) {
+            LinearGradient(
+                colors: [KXColor.separator.opacity(0.38), .clear],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 1)
+        }
+    }
+
+    private var inputRow: some View {
+        HStack(alignment: .bottom, spacing: 9) {
+            Button {
+                withAnimation(.snappy(duration: 0.2)) { isShowingAttachTray.toggle() }
+            } label: {
+                Image(systemName: "plus")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(KXColor.accent)
+                    .rotationEffect(.degrees(isShowingAttachTray ? 45 : 0))
+                    .frame(width: 38, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(language == .ja ? "メディアを追加" : language == .en ? "Add media" : "添加媒体")
 
             TextField(L("messagePlaceholder", language), text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
@@ -679,27 +802,7 @@ private struct ChatInputBar: View {
                         .stroke(KXColor.separator.opacity(0.24), lineWidth: 0.7)
                 )
 
-            Button {
-                guard canSend, !isSending else { return }
-                send()
-            } label: {
-                if isSending {
-                    KXSpinner(size: 18, lineWidth: 2.2, tint: canSend ? .white : KXColor.accent)
-                } else {
-                    Image(systemName: "paperplane.fill")
-                        .font(.subheadline.weight(.bold))
-                }
-            }
-            .frame(width: 44, height: 44)
-            .foregroundStyle(canSend ? .white : KXColor.accent.opacity(0.38))
-            .background {
-                Circle()
-                    .fill(canSend ? KXColor.accent : KXColor.accent.opacity(0.08))
-            }
-            .clipShape(Circle())
-            .overlay(Circle().stroke(canSend ? Color.clear : KXColor.accent.opacity(0.12), lineWidth: 0.8))
-            .shadow(color: canSend ? KXColor.accent.opacity(0.18) : .clear, radius: 10, y: 4)
-            .disabled(!canSend || isSending)
+            sendButton
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 8)
@@ -713,28 +816,167 @@ private struct ChatInputBar: View {
                 )
                 .shadow(color: KXColor.glassShadow.opacity(0.34), radius: 16, y: 7)
         }
-        .padding(.horizontal, 10)
-        .padding(.top, 7)
-        .padding(.bottom, 8)
-        .background {
-            Rectangle()
-                .fill(KXColor.pageBackground.opacity(0.72))
-                .background(.ultraThinMaterial)
-                .ignoresSafeArea(edges: .bottom)
+    }
+
+    private var sendButton: some View {
+        Button {
+            guard canSend, !isSending else { return }
+            send()
+        } label: {
+            if isSending {
+                KXSpinner(size: 18, lineWidth: 2.2, tint: canSend ? .white : KXColor.accent)
+            } else {
+                Image(systemName: "paperplane.fill")
+                    .font(.subheadline.weight(.bold))
+            }
         }
-        .overlay(alignment: .top) {
-            LinearGradient(
-                colors: [KXColor.separator.opacity(0.38), .clear],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 1)
+        .frame(width: 44, height: 44)
+        .foregroundStyle(canSend ? .white : KXColor.accent.opacity(0.38))
+        .background {
+            Circle()
+                .fill(canSend ? KXColor.accent : KXColor.accent.opacity(0.08))
+        }
+        .clipShape(Circle())
+        .overlay(Circle().stroke(canSend ? Color.clear : KXColor.accent.opacity(0.12), lineWidth: 0.8))
+        .shadow(color: canSend ? KXColor.accent.opacity(0.18) : .clear, radius: 10, y: 4)
+        .disabled(!canSend || isSending)
+    }
+
+    private func attachTray(remainingImageSlots: Int, imageDisabled: Bool, videoDisabled: Bool) -> some View {
+        HStack(spacing: 12) {
+            PhotosPicker(selection: $pickerItems, maxSelectionCount: remainingImageSlots, matching: .images) {
+                ChatAttachTile(
+                    icon: "photo.fill",
+                    title: language == .ja ? "写真" : language == .en ? "Photo" : "照片",
+                    disabled: imageDisabled
+                )
+            }
+            .disabled(imageDisabled)
+
+            PhotosPicker(selection: $pickerItems, maxSelectionCount: KaiXConfig.maxVideoItemsPerPost, matching: .videos) {
+                ChatAttachTile(
+                    icon: "video.fill",
+                    title: language == .ja ? "動画" : language == .en ? "Video" : "视频",
+                    disabled: videoDisabled
+                )
+            }
+            .disabled(videoDisabled)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 8)
+        .padding(.top, 2)
+    }
+}
+
+/// One tile in the composer's "+" attachment tray (照片 / 视频).
+private struct ChatAttachTile: View {
+    let icon: String
+    let title: String
+    let disabled: Bool
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(disabled ? KXColor.livingMuted.opacity(0.5) : KXColor.accent)
+                .frame(width: 54, height: 54)
+                .background(
+                    RoundedRectangle(cornerRadius: 17, style: .continuous)
+                        .fill(disabled ? KXColor.softBackground.opacity(0.4) : KXColor.accent.opacity(0.1))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 17, style: .continuous)
+                        .stroke(KXColor.separator.opacity(0.2), lineWidth: 0.7)
+                )
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(disabled ? .secondary : .primary)
         }
     }
 }
 
 private enum ChatBottomAnchor {
     static let id = "chat-bottom-anchor"
+}
+
+/// One row in the rendered chat timeline: a day separator, the new-message
+/// divider, or an actual message bubble.
+private struct ChatTimelineItem: Identifiable {
+    enum Kind {
+        case day(Date)
+        case newDivider
+        case message(MessageEntity)
+    }
+
+    let kind: Kind
+
+    var id: String {
+        switch kind {
+        case .day(let date): return "day-\(Int(date.timeIntervalSince1970))"
+        case .newDivider: return "new-divider"
+        case .message(let message): return "msg-\(message.id)"
+        }
+    }
+}
+
+/// Centered date pill (今天 / 昨天 / 6月20日) shown above each day's first
+/// message — the WeChat-style time grouping.
+private struct ChatDaySeparator: View {
+    let date: Date
+    let language: AppLanguage
+
+    var body: some View {
+        Text(Self.label(date, language))
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 4)
+            .background(KXColor.softBackground.opacity(0.9), in: Capsule())
+            .frame(maxWidth: .infinity)
+            .padding(.top, 6)
+            .padding(.bottom, 2)
+    }
+
+    static func label(_ date: Date, _ language: AppLanguage) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) {
+            return language == .ja ? "今日" : language == .en ? "Today" : "今天"
+        }
+        if calendar.isDateInYesterday(date) {
+            return language == .ja ? "昨日" : language == .en ? "Yesterday" : "昨天"
+        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: language == .ja ? "ja_JP" : language == .en ? "en_US" : "zh_CN")
+        let sameYear = calendar.isDate(date, equalTo: .now, toGranularity: .year)
+        let template = language == .en ? (sameYear ? "MMMd" : "yMMMd") : (sameYear ? "Md" : "yMd")
+        formatter.setLocalizedDateFormatFromTemplate(template)
+        return formatter.string(from: date)
+    }
+}
+
+/// "以下是新消息" divider above the first message received since last read.
+private struct ChatNewMessagesDivider: View {
+    let language: AppLanguage
+
+    var body: some View {
+        HStack(spacing: 8) {
+            line
+            Text(language == .ja ? "ここから新着メッセージ" : language == .en ? "New messages" : "以下是新消息")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(KXColor.accent)
+                .fixedSize()
+            line
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+    }
+
+    private var line: some View {
+        Rectangle()
+            .fill(KXColor.accent.opacity(0.28))
+            .frame(height: 1)
+    }
 }
 
 /// Determinate ring shown over a draft thumbnail while its media streams to
@@ -762,20 +1004,3 @@ private struct ChatUploadProgressRing: View {
     }
 }
 
-private struct ChatInputToolIcon: View {
-    let systemImage: String
-    let disabled: Bool
-
-    var body: some View {
-        Image(systemName: systemImage)
-            .font(.subheadline.weight(.bold))
-            .foregroundStyle(disabled ? KXColor.livingMuted.opacity(0.42) : KXColor.accent)
-            .frame(width: 34, height: 38)
-            .background {
-                Circle()
-                    .fill(disabled ? KXColor.softBackground.opacity(0.28) : KXColor.accent.opacity(0.09))
-            }
-            .overlay(Circle().stroke(KXColor.separator.opacity(disabled ? 0.10 : 0.18), lineWidth: 0.7))
-            .contentShape(Circle())
-    }
-}

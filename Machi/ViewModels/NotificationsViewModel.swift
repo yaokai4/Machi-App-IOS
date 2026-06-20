@@ -74,11 +74,15 @@ final class NotificationsViewModel: ObservableObject {
         notificationStore?.setNotifications(notifications)
         notificationStore?.setUnreadCount(0)
         do {
+            let serverUnread: Int?
             if KaiXBackend.token != nil {
-                try await KaiXAPIClient.shared.markNotificationsRead(all: true)
+                serverUnread = try await KaiXAPIClient.shared.markNotificationsRead(all: true)
             } else {
-                try await NotificationRepository(context: context).markAllRead()
+                serverUnread = try await NotificationRepository(context: context).markAllRead()
             }
+            // Calibrate to the server's authoritative count (it may be > 0 if a
+            // new notification landed between the fetch and this action).
+            if let serverUnread { notificationStore?.setUnreadCount(serverUnread) }
         } catch {
             previous.forEach { $0.0.isRead = $0.1 }
             rebuildGroupedNotifications()
@@ -93,7 +97,9 @@ final class NotificationsViewModel: ObservableObject {
         rebuildGroupedNotifications()
         notificationStore?.setNotifications(notifications)
         do {
-            try await NotificationRepository(context: context).markRead(notification)
+            let serverUnread = try await NotificationRepository(context: context).markRead(notification)
+            notificationStore?.setNotifications(notifications)
+            if let serverUnread { notificationStore?.setUnreadCount(serverUnread) }
         } catch {
             notification.isRead = previous
             rebuildGroupedNotifications()
@@ -108,7 +114,9 @@ final class NotificationsViewModel: ObservableObject {
         rebuildGroupedNotifications()
         notificationStore?.setNotifications(notifications)
         do {
-            try await NotificationRepository(context: context).markRead(aggregate.notifications)
+            let serverUnread = try await NotificationRepository(context: context).markRead(aggregate.notifications)
+            notificationStore?.setNotifications(notifications)
+            if let serverUnread { notificationStore?.setUnreadCount(serverUnread) }
         } catch {
             previous.forEach { $0.0.isRead = $0.1 }
             rebuildGroupedNotifications()
@@ -124,11 +132,14 @@ final class NotificationsViewModel: ObservableObject {
         rebuildGroupedNotifications()
         notificationStore?.setNotifications(notifications)
         do {
+            let serverUnread: Int?
             if shouldMarkRead {
-                try await NotificationRepository(context: context).markRead(aggregate.notifications)
+                serverUnread = try await NotificationRepository(context: context).markRead(aggregate.notifications)
             } else {
-                try await NotificationRepository(context: context).markUnread(aggregate.notifications)
+                serverUnread = try await NotificationRepository(context: context).markUnread(aggregate.notifications)
             }
+            notificationStore?.setNotifications(notifications)
+            if let serverUnread { notificationStore?.setUnreadCount(serverUnread) }
         } catch {
             previous.forEach { $0.0.isRead = $0.1 }
             rebuildGroupedNotifications()
