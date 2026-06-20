@@ -269,9 +269,6 @@ struct KXSegmentedControl<Item: Hashable, Label: View>: View {
     var itemMinWidth: CGFloat
     var itemHeight: CGFloat
     let label: (Item) -> Label
-    /// Shared id so the selected capsule slides between segments instead of
-    /// fading out/in on each side.
-    @Namespace private var indicatorNamespace
 
     init(
         _ items: [Item],
@@ -308,8 +305,16 @@ struct KXSegmentedControl<Item: Hashable, Label: View>: View {
                         .padding(.horizontal, KXSpacing.xs)
                         .background {
                             if selection == item {
+                                // Was matchedGeometryEffect(id:) to slide the indicator between
+                                // segments. That cross-view geometry preference (PairPreference
+                                // Combiner) could recurse when this control sits inside a
+                                // ScrollView during a NavigationStack push transition, overflowing
+                                // the main-thread stack (SystemScrollView layout SIGSEGV seen on
+                                // TestFlight 1.3). A plain conditional background cross-fades under
+                                // the existing withAnimation — no cross-view preference, no
+                                // layout-recursion risk.
                                 KXSelectedSegmentBackground()
-                                    .matchedGeometryEffect(id: "kx-segment-indicator", in: indicatorNamespace)
+                                    .transition(.opacity)
                             }
                         }
                         .contentShape(Capsule())
