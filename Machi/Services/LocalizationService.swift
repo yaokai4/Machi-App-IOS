@@ -641,6 +641,7 @@ struct LocalizationService {
         "repostNotifications": [.zh: "转发通知", .ja: "リポスト通知", .en: "Repost notifications"],
         "followNotifications": [.zh: "关注通知", .ja: "フォロー通知", .en: "Follow notifications"],
         "messageNotifications": [.zh: "私信通知", .ja: "メッセージ通知", .en: "Message notifications"],
+        "inquiryNotifications": [.zh: "申请/预约/线索通知", .ja: "応募・予約・問い合わせ通知", .en: "Application & booking notifications"],
         "systemNotifications": [.zh: "系统通知", .ja: "システム通知", .en: "System notifications"],
         "profileVisibility": [.zh: "主页可见范围", .ja: "プロフィール公開範囲", .en: "Profile visibility"],
         "followersOnly": [.zh: "仅关注者", .ja: "フォロワーのみ", .en: "Followers only"],

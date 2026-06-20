@@ -1566,6 +1566,7 @@ struct NotificationPreferencesView: View {
     @State private var notifyReposts = true
     @State private var notifyFollows = true
     @State private var notifyMessages = true
+    @State private var notifyInquiries = true
     @State private var notifySystem = true
     @State private var systemPermissionDenied = false
     let currentUser: UserEntity
@@ -1590,6 +1591,7 @@ struct NotificationPreferencesView: View {
             Toggle(L("repostNotifications", language), isOn: preferenceBinding(.repost, $notifyReposts, serverKey: nil))
             Toggle(L("followNotifications", language), isOn: preferenceBinding(.follow, $notifyFollows, serverKey: "push_follows"))
             Toggle(L("messageNotifications", language), isOn: messagePreferenceBinding)
+            Toggle(L("inquiryNotifications", language), isOn: inquiryPreferenceBinding)
             Toggle(L("systemNotifications", language), isOn: preferenceBinding(.system, $notifySystem, serverKey: nil))
         }
         .onAppear {
@@ -1599,6 +1601,7 @@ struct NotificationPreferencesView: View {
             notifyFollows = NotificationPreferenceService.isEnabled(.follow, recipientUserId: currentUser.id)
             notifySystem = NotificationPreferenceService.isEnabled(.system, recipientUserId: currentUser.id)
             notifyMessages = UserDefaults.standard.object(forKey: messagePreferenceKey) as? Bool ?? true
+            notifyInquiries = UserDefaults.standard.object(forKey: inquiryPreferenceKey) as? Bool ?? true
         }
         .task {
             let settings = await UNUserNotificationCenter.current().notificationSettings()
@@ -1615,6 +1618,8 @@ struct NotificationPreferencesView: View {
             NotificationPreferenceService.setEnabled(remote.push_comments, type: .comment, recipientUserId: currentUser.id)
             NotificationPreferenceService.setEnabled(remote.push_follows, type: .follow, recipientUserId: currentUser.id)
             UserDefaults.standard.set(remote.push_messages, forKey: messagePreferenceKey)
+            notifyInquiries = remote.push_inquiries ?? true
+            UserDefaults.standard.set(remote.push_inquiries ?? true, forKey: inquiryPreferenceKey)
         }
     }
 
@@ -1644,6 +1649,25 @@ struct NotificationPreferencesView: View {
             UserDefaults.standard.set(value, forKey: messagePreferenceKey)
             if KaiXBackend.token != nil {
                 Task.detached { _ = try? await KaiXAPIClient.shared.updateSettings(["push_messages": AnyEncodable(value)]) }
+            }
+        }
+    }
+
+    // 申请/预约/线索 push category (listing inquiries, applications, bookings,
+    // review results). Server-backed via push_inquiries; the APNs dispatcher
+    // skips these pushes when off.
+    private var inquiryPreferenceKey: String {
+        "notification.\(currentUser.id).inquiries"
+    }
+
+    private var inquiryPreferenceBinding: Binding<Bool> {
+        Binding {
+            notifyInquiries
+        } set: { value in
+            notifyInquiries = value
+            UserDefaults.standard.set(value, forKey: inquiryPreferenceKey)
+            if KaiXBackend.token != nil {
+                Task.detached { _ = try? await KaiXAPIClient.shared.updateSettings(["push_inquiries": AnyEncodable(value)]) }
             }
         }
     }

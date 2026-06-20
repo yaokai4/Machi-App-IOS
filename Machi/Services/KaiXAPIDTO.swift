@@ -1283,6 +1283,7 @@ struct KaiXSettingsDTO: Codable, Equatable {
     let push_comments: Bool
     let push_follows: Bool
     let push_messages: Bool
+    let push_inquiries: Bool?   // optional: tolerates servers that predate this field
     let privacy_protect: Bool
     let privacy_allow_dm: String
     let recommend_following: Bool
