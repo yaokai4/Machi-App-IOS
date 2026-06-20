@@ -116,22 +116,8 @@ final class MessageRepository {
         if KaiXBackend.token != nil {
             var attachmentIds: [String] = []
             for draft in mediaDrafts {
-                let data = try await Task.detached(priority: .utility, operation: {
-                    try Data(contentsOf: draft.localURL)
-                }).value
-                let purpose = draft.type == .video ? "message_video" : "message_image"
-                let uploaded = try await KaiXAPIClient.shared.uploadFile(
-                    data: data,
-                    mime: draft.contentType,
-                    fileName: draft.fileName,
-                    purpose: purpose,
-                    entityType: "message",
-                    threadId: thread.id,
-                    width: Int(draft.width.rounded()),
-                    height: Int(draft.height.rounded()),
-                    duration: draft.duration
-                )
-                attachmentIds.append(uploaded.file.id)
+                let fileId = try await Self.uploadMessageAttachment(draft, threadId: thread.id)
+                attachmentIds.append(fileId)
             }
             let dto = try await KaiXAPIClient.shared.sendMessage(thread.id, content: trimmed, attachmentIds: attachmentIds)
             let mappedMedia = await Self.resolvedMediaItems(from: dto)
@@ -176,6 +162,51 @@ final class MessageRepository {
         message.status = .sent
         try context.save()
         return message
+    }
+
+    private static func uploadMessageAttachment(_ draft: MediaDraft, threadId: String) async throws -> String {
+        let metadata: [String: String]?
+        if draft.type == .video {
+            let thumbnailData = try await loadFileData(at: draft.thumbnailURL)
+            let cover = try await KaiXAPIClient.shared.uploadFile(
+                data: thumbnailData,
+                mime: "image/jpeg",
+                fileName: "\(draft.id)-cover.jpg",
+                purpose: "video_thumbnail",
+                entityType: "message",
+                threadId: threadId,
+                width: Int(draft.width.rounded()),
+                height: Int(draft.height.rounded())
+            )
+            metadata = [
+                "thumbnailFileId": cover.file.id,
+                "posterFileId": cover.file.id
+            ]
+        } else {
+            metadata = nil
+        }
+
+        let data = try await loadFileData(at: draft.localURL)
+        let purpose = draft.type == .video ? "message_video" : "message_image"
+        let uploaded = try await KaiXAPIClient.shared.uploadFile(
+            data: data,
+            mime: draft.contentType,
+            fileName: draft.fileName,
+            purpose: purpose,
+            entityType: "message",
+            threadId: threadId,
+            width: Int(draft.width.rounded()),
+            height: Int(draft.height.rounded()),
+            duration: draft.duration,
+            metadata: metadata
+        )
+        return uploaded.file.id
+    }
+
+    private static func loadFileData(at url: URL) async throws -> Data {
+        try await Task.detached(priority: .utility) {
+            try Data(contentsOf: url)
+        }.value
     }
 
     func markThreadRead(_ thread: MessageThreadEntity) async throws {
@@ -345,7 +376,8 @@ final class MessageRepository {
         }
         let attachments = (dto.attachments ?? []).map { att -> MediaEntity in
             let rawType = (att.attachment_type ?? att.type).lowercased()
-            let mediaType: MediaType = rawType == "video" ? .video : .image
+            let mimeType = (att.content_type ?? att.contentType ?? att.mime ?? "").lowercased()
+            let mediaType: MediaType = rawType == "video" || mimeType.hasPrefix("video/") ? .video : .image
             let signedSource = signedAttachmentURLs[att.id] ?? ""
             let publicSource = att.publicUrl ?? att.cdnUrl ?? att.url ?? ""
             let source = signedSource.isEmpty ? publicSource : signedSource
