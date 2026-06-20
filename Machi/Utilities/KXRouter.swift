@@ -72,6 +72,21 @@ final class AppRouter: ObservableObject {
         setPath([], for: tab)
     }
 
+    @discardableResult
+    func replaceTop(with route: KXRoute, in tab: AppTab? = nil) -> Bool {
+        guard let normalizedRoute = route.normalized else {
+            let language = AppLanguage.resolved(from: UserDefaults.standard.string(forKey: "appLanguageCode") ?? AppLanguage.system.rawValue)
+            routeErrorMessage = L("routeUnavailable", language)
+            return false
+        }
+        let targetTab = tab ?? activeTab
+        var nextPath = path(for: targetTab)
+        guard !nextPath.isEmpty else { return false }
+        nextPath[nextPath.count - 1] = normalizedRoute
+        setPath(nextPath, for: targetTab)
+        return true
+    }
+
     func resetAll() {
         homePath = []
         searchPath = []

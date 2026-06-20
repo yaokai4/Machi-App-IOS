@@ -4731,17 +4731,20 @@ struct CreateCityListingView: View {
     let citySlug: String?
     let currentUser: UserEntity
     let existingListing: KaiXCityListingDTO?
+    let onPublishedListing: ((String) -> Void)?
 
     init(
         listingType: String,
         citySlug: String?,
         currentUser: UserEntity,
-        existingListing: KaiXCityListingDTO? = nil
+        existingListing: KaiXCityListingDTO? = nil,
+        onPublishedListing: ((String) -> Void)? = nil
     ) {
         self.listingType = listingType
         self.citySlug = citySlug
         self.currentUser = currentUser
         self.existingListing = existingListing
+        self.onPublishedListing = onPublishedListing
     }
 
     @State private var title = ""
@@ -6002,10 +6005,8 @@ struct CreateCityListingView: View {
                 : (published ? "发布成功，已同步到三端。" : "已提交审核，可在详情页查看审核状态。")
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             isSubmitting = false
-            try? await Task.sleep(for: .milliseconds(550))
-            dismiss()
-            try? await Task.sleep(for: .milliseconds(140))
-            router.open(.cityListingDetail(listingId: result.id))
+            try? await Task.sleep(for: .milliseconds(420))
+            openPublishedListing(result.id)
         } catch {
             if let failed = mediaDrafts.first(where: {
                 if case .uploading = mediaUploadPhases[$0.id] { return true }
@@ -6017,6 +6018,24 @@ struct CreateCityListingView: View {
             }
             message = error.kaixUserMessage
             isSubmitting = false
+        }
+    }
+
+    @MainActor
+    private func openPublishedListing(_ listingId: String) {
+        if let onPublishedListing {
+            onPublishedListing(listingId)
+            return
+        }
+        let targetTab = router.activeTab
+        let detailRoute = KXRoute.cityListingDetail(listingId: listingId)
+        if router.replaceTop(with: detailRoute, in: targetTab) {
+            return
+        }
+        dismiss()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(180))
+            router.open(detailRoute, in: targetTab)
         }
     }
 

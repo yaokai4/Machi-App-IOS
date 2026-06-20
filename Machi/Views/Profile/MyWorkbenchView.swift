@@ -9,6 +9,7 @@ struct MyWorkbenchView: View {
     @State private var didEnter = false
 
     let currentUser: UserEntity
+    var onPublishedListing: ((String) -> Void)?
 
     private var currentRegionCode: String {
         RegionStore.shared.current?.regionCode ?? currentUser.currentRegionCode
@@ -81,7 +82,7 @@ struct MyWorkbenchView: View {
     private var publishSection: some View {
         SettingsSectionCard(title: L("workbenchPublishTrading", language)) {
             SettingsRowLink(icon: "plus.circle.fill", tint: KXColor.accent, title: L("workbenchPublishCity", language), subtitle: L("workbenchPublishCitySubtitle", language), revealsNavBar: false) {
-                CreateCityListingView(listingType: "secondhand", citySlug: currentRegionCode, currentUser: currentUser)
+                CreateCityListingView(listingType: "secondhand", citySlug: currentRegionCode, currentUser: currentUser, onPublishedListing: onPublishedListing)
             }
             SettingsDivider()
             SettingsRowLink(icon: "shippingbox.fill", tint: .teal, title: L("workbenchCityListingsTitle", language), subtitle: L("workbenchCityListingsSubtitle", language)) {
@@ -146,19 +147,19 @@ struct MyWorkbenchView: View {
             }
             SettingsDivider()
             SettingsRowLink(icon: "briefcase.fill", tint: .indigo, title: L("workbenchJobPublishTitle", language), subtitle: L("workbenchJobPublishSubtitle", language), revealsNavBar: false) {
-                CreateCityListingView(listingType: "job", citySlug: currentRegionCode, currentUser: currentUser)
+                CreateCityListingView(listingType: "job", citySlug: currentRegionCode, currentUser: currentUser, onPublishedListing: onPublishedListing)
             }
             SettingsDivider()
             SettingsRowLink(icon: "house.fill", tint: .blue, title: L("workbenchRentalPublishTitle", language), subtitle: L("workbenchRentalPublishSubtitle", language), revealsNavBar: false) {
-                CreateCityListingView(listingType: "rental", citySlug: currentRegionCode, currentUser: currentUser)
+                CreateCityListingView(listingType: "rental", citySlug: currentRegionCode, currentUser: currentUser, onPublishedListing: onPublishedListing)
             }
             SettingsDivider()
             SettingsRowLink(icon: "storefront.fill", tint: .brown, title: L("workbenchServicePublishTitle", language), subtitle: L("workbenchServicePublishSubtitle", language), revealsNavBar: false) {
-                CreateCityListingView(listingType: "local_service", citySlug: currentRegionCode, currentUser: currentUser)
+                CreateCityListingView(listingType: "local_service", citySlug: currentRegionCode, currentUser: currentUser, onPublishedListing: onPublishedListing)
             }
             SettingsDivider()
             SettingsRowLink(icon: "tag.fill", tint: .pink, title: L("workbenchDiscountPublishTitle", language), subtitle: L("workbenchDiscountPublishSubtitle", language), revealsNavBar: false) {
-                CreateCityListingView(listingType: "discount", citySlug: currentRegionCode, currentUser: currentUser)
+                CreateCityListingView(listingType: "discount", citySlug: currentRegionCode, currentUser: currentUser, onPublishedListing: onPublishedListing)
             }
         }
     }

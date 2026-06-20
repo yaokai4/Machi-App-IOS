@@ -126,6 +126,27 @@ struct kaiziTests {
         #expect(router.pathCount(for: .home) == 0)
     }
 
+    @Test func appRouterReplacesPublishRouteWithListingDetail() async throws {
+        let router = AppRouter()
+
+        router.open(.cityListings(regionCode: "jp.tokyo.tokyo", type: "secondhand"), in: .search)
+        router.open(.createCityListing(type: "secondhand", citySlug: "jp.tokyo.tokyo"), in: .search)
+
+        #expect(router.pathCount(for: .search) == 2)
+        #expect(router.replaceTop(with: .cityListingDetail(listingId: "listing-1"), in: .search))
+        #expect(router.routes(for: .search) == [
+            .cityListings(regionCode: "jp.tokyo.tokyo", type: "secondhand"),
+            .cityListingDetail(listingId: "listing-1")
+        ])
+    }
+
+    @Test func appRouterDoesNotAppendWhenReplacingEmptyStack() async throws {
+        let router = AppRouter()
+
+        #expect(!router.replaceTop(with: .cityListingDetail(listingId: "listing-1"), in: .profile))
+        #expect(router.pathCount(for: .profile) == 0)
+    }
+
     @Test func appChromeKeepsRouteReasonSeparateFromTransientReasons() async throws {
         let chrome = AppChromeState()
 

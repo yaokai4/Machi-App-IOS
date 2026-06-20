@@ -970,12 +970,17 @@ private struct ProfilePresentationModifier: ViewModifier {
 }
 
 private struct WorkbenchFullScreenView: View {
+    @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var chrome: AppChromeState
+
     @Binding var isPresented: Bool
     let currentUser: UserEntity
 
     var body: some View {
         NavigationStack {
-            MyWorkbenchView(currentUser: currentUser)
+            MyWorkbenchView(currentUser: currentUser) { listingId in
+                openPublishedListingFromWorkbench(listingId)
+            }
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         Button {
@@ -994,6 +999,16 @@ private struct WorkbenchFullScreenView: View {
                 .toolbarBackground(.hidden, for: .navigationBar)
         }
         .kxPageBackground()
+    }
+
+    private func openPublishedListingFromWorkbench(_ listingId: String) {
+        isPresented = false
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(220))
+            chrome.select(.profile)
+            router.setActiveTab(.profile)
+            router.open(.cityListingDetail(listingId: listingId), in: .profile)
+        }
     }
 }
 

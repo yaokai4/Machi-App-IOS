@@ -19,11 +19,11 @@ struct BottomTabBarView: View {
                 } label: {
                     VStack(spacing: 2) {
                         tabIcon(tab, isSelected: isSelected)
-                            .frame(width: 34, height: 30, alignment: .center)
+                            .frame(width: 42, height: 32, alignment: .center)
                             .overlay(alignment: .topTrailing) {
                                 if let count = badgeCount(for: tab), count > 0 {
                                     TabUnreadBadge(count: count)
-                                        .offset(x: 10, y: -5)
+                                        .offset(x: 5, y: -6)
                                 }
                             }
 
@@ -36,11 +36,11 @@ struct BottomTabBarView: View {
                     }
                     .foregroundStyle(isSelected ? KXColor.accent : Color.primary.opacity(0.88))
                     .frame(maxWidth: .infinity)
-                    .frame(height: 56, alignment: .center)
+                    .frame(height: 58, alignment: .center)
                     .background {
                         if isSelected {
                             SelectedTabBubble()
-                                .frame(width: 74, height: 54)
+                                .frame(width: 76, height: 56)
                         }
                     }
                     .contentShape(Capsule())
@@ -107,11 +107,11 @@ private struct TabUnreadBadge: View {
 
     var body: some View {
         Text(count > 99 ? "99+" : "\(count)")
-            .font(.system(size: count > 99 ? 7 : count > 9 ? 7.5 : 8.5, weight: .black))
+            .font(.system(size: count > 99 ? 7.5 : count > 9 ? 8 : 9, weight: .black))
             .foregroundStyle(.white)
             .lineLimit(1)
             .minimumScaleFactor(0.72)
-            .frame(width: badgeWidth, height: 17)
+            .frame(width: badgeWidth, height: 18)
             .background(Color(red: 0.93, green: 0.16, blue: 0.34), in: Capsule())
             .overlay(Capsule().stroke(Color.white.opacity(0.9), lineWidth: 1.2))
             .shadow(color: Color(red: 0.93, green: 0.16, blue: 0.34).opacity(0.18), radius: 4, y: 1.5)
@@ -119,9 +119,9 @@ private struct TabUnreadBadge: View {
     }
 
     private var badgeWidth: CGFloat {
-        if count > 99 { return 27 }
-        if count > 9 { return 22 }
-        return 17
+        if count > 99 { return 30 }
+        if count > 9 { return 24 }
+        return 18
     }
 }
 
