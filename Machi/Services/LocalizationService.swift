@@ -28,6 +28,7 @@ struct LocalizationService {
         "accountSecurity": [.zh: "账号与安全", .ja: "アカウントと安全", .en: "Account and security"],
         "accountSecuritySubtitle": [.zh: "邮箱、密码、设备、黑名单和危险操作", .ja: "メール、パスワード、端末、ブロック、危険操作", .en: "Email, password, devices, blocklist, and dangerous actions"],
         "serviceGroup": [.zh: "服务", .ja: "サービス", .en: "Services"],
+        "helpGroup": [.zh: "帮助与反馈", .ja: "ヘルプとフィードバック", .en: "Help & feedback"],
         "switchAccount": [.zh: "切换账号", .ja: "アカウント切替", .en: "Switch account"],
         "switchAccountSubtitle": [.zh: "选择另一个本地账号继续使用", .ja: "別のローカルアカウントを選択します", .en: "Use another local account"],
         "current": [.zh: "当前", .ja: "現在", .en: "Current"],

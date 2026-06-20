@@ -179,11 +179,9 @@ struct SettingsView: View {
     }
 
     private var serviceSection: some View {
-        SettingsSectionCard(title: L("serviceGroup", language)) {
-            SettingsRowLink(icon: "storefront", tint: .teal, title: L("becomeMerchant", language), value: currentUser.merchantVerified ? L("merchantVerified", language) : (currentUser.isMerchant ? L("merchantPending", language) : ""), subtitle: L("merchantStatusNone", language)) {
-                MerchantSettingsView(currentUser: currentUser)
-            }
-            SettingsDivider()
+        // 帮助与反馈 only — merchant verification is a business function and lives
+        // in the workbench (经营后台), not in settings (职责清晰).
+        SettingsSectionCard(title: L("helpGroup", language)) {
             SettingsRowLink(icon: "questionmark.circle", tint: .blue, title: L("helpCenter", language), subtitle: L("navigationReady", language)) {
                 HelpCenterView()
             }
