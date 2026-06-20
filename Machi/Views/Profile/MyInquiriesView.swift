@@ -150,6 +150,24 @@ struct MyInquiriesView: View {
                     .lineLimit(2)
             }
 
+            // Plain-language hint so the status actually means something to the
+            // user ("新咨询，尽快联系" beats a bare "submitted" tag).
+            if let hint = LabeledCopy.statusHint(inquiry.status ?? "submitted", isReceived: role == .received, language: language) {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "info.circle.fill")
+                        .font(.caption2)
+                    Text(hint)
+                        .font(.caption2.weight(.semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(statusColor(inquiry.status ?? "submitted"))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(statusColor(inquiry.status ?? "submitted").opacity(0.08), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            }
+
             HStack(spacing: 8) {
                 actionButton(title: LabeledCopy.viewDetail(language), icon: "doc.text.magnifyingglass", filled: false) {
                     openListing(inquiry)
@@ -159,22 +177,16 @@ struct MyInquiriesView: View {
                 }
             }
 
+            // One tidy "更新进度" menu replaces the old cramped 7-pill
+            // horizontal scroll — the current status is always visible and
+            // the next steps live in a clean dropdown.
             if role == .received {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 7) {
-                        statusAction(inquiry, status: "reviewing", title: LabeledCopy.reviewing(language), icon: "clock.badge.checkmark")
-                        statusAction(inquiry, status: "contacted", title: LabeledCopy.contacted(language), icon: "paperplane.fill")
-                        statusAction(inquiry, status: "confirmed", title: LabeledCopy.confirm(language), icon: "checkmark.seal.fill")
-                        statusAction(inquiry, status: "rescheduled", title: LabeledCopy.reschedule(language), icon: "calendar.badge.clock")
-                        statusAction(inquiry, status: "rejected", title: LabeledCopy.reject(language), icon: "xmark.seal.fill")
-                        statusAction(inquiry, status: "completed", title: LabeledCopy.complete(language), icon: "flag.checkered")
-                        statusAction(inquiry, status: "closed", title: LabeledCopy.close(language), icon: "archivebox.fill")
-                    }
-                    .padding(.vertical, 1)
-                }
+                statusUpdateMenu(inquiry)
             } else {
                 HStack(spacing: 8) {
-                    statusAction(inquiry, status: "withdrawn", title: LabeledCopy.withdraw(language), icon: "arrow.uturn.backward.circle.fill")
+                    if !isTerminalStatus(inquiry.status ?? "submitted") {
+                        statusAction(inquiry, status: "withdrawn", title: LabeledCopy.withdraw(language), icon: "arrow.uturn.backward.circle.fill")
+                    }
                     destructiveAction(title: LabeledCopy.closeRecord(language), icon: "archivebox.fill") {
                         Task { await deleteInquiry(inquiry) }
                     }
@@ -183,6 +195,63 @@ struct MyInquiriesView: View {
         }
         .padding(14)
         .kxGlassSurface(radius: KXRadius.lg)
+    }
+
+    private func isTerminalStatus(_ status: String) -> Bool {
+        ["rejected", "withdrawn", "completed", "closed", "spam", "reported"].contains(status)
+    }
+
+    @ViewBuilder
+    private func statusUpdateMenu(_ inquiry: KaiXListingInquiryDTO) -> some View {
+        let current = inquiry.status ?? "submitted"
+        let terminal = isTerminalStatus(current)
+        Menu {
+            menuStatusButton(inquiry, current: current, status: "contacted", title: LabeledCopy.contacted(language), icon: "paperplane.fill")
+            menuStatusButton(inquiry, current: current, status: "reviewing", title: LabeledCopy.reviewing(language), icon: "clock.badge.checkmark")
+            menuStatusButton(inquiry, current: current, status: "confirmed", title: LabeledCopy.confirm(language), icon: "checkmark.seal.fill")
+            menuStatusButton(inquiry, current: current, status: "rescheduled", title: LabeledCopy.reschedule(language), icon: "calendar.badge.clock")
+            menuStatusButton(inquiry, current: current, status: "completed", title: LabeledCopy.complete(language), icon: "flag.checkered")
+            Divider()
+            menuStatusButton(inquiry, current: current, status: "rejected", title: LabeledCopy.reject(language), icon: "xmark.seal.fill", destructive: true)
+            menuStatusButton(inquiry, current: current, status: "closed", title: LabeledCopy.close(language), icon: "archivebox.fill", destructive: true)
+        } label: {
+            HStack(spacing: 8) {
+                if updatingInquiryId == inquiry.id {
+                    KXSpinner(size: 13, lineWidth: 1.8, tint: KXColor.accent)
+                } else {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.caption.weight(.black))
+                }
+                Text(LabeledCopy.updateStatus(language))
+                    .font(.caption.weight(.black))
+                Spacer(minLength: 0)
+                Text(LabeledCopy.statusLabel(current, language))
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(statusColor(current))
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.secondary)
+            }
+            .foregroundStyle(KXColor.accent)
+            .padding(.horizontal, 13)
+            .frame(height: 38)
+            .frame(maxWidth: .infinity)
+            .background(KXColor.accent.opacity(0.08), in: Capsule())
+            .overlay(Capsule().stroke(KXColor.accent.opacity(0.16), lineWidth: 0.7))
+            .contentShape(Capsule())
+        }
+        .disabled(terminal || updatingInquiryId != nil)
+        .opacity(terminal ? 0.55 : 1)
+    }
+
+    @ViewBuilder
+    private func menuStatusButton(_ inquiry: KaiXListingInquiryDTO, current: String, status: String, title: String, icon: String, destructive: Bool = false) -> some View {
+        Button(role: destructive ? .destructive : nil) {
+            Task { await updateInquiry(inquiry, status: status) }
+        } label: {
+            Label(title, systemImage: icon)
+        }
+        .disabled(current == status)
     }
 
     private func typeChip(_ type: String) -> some View {
@@ -417,6 +486,43 @@ private enum LabeledCopy {
 
     static func closeRecord(_ language: AppLanguage) -> String {
         pick(language, "关闭记录", "記録を閉じる", "Close record")
+    }
+
+    static func updateStatus(_ language: AppLanguage) -> String {
+        pick(language, "更新进度", "進捗を更新", "Update status")
+    }
+
+    /// A short, human hint that says what this status means and what to do
+    /// next — so the manager reads like guidance, not jargon.
+    static func statusHint(_ status: String, isReceived: Bool, language: AppLanguage) -> String? {
+        switch status {
+        case "submitted", "new":
+            return isReceived
+                ? pick(language, "新咨询，建议尽快联系对方", "新しい問い合わせ。早めに連絡しましょう", "New inquiry — reach out soon")
+                : pick(language, "已发送，等待对方回应", "送信済み。相手の返信待ちです", "Sent — waiting for a reply")
+        case "reviewing":
+            return pick(language, "你正在处理这条咨询", "対応中の問い合わせです", "You're handling this inquiry")
+        case "contacted":
+            return isReceived
+                ? pick(language, "已联系对方，等待回应", "連絡済み。返信を待っています", "Contacted — awaiting their reply")
+                : pick(language, "对方已联系你", "相手から連絡がありました", "They've reached out to you")
+        case "confirmed":
+            return pick(language, "已确认，准备完成交易或服务", "確定済み。取引・サービスへ進みましょう", "Confirmed — ready to proceed")
+        case "rescheduled":
+            return pick(language, "正在协调新的时间", "日程を調整しています", "Coordinating a new time")
+        case "completed":
+            return pick(language, "这条咨询已顺利完成", "この問い合わせは完了しました", "This inquiry is complete")
+        case "rejected":
+            return pick(language, "已拒绝该咨询", "この問い合わせは却下されました", "This inquiry was declined")
+        case "withdrawn":
+            return pick(language, "咨询已撤回", "問い合わせは取り下げられました", "This inquiry was withdrawn")
+        case "closed":
+            return pick(language, "记录已关闭", "記録は終了しました", "Record closed")
+        case "spam", "reported":
+            return pick(language, "已标记并处理", "報告・対応済みです", "Flagged and handled")
+        default:
+            return nil
+        }
     }
 
     static func applicant(_ name: String, _ language: AppLanguage) -> String {
