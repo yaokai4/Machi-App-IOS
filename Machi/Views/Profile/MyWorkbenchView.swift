@@ -145,6 +145,8 @@ struct MyWorkbenchView: View {
         .background(KXColor.heat.opacity(0.10), in: Capsule())
     }
 
+    private func countValue(_ n: Int) -> String? { n > 0 ? "\(n)" : nil }
+
     private func statTile(_ label: String, _ value: Int) -> some View {
         VStack(spacing: 3) {
             Text("\(value)")
@@ -166,11 +168,11 @@ struct MyWorkbenchView: View {
                 CreateCityListingView(listingType: "secondhand", citySlug: currentRegionCode, currentUser: currentUser, onPublishedListing: onPublishedListing)
             }
             SettingsDivider()
-            SettingsRowLink(icon: "shippingbox.fill", tint: .teal, title: L("workbenchCityListingsTitle", language), subtitle: L("workbenchCityListingsSubtitle", language)) {
+            SettingsRowLink(icon: "shippingbox.fill", tint: .teal, title: L("workbenchCityListingsTitle", language), value: summary.flatMap { countValue($0.publishedListings) }, subtitle: L("workbenchCityListingsSubtitle", language)) {
                 MyCityListingsView(currentUser: currentUser)
             }
             SettingsDivider()
-            SettingsRowLink(icon: "bubble.left.and.bubble.right.fill", tint: .orange, title: L("inquiriesTitle", language), subtitle: L("inquiriesSubtitle", language)) {
+            SettingsRowLink(icon: "bubble.left.and.bubble.right.fill", tint: .orange, title: L("inquiriesTitle", language), value: summary.flatMap { countValue($0.receivedInquiries) }, subtitle: L("inquiriesSubtitle", language)) {
                 MyInquiriesView(currentUser: currentUser)
             }
             SettingsDivider()
