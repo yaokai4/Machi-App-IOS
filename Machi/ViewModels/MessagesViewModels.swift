@@ -180,7 +180,8 @@ final class ChatViewModel: ObservableObject {
         isSending = true
         defer { isSending = false }
         do {
-            let message = try await MessageRepository(context: context).sendMessage(
+            let repository = MessageRepository(context: context)
+            let message = try await repository.sendMessage(
                 thread: thread,
                 senderId: currentUser.id,
                 content: inputText,
@@ -198,6 +199,10 @@ final class ChatViewModel: ObservableObject {
             messageStore?.setMessages(messages, conversationId: thread.id)
             messageStore?.removeFromQueue(message.id)
             drafts.forEach { messageStore?.removeUpload($0.id) }
+
+            if KaiXBackend.token != nil {
+                await refreshFromServer(repository: repository, thread: thread, currentUser: currentUser, messageStore: messageStore)
+            }
         } catch {
             errorMessage = error.kaixUserMessage
             state = messages.isEmpty ? .empty : .loaded
@@ -257,5 +262,30 @@ final class ChatViewModel: ObservableObject {
         formatter.timeZone = .current
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: date)
+    }
+
+    private func refreshFromServer(
+        repository: MessageRepository,
+        thread: MessageThreadEntity,
+        currentUser: UserEntity,
+        messageStore: MessageStore?
+    ) async {
+        guard !hasActiveFilters else { return }
+        do {
+            let latestMessages = try await repository.fetchMessages(threadId: thread.id)
+            let latestMedia = try await repository.fetchMedia(
+                threadId: thread.id,
+                messageIds: Set(latestMessages.map(\.id))
+            )
+            messages = latestMessages
+            mediaByMessageId = latestMedia
+            state = latestMessages.isEmpty ? .empty : .loaded
+            messageStore?.setMessages(latestMessages, conversationId: thread.id)
+            if let latestThread = try await repository.fetchThreads(currentUserId: currentUser.id).first(where: { $0.id == thread.id }) {
+                messageStore?.upsertConversation(latestThread)
+            }
+        } catch {
+            // Sending already succeeded; keep the optimistic message visible.
+        }
     }
 }

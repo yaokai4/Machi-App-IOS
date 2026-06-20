@@ -1094,6 +1094,7 @@ struct KaiXMessageAttachmentDTO: Codable, Equatable, Identifiable {
     let type: String
     let visibility: String?
     let objectKey: String?
+    let object_key: String?
     let attachment_type: String?
     let url: String?
     let cdnUrl: String?

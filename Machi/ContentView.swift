@@ -181,7 +181,12 @@ struct ContentView: View {
         guard KaiXBackend.token != nil, let user = appState.currentUser, !user.isGuest else { return }
         do {
             if let conversations = try? await MessageRepository(context: modelContext).fetchThreads(currentUserId: user.id) {
+                let previousLastMessageDates = messageStore.conversationsById.mapValues(\.lastMessageAt)
                 messageStore.setConversations(conversations)
+                await warmChangedMessageThreads(
+                    conversations,
+                    previousLastMessageDates: previousLastMessageDates
+                )
                 syncAppBadge()
             }
             let response = try await KaiXAPIClient.shared.notifications(kind: "all")
@@ -211,6 +216,36 @@ struct ContentView: View {
             )
         } catch {
             // Background polling should never interrupt foreground use.
+        }
+    }
+
+    /// Keep foreground push banners and the actual chat timeline in sync.
+    /// The notification poll is lightweight, but when it observes a new/unread
+    /// conversation we also prefetch that conversation's messages so opening the
+    /// chat never shows stale content behind a fresh banner.
+    private func warmChangedMessageThreads(
+        _ conversations: [MessageThreadEntity],
+        previousLastMessageDates: [String: Date]
+    ) async {
+        guard KaiXBackend.token != nil else { return }
+        let changed = conversations
+            .filter { conversation in
+                if conversation.unreadCount > 0 { return true }
+                guard let previous = previousLastMessageDates[conversation.id] else { return true }
+                return conversation.lastMessageAt > previous.addingTimeInterval(0.25)
+            }
+            .prefix(8)
+        guard !changed.isEmpty else { return }
+        let repository = MessageRepository(context: modelContext)
+        for conversation in changed {
+            do {
+                let messages = try await repository.fetchMessages(threadId: conversation.id)
+                _ = try await repository.fetchMedia(threadId: conversation.id, messageIds: Set(messages.map(\.id)))
+                messageStore.setMessages(messages, conversationId: conversation.id)
+                messageStore.upsertConversation(conversation)
+            } catch {
+                // Foreground warming must never interrupt the active screen.
+            }
         }
     }
 

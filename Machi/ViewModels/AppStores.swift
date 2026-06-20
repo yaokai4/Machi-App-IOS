@@ -155,6 +155,11 @@ final class MessageStore: ObservableObject {
         unreadCounts = Dictionary(uniqueKeysWithValues: conversations.map { ($0.id, $0.unreadCount) })
     }
 
+    func upsertConversation(_ conversation: MessageThreadEntity) {
+        conversationsById[conversation.id] = conversation
+        unreadCounts[conversation.id] = max(0, conversation.unreadCount)
+    }
+
     func setMessages(_ messages: [MessageEntity], conversationId: String) {
         messagesByConversationId[conversationId] = messages
         sendingQueue.removeAll { $0.threadId == conversationId && $0.status == .sent }

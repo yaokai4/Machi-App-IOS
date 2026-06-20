@@ -335,7 +335,7 @@ struct ChatView: View {
                 }
                 .padding(.horizontal, KaiXTheme.horizontalPadding)
                 .padding(.vertical, 10)
-                .padding(.bottom, 88)
+                .padding(.bottom, 124)
             }
             .scrollDismissesKeyboard(.interactively)
             .onAppear {
@@ -588,7 +588,7 @@ private struct ChatInputBar: View {
         let imageCount = mediaDrafts.filter { $0.type == .image }.count
         let remainingImageSlots = Swift.max(1, KaiXConfig.maxImageItemsPerPost - imageCount)
         HStack(alignment: .bottom, spacing: 10) {
-            HStack(spacing: 6) {
+            HStack(spacing: 4) {
                 PhotosPicker(selection: $pickerItems, maxSelectionCount: remainingImageSlots, matching: .images) {
                     ChatInputToolIcon(systemImage: "photo", disabled: hasVideo || imageCount >= KaiXConfig.maxImageItemsPerPost)
                 }
@@ -599,6 +599,15 @@ private struct ChatInputBar: View {
                 }
                 .disabled(!mediaDrafts.isEmpty)
             }
+            .padding(4)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(KXColor.cardBackground.opacity(0.86))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(KXColor.separator.opacity(0.38), lineWidth: 0.7)
+            )
 
             TextField(L("messagePlaceholder", language), text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
@@ -615,12 +624,13 @@ private struct ChatInputBar: View {
                 .frame(minHeight: 44)
                 .background(
                     RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .fill(KXColor.softBackground.opacity(0.96))
+                        .fill(KXColor.cardBackground.opacity(0.98))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .stroke(KXColor.separator.opacity(0.62), lineWidth: 0.7)
+                        .stroke(KXColor.separator.opacity(0.42), lineWidth: 0.7)
                 )
+                .shadow(color: KXColor.glassShadow.opacity(0.18), radius: 8, y: 3)
 
             Button {
                 guard canSend, !isSending else { return }
@@ -645,14 +655,21 @@ private struct ChatInputBar: View {
             .disabled(!canSend || isSending)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.top, 9)
+        .padding(.bottom, 10)
         .background {
-            KXColor.pageBackground
-                .opacity(0.97)
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .background(KXColor.pageBackground.opacity(0.82))
                 .ignoresSafeArea(edges: .bottom)
         }
         .overlay(alignment: .top) {
-            Divider().opacity(0.28)
+            LinearGradient(
+                colors: [KXColor.separator.opacity(0.38), .clear],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 1)
         }
     }
 }
@@ -669,12 +686,12 @@ private struct ChatInputToolIcon: View {
         Image(systemName: systemImage)
             .font(.subheadline.weight(.bold))
             .foregroundStyle(disabled ? KXColor.livingMuted.opacity(0.42) : KXColor.accent)
-            .frame(width: 38, height: 44)
+            .frame(width: 34, height: 36)
             .background {
                 Circle()
-                    .fill(disabled ? KXColor.softBackground.opacity(0.42) : KXColor.accent.opacity(0.09))
+                    .fill(disabled ? KXColor.softBackground.opacity(0.38) : KXColor.accent.opacity(0.10))
             }
-            .overlay(Circle().stroke(KXColor.separator.opacity(disabled ? 0.16 : 0.35), lineWidth: 0.7))
+            .overlay(Circle().stroke(KXColor.separator.opacity(disabled ? 0.12 : 0.26), lineWidth: 0.7))
             .contentShape(Circle())
     }
 }
