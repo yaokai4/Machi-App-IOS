@@ -645,7 +645,7 @@ private struct CurrentRegionCard: View {
 
     private var title: String {
         guard let region else { return L("selectCity", language) }
-        return KaiXRegionDirectory.localizedDisplayName(region, language: language)
+        return KaiXRegionDirectory.localizedShortLabel(region, language: language)
     }
 
     var body: some View {

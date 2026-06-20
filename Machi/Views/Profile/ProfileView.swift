@@ -482,7 +482,7 @@ struct ProfileView: View {
             province: profileUser.province.isEmpty ? nil : profileUser.province,
             city: profileUser.city
            ) {
-            return "\(region.countryName) · \(region.shortLabel)"
+            return KaiXRegionDirectory.localizedShortLabel(region, language: language)
         }
         return nil
     }
