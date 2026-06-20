@@ -5,6 +5,10 @@ extension Notification.Name {
     /// Posted when the user taps a Machi system notification banner.
     /// userInfo: ["postId": String] when the notification targets a post.
     static let kaiXSystemNotificationTapped = Notification.Name("KaiXSystemNotificationTapped")
+    /// Posted whenever a server or local notification says a conversation has
+    /// new activity. Active chat/inbox screens use this to refresh immediately
+    /// instead of waiting for their next polling tick.
+    static let kaiXConversationShouldRefresh = Notification.Name("KaiXConversationShouldRefresh")
 }
 
 /// Bridges server-side social notifications (likes, comments, follows…)
@@ -59,6 +63,7 @@ final class SystemNotificationService: NSObject {
 
         var delivered = deliveredIds()
         var dirty = false
+        var refreshConversationIds = Set<String>()
         for notification in notifications {
             let key = notification.remoteId ?? notification.id
             guard !delivered.contains(key) else { continue }
@@ -81,6 +86,9 @@ final class SystemNotificationService: NSObject {
             if let postId = notification.targetPostId { info["postId"] = postId }
             if let conversationId = notification.targetConversationId { info["conversationId"] = conversationId }
             content.userInfo = info
+            if let conversationId = info["conversationId"] as? String {
+                refreshConversationIds.insert(conversationId)
+            }
 
             let request = UNNotificationRequest(
                 identifier: "machi.notif.\(key)",
@@ -92,6 +100,7 @@ final class SystemNotificationService: NSObject {
         if dirty {
             saveDeliveredIds(delivered)
         }
+        refreshConversationIds.forEach(Self.postConversationRefresh)
     }
 
     /// Mirror the in-app unread count onto the home-screen app icon.
@@ -142,6 +151,21 @@ final class SystemNotificationService: NSObject {
     private static func contentIsBoilerplate(_ content: String) -> Bool {
         ["喜欢了你的帖子", "收藏了你的帖子", "转发了你的帖子", "关注了你"].contains(content)
     }
+
+    private static func postConversationRefresh(_ conversationId: String) {
+        guard !conversationId.isEmpty else { return }
+        NotificationCenter.default.post(
+            name: .kaiXConversationShouldRefresh,
+            object: nil,
+            userInfo: ["conversationId": conversationId]
+        )
+    }
+
+    nonisolated private static func conversationId(from userInfo: [AnyHashable: Any]) -> String? {
+        if let value = userInfo["conversationId"] as? String, !value.isEmpty { return value }
+        if let value = userInfo["conversation_id"] as? String, !value.isEmpty { return value }
+        return nil
+    }
 }
 
 extension SystemNotificationService: UNUserNotificationCenterDelegate {
@@ -149,7 +173,13 @@ extension SystemNotificationService: UNUserNotificationCenterDelegate {
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
+        let conversationId = Self.conversationId(from: notification.request.content.userInfo)
         let suppressed = await MainActor.run { self.suppressBanners }
+        if let conversationId {
+            await MainActor.run {
+                Self.postConversationRefresh(conversationId)
+            }
+        }
         return suppressed ? [] : [.banner, .list, .sound, .badge]
     }
 
@@ -161,6 +191,12 @@ extension SystemNotificationService: UNUserNotificationCenterDelegate {
         var payload: [String: Any] = [:]
         if let postId = userInfo["postId"] as? String { payload["postId"] = postId }
         if let conversationId = userInfo["conversationId"] as? String { payload["conversationId"] = conversationId }
+        if let conversationId = Self.conversationId(from: userInfo) {
+            payload["conversationId"] = conversationId
+            await MainActor.run {
+                Self.postConversationRefresh(conversationId)
+            }
+        }
         let finalPayload = payload
         await MainActor.run {
             NotificationCenter.default.post(

@@ -23,7 +23,7 @@ struct BottomTabBarView: View {
                             .overlay(alignment: .topTrailing) {
                                 if let count = badgeCount(for: tab), count > 0 {
                                     TabUnreadBadge(count: count)
-                                        .offset(x: 5, y: -6)
+                                        .offset(x: 2, y: -5)
                                 }
                             }
 
@@ -107,21 +107,22 @@ private struct TabUnreadBadge: View {
 
     var body: some View {
         Text(count > 99 ? "99+" : "\(count)")
-            .font(.system(size: count > 99 ? 7.5 : count > 9 ? 8 : 9, weight: .black))
+            .font(.system(size: count > 99 ? 7.5 : count > 9 ? 8 : 8.5, weight: .black))
             .foregroundStyle(.white)
             .lineLimit(1)
             .minimumScaleFactor(0.72)
-            .frame(width: badgeWidth, height: 18)
+            .frame(minWidth: badgeWidth, minHeight: 17)
+            .padding(.horizontal, count > 99 ? 3 : count > 9 ? 2 : 0)
             .background(Color(red: 0.93, green: 0.16, blue: 0.34), in: Capsule())
-            .overlay(Capsule().stroke(Color.white.opacity(0.9), lineWidth: 1.2))
-            .shadow(color: Color(red: 0.93, green: 0.16, blue: 0.34).opacity(0.18), radius: 4, y: 1.5)
+            .overlay(Capsule().stroke(Color.white.opacity(0.95), lineWidth: 1.4))
+            .shadow(color: Color(red: 0.93, green: 0.16, blue: 0.34).opacity(0.18), radius: 3.5, y: 1)
             .accessibilityHidden(true)
     }
 
     private var badgeWidth: CGFloat {
-        if count > 99 { return 30 }
-        if count > 9 { return 24 }
-        return 18
+        if count > 99 { return 25 }
+        if count > 9 { return 21 }
+        return 17
     }
 }
 

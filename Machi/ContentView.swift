@@ -132,6 +132,10 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .kaiXSystemNotificationTapped)) { note in
             handleSystemNotificationTap(note)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .kaiXConversationShouldRefresh)) { _ in
+            guard KaiXBackend.token != nil else { return }
+            Task { await syncSystemNotifications() }
+        }
         .onChange(of: appState.databaseRecoveryNotice) { _, notice in
             #if DEBUG
             guard let notice else { return }

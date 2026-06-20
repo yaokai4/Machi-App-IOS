@@ -41,6 +41,10 @@ struct MessagesView: View {
                 await loadContacts()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .kaiXConversationShouldRefresh)) { _ in
+            guard mode == .conversations else { return }
+            Task { await refreshInbox() }
+        }
         .overlay(alignment: .top) {
             if let message = viewModel.transientError {
                 KXInlineNotice(message: message) {

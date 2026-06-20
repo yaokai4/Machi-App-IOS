@@ -158,6 +158,11 @@ final class ChatViewModel: ObservableObject {
                 state = messages.isEmpty ? .empty : .loaded
                 return
             }
+            if isVideo, draft.duration > KaiXConfig.maxMessageVideoDuration {
+                errorMessage = L("messageVideoDurationLimit", language)
+                state = messages.isEmpty ? .empty : .loaded
+                return
+            }
             mediaDrafts.append(draft)
             messageStore?.enqueueUpload(draft)
             if case .idle = state {

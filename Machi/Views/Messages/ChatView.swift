@@ -179,12 +179,25 @@ struct ChatView: View {
             guard !viewModel.hasActiveFilters else { return }
             Task { await loadAndMarkRead() }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .kaiXConversationShouldRefresh)) { note in
+            guard !viewModel.hasActiveFilters else { return }
+            let conversationId = note.userInfo?["conversationId"] as? String
+            guard conversationId == nil || conversationId == thread.id else { return }
+            Task { await loadAndMarkRead() }
+        }
         .onChange(of: pickerItems) { _, newValue in
             Task {
+                var failedToLoad = false
                 for item in newValue {
-                    guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
+                    guard let data = try? await item.loadTransferable(type: Data.self) else {
+                        failedToLoad = true
+                        continue
+                    }
                     let videoContentType = item.supportedContentTypes.first { $0.conforms(to: .movie) }
                     await viewModel.addMedia(data: data, isVideo: videoContentType != nil, contentType: videoContentType, language: language, messageStore: messageStore)
+                }
+                if failedToLoad {
+                    viewModel.errorMessage = L("mediaFailed", language)
                 }
                 pickerItems = []
             }
@@ -373,6 +386,9 @@ struct ChatView: View {
             }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            action()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
             action()
         }
     }
@@ -593,8 +609,8 @@ private struct ChatInputBar: View {
         let hasVideo = mediaDrafts.contains { $0.type == .video }
         let imageCount = mediaDrafts.filter { $0.type == .image }.count
         let remainingImageSlots = Swift.max(1, KaiXConfig.maxImageItemsPerPost - imageCount)
-        HStack(alignment: .bottom, spacing: 8) {
-            HStack(spacing: 3) {
+        HStack(alignment: .bottom, spacing: 9) {
+            HStack(spacing: 5) {
                 PhotosPicker(selection: $pickerItems, maxSelectionCount: remainingImageSlots, matching: .images) {
                     ChatInputToolIcon(systemImage: "photo", disabled: hasVideo || imageCount >= KaiXConfig.maxImageItemsPerPost)
                 }
@@ -617,16 +633,16 @@ private struct ChatInputBar: View {
                     }
                 }
                 .font(.body)
-                .padding(.horizontal, 13)
+                .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .frame(minHeight: 42)
+                .frame(minHeight: 44)
                 .background(
-                    RoundedRectangle(cornerRadius: 21, style: .continuous)
-                        .fill(KXColor.softBackground.opacity(0.72))
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(KXColor.elevatedBackground.opacity(0.96))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 21, style: .continuous)
-                        .stroke(KXColor.separator.opacity(0.18), lineWidth: 0.7)
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(KXColor.separator.opacity(0.24), lineWidth: 0.7)
                 )
 
             Button {
@@ -640,7 +656,7 @@ private struct ChatInputBar: View {
                         .font(.subheadline.weight(.bold))
                 }
             }
-            .frame(width: 42, height: 42)
+            .frame(width: 44, height: 44)
             .foregroundStyle(canSend ? .white : KXColor.accent.opacity(0.38))
             .background {
                 Circle()
@@ -651,24 +667,24 @@ private struct ChatInputBar: View {
             .shadow(color: canSend ? KXColor.accent.opacity(0.18) : .clear, radius: 10, y: 4)
             .disabled(!canSend || isSending)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 7)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 8)
         .background {
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(KXColor.cardBackground.opacity(0.82))
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+            RoundedRectangle(cornerRadius: 31, style: .continuous)
+                .fill(KXColor.cardBackground.opacity(0.92))
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 31, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 30, style: .continuous)
+                    RoundedRectangle(cornerRadius: 31, style: .continuous)
                         .stroke(KXColor.separator.opacity(0.24), lineWidth: 0.7)
                 )
-                .shadow(color: KXColor.glassShadow.opacity(0.48), radius: 18, y: 8)
+                .shadow(color: KXColor.glassShadow.opacity(0.34), radius: 16, y: 7)
         }
         .padding(.horizontal, 10)
         .padding(.top, 7)
         .padding(.bottom, 8)
         .background {
             Rectangle()
-                .fill(KXColor.pageBackground.opacity(0.62))
+                .fill(KXColor.pageBackground.opacity(0.72))
                 .background(.ultraThinMaterial)
                 .ignoresSafeArea(edges: .bottom)
         }

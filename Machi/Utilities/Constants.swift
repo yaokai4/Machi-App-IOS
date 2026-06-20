@@ -35,7 +35,8 @@ enum KaiXConfig {
     static let maxPostImageSourceBytes = 80 * 1024 * 1024
     static let maxPostVideoSourceBytes = 1024 * 1024 * 1024
     static let maxMessageImageBytes = 10 * 1024 * 1024
-    static let maxMessageVideoBytes = 100 * 1024 * 1024
+    static let maxMessageVideoBytes = 200 * 1024 * 1024
+    static let maxMessageVideoDuration: TimeInterval = 2 * 60
     /// Hard cap on a single post's character count. Mirrors the
     /// server-side cap in `web/server.py:api_create_post` so the two
     /// clients reject the same payloads. Bumping this value here
