@@ -5977,10 +5977,6 @@ struct CreateCityListingView: View {
         var mediaCount = mediaDrafts.count
         var warning: String?
         for item in items.prefix(imageLimit) {
-            guard let data = try? await item.loadTransferable(type: Data.self) else {
-                warning = "无法读取所选媒体，请重新选择。"
-                continue
-            }
             let isVideo = item.supportedContentTypes.contains { $0.conforms(to: .movie) }
             do {
                 guard mediaCount < imageLimit else {
@@ -5992,11 +5988,15 @@ struct CreateCityListingView: View {
                         warning = "每条信息最多上传 1 个视频。"
                         continue
                     }
-                    guard data.count <= (listingType == "rental" ? 300 * 1024 * 1024 : KaiXConfig.maxPostVideoBytes) else {
+                    guard let picked = try? await item.loadTransferable(type: PickedVideoFile.self) else {
+                        warning = "无法读取所选媒体，请重新选择。"
+                        continue
+                    }
+                    guard fileByteCount(at: picked.url) <= (listingType == "rental" ? 300 * 1024 * 1024 : KaiXConfig.maxPostVideoSourceBytes) else {
                         warning = "视频文件过大，请压缩后重试。"
                         continue
                     }
-                    let draft = try await UploadService.shared.prepareVideo(data: data, contentType: item.supportedContentTypes.first { $0.conforms(to: .movie) })
+                    let draft = try await UploadService.shared.prepareVideo(fileURL: picked.url, contentType: item.supportedContentTypes.first { $0.conforms(to: .movie) })
                     guard draft.duration <= (listingType == "rental" ? 600 : 300) else {
                         warning = listingType == "rental" ? "房源视频最长 10 分钟。" : "视频最长 5 分钟。"
                         continue
@@ -6007,6 +6007,10 @@ struct CreateCityListingView: View {
                 } else {
                     guard imageCount < imageLimit else {
                         warning = "图片最多上传 \(imageLimit) 张。"
+                        continue
+                    }
+                    guard let data = try? await item.loadTransferable(type: Data.self) else {
+                        warning = "无法读取所选媒体，请重新选择。"
                         continue
                     }
                     let draft = try await UploadService.shared.prepareImage(data: data)
@@ -6022,6 +6026,11 @@ struct CreateCityListingView: View {
         mediaUploadPhases = Dictionary(uniqueKeysWithValues: next.map { ($0.id, uploadedMedia[$0.id] == nil ? .idle : .ready) })
         pickerItems = []
         if let warning { message = warning }
+    }
+
+    private func fileByteCount(at url: URL) -> Int {
+        let values = try? url.resourceValues(forKeys: [.fileSizeKey])
+        return values?.fileSize ?? Int.max
     }
 
     private func submit() async {

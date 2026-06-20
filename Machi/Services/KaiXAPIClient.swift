@@ -1771,6 +1771,40 @@ final class KaiXAPIClient {
         }
     }
 
+    private func uploadFileContents(
+        request: URLRequest,
+        fileURL: URL,
+        onProgress: ((Double) -> Void)? = nil
+    ) async throws -> (Data, URLResponse) {
+        let box = UploadTaskBox()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let task = session.uploadTask(with: request, fromFile: fileURL) { body, response, error in
+                    box.progressObservation?.invalidate()
+                    box.progressObservation = nil
+                    if let error {
+                        continuation.resume(throwing: error)
+                        return
+                    }
+                    guard let response else {
+                        continuation.resume(throwing: URLError(.badServerResponse))
+                        return
+                    }
+                    continuation.resume(returning: (body ?? Data(), response))
+                }
+                box.task = task
+                if let onProgress {
+                    box.progressObservation = task.progress.observe(\.fractionCompleted, options: [.new]) { progress, _ in
+                        onProgress(min(max(progress.fractionCompleted, 0), 0.98))
+                    }
+                }
+                task.resume()
+            }
+        } onCancel: {
+            box.task?.cancel()
+        }
+    }
+
     private func uploadPUTWithRetry(
         request: URLRequest,
         data: Data,
@@ -1795,6 +1829,43 @@ final class KaiXAPIClient {
                     // backend has already stored the object in S3. In that
                     // case the retry sees an already-uploaded row; let the
                     // following /complete call verify S3 and finish.
+                    return ""
+                }
+                if attempt < maxAttempts, Self.isRetryableHTTPStatus(http.statusCode) {
+                    try? await Task.sleep(nanoseconds: Self.retryBackoff(attempt, response: http))
+                    continue
+                }
+                if let api = try? JSONDecoder().decode(KaiXAPIError.self, from: body) {
+                    throw api
+                }
+                throw KaiXAPIError(error: .init(code: "upload_failed", message: "Upload failed (\(http.statusCode))"))
+            } catch let urlError as URLError where attempt < maxAttempts && Self.isRetryableURLError(urlError) {
+                try? await Task.sleep(nanoseconds: Self.retryBackoff(attempt))
+                continue
+            }
+        }
+    }
+
+    private func uploadPUTFileWithRetry(
+        request: URLRequest,
+        fileURL: URL,
+        onProgress: ((Double) -> Void)? = nil
+    ) async throws -> String {
+        let maxAttempts = 4
+        var attempt = 0
+        while true {
+            attempt += 1
+            do {
+                let (body, response) = try await uploadFileContents(request: request, fileURL: fileURL, onProgress: onProgress)
+                guard let http = response as? HTTPURLResponse else {
+                    throw URLError(.badServerResponse)
+                }
+                if (200..<300).contains(http.statusCode) {
+                    return http.value(forHTTPHeaderField: "ETag")?.replacingOccurrences(of: "\"", with: "") ?? ""
+                }
+                if let api = try? JSONDecoder().decode(KaiXAPIError.self, from: body),
+                   http.statusCode == 409,
+                   api.error.code == "invalid_upload_state" {
                     return ""
                 }
                 if attempt < maxAttempts, Self.isRetryableHTTPStatus(http.statusCode) {
@@ -1869,6 +1940,93 @@ final class KaiXAPIClient {
             put.setValue(value, forHTTPHeaderField: key)
         }
         let etag = try await uploadPUTWithRetry(request: put, data: data) { progress in
+            onProgress?(0.03 + min(max(progress, 0), 0.98) * 0.92)
+        }
+        onProgress?(0.96)
+        struct CompleteBody: Encodable {
+            let uploadId: String
+            let fileKey: String
+            let etag: String
+            let width: Int
+            let height: Int
+            let duration: Double
+            let durationSeconds: Double
+        }
+        let completedData = try await request("POST", "/api/uploads/complete", body: CompleteBody(
+            uploadId: presign.data.uploadId,
+            fileKey: presign.data.fileKey,
+            etag: etag,
+            width: width,
+            height: height,
+            duration: duration,
+            durationSeconds: duration
+        ), idempotencyKey: "\(actionKey)-complete")
+        let completed: KaiXUploadCompleteDTO = try decode(completedData)
+        onProgress?(1)
+        return (completed.data.file, completed.data.media)
+    }
+
+    func uploadFile(
+        fileURL: URL,
+        mime: String,
+        fileName: String = "upload",
+        purpose: String = "post_image",
+        entityType: String = "",
+        entityId: String = "",
+        threadId: String = "",
+        groupId: String = "",
+        width: Int = 0,
+        height: Int = 0,
+        duration: Double = 0,
+        metadata: [String: String]? = nil,
+        onProgress: ((Double) -> Void)? = nil
+    ) async throws -> (file: KaiXUploadedFileDTO, media: KaiXMediaDTO) {
+        let values = try fileURL.resourceValues(forKeys: [.fileSizeKey])
+        guard let fileSize = values.fileSize, fileSize > 0 else {
+            throw URLError(.fileDoesNotExist)
+        }
+        let actionKey = "upload-\(UUID().uuidString)"
+        struct PresignBody: Encodable {
+            let fileName: String
+            let contentType: String
+            let fileSize: Int
+            let purpose: String
+            let entityType: String
+            let entityId: String
+            let threadId: String
+            let groupId: String
+            let duration: Double
+            let durationSeconds: Double
+            let metadata: [String: String]?
+            let client: String
+            let directS3: Bool
+        }
+        let presignData = try await request("POST", "/api/uploads/presign", body: PresignBody(
+            fileName: fileName,
+            contentType: mime,
+            fileSize: fileSize,
+            purpose: purpose,
+            entityType: entityType,
+            entityId: entityId,
+            threadId: threadId,
+            groupId: groupId,
+            duration: duration,
+            durationSeconds: duration,
+            metadata: metadata,
+            client: "ios",
+            directS3: true
+        ), idempotencyKey: "\(actionKey)-presign")
+        onProgress?(0.03)
+        let presign: KaiXUploadPresignDTO = try decode(presignData)
+        guard let uploadURL = URL(string: presign.data.uploadUrl, relativeTo: KaiXBackend.baseURL)?.absoluteURL else {
+            throw URLError(.badURL)
+        }
+        var put = URLRequest(url: uploadURL)
+        put.httpMethod = "PUT"
+        for (key, value) in presign.data.headers {
+            put.setValue(value, forHTTPHeaderField: key)
+        }
+        let etag = try await uploadPUTFileWithRetry(request: put, fileURL: fileURL) { progress in
             onProgress?(0.03 + min(max(progress, 0), 0.98) * 0.92)
         }
         onProgress?(0.96)

@@ -174,6 +174,39 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
+    func addVideo(fileURL: URL, contentType: UTType? = nil, language: AppLanguage, messageStore: MessageStore? = nil) async {
+        errorMessage = nil
+        guard mediaDrafts.isEmpty else {
+            errorMessage = L(mediaDrafts.contains { $0.type == .video } ? "mediaVideoLimit" : "mediaMixNotAllowed", language)
+            state = messages.isEmpty ? .empty : .loaded
+            return
+        }
+        do {
+            let draft = try await UploadService.shared.prepareVideo(fileURL: fileURL, contentType: contentType)
+            guard draft.uploadFileSize <= KaiXConfig.maxMessageVideoBytes else {
+                errorMessage = L("mediaTooLarge", language)
+                state = messages.isEmpty ? .empty : .loaded
+                return
+            }
+            if draft.duration > KaiXConfig.maxMessageVideoDuration {
+                errorMessage = L("messageVideoDurationLimit", language)
+                state = messages.isEmpty ? .empty : .loaded
+                return
+            }
+            mediaDrafts.append(draft)
+            messageStore?.enqueueUpload(draft)
+            if case .idle = state {
+                state = messages.isEmpty ? .empty : .loaded
+            }
+        } catch UploadService.UploadError.mediaTooLarge {
+            errorMessage = L("mediaTooLarge", language)
+            state = messages.isEmpty ? .empty : .loaded
+        } catch {
+            errorMessage = L("mediaFailed", language)
+            state = messages.isEmpty ? .empty : .loaded
+        }
+    }
+
     func removeMedia(_ draft: MediaDraft, messageStore: MessageStore? = nil) {
         mediaDrafts.removeAll { $0.id == draft.id }
         messageStore?.removeUpload(draft.id)

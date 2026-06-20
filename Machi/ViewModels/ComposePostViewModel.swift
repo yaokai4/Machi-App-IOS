@@ -356,6 +356,41 @@ final class ComposePostViewModel: ObservableObject {
         }
     }
 
+    func addVideo(fileURL: URL, contentType: UTType? = nil, language: AppLanguage) async {
+        state = .loading
+        errorMessage = nil
+
+        let hasVideo = mediaDrafts.contains { $0.type == .video }
+        guard mediaDrafts.isEmpty else {
+            errorMessage = L(hasVideo ? "mediaVideoLimit" : "mediaVideoOnlyOne", language)
+            state = .error(errorMessage ?? L("mediaFailed", language))
+            return
+        }
+        guard fileByteCount(at: fileURL) <= KaiXConfig.maxPostVideoSourceBytes else {
+            errorMessage = L("mediaTooLarge", language)
+            state = .error(errorMessage ?? L("mediaFailed", language))
+            return
+        }
+
+        do {
+            let preparingId = UUID().uuidString
+            mediaUploadStates[preparingId] = .compressing
+            defer { mediaUploadStates.removeValue(forKey: preparingId) }
+            let draft = try await UploadService.shared.prepareVideo(fileURL: fileURL, contentType: contentType)
+            mediaDrafts.append(draft)
+            mediaUploadStates[draft.id] = KaiXBackend.token == nil ? .local : .waiting
+            mediaUploadProgress[draft.id] = 0
+            state = .loaded
+            startUpload(for: draft, language: language)
+        } catch UploadService.UploadError.mediaTooLarge {
+            errorMessage = L("mediaTooLarge", language)
+            state = .error(errorMessage ?? L("mediaFailed", language))
+        } catch {
+            errorMessage = L("mediaFailed", language)
+            state = .error(errorMessage ?? L("mediaFailed", language))
+        }
+    }
+
     func removeMedia(_ draft: MediaDraft) {
         mediaUploadTasks[draft.id]?.cancel()
         mediaUploadTasks.removeValue(forKey: draft.id)
@@ -371,6 +406,11 @@ final class ComposePostViewModel: ObservableObject {
     func reportMediaFailure(language: AppLanguage) {
         errorMessage = L("permissionDenied", language)
         state = .error(errorMessage ?? L("mediaFailed", language))
+    }
+
+    private func fileByteCount(at url: URL) -> Int {
+        let values = try? url.resourceValues(forKeys: [.fileSizeKey])
+        return values?.fileSize ?? Int.max
     }
 
     func publish(context: ModelContext, currentUser: UserEntity, language: AppLanguage) async -> Bool {

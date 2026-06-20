@@ -58,9 +58,9 @@ actor UploadService {
     func prepareVideo(data: Data, contentType: UTType? = nil) async throws -> MediaDraft {
         let id = UUID().uuidString
         let directory = try mediaDirectory()
-        var mime = normalizedVideoMIME(contentType?.preferredMIMEType, data: data)
-        var fileName = "\(id).\(videoExtension(for: mime))"
-        var videoURL = directory.appendingPathComponent(fileName)
+        let mime = normalizedVideoMIME(contentType?.preferredMIMEType, data: data)
+        let fileName = "\(id).\(videoExtension(for: mime))"
+        let videoURL = directory.appendingPathComponent(fileName)
         let thumbnailURL = directory.appendingPathComponent("\(id)-thumb.jpg")
 
         do {
@@ -69,13 +69,66 @@ actor UploadService {
             throw UploadError.writeFailed
         }
 
+        return try await finalizeVideoDraft(
+            id: id,
+            directory: directory,
+            videoURL: videoURL,
+            thumbnailURL: thumbnailURL,
+            mime: mime,
+            fileName: fileName,
+            originalFileSize: data.count
+        )
+    }
+
+    func prepareVideo(fileURL sourceURL: URL, contentType: UTType? = nil) async throws -> MediaDraft {
+        let id = UUID().uuidString
+        let directory = try mediaDirectory()
+        let head = try await readPrefixData(at: sourceURL, maxBytes: 16)
+        let mime = normalizedVideoMIME(contentType?.preferredMIMEType, data: head)
+        let fileName = "\(id).\(videoExtension(for: mime))"
+        let videoURL = directory.appendingPathComponent(fileName)
+        let thumbnailURL = directory.appendingPathComponent("\(id)-thumb.jpg")
+
+        do {
+            if FileManager.default.fileExists(atPath: videoURL.path) {
+                try FileManager.default.removeItem(at: videoURL)
+            }
+            try FileManager.default.copyItem(at: sourceURL, to: videoURL)
+        } catch {
+            throw UploadError.writeFailed
+        }
+
+        return try await finalizeVideoDraft(
+            id: id,
+            directory: directory,
+            videoURL: videoURL,
+            thumbnailURL: thumbnailURL,
+            mime: mime,
+            fileName: fileName,
+            originalFileSize: fileSize(at: videoURL)
+        )
+    }
+
+    private func finalizeVideoDraft(
+        id: String,
+        directory: URL,
+        videoURL inputVideoURL: URL,
+        thumbnailURL: URL,
+        mime inputMime: String,
+        fileName inputFileName: String,
+        originalFileSize: Int
+    ) async throws -> MediaDraft {
+        var videoURL = inputVideoURL
+        var mime = inputMime
+        var fileName = inputFileName
+
         // 视频统一压到 ≤1080p(4K 也降到 1080p),或当源文件超过发布上限时
         // 尝试重新编码。转码失败会回退原片;最终仍超过 200MB 时再明确拒绝。
         if let capped = await transcodeTo1080pIfNeeded(
             sourceURL: videoURL,
             directory: directory,
             id: id,
-            sourceByteCount: data.count
+            sourceByteCount: originalFileSize
         ) {
             try? FileManager.default.removeItem(at: videoURL)
             videoURL = capped
@@ -112,7 +165,7 @@ actor UploadService {
             width: videoSize.width,
             height: videoSize.height,
             duration: duration,
-            originalFileSize: data.count,
+            originalFileSize: originalFileSize,
             uploadFileSize: uploadFileSize
         )
     }
@@ -179,27 +232,39 @@ actor UploadService {
             metadata = nil
         }
 
-        let data: Data
-        do {
-            data = try await loadFileData(at: draft.localURL)
-        } catch {
-            throw UploadError.writeFailed
-        }
-
-        let uploaded = try await KaiXAPIClient.shared.uploadFile(
-            data: data,
-            mime: draft.contentType,
-            fileName: draft.fileName,
-            purpose: purpose,
-            entityType: entityType,
-            width: Int(draft.width),
-            height: Int(draft.height),
-            duration: draft.duration,
-            metadata: metadata
-        ) { progress in
-            if draft.type == .video {
+        let uploaded: (file: KaiXUploadedFileDTO, media: KaiXMediaDTO)
+        if draft.type == .video {
+            uploaded = try await KaiXAPIClient.shared.uploadFile(
+                fileURL: draft.localURL,
+                mime: draft.contentType,
+                fileName: draft.fileName,
+                purpose: purpose,
+                entityType: entityType,
+                width: Int(draft.width),
+                height: Int(draft.height),
+                duration: draft.duration,
+                metadata: metadata
+            ) { progress in
                 onProgress?(0.18 + progress * 0.82)
-            } else {
+            }
+        } else {
+            let data: Data
+            do {
+                data = try await loadFileData(at: draft.localURL)
+            } catch {
+                throw UploadError.writeFailed
+            }
+            uploaded = try await KaiXAPIClient.shared.uploadFile(
+                data: data,
+                mime: draft.contentType,
+                fileName: draft.fileName,
+                purpose: purpose,
+                entityType: entityType,
+                width: Int(draft.width),
+                height: Int(draft.height),
+                duration: draft.duration,
+                metadata: metadata
+            ) { progress in
                 onProgress?(progress)
             }
         }
@@ -217,6 +282,14 @@ actor UploadService {
     private func loadFileData(at url: URL) async throws -> Data {
         try await Task.detached(priority: .utility) {
             try Data(contentsOf: url)
+        }.value
+    }
+
+    private func readPrefixData(at url: URL, maxBytes: Int) async throws -> Data {
+        try await Task.detached(priority: .utility) {
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+            return try handle.read(upToCount: maxBytes) ?? Data()
         }.value
     }
 

@@ -186,20 +186,36 @@ final class MessageRepository {
             metadata = nil
         }
 
-        let data = try await loadFileData(at: draft.localURL)
         let purpose = draft.type == .video ? "message_video" : "message_image"
-        let uploaded = try await KaiXAPIClient.shared.uploadFile(
-            data: data,
-            mime: draft.contentType,
-            fileName: draft.fileName,
-            purpose: purpose,
-            entityType: "message",
-            threadId: threadId,
-            width: Int(draft.width.rounded()),
-            height: Int(draft.height.rounded()),
-            duration: draft.duration,
-            metadata: metadata
-        )
+        let uploaded: (file: KaiXUploadedFileDTO, media: KaiXMediaDTO)
+        if draft.type == .video {
+            uploaded = try await KaiXAPIClient.shared.uploadFile(
+                fileURL: draft.localURL,
+                mime: draft.contentType,
+                fileName: draft.fileName,
+                purpose: purpose,
+                entityType: "message",
+                threadId: threadId,
+                width: Int(draft.width.rounded()),
+                height: Int(draft.height.rounded()),
+                duration: draft.duration,
+                metadata: metadata
+            )
+        } else {
+            let data = try await loadFileData(at: draft.localURL)
+            uploaded = try await KaiXAPIClient.shared.uploadFile(
+                data: data,
+                mime: draft.contentType,
+                fileName: draft.fileName,
+                purpose: purpose,
+                entityType: "message",
+                threadId: threadId,
+                width: Int(draft.width.rounded()),
+                height: Int(draft.height.rounded()),
+                duration: draft.duration,
+                metadata: metadata
+            )
+        }
         return uploaded.file.id
     }
 

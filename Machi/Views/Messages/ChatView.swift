@@ -189,12 +189,20 @@ struct ChatView: View {
             Task {
                 var failedToLoad = false
                 for item in newValue {
-                    guard let data = try? await item.loadTransferable(type: Data.self) else {
-                        failedToLoad = true
-                        continue
-                    }
                     let videoContentType = item.supportedContentTypes.first { $0.conforms(to: .movie) }
-                    await viewModel.addMedia(data: data, isVideo: videoContentType != nil, contentType: videoContentType, language: language, messageStore: messageStore)
+                    if videoContentType != nil {
+                        guard let picked = try? await item.loadTransferable(type: PickedVideoFile.self) else {
+                            failedToLoad = true
+                            continue
+                        }
+                        await viewModel.addVideo(fileURL: picked.url, contentType: videoContentType, language: language, messageStore: messageStore)
+                    } else {
+                        guard let data = try? await item.loadTransferable(type: Data.self) else {
+                            failedToLoad = true
+                            continue
+                        }
+                        await viewModel.addMedia(data: data, isVideo: false, language: language, messageStore: messageStore)
+                    }
                 }
                 if failedToLoad {
                     viewModel.errorMessage = L("mediaFailed", language)

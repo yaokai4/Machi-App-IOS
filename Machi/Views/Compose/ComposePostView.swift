@@ -79,12 +79,20 @@ struct ComposePostView: View {
         .onChange(of: pickerItems) { _, newValue in
             Task {
                 for item in newValue {
-                    guard let data = try? await item.loadTransferable(type: Data.self) else {
-                        viewModel.reportMediaFailure(language: language)
-                        continue
-                    }
                     let videoContentType = item.supportedContentTypes.first { $0.conforms(to: .movie) }
-                    await viewModel.addMedia(data: data, isVideo: videoContentType != nil, contentType: videoContentType, language: language)
+                    if videoContentType != nil {
+                        guard let picked = try? await item.loadTransferable(type: PickedVideoFile.self) else {
+                            viewModel.reportMediaFailure(language: language)
+                            continue
+                        }
+                        await viewModel.addVideo(fileURL: picked.url, contentType: videoContentType, language: language)
+                    } else {
+                        guard let data = try? await item.loadTransferable(type: Data.self) else {
+                            viewModel.reportMediaFailure(language: language)
+                            continue
+                        }
+                        await viewModel.addMedia(data: data, isVideo: false, language: language)
+                    }
                 }
                 pickerItems = []
             }
