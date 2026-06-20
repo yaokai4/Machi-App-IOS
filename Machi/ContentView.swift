@@ -27,26 +27,45 @@ struct ContentView: View {
         AppLanguage.resolved(from: appLanguageCode)
     }
 
+    /// A coarse, Equatable launch phase so the splash → main / auth swap can
+    /// cross-fade-and-settle instead of hard-cutting. Changes only on bootstrap
+    /// completion, login, and logout — exactly the moments we want animated.
+    private var launchPhase: Int {
+        switch appState.state {
+        case .loading, .idle: return 0
+        case .error: return 1
+        case .empty: return 2
+        case .loaded: return appState.currentUser != nil ? 3 : 2
+        }
+    }
+
     var body: some View {
         Group {
             switch appState.state {
             case .loading, .idle:
                 KXSplashView()
+                    .transition(.opacity)
             case .error(let message):
                 ErrorStateView(message: message) {
                     Task { await appState.bootstrap(context: modelContext, currentUserId: currentUserID) }
                 }
             case .empty:
                 AuthView(onAuthenticated: completeLogin, onBrowseAsGuest: enterAsGuest)
+                    .transition(.opacity)
             case .loaded:
                 if let currentUser = appState.currentUser {
                     MainTabView(currentUser: currentUser, onLogout: logout, onSwitchAccount: switchAccount)
                         .id(currentUser.id)
+                        // The app "arrives": content fades up from a hair under
+                        // 1.0 as the splash fades out — a calm, premium settle.
+                        .transition(.opacity.combined(with: .scale(scale: 1.015)))
                 } else {
                     AuthView(onAuthenticated: completeLogin, onBrowseAsGuest: enterAsGuest)
+                        .transition(.opacity)
                 }
             }
         }
+        .animation(.smooth(duration: 0.5), value: launchPhase)
         .environment(\.appLanguage, language)
         .environmentObject(appRouter)
         .environmentObject(appChrome)
