@@ -208,6 +208,9 @@ extension KXRoute {
 private struct KXRouteDestinations: ViewModifier {
     @EnvironmentObject private var router: KXRouter
     @Environment(\.appLanguage) private var language
+    /// One namespace shared by every listing screen pushed onto this stack, so
+    /// a channel card can zoom into its detail (iOS 18+; no-op on 17).
+    @Namespace private var listingZoom
 
     let currentUser: UserEntity
 
@@ -232,11 +235,11 @@ private struct KXRouteDestinations: ViewModifier {
                 case .cityChannel(let regionCode, let channel):
                     CityChannelView(regionCode: regionCode, currentUser: currentUser, initialChannel: channel)
                 case .cityListings(let regionCode, let type):
-                    CityListingChannelView(regionCode: regionCode, listingType: type, currentUser: currentUser)
+                    CityListingChannelView(regionCode: regionCode, listingType: type, currentUser: currentUser, zoomNamespace: listingZoom)
                 case .userListings(let userId, let type, let title):
                     UserListingsView(userId: userId, listingType: type, title: title, currentUser: currentUser)
                 case .cityListingDetail(let listingId):
-                    CityListingDetailView(listingId: listingId, currentUser: currentUser)
+                    CityListingDetailView(listingId: listingId, currentUser: currentUser, zoomNamespace: listingZoom)
                 case .createCityListing(let type, let citySlug):
                     CreateCityListingView(listingType: type, citySlug: citySlug, currentUser: currentUser)
                 case .editCityListing(let listingId):

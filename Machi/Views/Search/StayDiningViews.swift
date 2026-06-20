@@ -170,30 +170,47 @@ struct KXStayListingCard: View {
         .buttonStyle(KXPressableStyle())
         .onAppear {
             if !favoriteSeeded {
-                favorited = listing.favorited ?? listing.isFavorited ?? false
+                favorited = FavoritesStore.shared.contains(listing.id) || (listing.favorited ?? listing.isFavorited ?? false)
                 favoriteSeeded = true
             }
         }
     }
 
-    /// 右上角爱心：乐观切换，失败回滚。
+    private var favoriteSnapshot: FavoriteSnapshot {
+        FavoriteSnapshot(
+            id: listing.id,
+            title: KXListingCopy.displayTitle(listing),
+            priceLabel: KXListingCopy.priceLabel(listing),
+            coverURLString: listing.realCoverURL?.absoluteString,
+            type: listing.type,
+            locationText: stationOrLocation.isEmpty ? listing.location_text : stationOrLocation,
+            savedAt: Date()
+        )
+    }
+
+    /// 右上角爱心：乐观切换，失败回滚；同时写入本地收藏。
     private var heartButton: some View {
         Button {
             let next = !favorited
             favorited = next
+            FavoritesStore.shared.set(favoriteSnapshot, on: next)
             Task {
                 do {
                     try await KaiXAPIClient.shared.favoriteListing(listing.id, on: next)
                 } catch {
                     favorited = !next
+                    FavoritesStore.shared.set(favoriteSnapshot, on: !next)
                 }
             }
         } label: {
             Image(systemName: favorited ? "heart.fill" : "heart")
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(favorited ? KXColor.heat : .primary)
+                .symbolEffect(.bounce, value: favorited)
                 .frame(width: 32, height: 32)
-                .background(.ultraThinMaterial, in: Circle())
+                .background(.regularMaterial, in: Circle())
+                .overlay(Circle().strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.7))
+                .shadow(color: .black.opacity(0.10), radius: 5, y: 2)
         }
         .buttonStyle(.plain)
     }
@@ -204,28 +221,22 @@ private struct KXStayCoverArtwork: View {
     let listing: KaiXCityListingDTO
     let isStay: Bool
 
-    private var coverURL: URL? { listing.realCoverURL }
+    /// All real listing photos (generated covers dropped) so the cover can
+    /// swipe between them; falls back to the single resolved cover.
+    private var coverURLs: [URL] {
+        let media = (listing.media ?? []).filter { !KaiXCityListingDTO.isGeneratedCover($0.url) }
+        let urls = media.compactMap { $0.previewURL }
+        if !urls.isEmpty { return urls }
+        return listing.realCoverURL.map { [$0] } ?? []
+    }
 
     var body: some View {
-        // Reserve a clean 4:3 box first: Color.clear has no intrinsic size, so
-        // the aspect ratio is exact and never warped by the photo's own
-        // dimensions. The cover then fills it (scaledToFill + clip), so every
-        // card lands the identical size regardless of the source image.
-        Color.clear
-            .frame(maxWidth: .infinity)
-            .aspectRatio(4.0 / 3.0, contentMode: .fit)
-            .overlay {
-                ZStack {
-                    // Placeholder always sits behind the photo: while it decodes
-                    // or if the remote image fails (slow 4G), the tasteful
-                    // placeholder shows through instead of a blank grey box.
-                    stayPlaceholder
-                    if let url = coverURL {
-                        CachedMediaImageView(url: url, targetPixelSize: 960, failureMode: .transparent)
-                    }
-                }
-            }
-            .clipped()
+        // Photo-led cover: swipes between photos (with dots) when there are
+        // several, else a single fill — placeholder always behind so slow/
+        // failed loads degrade to a tasteful tile instead of a grey box.
+        KXCoverCarousel(urls: coverURLs, aspectRatio: 4.0 / 3.0, targetPixelSize: 960) {
+            stayPlaceholder
+        }
     }
 
     private var stayPlaceholder: some View {

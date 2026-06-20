@@ -159,26 +159,45 @@ struct KXServiceListingCard: View {
         .buttonStyle(KXPressableStyle())
         .onAppear {
             if !favoriteSeeded {
-                favorited = listing.favorited ?? listing.isFavorited ?? false
+                favorited = FavoritesStore.shared.contains(listing.id) || (listing.favorited ?? listing.isFavorited ?? false)
                 favoriteSeeded = true
             }
         }
+    }
+
+    private var favoriteSnapshot: FavoriteSnapshot {
+        FavoriteSnapshot(
+            id: listing.id,
+            title: KXListingCopy.displayTitle(listing),
+            priceLabel: priceText,
+            coverURLString: listing.realCoverURL?.absoluteString,
+            type: listing.type,
+            locationText: listing.location_text,
+            savedAt: Date()
+        )
     }
 
     private var heartButton: some View {
         Button {
             let next = !favorited
             favorited = next
+            FavoritesStore.shared.set(favoriteSnapshot, on: next)
             Task {
                 do { try await KaiXAPIClient.shared.favoriteListing(listing.id, on: next) }
-                catch { favorited = !next }
+                catch {
+                    favorited = !next
+                    FavoritesStore.shared.set(favoriteSnapshot, on: !next)
+                }
             }
         } label: {
             Image(systemName: favorited ? "heart.fill" : "heart")
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(favorited ? KXColor.heat : .primary)
+                .symbolEffect(.bounce, value: favorited)
                 .frame(width: 32, height: 32)
-                .background(.ultraThinMaterial, in: Circle())
+                .background(.regularMaterial, in: Circle())
+                .overlay(Circle().strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.7))
+                .shadow(color: .black.opacity(0.10), radius: 5, y: 2)
         }
         .buttonStyle(.plain)
     }
@@ -188,30 +207,24 @@ struct KXServiceListingCard: View {
 private struct ListingCoverArtwork: View {
     let listing: KaiXCityListingDTO
 
-    private var coverURL: URL? { listing.realCoverURL }
-
     private var category: String { listing.category ?? "" }
 
+    /// All real listing photos (generated covers dropped) for the swipeable
+    /// cover; falls back to the single resolved cover.
+    private var coverURLs: [URL] {
+        let media = (listing.media ?? []).filter { !KaiXCityListingDTO.isGeneratedCover($0.url) }
+        let urls = media.compactMap { $0.previewURL }
+        if !urls.isEmpty { return urls }
+        return listing.realCoverURL.map { [$0] } ?? []
+    }
+
     var body: some View {
-        // Reserve an exact 4:3 box with a zero-intrinsic-size Color.clear so a
-        // tall/odd source photo can never stretch the card (this was the bug:
-        // applying .aspectRatio to a ZStack that already carried the image's
-        // own intrinsic size did nothing). The cover then fills + clips into
-        // the box, identical to KXStayCoverArtwork.
-        Color.clear
-            .frame(maxWidth: .infinity)
-            .aspectRatio(4.0 / 3.0, contentMode: .fit)
-            .overlay {
-                ZStack {
-                    // Placeholder behind the photo so failed/slow loads degrade
-                    // to a tasteful tile instead of a blank grey rectangle.
-                    servicePlaceholder
-                    if let url = coverURL {
-                        CachedMediaImageView(url: url, targetPixelSize: 720, failureMode: .transparent)
-                    }
-                }
-            }
-            .clipped()
+        // Swipeable photo cover (dots when multiple), placeholder behind so
+        // failed/slow loads degrade to a tasteful tile, identical box geometry
+        // to KXStayCoverArtwork.
+        KXCoverCarousel(urls: coverURLs, aspectRatio: 4.0 / 3.0, targetPixelSize: 720) {
+            servicePlaceholder
+        }
     }
 
     private var servicePlaceholder: some View {

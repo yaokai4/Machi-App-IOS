@@ -171,6 +171,46 @@ extension View {
             self
         }
     }
+
+    /// Conditional zoom source/destination — applies the matched-transition
+    /// pair only when a namespace is threaded through (router-built listing
+    /// screens share one), otherwise a plain no-op so other call sites and the
+    /// DEBUG push path are unaffected.
+    @ViewBuilder
+    func kxListingZoomSource(_ id: String, _ namespace: Namespace.ID?) -> some View {
+        if let namespace {
+            self.kxMatchedTransitionSource(id: id, in: namespace)
+        } else {
+            self
+        }
+    }
+
+    @ViewBuilder
+    func kxListingZoomDestination(_ id: String, _ namespace: Namespace.ID?) -> some View {
+        if let namespace {
+            self.kxZoomTransition(sourceID: id, in: namespace)
+        } else {
+            self
+        }
+    }
+
+    /// Drives a `collapsed` flag from a scroll view's vertical offset so a
+    /// pinned header can condense once the user scrolls past `threshold`.
+    /// iOS 18+ only (uses scroll geometry); on 17 the header stays expanded.
+    @ViewBuilder
+    func kxScrollCollapse(threshold: CGFloat = 24, _ collapsed: Binding<Bool>) -> some View {
+        if #available(iOS 18, *) {
+            self.onScrollGeometryChange(for: Bool.self) { geo in
+                geo.contentOffset.y > threshold
+            } action: { _, newValue in
+                if collapsed.wrappedValue != newValue {
+                    withAnimation(.snappy(duration: 0.24)) { collapsed.wrappedValue = newValue }
+                }
+            }
+        } else {
+            self
+        }
+    }
 }
 
 enum KXMaterial {
@@ -738,6 +778,85 @@ struct KXFeedSkeleton: View {
         }
         .accessibilityHidden(true)
         .transition(.opacity)
+    }
+}
+
+// MARK: - Cover carousel (Airbnb-style swipeable photos on list cards)
+
+/// Page dots drawn for legibility over any photo: white dots in a soft dark
+/// pill, the active one larger + opaque. Caps at 7 dots so long galleries
+/// don't overflow a card's width.
+struct KXCarouselDots: View {
+    let count: Int
+    let index: Int
+
+    var body: some View {
+        let shown = min(count, 7)
+        HStack(spacing: 5) {
+            ForEach(0..<shown, id: \.self) { i in
+                Circle()
+                    .fill(Color.white.opacity(i == index ? 1 : 0.55))
+                    .frame(width: i == index ? 6.5 : 5, height: i == index ? 6.5 : 5)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(.black.opacity(0.22), in: Capsule())
+        .shadow(color: .black.opacity(0.16), radius: 3, y: 1)
+        .animation(.snappy(duration: 0.2), value: index)
+    }
+}
+
+/// Photo-led cover that swipes between a listing's images (with dots) when
+/// there is more than one, and degrades to a single fill — or the supplied
+/// `placeholder` — otherwise. Reserves an exact aspect box with a
+/// zero-intrinsic Color.clear so an odd source photo can't warp the card.
+struct KXCoverCarousel<Placeholder: View>: View {
+    let urls: [URL]
+    var aspectRatio: CGFloat = 4.0 / 3.0
+    var targetPixelSize: CGFloat = 960
+    let placeholder: Placeholder
+
+    @State private var page = 0
+
+    init(
+        urls: [URL],
+        aspectRatio: CGFloat = 4.0 / 3.0,
+        targetPixelSize: CGFloat = 960,
+        @ViewBuilder placeholder: () -> Placeholder
+    ) {
+        self.urls = urls
+        self.aspectRatio = aspectRatio
+        self.targetPixelSize = targetPixelSize
+        self.placeholder = placeholder()
+    }
+
+    var body: some View {
+        Color.clear
+            .frame(maxWidth: .infinity)
+            .aspectRatio(aspectRatio, contentMode: .fit)
+            .overlay {
+                ZStack {
+                    placeholder
+                    if urls.count == 1 {
+                        CachedMediaImageView(url: urls[0], targetPixelSize: targetPixelSize, failureMode: .transparent)
+                    } else if urls.count > 1 {
+                        TabView(selection: $page) {
+                            ForEach(Array(urls.enumerated()), id: \.offset) { index, url in
+                                CachedMediaImageView(url: url, targetPixelSize: targetPixelSize, failureMode: .transparent)
+                                    .clipped()
+                                    .tag(index)
+                            }
+                        }
+                        .tabViewStyle(.page(indexDisplayMode: .never))
+                        .overlay(alignment: .bottom) {
+                            KXCarouselDots(count: urls.count, index: page)
+                                .padding(.bottom, 9)
+                        }
+                    }
+                }
+            }
+            .clipped()
     }
 }
 

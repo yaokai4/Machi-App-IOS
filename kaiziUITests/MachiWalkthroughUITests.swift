@@ -124,6 +124,91 @@ final class MachiWalkthroughUITests: XCTestCase {
         snap("17_merchant_form_bottom")
     }
 
+    /// Captures the redesigned four discover channels (二手 / 租房 / 工作 /
+    /// 商家与服务) — new search-first chrome, icon category rail and filter
+    /// bottom sheet. PNGs land in /tmp/machi_shots/ prefixed `RD_`.
+    @MainActor
+    func testFourChannelRedesign() throws {
+        let app = XCUIApplication()
+        // To audit dark mode, prepend ["-appAppearance", "dark"] to launchArguments.
+        app.launch()
+
+        _ = app.buttons["auth.mode.register"].waitForExistence(timeout: 25)
+        let guest = app.buttons["auth.browseAsGuest"].firstMatch
+        if guest.waitForExistence(timeout: 10) { forceTap(guest) }
+        _ = app.buttons["tabbar.search"].waitForExistence(timeout: 30)
+        pause(3)
+        tapTab(app, "tabbar.search")
+        pause(2.5)
+        snap("RD_00_discover")
+
+        // Map view (client-side geocoded) — capture from the first channel.
+        let mapCard = app.staticTexts["二手市场"].firstMatch
+        if mapCard.waitForExistence(timeout: 6) {
+            forceTap(mapCard)
+            pause(3)
+            let mapBtn = app.buttons["地图"].firstMatch
+            if mapBtn.waitForExistence(timeout: 4) {
+                forceTap(mapBtn)
+                pause(8)   // allow on-device geocoding to drop pins
+                snap("RD_map")
+            }
+            tapBack(app)
+            pause(1.5)
+        }
+
+        let entries: [(label: String, key: String)] = [
+            ("二手市场", "secondhand"),
+            ("租房 · 住宿", "rental"),
+            ("工作", "work"),
+            ("商家与服务", "service"),
+        ]
+        for entry in entries {
+            tapTab(app, "tabbar.search")
+            pause(1.5)
+            let card = app.staticTexts[entry.label].firstMatch
+            guard card.waitForExistence(timeout: 8) else { continue }
+            forceTap(card)
+            pause(3.5)
+            snap("RD_\(entry.key)_1_top")
+            app.swipeUp()
+            pause(1.2)
+            snap("RD_\(entry.key)_2_scrolled")
+            app.swipeDown()
+            pause(1)
+            // Open the filter bottom sheet via its accessibility label, then
+            // dismiss by swiping the (un-scrolled) sheet straight down.
+            let filters = app.buttons["筛选"].firstMatch
+            if filters.waitForExistence(timeout: 4) {
+                forceTap(filters)
+                pause(2)
+                snap("RD_\(entry.key)_3_filters")
+                app.swipeDown(velocity: .fast)
+                pause(1.2)
+            }
+            tapBack(app)
+            pause(1.5)
+        }
+
+        // Local 收藏 page — open from a channel header heart.
+        tapTab(app, "tabbar.search")
+        pause(1.2)
+        let mk = app.staticTexts["二手市场"].firstMatch
+        if mk.waitForExistence(timeout: 6) {
+            forceTap(mk)
+            pause(3)
+            let saved = app.buttons["我的收藏"].firstMatch
+            if saved.waitForExistence(timeout: 4) {
+                forceTap(saved)
+                pause(1.5)
+                snap("RD_wishlist")
+                app.swipeDown(velocity: .fast)
+                pause(1)
+            }
+            tapBack(app)
+        }
+    }
+
     /// Regression for the workbench freeze: the profile top-left workbench
     /// button opens a fullScreenCover that must come up fully rendered (the
     /// earlier bug left the whole cover at opacity 0 — a blank/frozen screen
