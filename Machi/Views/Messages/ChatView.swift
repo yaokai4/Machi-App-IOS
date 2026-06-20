@@ -667,7 +667,11 @@ struct KXMessageBubble: View {
                         .padding(.vertical, 9)
                         .background {
                             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .fill(isMine ? KXColor.accent : KXColor.cardBackground)
+                                .fill(isMine
+                                      ? AnyShapeStyle(LinearGradient(
+                                            colors: [KXColor.accent, KXColor.accent.opacity(0.86)],
+                                            startPoint: .top, endPoint: .bottom))
+                                      : AnyShapeStyle(KXColor.cardBackground))
                         }
                         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                         .overlay(

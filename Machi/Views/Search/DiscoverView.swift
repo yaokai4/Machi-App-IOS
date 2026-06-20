@@ -1302,6 +1302,8 @@ private struct HotBoardSection: View {
             content
         }
         .task(id: reloadKey) { await reload() }
+        .sensoryFeedback(.selection, trigger: scope)
+        .sensoryFeedback(.selection, trigger: window)
     }
 
     private var switchers: some View {
@@ -1341,7 +1343,7 @@ private struct HotBoardSection: View {
                     } label: {
                         HotBoardRow(item: item, language: language)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(KXPressableStyle(scale: 0.985, dim: 0.92))
                     if idx != items.count - 1 {
                         Divider().opacity(0.14).padding(.leading, 56)
                     }
@@ -1563,7 +1565,7 @@ private struct HappeningSection: View {
                     Button { onOpenPost(post) } label: {
                         HappeningRadarRow(post: post, author: authors[post.authorId], language: language)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(KXPressableStyle(scale: 0.985, dim: 0.92))
                     if idx != posts.count - 1 {
                         Divider().opacity(0.12).padding(.leading, 60)
                     }
@@ -1736,7 +1738,7 @@ private struct DiscoverContentList: View {
                             showHeat: segment == .ranking
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(KXPressableStyle(scale: 0.985, dim: 0.92))
                     if displayed.id != visible.last?.id {
                         Divider().opacity(0.16).padding(.leading, 52)
                     }

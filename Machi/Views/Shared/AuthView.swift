@@ -129,12 +129,21 @@ struct AuthView: View {
             HStack {
                 ZStack {
                     Circle()
-                        .fill(KXColor.accent.opacity(0.18))
-                        .kxLiquidGlass(.selected, in: Circle(), interactive: false)
+                        .fill(
+                            LinearGradient(
+                                colors: [KXColor.accent, KXColor.accent.opacity(0.74)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
                         .frame(width: 62, height: 62)
+                        .overlay(
+                            Circle().stroke(Color.white.opacity(0.18), lineWidth: 1)
+                        )
+                        .shadow(color: KXColor.accent.opacity(0.36), radius: 14, y: 7)
                     Image(systemName: "bolt.fill")
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(KXColor.accent)
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(.white)
                 }
 
                 Spacer()
@@ -367,13 +376,28 @@ struct AuthView: View {
                     Image(systemName: "arrow.right")
                 }
                 .font(.headline.weight(.bold))
-                .foregroundStyle(isFormReady ? KXColor.accent : .secondary)
+                .foregroundStyle(isFormReady ? .white : .secondary)
                 .frame(maxWidth: .infinity)
                 .frame(height: 56)
-                .kxGlassCapsule(isSelected: isFormReady)
+                .background {
+                    if isFormReady {
+                        Capsule().fill(
+                            LinearGradient(
+                                colors: [KXColor.accent, KXColor.accent.opacity(0.82)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                    } else {
+                        Capsule().fill(KXColor.softBackground)
+                            .overlay(Capsule().stroke(KXColor.separator, lineWidth: 0.7))
+                    }
+                }
+                .clipShape(Capsule())
+                .shadow(color: isFormReady ? KXColor.accent.opacity(0.30) : .clear, radius: 14, y: 7)
             }
             .disabled(!isFormReady || viewModel.isLoading)
-            .buttonStyle(.plain)
+            .buttonStyle(KXPressableStyle(scale: 0.98, dim: 0.9))
             .accessibilityIdentifier("auth.submit")
 
             HStack(spacing: 10) {
