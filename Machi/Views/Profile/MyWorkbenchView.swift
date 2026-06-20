@@ -29,12 +29,8 @@ struct MyWorkbenchView: View {
                     .kxWorkbenchEntrance(didEnter, index: 0)
                 publishSection
                     .kxWorkbenchEntrance(didEnter, index: 1)
-                contentSection
-                    .kxWorkbenchEntrance(didEnter, index: 2)
-                membershipSection
-                    .kxWorkbenchEntrance(didEnter, index: 3)
                 serviceSection
-                    .kxWorkbenchEntrance(didEnter, index: 4)
+                    .kxWorkbenchEntrance(didEnter, index: 2)
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
             .padding(.top, 12)
@@ -100,38 +96,6 @@ struct MyWorkbenchView: View {
                     mediaByPostId: viewModel.mediaByPostId,
                     currentUser: currentUser
                 )
-            }
-            SettingsDivider()
-            SettingsRowLink(icon: "tray.full", tint: .purple, title: L("drafts", language), value: "\(viewModel.draftCount)", subtitle: L("navigationReady", language)) {
-                DraftsSettingsView(currentUser: currentUser)
-            }
-        }
-    }
-
-    private var contentSection: some View {
-        SettingsSectionCard(title: L("contentManagement", language)) {
-            SettingsRowLink(icon: "bookmark.fill", tint: .blue, title: L("bookmarks", language), value: "\(viewModel.bookmarkCount)", subtitle: "\(viewModel.bookmarkCount) \(L("savedItems", language))") {
-                BookmarkView(currentUser: currentUser)
-            }
-            SettingsDivider()
-            SettingsRowLink(icon: "photo.on.rectangle", tint: .cyan, title: L("mediaLibrary", language), value: "\(viewModel.mediaCount)", subtitle: L("navigationReady", language)) {
-                MediaLibraryView(currentUser: currentUser)
-            }
-        }
-    }
-
-    private var membershipSection: some View {
-        SettingsSectionCard(title: L("workbenchMembershipSection", language)) {
-            SettingsRowLink(icon: "checkmark.seal.fill", tint: .blue, title: L("membershipSettingsTitle", language), value: currentUser.isVerifiedMember ? L("membershipStatusActive", language) : nil, subtitle: L("membershipSettingsSubtitle", language)) {
-                MembershipView(currentUser: currentUser)
-            }
-            SettingsDivider()
-            SettingsRowLink(icon: "books.vertical.fill", tint: .orange, title: L("memberLibraryTitle", language), subtitle: L("memberLibrarySubtitle", language)) {
-                GuideMemberResourcesView()
-            }
-            SettingsDivider()
-            SettingsRowLink(icon: "doc.plaintext.fill", tint: .green, title: L("ordersTitle", language), subtitle: L("ordersSubtitle", language)) {
-                MyOrdersView()
             }
         }
     }

@@ -112,12 +112,9 @@ struct NotificationsView: View {
                             } else {
                                 router.routeErrorMessage = L("postDeletedHelp", language)
                             }
-                        },
-                        onMarkRead: {
-                            Task { await viewModel.markRead(context: modelContext, aggregate: item, notificationStore: notificationStore) }
                         }
                     )
-                    .listRowInsets(EdgeInsets(top: 4, leading: KXSpacing.screen, bottom: 4, trailing: KXSpacing.screen))
+                    .listRowInsets(EdgeInsets(top: 5, leading: KXSpacing.screen, bottom: 5, trailing: KXSpacing.screen))
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -209,98 +206,119 @@ private struct NotificationCard: View {
     let actors: [String: UserEntity]
     let onOpenProfile: (String) -> Void
     let onOpenTarget: () -> Void
-    let onMarkRead: () -> Void
 
     private var primaryActor: UserEntity? {
         notification.actorIds.compactMap { actors[$0] }.first
     }
 
+    private var isUnread: Bool { !notification.isRead }
+
     var body: some View {
-        HStack(alignment: .top, spacing: KXSpacing.md) {
+        HStack(alignment: .center, spacing: KXSpacing.md) {
+            // Avatar → opens the actor's profile.
             Button {
                 if let actorId = primaryActor?.id {
                     onOpenProfile(actorId)
                 }
             } label: {
-                ZStack(alignment: .bottomTrailing) {
-                    AvatarView(user: primaryActor, size: KXAvatarSize.md)
-                    // Floating type badge: a soft gradient pill that sits at the
-                    // avatar's corner (slight outward offset) with a colored shadow,
-                    // instead of a flat solid circle clipped inside the avatar.
-                    Image(systemName: icon)
-                        .font(.system(size: 9, weight: .black))
-                        .foregroundStyle(.white)
-                        .frame(width: 19, height: 19)
-                        .background(
-                            Circle().fill(
-                                LinearGradient(
-                                    colors: [color.opacity(0.92), color],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-                        )
-                        .overlay(Circle().stroke(KaiXTheme.cardBackground, lineWidth: 2))
-                        .shadow(color: color.opacity(0.30), radius: 2, y: 1)
-                        .offset(x: 2.5, y: 2.5)
-                }
+                avatar
             }
             .buttonStyle(.plain)
 
+            // The entire remaining row → opens the related content. The hit
+            // shape is the full rectangle so taps land anywhere, not just on
+            // the glyphs.
             Button(action: onOpenTarget) {
-                VStack(alignment: .leading, spacing: KXSpacing.xs) {
-                    HStack(spacing: 5) {
+                HStack(alignment: .center, spacing: KXSpacing.sm) {
+                    VStack(alignment: .leading, spacing: 3) {
                         Text(title)
-                            .font(.subheadline.weight(.semibold))
+                            .font(.subheadline.weight(isUnread ? .bold : .semibold))
                             .foregroundStyle(.primary)
-                        if !notification.isRead {
-                            Circle()
-                                .fill(.blue)
-                                .frame(width: 7, height: 7)
+                            .lineLimit(2)
+
+                        if !notification.content.isEmpty {
+                            Text(notification.content)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
                         }
+
+                        Text(DateFormatterUtils.relativeText(from: notification.createdAt, language: language))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                            .padding(.top, 1)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                    Text(notification.content)
-                        .font(KXTypography.meta)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-
-                    Text(DateFormatterUtils.relativeText(from: notification.createdAt, language: language))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                    if isUnread {
+                        Circle()
+                            .fill(KXColor.accent)
+                            .frame(width: 9, height: 9)
+                            .shadow(color: KXColor.accent.opacity(0.45), radius: 3, y: 1)
+                    } else {
+                        Image(systemName: "chevron.right")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.tertiary)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-
-            readIndicator
         }
-        .padding(KXSpacing.md)
-        .kxGlassSurface(radius: KXRadius.md)
+        .padding(.vertical, 11)
+        .padding(.horizontal, 13)
+        .background(cardBackground)
+        .overlay(alignment: .leading) {
+            // A slim accent rail marks unread items at a glance, the way Mail
+            // does — far cleaner than a "已读/未读" pill on every single row.
+            if isUnread {
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(KXColor.accent)
+                    .frame(width: 3.5)
+                    .padding(.vertical, 12)
+                    .padding(.leading, 1)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
+                .stroke(isUnread ? KXColor.accent.opacity(0.16) : KXColor.separator.opacity(0.35), lineWidth: 0.6)
+        )
+        .shadow(color: KXColor.glassShadow.opacity(isUnread ? 0.16 : 0.07), radius: isUnread ? 9 : 5, y: 3)
+    }
+
+    private var avatar: some View {
+        ZStack(alignment: .bottomTrailing) {
+            AvatarView(user: primaryActor, size: KXAvatarSize.md)
+            // Floating type badge: a soft gradient pill at the avatar's corner
+            // with a colored shadow, instead of a flat solid circle.
+            Image(systemName: icon)
+                .font(.system(size: 9, weight: .black))
+                .foregroundStyle(.white)
+                .frame(width: 20, height: 20)
+                .background(
+                    Circle().fill(
+                        LinearGradient(
+                            colors: [color.opacity(0.92), color],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                )
+                .overlay(Circle().stroke(KaiXTheme.cardBackground, lineWidth: 2))
+                .shadow(color: color.opacity(0.32), radius: 2.5, y: 1)
+                .offset(x: 3, y: 3)
+        }
     }
 
     @ViewBuilder
-    private var readIndicator: some View {
-        if notification.isRead {
-            Label(L("markViewed", language), systemImage: "checkmark")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(Capsule(style: .continuous).fill(KXColor.softBackground.opacity(0.76)))
-                .accessibilityLabel(L("markViewed", language))
+    private var cardBackground: some View {
+        if isUnread {
+            // Unread rows lift off the page with a faint accent wash.
+            KXColor.accent.opacity(0.06)
         } else {
-            Button(action: onMarkRead) {
-                Label(L("markUnviewed", language), systemImage: "checkmark")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(KXColor.accent)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(Capsule(style: .continuous).fill(KXColor.accent.opacity(0.10)))
-                    .overlay(Capsule(style: .continuous).stroke(KXColor.accent.opacity(0.20), lineWidth: 0.8))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(L("markRead", language))
+            KXColor.cardBackground
         }
     }
 

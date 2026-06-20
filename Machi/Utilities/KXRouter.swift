@@ -144,6 +144,19 @@ final class AppRouter: ObservableObject {
 
     private func append(_ route: KXRoute, to tab: AppTab) {
         var nextPath = path(for: tab)
+        // Idempotent navigation: if the destination is already somewhere in
+        // this tab's stack, pop back to it instead of pushing a duplicate.
+        // Without this, bouncing between two users' profiles (A→B→A→B…) — or
+        // any A→…→A loop — grew the stack without bound, so the user had to
+        // tap Back a dozen times to escape. Pop-to-existing keeps the back
+        // chain shallow and matches what people expect ("I'm already here").
+        if let existingIndex = nextPath.lastIndex(of: route) {
+            if existingIndex < nextPath.count - 1 {
+                nextPath.removeSubrange((existingIndex + 1)...)
+                setPath(nextPath, for: tab)
+            }
+            return
+        }
         nextPath.append(route)
         setPath(nextPath, for: tab)
     }

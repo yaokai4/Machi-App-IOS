@@ -407,30 +407,7 @@ struct ChatView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(viewModel.mediaDrafts) { draft in
-                        ZStack(alignment: .topTrailing) {
-                            CachedMediaImageView(url: draft.thumbnailURL)
-                                .frame(width: 82, height: 82)
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
-
-                            if draft.type == .video {
-                                Image(systemName: "play.fill")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.white)
-                                    .padding(6)
-                                    .background(.black.opacity(0.68))
-                                    .clipShape(Circle())
-                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                                    .padding(6)
-                            }
-
-                            Button {
-                                viewModel.removeMedia(draft, messageStore: messageStore)
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundStyle(.white, .black.opacity(0.75))
-                            }
-                            .padding(5)
-                        }
+                        draftChip(draft)
                     }
                 }
                 .padding(.horizontal, 14)
@@ -438,6 +415,55 @@ struct ChatView: View {
             }
             .kxGlassBar()
         }
+    }
+
+    private func draftChip(_ draft: MediaDraft) -> some View {
+        // Every affordance is an overlay on the fixed 82×82 thumbnail. The old
+        // play badge used `.frame(maxWidth/maxHeight: .infinity)` inside the
+        // ZStack, which — proposed an unbounded width by the horizontal
+        // ScrollView — exploded the chip to full size (the stray floating play
+        // button). Overlays stay clamped to the thumbnail.
+        let isUploading = viewModel.isSending && viewModel.sendUploadProgress != nil
+        return CachedMediaImageView(url: draft.thumbnailURL)
+            .frame(width: 82, height: 82)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(alignment: .bottomLeading) {
+                if draft.type == .video {
+                    Image(systemName: "play.fill")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(5)
+                        .background(.black.opacity(0.62), in: Circle())
+                        .padding(5)
+                }
+            }
+            .overlay {
+                if isUploading, let progress = viewModel.sendUploadProgress {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(.black.opacity(0.46))
+                        ChatUploadProgressRing(progress: progress)
+                    }
+                }
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(KXColor.separator.opacity(0.22), lineWidth: 0.6)
+            )
+            .overlay(alignment: .topTrailing) {
+                if !isUploading {
+                    Button {
+                        viewModel.removeMedia(draft, messageStore: messageStore)
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.body)
+                            .foregroundStyle(.white, .black.opacity(0.75))
+                            .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(4)
+                }
+            }
     }
 
     private var chatSearchTools: some View {
@@ -709,6 +735,31 @@ private struct ChatInputBar: View {
 
 private enum ChatBottomAnchor {
     static let id = "chat-bottom-anchor"
+}
+
+/// Determinate ring shown over a draft thumbnail while its media streams to
+/// S3 — the WeChat-style "uploading NN%" affordance.
+private struct ChatUploadProgressRing: View {
+    let progress: Double
+
+    private var clamped: Double { Swift.min(Swift.max(progress, 0), 1) }
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(.white.opacity(0.26), lineWidth: 3)
+            Circle()
+                .trim(from: 0, to: Swift.max(0.02, clamped))
+                .stroke(.white, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            Text("\(Int(clamped * 100))%")
+                .font(.system(size: 11, weight: .heavy))
+                .foregroundStyle(.white)
+                .monospacedDigit()
+        }
+        .frame(width: 44, height: 44)
+        .animation(.easeOut(duration: 0.2), value: clamped)
+    }
 }
 
 private struct ChatInputToolIcon: View {

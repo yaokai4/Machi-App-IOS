@@ -190,7 +190,13 @@ struct SettingsRowContent: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .frame(minHeight: 60)
+        // Without an explicit hit shape, SwiftUI only registers taps on the
+        // rendered glyphs (icon/text) — the gaps and trailing space fall
+        // through, so the row "doesn't respond unless you hit the text".
+        // Make the whole row rectangle tappable.
+        .contentShape(Rectangle())
     }
 }
 

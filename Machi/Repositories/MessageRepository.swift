@@ -108,17 +108,26 @@ final class MessageRepository {
         thread: MessageThreadEntity,
         senderId: String,
         content: String,
-        mediaDrafts: [MediaDraft] = []
+        mediaDrafts: [MediaDraft] = [],
+        onProgress: ((Double) -> Void)? = nil
     ) async throws -> MessageEntity {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.isEmpty == false || mediaDrafts.isEmpty == false else { throw RepositoryError.validationFailed }
 
         if KaiXBackend.token != nil {
             var attachmentIds: [String] = []
-            for draft in mediaDrafts {
-                let fileId = try await Self.uploadMessageAttachment(draft, threadId: thread.id)
+            let total = Swift.max(1, mediaDrafts.count)
+            for (index, draft) in mediaDrafts.enumerated() {
+                // Map each attachment's own 0…1 upload into its slice of the
+                // overall send so the UI can show one continuous progress.
+                let base = Double(index) / Double(total)
+                let span = 1.0 / Double(total)
+                let fileId = try await Self.uploadMessageAttachment(draft, threadId: thread.id) { fraction in
+                    onProgress?(base + span * Swift.min(Swift.max(fraction, 0), 1))
+                }
                 attachmentIds.append(fileId)
             }
+            onProgress?(1)
             let dto = try await KaiXAPIClient.shared.sendMessage(thread.id, content: trimmed, attachmentIds: attachmentIds)
             let mappedMedia = await Self.resolvedMediaItems(from: dto)
             Self.cachedMediaByConversationId[thread.id, default: [:]][dto.id] = mappedMedia
@@ -164,9 +173,15 @@ final class MessageRepository {
         return message
     }
 
-    private static func uploadMessageAttachment(_ draft: MediaDraft, threadId: String) async throws -> String {
+    private static func uploadMessageAttachment(
+        _ draft: MediaDraft,
+        threadId: String,
+        onProgress: ((Double) -> Void)? = nil
+    ) async throws -> String {
         let metadata: [String: String]?
         if draft.type == .video {
+            // The poster is tiny — reserve the first 8% of the bar for it so
+            // the long video upload owns the visible remainder.
             let thumbnailData = try await loadFileData(at: draft.thumbnailURL)
             let cover = try await KaiXAPIClient.shared.uploadFile(
                 data: thumbnailData,
@@ -177,7 +192,9 @@ final class MessageRepository {
                 threadId: threadId,
                 width: Int(draft.width.rounded()),
                 height: Int(draft.height.rounded())
-            )
+            ) { progress in
+                onProgress?(Swift.min(0.08, progress * 0.08))
+            }
             metadata = [
                 "thumbnailFileId": cover.file.id,
                 "posterFileId": cover.file.id
@@ -200,7 +217,9 @@ final class MessageRepository {
                 height: Int(draft.height.rounded()),
                 duration: draft.duration,
                 metadata: metadata
-            )
+            ) { progress in
+                onProgress?(0.08 + Swift.min(Swift.max(progress, 0), 1) * 0.92)
+            }
         } else {
             let data = try await loadFileData(at: draft.localURL)
             uploaded = try await KaiXAPIClient.shared.uploadFile(
@@ -214,7 +233,9 @@ final class MessageRepository {
                 height: Int(draft.height.rounded()),
                 duration: draft.duration,
                 metadata: metadata
-            )
+            ) { progress in
+                onProgress?(Swift.min(Swift.max(progress, 0), 1))
+            }
         }
         return uploaded.file.id
     }

@@ -85,6 +85,10 @@ final class ChatViewModel: ObservableObject {
     @Published var isShowingSearchTools = false
     @Published var state: ScreenState = .idle
     @Published var isSending = false
+    /// Overall 0…1 progress while a message's media is uploading to S3, or
+    /// nil when there is no in-flight media upload. Drives the ring on the
+    /// draft thumbnails.
+    @Published var sendUploadProgress: Double?
     @Published var errorMessage: String?
 
     var canSend: Bool {
@@ -216,14 +220,24 @@ final class ChatViewModel: ObservableObject {
         guard canSend else { return }
         let drafts = mediaDrafts
         isSending = true
-        defer { isSending = false }
+        sendUploadProgress = drafts.isEmpty ? nil : 0
+        defer {
+            isSending = false
+            sendUploadProgress = nil
+        }
         do {
             let repository = MessageRepository(context: context)
             let message = try await repository.sendMessage(
                 thread: thread,
                 senderId: currentUser.id,
                 content: inputText,
-                mediaDrafts: drafts
+                mediaDrafts: drafts,
+                onProgress: { [weak self] fraction in
+                    Task { @MainActor in
+                        guard let self, self.isSending else { return }
+                        self.sendUploadProgress = Swift.min(Swift.max(fraction, 0.01), 0.99)
+                    }
+                }
             )
             messageStore?.enqueueSending(message)
             inputText = ""

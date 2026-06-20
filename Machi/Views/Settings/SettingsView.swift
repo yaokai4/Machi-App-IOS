@@ -133,6 +133,10 @@ struct SettingsView: View {
                 MembershipView(currentUser: currentUser)
             }
             SettingsDivider()
+            SettingsRowLink(icon: "doc.plaintext.fill", tint: .green, title: L("ordersTitle", language), subtitle: L("ordersSubtitle", language)) {
+                MyOrdersView()
+            }
+            SettingsDivider()
             SettingsRowLink(icon: "globe.asia.australia", tint: .teal, title: L("regionAndLanguage", language), value: AppAppearance.from(appAppearance).title(language), subtitle: L("regionAndLanguageSubtitle", language)) {
                 RegionLanguageSettingsView(currentUser: currentUser)
             }
