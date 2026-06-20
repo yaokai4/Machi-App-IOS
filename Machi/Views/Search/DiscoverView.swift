@@ -4870,6 +4870,7 @@ struct CreateCityListingView: View {
     // passed citySlug / current browsing region, then user-changeable.
     @State private var selectedRegion: KaiXRegionDirectory.Region?
     @State private var isShowingRegionPicker = false
+    @State private var publishedReceipt: ListingPublishReceipt?
 
     private var region: KaiXRegionDirectory.Region? {
         if let selectedRegion { return selectedRegion }
@@ -5311,6 +5312,40 @@ struct CreateCityListingView: View {
                 selectedRegion = picked
             }
         }
+        .sheet(item: $publishedReceipt) { receipt in
+            ListingPublishSuccessSheet(
+                receipt: receipt,
+                language: language,
+                onViewListing: {
+                    let id = receipt.listingId
+                    publishedReceipt = nil
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(300))
+                        openPublishedListing(id)
+                    }
+                },
+                onContinuePublishing: {
+                    publishedReceipt = nil
+                    resetFormForAnother()
+                },
+                onClose: {
+                    publishedReceipt = nil
+                    dismiss()
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+    }
+
+    /// Clears the per-listing fields so the user can immediately publish another
+    /// in the same region (keeps 发布地区 + media-less form).
+    private func resetFormForAnother() {
+        title = ""; price = ""; location = ""; description = ""
+        category = ""; station = ""; area = ""; serviceArea = ""
+        mediaDrafts = []; uploadedMedia = [:]; existingMedia = []
+        mediaUploadPhases = [:]; pickerItems = []
+        message = nil
     }
 
     /// 发布地区 card — the structured region this listing files under. Shows the
@@ -6223,13 +6258,20 @@ struct CreateCityListingView: View {
                 )
             }
             let published = result.status == "published" || result.status == "active"
-            message = isEditing
-                ? (published ? "修改已保存，Web 与 iOS 已同步。" : "修改已保存并提交复审。")
-                : (published ? "发布成功，已同步到三端。" : "已提交审核，可在详情页查看审核状态。")
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             isSubmitting = false
-            try? await Task.sleep(for: .milliseconds(420))
-            openPublishedListing(result.id)
+            message = nil
+            // Proper success feedback instead of a 0.42s flash → jump. The sheet
+            // surfaces type / title / 发布地区 / 展示位置 / status / time + actions.
+            publishedReceipt = ListingPublishReceipt(
+                listingId: result.id,
+                isEditing: isEditing,
+                published: published,
+                typeLabel: KXListingCopy.createTitle(for: listingType, language),
+                title: title.isEmpty ? KXListingCopy.displayTitle(result) : title,
+                regionLabel: KaiXRegionDirectory.localizedHeaderLabel(region, language: language),
+                locationText: location
+            )
         } catch {
             if let failed = mediaDrafts.first(where: {
                 if case .uploading = mediaUploadPhases[$0.id] { return true }
@@ -8924,5 +8966,140 @@ private extension KaiXAttributeValue {
         case .null:
             return ""
         }
+    }
+}
+
+/// Identifiable receipt for the post-publish success sheet.
+struct ListingPublishReceipt: Identifiable {
+    let id = UUID()
+    let listingId: String
+    let isEditing: Bool
+    let published: Bool
+    let typeLabel: String
+    let title: String
+    let regionLabel: String
+    let locationText: String
+}
+
+/// Post-publish success sheet — clear confirmation with the key facts and the
+/// three next actions (查看发布 / 继续发布 / 去工作台). Replaces the old 0.42s flash.
+private struct ListingPublishSuccessSheet: View {
+    let receipt: ListingPublishReceipt
+    let language: AppLanguage
+    let onViewListing: () -> Void
+    let onContinuePublishing: () -> Void
+    let onClose: () -> Void
+
+    private func pick(_ zh: String, _ ja: String, _ en: String) -> String {
+        KXListingCopy.pickText(language, zh, ja, en)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Spacer()
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, height: 32)
+                        .background(KXColor.softBackground, in: Circle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, KXSpacing.lg)
+            .padding(.top, KXSpacing.md)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: KXSpacing.lg) {
+                    VStack(spacing: 10) {
+                        Image(systemName: receipt.published ? "checkmark.seal.fill" : "clock.badge.checkmark.fill")
+                            .font(.system(size: 44))
+                            .foregroundStyle(receipt.published ? KXColor.accent : .orange)
+                        Text(receipt.published
+                             ? pick("发布成功", "公開しました", "Published")
+                             : pick("已提交审核", "審査に提出しました", "Submitted for review"))
+                            .font(.title3.weight(.bold))
+                        Text(receipt.published
+                             ? pick("已同步到 Web 与 iOS，并进入对应城市频道。", "Web と iOS に同期し、都市チャンネルに表示されます。", "Synced to web & iOS and added to the city channel.")
+                             : pick("审核通过后会自动展示，可在详情页查看状态。", "承認後に自動表示されます。詳細で状態を確認できます。", "It will appear once approved; track status on the detail page."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, KXSpacing.sm)
+
+                    VStack(spacing: 0) {
+                        row(pick("类型", "種類", "Type"), receipt.typeLabel)
+                        Divider()
+                        row(pick("标题", "タイトル", "Title"), receipt.title)
+                        if !receipt.regionLabel.isEmpty {
+                            Divider(); row(pick("发布地区", "公開エリア", "Publish area"), receipt.regionLabel)
+                        }
+                        if !receipt.locationText.isEmpty {
+                            Divider(); row(pick("展示位置", "表示する場所", "Location"), receipt.locationText)
+                        }
+                        Divider()
+                        row(pick("状态", "状態", "Status"), receipt.published ? pick("已发布", "公開中", "Live") : pick("审核中", "審査中", "In review"))
+                    }
+                    .padding(KXSpacing.md)
+                    .background(KXColor.softBackground.opacity(0.7), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .padding(.horizontal, KXSpacing.lg)
+                .padding(.bottom, KXSpacing.md)
+            }
+
+            VStack(spacing: 10) {
+                Button(action: onViewListing) {
+                    Text(pick("查看发布", "投稿を見る", "View listing"))
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(KXColor.accent, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                HStack(spacing: 10) {
+                    Button(action: onContinuePublishing) {
+                        Text(pick("继续发布", "続けて投稿", "Publish another"))
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(KXColor.accent)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 48)
+                            .background(KXColor.accent.opacity(0.10), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    Button(action: onClose) {
+                        Text(pick("完成", "完了", "Done"))
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(.primary)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 48)
+                            .background(KXColor.softBackground.opacity(0.9), in: Capsule())
+                            .overlay(Capsule().stroke(KXColor.separator.opacity(0.6), lineWidth: 0.7))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, KXSpacing.lg)
+            .padding(.bottom, KXSpacing.lg)
+        }
+    }
+
+    private func row(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(label)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 72, alignment: .leading)
+            Text(value)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, 9)
     }
 }
