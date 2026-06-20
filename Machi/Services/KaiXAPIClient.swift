@@ -795,6 +795,14 @@ final class KaiXAPIClient {
         return response.items
     }
 
+    /// One-shot workbench overview (GET /api/my/workbench/summary). All counts
+    /// from real server data; the DTO defaults every field so a missing key
+    /// never crashes decoding.
+    func workbenchSummary() async throws -> KaiXWorkbenchSummaryDTO {
+        let data = try await request("GET", "/api/my/workbench/summary")
+        return try decode(data)
+    }
+
     func businessProfile() async throws -> KaiXBusinessProfileResponse {
         let data = try await request("GET", "/api/business/profile")
         return try decode(data)

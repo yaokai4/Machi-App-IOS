@@ -2004,3 +2004,54 @@ struct KaiXCitiesResponse: Codable {
 struct KaiXPopularRegionsResponse: Codable {
     let items: [KaiXRegionDTO]
 }
+
+/// Workbench overview counts (GET /api/my/workbench/summary). Every field
+/// defaults so a missing/null key never breaks decoding.
+struct KaiXWorkbenchSummaryDTO: Decodable {
+    var posts = 0
+    var followers = 0
+    var following = 0
+    var publishedListings = 0
+    var pendingReview = 0
+    var offlineListings = 0
+    var receivedInquiries = 0
+    var newInquiries = 0
+    var sentInquiries = 0
+    var applications = 0
+    var newApplications = 0
+    var bookings = 0
+    var newBookings = 0
+    var consults = 0
+    var newConsults = 0
+    var orders = 0
+    var views = 0
+    var newLeads = 0
+    var membershipActive = false
+    var merchantVerified = false
+
+    enum CodingKeys: String, CodingKey {
+        case posts, followers, following, publishedListings, pendingReview, offlineListings
+        case receivedInquiries, newInquiries, sentInquiries, applications, newApplications
+        case bookings, newBookings, consults, newConsults, orders, views, newLeads
+        case membershipActive, merchantVerified
+    }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func i(_ k: CodingKeys) -> Int { (try? c.decodeIfPresent(Int.self, forKey: k)) ?? 0 }
+        func b(_ k: CodingKeys) -> Bool { (try? c.decodeIfPresent(Bool.self, forKey: k)) ?? false }
+        posts = i(.posts); followers = i(.followers); following = i(.following)
+        publishedListings = i(.publishedListings); pendingReview = i(.pendingReview); offlineListings = i(.offlineListings)
+        receivedInquiries = i(.receivedInquiries); newInquiries = i(.newInquiries); sentInquiries = i(.sentInquiries)
+        applications = i(.applications); newApplications = i(.newApplications)
+        bookings = i(.bookings); newBookings = i(.newBookings)
+        consults = i(.consults); newConsults = i(.newConsults)
+        orders = i(.orders); views = i(.views); newLeads = i(.newLeads)
+        membershipActive = b(.membershipActive); merchantVerified = b(.merchantVerified)
+    }
+
+    /// Total items needing attention today (drives the 今日待处理 banner).
+    var pendingTotal: Int { newInquiries + newApplications + newBookings + pendingReview }
+}
