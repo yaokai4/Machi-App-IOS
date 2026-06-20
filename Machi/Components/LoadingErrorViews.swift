@@ -207,8 +207,8 @@ private struct KXSplashLogoMark: View {
                             )
                         )
                         .blendMode(.plusLighter)
-                        .mask(RoundedRectangle(cornerRadius: 28, style: .continuous))
                         .offset(x: shimmer * 92)
+                        .mask(RoundedRectangle(cornerRadius: 28, style: .continuous))
                 )
 
             Circle()

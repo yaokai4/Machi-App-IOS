@@ -330,12 +330,12 @@ struct ChatView: View {
                         .id(message.id)
                     }
                     Color.clear
-                        .frame(height: 1)
+                        .frame(height: viewModel.mediaDrafts.isEmpty ? 92 : 176)
                         .id(ChatBottomAnchor.id)
                 }
                 .padding(.horizontal, KaiXTheme.horizontalPadding)
-                .padding(.vertical, 10)
-                .padding(.bottom, 124)
+                .padding(.top, 10)
+                .padding(.bottom, 12)
             }
             .scrollDismissesKeyboard(.interactively)
             .onAppear {
@@ -513,14 +513,14 @@ struct KXMessageBubble: View {
                 if !mediaItems.isEmpty {
                     MediaGridView(mediaItems: mediaItems)
                         .frame(maxWidth: contentType == .video ? 236 : 216)
-                        .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                         .overlay {
                             if message.status == .sending {
-                                RoundedRectangle(cornerRadius: 17, style: .continuous)
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
                                     .fill(.black.opacity(0.20))
                                 KXSpinner(size: 24, lineWidth: 2.6, tint: .white)
                             } else if message.status == .failed {
-                                RoundedRectangle(cornerRadius: 17, style: .continuous)
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
                                     .fill(.black.opacity(0.22))
                                 Button(action: onRetry) {
                                     Image(systemName: "arrow.clockwise.circle.fill")
@@ -532,6 +532,12 @@ struct KXMessageBubble: View {
                                 .accessibilityLabel(L("retry", language))
                             }
                         }
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .stroke(KXColor.separator.opacity(isMine ? 0.10 : 0.22), lineWidth: 0.6)
+                        )
+                        .compositingGroup()
+                        .shadow(color: KXColor.glassShadow.opacity(isMine ? 0.14 : 0.22), radius: 8, y: 3)
                         .accessibilityLabel(contentType == .video ? "视频消息" : "图片消息")
                 }
 
@@ -587,7 +593,7 @@ private struct ChatInputBar: View {
         let hasVideo = mediaDrafts.contains { $0.type == .video }
         let imageCount = mediaDrafts.filter { $0.type == .image }.count
         let remainingImageSlots = Swift.max(1, KaiXConfig.maxImageItemsPerPost - imageCount)
-        HStack(alignment: .bottom, spacing: 10) {
+        HStack(alignment: .bottom, spacing: 8) {
             HStack(spacing: 4) {
                 PhotosPicker(selection: $pickerItems, maxSelectionCount: remainingImageSlots, matching: .images) {
                     ChatInputToolIcon(systemImage: "photo", disabled: hasVideo || imageCount >= KaiXConfig.maxImageItemsPerPost)
@@ -599,14 +605,14 @@ private struct ChatInputBar: View {
                 }
                 .disabled(!mediaDrafts.isEmpty)
             }
-            .padding(4)
+            .padding(3)
             .background(
                 Capsule(style: .continuous)
-                    .fill(KXColor.cardBackground.opacity(0.86))
+                    .fill(KXColor.softBackground.opacity(0.72))
             )
             .overlay(
                 Capsule(style: .continuous)
-                    .stroke(KXColor.separator.opacity(0.38), lineWidth: 0.7)
+                    .stroke(KXColor.separator.opacity(0.28), lineWidth: 0.7)
             )
 
             TextField(L("messagePlaceholder", language), text: $text, axis: .vertical)
@@ -619,18 +625,17 @@ private struct ChatInputBar: View {
                     }
                 }
                 .font(.body)
-                .padding(.horizontal, 15)
-                .padding(.vertical, 11)
-                .frame(minHeight: 44)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .frame(minHeight: 42)
                 .background(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .fill(KXColor.cardBackground.opacity(0.98))
+                    RoundedRectangle(cornerRadius: 21, style: .continuous)
+                        .fill(KXColor.cardBackground.opacity(0.94))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .stroke(KXColor.separator.opacity(0.42), lineWidth: 0.7)
+                    RoundedRectangle(cornerRadius: 21, style: .continuous)
+                        .stroke(KXColor.separator.opacity(0.30), lineWidth: 0.7)
                 )
-                .shadow(color: KXColor.glassShadow.opacity(0.18), radius: 8, y: 3)
 
             Button {
                 guard canSend, !isSending else { return }
@@ -643,7 +648,7 @@ private struct ChatInputBar: View {
                         .font(.subheadline.weight(.bold))
                 }
             }
-            .frame(width: 44, height: 44)
+            .frame(width: 42, height: 42)
             .foregroundStyle(canSend ? .white : KXColor.accent.opacity(0.38))
             .background {
                 Circle()
@@ -651,16 +656,16 @@ private struct ChatInputBar: View {
             }
             .clipShape(Circle())
             .overlay(Circle().stroke(canSend ? Color.clear : KXColor.accent.opacity(0.12), lineWidth: 0.8))
-            .shadow(color: canSend ? KXColor.accent.opacity(0.20) : .clear, radius: 12, y: 5)
+            .shadow(color: canSend ? KXColor.accent.opacity(0.18) : .clear, radius: 10, y: 4)
             .disabled(!canSend || isSending)
         }
         .padding(.horizontal, 12)
-        .padding(.top, 9)
+        .padding(.top, 8)
         .padding(.bottom, 10)
         .background {
             Rectangle()
-                .fill(.ultraThinMaterial)
-                .background(KXColor.pageBackground.opacity(0.82))
+                .fill(KXColor.pageBackground.opacity(0.74))
+                .background(.ultraThinMaterial)
                 .ignoresSafeArea(edges: .bottom)
         }
         .overlay(alignment: .top) {
@@ -686,7 +691,7 @@ private struct ChatInputToolIcon: View {
         Image(systemName: systemImage)
             .font(.subheadline.weight(.bold))
             .foregroundStyle(disabled ? KXColor.livingMuted.opacity(0.42) : KXColor.accent)
-            .frame(width: 34, height: 36)
+            .frame(width: 32, height: 34)
             .background {
                 Circle()
                     .fill(disabled ? KXColor.softBackground.opacity(0.38) : KXColor.accent.opacity(0.10))

@@ -110,7 +110,7 @@ struct ContentView: View {
             await SystemNotificationService.shared.requestAuthorizationIfNeeded()
             while !Task.isCancelled {
                 await syncSystemNotifications()
-                try? await Task.sleep(nanoseconds: 45_000_000_000)
+                try? await Task.sleep(nanoseconds: 12_000_000_000)
             }
         }
         .onChange(of: scenePhase) { _, phase in

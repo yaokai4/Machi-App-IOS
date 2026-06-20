@@ -384,6 +384,114 @@ extension KaiXCityListingDTO {
     }
 }
 
+// ── listing taxonomy（后台可配置发布分类/字段）──────────────────────────────
+
+struct KaiXListingTaxonomyCategoryDTO: Codable, Equatable {
+    let id: String?
+    let listing_type: String?
+    let listingType: String?
+    let category_key: String?
+    let categoryKey: String?
+    let label: String?
+    let label_ja: String?
+    let labelJa: String?
+    let label_en: String?
+    let labelEn: String?
+    let section_key: String?
+    let sectionKey: String?
+    let description: String?
+    let is_active: Bool?
+    let isActive: Bool?
+    let sort_order: Int?
+    let sortOrder: Int?
+
+    private func clean(_ value: String?) -> String {
+        (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var resolvedKey: String {
+        let key = clean(category_key ?? categoryKey)
+        return key.isEmpty ? clean(label) : key
+    }
+
+    var resolvedLabel: String {
+        let name = clean(label)
+        return name.isEmpty ? resolvedKey : name
+    }
+
+    var resolvedLabelJa: String {
+        let name = clean(label_ja ?? labelJa)
+        return name.isEmpty ? resolvedLabel : name
+    }
+
+    var resolvedLabelEn: String {
+        let name = clean(label_en ?? labelEn)
+        return name.isEmpty ? resolvedLabel : name
+    }
+
+    var resolvedSectionKey: String {
+        clean(section_key ?? sectionKey)
+    }
+
+    var isVisible: Bool {
+        is_active ?? isActive ?? true
+    }
+
+    var resolvedSortOrder: Int {
+        sort_order ?? sortOrder ?? 0
+    }
+}
+
+struct KaiXListingTaxonomyFieldDTO: Codable, Equatable {
+    let id: String?
+    let listing_type: String?
+    let listingType: String?
+    let category_key: String?
+    let categoryKey: String?
+    let field_key: String?
+    let fieldKey: String?
+    let label: String?
+    let label_ja: String?
+    let labelJa: String?
+    let label_en: String?
+    let labelEn: String?
+    let kind: String?
+    let field_kind: String?
+    let fieldKind: String?
+    let placeholder: String?
+    let required: Bool?
+    let is_active: Bool?
+    let isActive: Bool?
+    let sort_order: Int?
+    let sortOrder: Int?
+}
+
+struct KaiXListingTaxonomyDTO: Codable, Equatable {
+    let listing_type: String?
+    let listingType: String?
+    let categories: [KaiXListingTaxonomyCategoryDTO]?
+    let fields: [KaiXListingTaxonomyFieldDTO]?
+    let data: Nested?
+
+    struct Nested: Codable, Equatable {
+        let listing_type: String?
+        let listingType: String?
+        let categories: [KaiXListingTaxonomyCategoryDTO]?
+        let fields: [KaiXListingTaxonomyFieldDTO]?
+    }
+
+    var resolvedCategories: [KaiXListingTaxonomyCategoryDTO] {
+        (categories ?? data?.categories ?? [])
+            .filter(\.isVisible)
+            .sorted {
+                if $0.resolvedSortOrder != $1.resolvedSortOrder {
+                    return $0.resolvedSortOrder < $1.resolvedSortOrder
+                }
+                return $0.resolvedLabel.localizedCompare($1.resolvedLabel) == .orderedAscending
+            }
+    }
+}
+
 // ── listing reviews（星级点评）────────────────────────────────────────────
 
 struct KaiXListingReviewDTO: Codable, Identifiable, Equatable {

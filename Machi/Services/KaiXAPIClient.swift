@@ -885,6 +885,13 @@ final class KaiXAPIClient {
         return response.listing
     }
 
+    func listingTaxonomy(type: String) async throws -> KaiXListingTaxonomyDTO {
+        let data = try await request("GET", "/api/listing-taxonomy", queryItems: [
+            URLQueryItem(name: "type", value: type)
+        ])
+        return try decode(data)
+    }
+
     func createListing(
         type: String,
         countryCode: String = "jp",

@@ -2709,7 +2709,6 @@ struct CityListingChannelView: View {
                 filterToggleSection(title: "条件", toggles: [
                     ("furnished", "家具家电"),
                     ("pet_allowed", "可宠物"),
-                    ("short_term_allowed", "可短租"),
                     ("share_allowed", "可合租"),
                 ])
             } else if isWorkChannel {
@@ -4848,6 +4847,7 @@ struct CreateCityListingView: View {
     @State private var didHydrateExisting = false
     @State private var isSubmitting = false
     @State private var message: String?
+    @State private var listingTaxonomyCategories: [KaiXListingTaxonomyCategoryDTO] = []
 
     private var region: KaiXRegionDirectory.Region? {
         if let citySlug,
@@ -4858,6 +4858,69 @@ struct CreateCityListingView: View {
     }
 
     private var isEditing: Bool { existingListing != nil }
+
+    private var taxonomyRequestType: String {
+        KXListingCopy.createType(for: listingType)
+    }
+
+    private var activeTaxonomyCategories: [KaiXListingTaxonomyCategoryDTO] {
+        var items = listingTaxonomyCategories
+        if listingType == "local_service" {
+            items = items.filter { item in
+                let key = item.resolvedKey
+                return !KXListingCopy.isStayCategory(key) || key == category
+            }
+        }
+        var seen = Set<String>()
+        return items.filter { item in
+            let key = item.resolvedKey
+            guard !key.isEmpty else { return false }
+            return seen.insert(key).inserted
+        }
+    }
+
+    private var fallbackCategoryValues: [String] {
+        KXListingCopy.categories(for: listingType).filter { $0 != "全部" }
+    }
+
+    private var publishCategoryValues: [String] {
+        let serverValues = activeTaxonomyCategories.map(\.resolvedKey)
+        let values = serverValues.isEmpty ? fallbackCategoryValues : serverValues
+        var seen = Set<String>()
+        return values.filter { value in
+            let clean = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !clean.isEmpty, clean != "全部" else { return false }
+            return seen.insert(clean).inserted
+        }
+    }
+
+    private func taxonomyCategoryLabel(_ key: String) -> String {
+        if let item = activeTaxonomyCategories.first(where: { $0.resolvedKey == key }) {
+            switch language {
+            case .ja:
+                return item.resolvedLabelJa
+            case .en:
+                return item.resolvedLabelEn
+            default:
+                return item.resolvedLabel
+            }
+        }
+        return KXListingCopy.categoryLabel(key, language)
+    }
+
+    private func serviceCategories(for section: KXListingCopy.ServiceCreateSection) -> [String] {
+        let serverValues = activeTaxonomyCategories.compactMap { item -> String? in
+            let key = item.resolvedKey
+            guard !key.isEmpty else { return nil }
+            if !item.resolvedSectionKey.isEmpty {
+                return item.resolvedSectionKey == section.id ? key : nil
+            }
+            return KXListingCopy.serviceCreateSectionKey(for: key) == section.id ? key : nil
+        }
+        guard !serverValues.isEmpty else { return section.categories }
+        var seen = Set<String>()
+        return serverValues.filter { seen.insert($0).inserted }
+    }
 
     private var canSubmit: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -4972,6 +5035,11 @@ struct CreateCityListingView: View {
     }
 
     private var activeServiceCreateSection: KXListingCopy.ServiceCreateSection {
+        if let taxonomyCategory = activeTaxonomyCategories.first(where: { $0.resolvedKey == category }),
+           !taxonomyCategory.resolvedSectionKey.isEmpty,
+           let section = KXListingCopy.serviceCreateSections.first(where: { $0.id == taxonomyCategory.resolvedSectionKey }) {
+            return section
+        }
         if let fromCategory = KXListingCopy.serviceCreateSection(for: category) {
             return fromCategory
         }
@@ -4983,8 +5051,19 @@ struct CreateCityListingView: View {
 
     private func selectServiceCreateSection(_ section: KXListingCopy.ServiceCreateSection) {
         serviceCategorySection = section.id
-        guard !section.categories.contains(category), let first = section.categories.first else { return }
+        let sectionCategories = serviceCategories(for: section)
+        guard !sectionCategories.contains(category), let first = sectionCategories.first else { return }
         applyServiceCategory(first)
+    }
+
+    @MainActor
+    private func loadListingTaxonomy() async {
+        do {
+            let payload = try await KaiXAPIClient.shared.listingTaxonomy(type: taxonomyRequestType)
+            listingTaxonomyCategories = payload.resolvedCategories
+        } catch {
+            listingTaxonomyCategories = []
+        }
     }
 
     private func clearServiceSpecificFields() {
@@ -5158,6 +5237,9 @@ struct CreateCityListingView: View {
         }
         .task(id: existingListing?.id) {
             hydrateExistingListingIfNeeded()
+        }
+        .task(id: taxonomyRequestType) {
+            await loadListingTaxonomy()
         }
     }
 
@@ -5377,11 +5459,11 @@ struct CreateCityListingView: View {
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
-                    ForEach(KXListingCopy.categories(for: listingType).filter { $0 != "全部" }, id: \.self) { chip in
+                    ForEach(publishCategoryValues, id: \.self) { chip in
                         Button {
                             category = chip
                         } label: {
-                            Text(KXListingCopy.categoryLabel(chip, language))
+                            Text(taxonomyCategoryLabel(chip))
                                 .font(.caption.weight(.bold))
                                 .foregroundStyle(category == chip ? Color.white : .primary)
                                 .padding(.horizontal, 11)
@@ -5447,13 +5529,13 @@ struct CreateCityListingView: View {
                 .font(.caption.weight(.black))
                 .foregroundStyle(.secondary)
             FlowLayout(spacing: 8) {
-                ForEach(activeSection.categories, id: \.self) { chip in
+                ForEach(serviceCategories(for: activeSection), id: \.self) { chip in
                     Button {
                         withAnimation(.easeOut(duration: 0.18)) {
                             applyServiceCategory(chip)
                         }
                     } label: {
-                        Text(KXListingCopy.categoryLabel(chip, language))
+                        Text(taxonomyCategoryLabel(chip))
                             .font(.caption.weight(.bold))
                             .foregroundStyle(category == chip ? Color.white : .primary)
                             .padding(.horizontal, 12)
@@ -5552,7 +5634,6 @@ struct CreateCityListingView: View {
                     KXListingFormField(title: "入住时间", placeholder: "例如 7 月上旬 / 即可入住", icon: "calendar", text: $moveIn)
                     HStack(spacing: 10) {
                         KXListingToggleChip(title: "可合租", icon: "person.2", isOn: $shareAllowed, tint: typeAccent)
-                        KXListingToggleChip(title: "可短租", icon: "calendar.badge.clock", isOn: $shortTermAllowed, tint: typeAccent)
                     }
                     HStack(spacing: 10) {
                         KXListingToggleChip(title: "家具家电", icon: "bed.double", isOn: $furnished, tint: typeAccent)
@@ -6058,7 +6139,6 @@ struct CreateCityListingView: View {
                 "nearest_station": .init(string: station),
                 "move_in_date": .init(string: moveIn),
                 "share_allowed": .init(bool: shareAllowed),
-                "short_term_allowed": .init(bool: shortTermAllowed),
                 "furnished": .init(bool: furnished),
             ]
         }
@@ -7527,7 +7607,7 @@ enum KXListingCopy {
 
     static func categories(for type: String) -> [String] {
         switch type {
-        case "rental": ["全部", "单人", "合租", "短租", "整租", "家具家电", "近车站"]
+        case "rental": ["全部", "单人", "合租", "整租", "家具家电", "近车站"]
         case "stays": stayChips
         case "hotels": stayChips
         case "work", "job", "hiring": ["全部", "兼职", "全职", "时给", "月给", "N3 可", "签证支持", "无经验可"]
@@ -7762,7 +7842,7 @@ enum KXListingCopy {
         let ja: String
         let en: String
         switch type {
-        case "rental": (zh, ja, en) = ("类型，例如 单人 / 合租 / 短租", "種類：一人暮らし / ルームシェア / 短期", "Type, e.g. single / share / short-term")
+        case "rental": (zh, ja, en) = ("类型，例如 单人 / 合租 / 整租", "種類：一人暮らし / ルームシェア / 一棟賃貸", "Type, e.g. single / share / entire place")
         case "work", "job", "hiring": (zh, ja, en) = ("行业或岗位分类", "業種または職種カテゴリ", "Industry or role category")
         case "local_service": (zh, ja, en) = ("服务分类，例如 日本料理 / 民宿 / 景点门票 / 机场接送", "サービス分類：日本料理 / 民泊 / 観光チケット / 空港送迎", "Service category, e.g. Japanese dining / stay / tickets / airport transfer")
         case "discount": (zh, ja, en) = ("优惠分类", "特典カテゴリ", "Deal category")

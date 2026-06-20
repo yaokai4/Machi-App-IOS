@@ -520,7 +520,7 @@ struct LocalizationService {
         "workbenchJobPublishTitle": [.zh: "招聘发布", .ja: "求人掲載", .en: "Post a job"],
         "workbenchJobPublishSubtitle": [.zh: "发布招聘或求职相关信息", .ja: "求人または求職関連の情報を掲載", .en: "Publish hiring or job-seeking listings"],
         "workbenchRentalPublishTitle": [.zh: "房源发布", .ja: "住まいを掲載", .en: "Post housing"],
-        "workbenchRentalPublishSubtitle": [.zh: "发布合租、整租和短租信息", .ja: "シェア・賃貸・短期滞在の情報を掲載", .en: "Publish shared, rental, or short-stay housing"],
+        "workbenchRentalPublishSubtitle": [.zh: "发布单人、合租和整租房源", .ja: "一人暮らし・シェア・賃貸物件を掲載", .en: "Publish single, shared, or entire-place rentals"],
         "workbenchServicePublishTitle": [.zh: "商家与服务发布", .ja: "店舗・サービス掲載", .en: "Post merchant service"],
         "workbenchServicePublishSubtitle": [.zh: "餐厅、旅行票务、接送交通、翻译手续和生活开通", .ja: "飲食店・旅行チケット・送迎・手続き・生活開通", .en: "Restaurants, travel, transfers, paperwork, and life setup"],
         "workbenchDiscountPublishTitle": [.zh: "优惠发布", .ja: "特典を掲載", .en: "Post a deal"],
