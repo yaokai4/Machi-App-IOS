@@ -24,9 +24,20 @@ struct MainTabView: View {
             chrome.selectedTab
         } set: { tab in
             withAnimation(.snappy(duration: 0.2)) {
-                loadedTabs.insert(tab)
-                chrome.select(tab)
-                router.setActiveTab(tab)
+                if chrome.selectedTab == tab {
+                    // Re-tapping the tab you are already on pops that tab's
+                    // navigation stack back to its root — standard iOS behavior.
+                    // Without this, after pushing e.g. a user's profile from the
+                    // Discover tab, tapping Discover again kept showing the pushed
+                    // profile, stranding the user (they had to repeatedly hit Back).
+                    if router.pathCount(for: tab) > 0 {
+                        router.popToRoot(tab)
+                    }
+                } else {
+                    loadedTabs.insert(tab)
+                    chrome.select(tab)
+                    router.setActiveTab(tab)
+                }
                 syncChromeForActiveRoute()
             }
         }

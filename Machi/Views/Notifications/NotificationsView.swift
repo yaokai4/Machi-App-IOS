@@ -224,13 +224,25 @@ private struct NotificationCard: View {
             } label: {
                 ZStack(alignment: .bottomTrailing) {
                     AvatarView(user: primaryActor, size: KXAvatarSize.md)
+                    // Floating type badge: a soft gradient pill that sits at the
+                    // avatar's corner (slight outward offset) with a colored shadow,
+                    // instead of a flat solid circle clipped inside the avatar.
                     Image(systemName: icon)
-                        .font(.caption2.weight(.semibold))
+                        .font(.system(size: 9, weight: .black))
                         .foregroundStyle(.white)
-                        .frame(width: 18, height: 18)
-                        .background(color)
-                        .clipShape(Circle())
+                        .frame(width: 19, height: 19)
+                        .background(
+                            Circle().fill(
+                                LinearGradient(
+                                    colors: [color.opacity(0.92), color],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                        )
                         .overlay(Circle().stroke(KaiXTheme.cardBackground, lineWidth: 2))
+                        .shadow(color: color.opacity(0.30), radius: 2, y: 1)
+                        .offset(x: 2.5, y: 2.5)
                 }
             }
             .buttonStyle(.plain)
