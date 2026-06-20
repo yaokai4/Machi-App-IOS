@@ -92,7 +92,7 @@ final class SearchViewModel: ObservableObject {
             }
 
             if loadedHot.isEmpty {
-                loadedHot = try await postRepository.fetchPage(mode: .hot, currentUserId: currentUser.id, page: 0, pageSize: 30)
+                loadedHot = (try? await postRepository.fetchPage(mode: .hot, currentUserId: currentUser.id, page: 0, pageSize: 30)) ?? []
             }
             if loadedHappening.isEmpty {
                 loadedHappening = loadedHot
@@ -109,18 +109,22 @@ final class SearchViewModel: ObservableObject {
             postStore?.register(visiblePosts)
             mediaByPostId = loadedMediaByPostId
             if mediaByPostId.isEmpty || visiblePosts.contains(where: { mediaByPostId[$0.id] == nil }) {
-                let fetchedMedia = try await postRepository.fetchMedia(for: visiblePosts)
+                let fetchedMedia = (try? await postRepository.fetchMedia(for: visiblePosts)) ?? [:]
                 mediaByPostId.merge(fetchedMedia) { existing, fetched in existing.isEmpty ? fetched : existing }
             }
             for post in visiblePosts where mediaByPostId[post.id] == nil {
                 mediaByPostId[post.id] = []
             }
+            // Author / recommended-user / following lookups are user-specific and
+            // 401 for signed-out visitors. Degrade gracefully with `try?` so a
+            // guest still gets a fully-loaded Discover (public happening/hot/topics)
+            // instead of an "加载失败" error screen.
             let missingAuthorIds = Set(visiblePosts.map(\.authorId)).subtracting(loadedAuthors.keys)
-            let postAuthors = try await userRepository.fetchUsers(ids: missingAuthorIds)
+            let postAuthors = (try? await userRepository.fetchUsers(ids: missingAuthorIds)) ?? []
             loadedAuthors.merge(Dictionary(uniqueKeysWithValues: postAuthors.map { ($0.id, $0) })) { _, fresh in fresh }
             authors = loadedAuthors
-            suggestedUsers = try await userRepository.fetchRecommendedUsers(excluding: currentUser.id, limit: 12)
-            followingIds = try await userRepository.followingIds(for: currentUser.id)
+            suggestedUsers = (try? await userRepository.fetchRecommendedUsers(excluding: currentUser.id, limit: 12)) ?? []
+            followingIds = (try? await userRepository.followingIds(for: currentUser.id)) ?? []
             rebuildTrendingItems()
             state = .loaded
             searchStore?.setTrending(trendingItems + topicTrendingItems + userTrendingItems)

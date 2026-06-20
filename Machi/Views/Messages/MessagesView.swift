@@ -598,23 +598,26 @@ private struct MessageConversationCard: View {
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 5) {
                             Text(peer?.displayName ?? L("unknownUser", language))
-                                .font(.subheadline.weight(.semibold))
+                                .font(.subheadline.weight(.bold))
                                 .foregroundStyle(.primary)
                                 .lineLimit(1)
                             KXUserBadge(user: peer)
                             Spacer()
                             Text(DateFormatterUtils.relativeText(from: thread.lastMessageAt, language: language))
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(isUnread ? KXColor.accent : .secondary)
+                                .monospacedDigit()
                         }
 
-                        HStack(spacing: 6) {
+                        HStack(spacing: 5) {
                             if let previewIcon {
                                 Image(systemName: previewIcon)
+                                    .font(.caption2)
+                                    .foregroundStyle(isUnread ? KXColor.accent : .secondary)
                             }
                             Text(previewText)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .font(.subheadline.weight(isUnread ? .medium : .regular))
+                                .foregroundStyle(isUnread ? .primary : .secondary)
                                 .lineLimit(1)
                         }
                     }
@@ -636,10 +639,12 @@ private struct MessageConversationCard: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .kxGlassSurface(radius: KXRadius.md)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .kxGlassSurface(radius: KXRadius.lg)
     }
+
+    private var isUnread: Bool { thread.unreadCount > 0 }
 
     private var previewIcon: String? {
         if isImagePlaceholder { return "photo" }

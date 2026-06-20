@@ -1269,13 +1269,12 @@ private enum HotBoardScope: String, CaseIterable, Identifiable {
 }
 
 private enum HotBoardWindow: String, CaseIterable, Identifiable {
-    case h2 = "2h", h24 = "24h", d7 = "7d"
+    case d3 = "3d", d7 = "7d"
     var id: String { rawValue }
     func label(_ language: AppLanguage) -> String {
         switch self {
-        case .h2: return language == .ja ? "2時間" : language == .en ? "2h" : "2小时"
-        case .h24: return language == .ja ? "24時間" : language == .en ? "24h" : "24小时"
-        case .d7: return language == .ja ? "7日間" : language == .en ? "7d" : "7天"
+        case .d3: return language == .ja ? "3日間" : language == .en ? "3d" : "3天内"
+        case .d7: return language == .ja ? "7日間" : language == .en ? "7d" : "7天内"
         }
     }
 }
@@ -1289,7 +1288,7 @@ private struct HotBoardSection: View {
     let onOpenTopic: (String) -> Void
 
     @State private var scope: HotBoardScope = .city
-    @State private var window: HotBoardWindow = .h24
+    @State private var window: HotBoardWindow = .d7
     @State private var items: [KaiXDiscoverHotItemDTO] = []
     @State private var isLoading = false
     @State private var didFail = false
@@ -1563,11 +1562,11 @@ private struct HappeningSection: View {
             VStack(spacing: 0) {
                 ForEach(Array(posts.enumerated()), id: \.element.id) { idx, post in
                     Button { onOpenPost(post) } label: {
-                        HappeningRadarRow(post: post, author: authors[post.authorId], language: language)
+                        HappeningRadarRow(rank: idx + 1, post: post, author: authors[post.authorId], language: language)
                     }
                     .buttonStyle(KXPressableStyle(scale: 0.985, dim: 0.92))
                     if idx != posts.count - 1 {
-                        Divider().opacity(0.12).padding(.leading, 60)
+                        Divider().opacity(0.12).padding(.leading, 76)
                     }
                 }
             }
@@ -1593,17 +1592,23 @@ private struct HappeningSection: View {
 /// One city event on the radar: type icon · what happened · who/where · how
 /// fresh. Reads at a glance, distinct from the numbered heat board.
 private struct HappeningRadarRow: View {
+    let rank: Int
     let post: PostEntity
     let author: UserEntity?
     let language: AppLanguage
 
     var body: some View {
         let spec = post.contentType.spec
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: 11) {
+            Text("\(rank)")
+                .font(.system(size: 15, weight: .heavy, design: .rounded))
+                .foregroundStyle(rank <= 3 ? KXColor.heat : Color.secondary)
+                .monospacedDigit()
+                .frame(width: 18, height: 34, alignment: .center)
             Image(systemName: spec.icon)
-                .font(.subheadline.weight(.bold))
+                .font(.footnote.weight(.bold))
                 .foregroundStyle(spec.tint)
-                .frame(width: 38, height: 38)
+                .frame(width: 34, height: 34)
                 .background(spec.tint.opacity(0.12), in: Circle())
 
             VStack(alignment: .leading, spacing: 3) {
