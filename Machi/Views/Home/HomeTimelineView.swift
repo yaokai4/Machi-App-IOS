@@ -85,7 +85,7 @@ struct HomeTimelineView: View {
         .onChange(of: refreshToken) { _, _ in
             Task { await viewModel.loadInitial(context: modelContext, currentUser: currentUser, postStore: postStore) }
         }
-        .fullScreenCover(isPresented: $isShowingSettings) {
+        .navigationDestination(isPresented: $isShowingSettings) {
             SettingsView(currentUser: currentUser, onLogout: onLogout, onSwitchAccount: onSwitchAccount)
         }
         .sheet(isPresented: $isShowingRegionPicker) {

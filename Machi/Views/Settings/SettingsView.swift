@@ -19,7 +19,6 @@ struct SettingsView: View {
     var onSwitchAccount: ((UserEntity) -> Void)?
 
     var body: some View {
-        NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 15) {
                     topBar
@@ -66,7 +65,6 @@ struct SettingsView: View {
             }
             .kxPageBackground()
             .toolbar(.hidden, for: .navigationBar)
-        }
         .task {
             await viewModel.load(context: modelContext, user: currentUser, postStore: postStore)
         }

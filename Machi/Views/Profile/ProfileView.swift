@@ -954,7 +954,7 @@ private struct ProfilePresentationModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .fullScreenCover(isPresented: $isShowingSettings) {
+            .navigationDestination(isPresented: $isShowingSettings) {
                 SettingsView(currentUser: currentUser, onLogout: onLogout, onSwitchAccount: onSwitchAccount)
             }
             .fullScreenCover(isPresented: $isShowingWorkbench) {
