@@ -874,6 +874,15 @@ final class KaiXAPIClient {
         }
     }
 
+    /// Listings the signed-in user has favorited server-side, one type at a time
+    /// (GET /api/my/favorites). Backs cross-device sync of the local 收藏 store;
+    /// requires auth, so it throws for guests (caller then keeps local-only).
+    func savedListings(type: String) async throws -> [KaiXCityListingDTO] {
+        let data = try await request("GET", "/api/my/favorites", queryItems: [URLQueryItem(name: "type", value: type)])
+        let response: KaiXListingsResponse = try decode(data)
+        return response.items
+    }
+
     /// A seller-scoped public inventory used by profile count tags. It walks
     /// the same cursor protocol as marketplace channels so profile shortcuts
     /// never produce a "missing after 50 rows" false empty state.

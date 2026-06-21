@@ -23,6 +23,7 @@ final class FavoritesStore: ObservableObject {
 
     private let key = "kx.favorites.v1"
     @Published private(set) var items: [FavoriteSnapshot] = []
+    @Published private(set) var isSyncing = false
 
     private init() { load() }
 
@@ -41,6 +42,43 @@ final class FavoritesStore: ObservableObject {
 
     func remove(_ id: String) {
         items.removeAll { $0.id == id }
+        persist()
+    }
+
+    static func snapshot(from listing: KaiXCityListingDTO) -> FavoriteSnapshot {
+        FavoriteSnapshot(
+            id: listing.id,
+            title: KXListingCopy.displayTitle(listing),
+            priceLabel: KXListingCopy.priceLabel(listing),
+            coverURLString: listing.realCoverURL?.absoluteString,
+            type: listing.type,
+            locationText: listing.location_text,
+            savedAt: Date()
+        )
+    }
+
+    /// Pull the signed-in user's server-side favorites (GET /api/my/favorites,
+    /// per type) and make them the source of truth — this is the cross-device
+    /// sync. Aborts WITHOUT touching local state if any call fails (guest /
+    /// offline), so a 401 never wipes the local list.
+    func syncFromServer() async {
+        let types = ["secondhand", "rental", "job", "hiring", "local_service", "discount"]
+        isSyncing = true
+        defer { isSyncing = false }
+        var collected: [FavoriteSnapshot] = []
+        var seen = Set<String>()
+        for type in types {
+            do {
+                let listings = try await KaiXAPIClient.shared.savedListings(type: type)
+                for listing in listings where !seen.contains(listing.id) {
+                    seen.insert(listing.id)
+                    collected.append(Self.snapshot(from: listing))
+                }
+            } catch {
+                return
+            }
+        }
+        items = collected
         persist()
     }
 
@@ -70,12 +108,17 @@ struct WishlistView: View {
         NavigationStack {
             Group {
                 if store.items.isEmpty {
-                    EmptyStateView(
-                        title: KXListingCopy.pickText(language, "还没有收藏", "お気に入りはまだありません", "Nothing saved yet"),
-                        subtitle: KXListingCopy.pickText(language, "在房源、商家或商品上点 ❤ 即可收藏，方便随时回看。", "物件・店舗・商品の ❤ で保存できます。", "Tap ❤ on any listing to save it here."),
-                        systemImage: "heart"
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if store.isSyncing {
+                        KXSpinner()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        EmptyStateView(
+                            title: KXListingCopy.pickText(language, "还没有收藏", "お気に入りはまだありません", "Nothing saved yet"),
+                            subtitle: KXListingCopy.pickText(language, "在房源、商家或商品上点 ❤ 即可收藏，方便随时回看。", "物件・店舗・商品の ❤ で保存できます。", "Tap ❤ on any listing to save it here."),
+                            systemImage: "heart"
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 12) {
@@ -104,6 +147,7 @@ struct WishlistView: View {
                     }
                 }
             }
+            .task { await store.syncFromServer() }
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
