@@ -18,6 +18,7 @@ enum KXRoute: Hashable {
     case businessDirectory(citySlug: String)
     case businessProfile(businessId: String)
     case guideCategory(categoryKey: String)
+    case guideJourney(key: String)
     case guideServices
     case guideMemberResources
     case guideArticle(slug: String)
@@ -171,14 +172,14 @@ extension KXRoute {
             return .none
         case .postDetailComment(_, let commentId):
             return commentId.map { .comment($0) } ?? .comments
-        case .profile, .topic, .city, .cityChannel, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .myInquiries, .businessDirectory, .businessProfile, .guideCategory, .guideServices, .guideMemberResources, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .conversation, .search:
+        case .profile, .topic, .city, .cityChannel, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .myInquiries, .businessDirectory, .businessProfile, .guideCategory, .guideJourney, .guideServices, .guideMemberResources, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .conversation, .search:
             return .none
         }
     }
 
     var requiresHiddenTabBar: Bool {
         switch self {
-        case .postDetail, .postDetailComment, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .businessProfile, .guideArticle, .guideProduct, .guideSchool, .guideCompany, .guideCompanyReviews, .conversation:
+        case .postDetail, .postDetailComment, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .businessProfile, .guideArticle, .guideProduct, .guideJourney, .guideSchool, .guideCompany, .guideCompanyReviews, .conversation:
             true
         case .profile, .topic, .city, .cityChannel, .myInquiries, .businessDirectory, .guideCategory, .guideServices, .guideMemberResources, .guideSchools, .guideCompanies, .guideInterviewReviews, .search:
             false
@@ -195,7 +196,7 @@ extension KXRoute {
             L("noTopicPosts", language)
         case .city, .cityChannel, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .myInquiries, .businessDirectory, .businessProfile:
             L("emptyFeed", language)
-        case .guideCategory, .guideServices, .guideMemberResources, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews:
+        case .guideCategory, .guideJourney, .guideServices, .guideMemberResources, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews:
             L("guideOpenFailed", language)
         case .conversation:
             L("emptyMessages", language)
@@ -252,6 +253,8 @@ private struct KXRouteDestinations: ViewModifier {
                     BusinessPublicProfileView(businessId: businessId, currentUser: currentUser)
                 case .guideCategory(let categoryKey):
                     GuideCategoryView(categoryKey: categoryKey)
+                case .guideJourney(let key):
+                    GuideJourneyDetailView(journeyKey: key)
                 case .guideServices:
                     GuideServicesView()
                 case .guideMemberResources:
@@ -372,6 +375,9 @@ private extension KXRoute {
         case .guideCategory(let categoryKey):
             let key = categoryKey.trimmingCharacters(in: .whitespacesAndNewlines)
             return key.isEmpty ? nil : .guideCategory(categoryKey: key)
+        case .guideJourney(let key):
+            let normalizedKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
+            return normalizedKey.isEmpty ? nil : .guideJourney(key: normalizedKey)
         case .guideServices:
             return .guideServices
         case .guideMemberResources:

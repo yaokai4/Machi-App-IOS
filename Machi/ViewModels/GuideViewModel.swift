@@ -57,24 +57,38 @@ final class GuideViewModel: ObservableObject {
         isSearching = true
         errorMessage = nil
         defer { isSearching = false }
+        let normalizedCountry = country.isEmpty ? "jp" : country
+        // Prefer the unified search endpoint so iOS and Web search the same set
+        // (articles + schools + companies + products + faq + journeys). Fall
+        // back to the legacy per-type queries + offline article match if it's
+        // unavailable, so an older backend or a dropped connection still works.
+        do {
+            let response = try await KaiXAPIClient.shared.guideSearch(country: normalizedCountry, language: currentGuideLanguage(), keyword: q)
+            searchResults = response.groups.articles ?? []
+            schoolResults = response.groups.schools ?? []
+            companyResults = response.groups.companies ?? []
+        } catch {
+            await legacySearch(country: normalizedCountry, q: q)
+        }
+    }
+
+    private func legacySearch(country: String, q: String) async {
         // Schools + companies are best-effort after the article query: a
         // failure there must never blank the article results.
-        let normalizedCountry = country.isEmpty ? "jp" : country
         do {
             let response = try await KaiXAPIClient.shared.guideArticles(country: country, language: currentGuideLanguage(), keyword: q, pageSize: 20)
             searchResults = response.items
         } catch {
             let fallbackArticles = GuideFallbackContent.articles(language: currentGuideLanguage())
             searchResults = fallbackArticles.filter { article in
-                let haystack = ([article.title, article.summary, article.categoryKey, article.subCategoryKey] + article.tags)
+                ([article.title, article.summary, article.categoryKey, article.subCategoryKey] + article.tags)
                     .joined(separator: " ")
                     .localizedCaseInsensitiveContains(q)
-                return haystack
             }
             errorMessage = searchResults.isEmpty ? "搜索暂时无法连接服务器，换个关键词或下拉刷新试试。" : "搜索暂时无法连接服务器，先显示内置指南结果。"
         }
-        let schoolsResponse = try? await KaiXAPIClient.shared.guideSchools(country: normalizedCountry, keyword: q, pageSize: 8)
-        let companiesResponse = try? await KaiXAPIClient.shared.guideCompanies(country: normalizedCountry, keyword: q, pageSize: 8)
+        let schoolsResponse = try? await KaiXAPIClient.shared.guideSchools(country: country, keyword: q, pageSize: 8)
+        let companiesResponse = try? await KaiXAPIClient.shared.guideCompanies(country: country, keyword: q, pageSize: 8)
         schoolResults = schoolsResponse?.items ?? []
         companyResults = companiesResponse?.items ?? []
     }
@@ -116,6 +130,7 @@ private enum GuideFallbackContent {
             categories: categories,
             goals: .init(title: "你现在想先解决什么？", entries: goals),
             goalEntries: goals,
+            journeys: journeys,
             resourceEntries: resources,
             featuredArticles: articles(language: language),
             featuredProducts: [],
@@ -193,6 +208,26 @@ private enum GuideFallbackContent {
         .init(targetKey: "rent", title: "准备租房或搬家", categoryKey: "life_japan", subCategoryKey: "housing"),
         .init(targetKey: "career", title: "开始日本就职", categoryKey: "career_japan", subCategoryKey: "job_hunting"),
         .init(targetKey: "jlpt", title: "准备 JLPT", categoryKey: "jlpt", subCategoryKey: "study_plan")
+    ]
+
+    // Offline journey headers so the action-path grid still renders without a
+    // network. Steps load when online (journey detail is network-only).
+    private static func journey(_ key: String, _ title: String, _ subtitle: String, icon: String, color: String, days: Int, order: Int) -> KaiXGuideJourneyDTO {
+        .init(id: "fallback-journey-\(key)", key: key, country: "jp", language: "zh-CN",
+              title: title, subtitle: subtitle, audience: "", icon: icon, color: color,
+              heroTitle: title, heroSubtitle: subtitle, estimatedDays: days, sortOrder: order,
+              status: "published", stepCount: nil)
+    }
+
+    static let journeys: [KaiXGuideJourneyDTO] = [
+        journey("arrival", "刚到日本 7 天", "落地后最关键的一周，把手续一次办顺", icon: "arrival", color: "#0EA5E9", days: 7, order: 1),
+        journey("prepare", "准备来日本", "出发前把目的、预算和材料理清楚", icon: "plan", color: "#6366F1", days: 60, order: 2),
+        journey("housing", "租房 / 搬家", "看懂初期费用，避开外国人租房的坑", icon: "home", color: "#F97316", days: 30, order: 3),
+        journey("language_school", "语言学校 / 留学", "择校、费用、签证与升学衔接", icon: "plane", color: "#EC4899", days: 120, order: 4),
+        journey("grad_school", "大学院 / 升学", "研究计划书、联系教授到出愿面试", icon: "graduation", color: "#14B8A6", days: 240, order: 5),
+        journey("job_hunting", "日本就职", "从自我分析到内定与签证变更", icon: "briefcase", color: "#147067", days: 180, order: 6),
+        journey("jlpt", "JLPT / EJU 备考", "定级、周期、教材、模考到报名", icon: "language", color: "#0EA5E9", days: 90, order: 7),
+        journey("visa", "签证 / 手续", "在留更新、变更与打工限制", icon: "document", color: "#6366F1", days: 30, order: 8),
     ]
 
     private static let faq: [KaiXGuideFaqDTO] = [

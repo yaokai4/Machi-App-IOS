@@ -82,6 +82,9 @@ struct GuideHomeView: View {
                             companies: viewModel.companyResults
                         )
                     } else {
+                        // Situation -> action path is the primary entry now;
+                        // categories are demoted below it.
+                        GuideJourneyGrid(journeys: home.journeys ?? [])
                         GuideCategoryGrid(categories: home.categories)
                         GuideResourceEntriesSection(entries: home.resourceEntries ?? [])
                         // 两个固定大门：会员权益内容 vs 付费商城——所有
@@ -368,6 +371,9 @@ struct GuideArticleDetailView: View {
                         if let related = response?.related, !related.isEmpty {
                             GuideArticleSection(title: guideText(language, "相关指南", "関連ガイド", "Related guides"), subtitle: nil, articles: related, compact: true)
                         }
+                        // "Next step": route from this article into the matching
+                        // action path so reading turns into doing.
+                        GuideJourneyNextStepCard(categoryKey: article.categoryKey)
                     }
                     .padding(KXSpacing.screen)
                     .guideBottomInset()
@@ -3242,7 +3248,7 @@ private struct GuideWorkReviewCard: View {
     }
 }
 
-private struct GuideBackground: View {
+struct GuideBackground: View {
     var body: some View {
         LinearGradient(
             colors: [

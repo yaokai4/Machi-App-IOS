@@ -3964,6 +3964,405 @@ struct UserListingsView: View {
     }
 }
 
+/// Reservation calendar on a listing detail (no money): a horizontal day strip
+/// plus time-slot chips the merchant/landlord published. Renders nothing until
+/// slots load and stays hidden when none exist, so it only appears where the
+/// owner actually opened bookings (看房 / 餐厅订座 / 服务预约).
+struct ListingBookingSection: View {
+    @Environment(\.appLanguage) private var language
+    let listingId: String
+    let listingType: String?
+
+    @State private var slots: [KaiXBookingSlotDTO] = []
+    @State private var loaded = false
+    @State private var isOwner = false
+    @State private var selectedDayKey: String?
+    @State private var inFlightSlotId: String?
+    @State private var bookedTick = 0
+    @State private var toast: String?
+    @State private var showAddSheet = false
+    @State private var pendingDeleteSlot: KaiXBookingSlotDTO?
+    @State private var pendingCancelSlot: KaiXBookingSlotDTO?
+
+    private static let dayKeyFormatter: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.locale = Locale(identifier: "en_US_POSIX"); return f
+    }()
+
+    var body: some View {
+        Group {
+            if loaded && (!slots.isEmpty || isOwner) {
+                KXListingSection(title: titleText, icon: "calendar.badge.clock") {
+                    VStack(alignment: .leading, spacing: 14) {
+                        if slots.isEmpty {
+                            Text(KXListingCopy.pickText(language,
+                                                        "还没有可预约的时段，添加后买家/租客就能直接在线预约。",
+                                                        "予約枠がまだありません。追加すると相手が直接予約できます。",
+                                                        "No slots yet — add some so people can reserve online."))
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            dayStrip
+                            slotGrid
+                        }
+                        if isOwner {
+                            Button {
+                                showAddSheet = true
+                            } label: {
+                                Label(KXListingCopy.pickText(language, "添加预约时段", "予約枠を追加", "Add a slot"),
+                                      systemImage: "plus.circle.fill")
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundStyle(KXColor.livingAccent)
+                            }
+                            .buttonStyle(KXPressableStyle())
+                            if !slots.isEmpty {
+                                Text(KXListingCopy.pickText(language, "长按时段可删除", "長押しで削除できます", "Long-press a slot to remove it"))
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
+                        }
+                        if let toast {
+                            Label(toast, systemImage: toast.contains("成功") ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(toast.contains("成功") ? KXColor.livingAccent : KXColor.livingWarm)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
+                        Label(KXListingCopy.pickText(language,
+                                                     "预约不收取任何费用，具体时间请到店/看房时与对方确认。",
+                                                     "予約は無料です。詳細は現地で相手にご確認ください。",
+                                                     "Booking is free — confirm the exact time with the host on arrival."),
+                              systemImage: "info.circle")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .task(id: listingId) { await reload() }
+        .sensoryFeedback(.success, trigger: bookedTick)
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: selectedDayKey)
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: bookedTick)
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: slots.count)
+        .sheet(isPresented: $showAddSheet) {
+            AddBookingSlotSheet { startAt, capacity, note in
+                Task { await addSlots([KaiXAPIClient.SlotInput(startAt: startAt, capacity: capacity, note: note)]) }
+            }
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+        }
+        .confirmationDialog(
+            KXListingCopy.pickText(language, "删除这个预约时段？", "この予約枠を削除しますか？", "Remove this slot?"),
+            isPresented: Binding(get: { pendingDeleteSlot != nil }, set: { if !$0 { pendingDeleteSlot = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button(KXListingCopy.pickText(language, "删除", "削除", "Remove"), role: .destructive) {
+                if let s = pendingDeleteSlot { Task { await deleteSlot(s) } }
+                pendingDeleteSlot = nil
+            }
+            Button(KXListingCopy.pickText(language, "取消", "キャンセル", "Cancel"), role: .cancel) { pendingDeleteSlot = nil }
+        } message: {
+            Text(KXListingCopy.pickText(language, "已预约的用户会收到取消通知。", "予約済みのユーザーに取消通知が届きます。", "Anyone booked will be notified of the cancellation."))
+        }
+        .confirmationDialog(
+            KXListingCopy.pickText(language, "取消你的预约？", "予約をキャンセルしますか？", "Cancel your reservation?"),
+            isPresented: Binding(get: { pendingCancelSlot != nil }, set: { if !$0 { pendingCancelSlot = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button(KXListingCopy.pickText(language, "取消预约", "予約をキャンセル", "Cancel reservation"), role: .destructive) {
+                if let s = pendingCancelSlot { Task { await cancelMyBooking(s) } }
+                pendingCancelSlot = nil
+            }
+            Button(KXListingCopy.pickText(language, "返回", "戻る", "Keep"), role: .cancel) { pendingCancelSlot = nil }
+        }
+    }
+
+    // Day pills (distinct days that have slots).
+    private var dayStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(dayKeys, id: \.self) { key in
+                    let date = firstDate(forDay: key)
+                    Button {
+                        selectedDayKey = key
+                    } label: {
+                        VStack(spacing: 3) {
+                            Text(weekdayText(date))
+                                .font(.caption2.weight(.semibold))
+                            Text(dayNumberText(date))
+                                .font(.headline.weight(.bold))
+                        }
+                        .frame(width: 52, height: 60)
+                        .foregroundStyle(key == selectedDayKey ? .white : KXColor.livingInk)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(key == selectedDayKey ? AnyShapeStyle(KXColor.livingAccent) : AnyShapeStyle(KXColor.livingAccentSoft.opacity(0.5)))
+                        )
+                    }
+                    .buttonStyle(KXPressableStyle())
+                }
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
+    // Time-slot chips for the selected day.
+    private var slotGrid: some View {
+        FlowLayout(spacing: 10) {
+            ForEach(slotsForSelectedDay) { slot in
+                slotChip(slot)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func slotChip(_ slot: KaiXBookingSlotDTO) -> some View {
+        let booked = slot.resolvedBookedByMe
+        let full = slot.resolvedIsFull && !booked
+        let busy = inFlightSlotId == slot.id
+        Button {
+            if isOwner { return }
+            if booked { pendingCancelSlot = slot } else { Task { await book(slot) } }
+        } label: {
+            HStack(spacing: 6) {
+                if busy {
+                    ProgressView().controlSize(.mini).tint(KXColor.livingAccent)
+                } else if booked {
+                    Image(systemName: "checkmark.circle.fill")
+                }
+                Text(timeText(slot.startDate))
+                    .font(.subheadline.weight(.bold))
+                if booked {
+                    Text(KXListingCopy.pickText(language, "已预约", "予約済み", "Booked")).font(.caption2.weight(.semibold))
+                } else if full {
+                    Text(KXListingCopy.pickText(language, "已约满", "満席", "Full")).font(.caption2.weight(.semibold))
+                } else {
+                    Text(KXListingCopy.pickText(language, "剩\(slot.resolvedAvailable)", "残\(slot.resolvedAvailable)", "\(slot.resolvedAvailable) left"))
+                        .font(.caption2.weight(.semibold)).opacity(0.85)
+                }
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            .foregroundStyle(chipForeground(booked: booked, full: full))
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(booked ? AnyShapeStyle(KXColor.livingAccent.opacity(0.14)) : AnyShapeStyle(KXColor.livingSurface))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(booked ? KXColor.livingAccent : (full ? Color.secondary.opacity(0.25) : KXColor.livingAccent.opacity(0.45)),
+                            lineWidth: 1.2)
+            )
+        }
+        .buttonStyle(KXPressableStyle())
+        .disabled(busy || (!isOwner && full && !booked))
+        .onLongPressGesture(minimumDuration: 0.4) {
+            if isOwner { pendingDeleteSlot = slot }
+        }
+    }
+
+    private func chipForeground(booked: Bool, full: Bool) -> Color {
+        if booked { return KXColor.livingAccent }
+        if full { return .secondary }
+        return KXColor.livingInk
+    }
+
+    // MARK: - Data
+
+    private var dayKeys: [String] {
+        var seen = Set<String>(); var ordered: [String] = []
+        for s in slots {
+            guard let d = s.startDate else { continue }
+            let k = Self.dayKeyFormatter.string(from: d)
+            if !seen.contains(k) { seen.insert(k); ordered.append(k) }
+        }
+        return ordered
+    }
+
+    private var slotsForSelectedDay: [KaiXBookingSlotDTO] {
+        guard let key = selectedDayKey ?? dayKeys.first else { return [] }
+        return slots.filter { s in
+            guard let d = s.startDate else { return false }
+            return Self.dayKeyFormatter.string(from: d) == key
+        }
+    }
+
+    private func firstDate(forDay key: String) -> Date? {
+        slots.first { s in
+            guard let d = s.startDate else { return false }
+            return Self.dayKeyFormatter.string(from: d) == key
+        }?.startDate
+    }
+
+    private func reload() async {
+        do {
+            let resp = try await KaiXAPIClient.shared.listingSlots(listingId)
+            await MainActor.run {
+                slots = resp.items.sorted { ($0.startAt ?? "") < ($1.startAt ?? "") }
+                isOwner = resp.isOwner ?? false
+                if selectedDayKey == nil { selectedDayKey = dayKeys.first }
+                loaded = true
+            }
+        } catch {
+            await MainActor.run { loaded = true }   // hide section silently on failure
+        }
+    }
+
+    private func addSlots(_ inputs: [KaiXAPIClient.SlotInput]) async {
+        do {
+            _ = try await KaiXAPIClient.shared.createListingSlots(listingId, slots: inputs)
+            await reload()
+            await MainActor.run {
+                if selectedDayKey == nil { selectedDayKey = dayKeys.first }
+                toast = KXListingCopy.pickText(language, "时段已添加", "枠を追加しました", "Slot added")
+            }
+        } catch {
+            await MainActor.run { toast = KXListingCopy.pickText(language, "添加失败，请重试", "追加に失敗しました", "Failed to add") }
+        }
+    }
+
+    private func deleteSlot(_ slot: KaiXBookingSlotDTO) async {
+        do {
+            try await KaiXAPIClient.shared.deleteListingSlot(listingId: listingId, slotId: slot.id)
+            await reload()
+            await MainActor.run {
+                if let key = selectedDayKey, !dayKeys.contains(key) { selectedDayKey = dayKeys.first }
+                toast = KXListingCopy.pickText(language, "时段已删除", "枠を削除しました", "Slot removed")
+            }
+        } catch {
+            await MainActor.run { toast = KXListingCopy.pickText(language, "删除失败，请重试", "削除に失敗しました", "Failed to remove") }
+        }
+    }
+
+    private func cancelMyBooking(_ slot: KaiXBookingSlotDTO) async {
+        do {
+            let mine = try await KaiXAPIClient.shared.myReservations()
+            guard let booking = mine.first(where: { $0.slotId == slot.id && ($0.status ?? "confirmed") == "confirmed" }) else {
+                await MainActor.run { toast = KXListingCopy.pickText(language, "未找到该预约", "予約が見つかりません", "Reservation not found") }
+                return
+            }
+            try await KaiXAPIClient.shared.cancelReservation(booking.id)
+            await reload()
+            await MainActor.run { toast = KXListingCopy.pickText(language, "已取消预约", "予約をキャンセルしました", "Reservation cancelled") }
+        } catch {
+            await MainActor.run { toast = KXListingCopy.pickText(language, "取消失败，请重试", "キャンセルに失敗しました", "Failed to cancel") }
+        }
+    }
+
+    private func book(_ slot: KaiXBookingSlotDTO) async {
+        guard inFlightSlotId == nil else { return }
+        await MainActor.run { inFlightSlotId = slot.id; toast = nil }
+        do {
+            try await KaiXAPIClient.shared.bookSlot(listingId: listingId, slotId: slot.id)
+            let resp = try? await KaiXAPIClient.shared.listingSlots(listingId)
+            await MainActor.run {
+                if let resp { slots = resp.items.sorted { ($0.startAt ?? "") < ($1.startAt ?? "") } }
+                inFlightSlotId = nil
+                bookedTick += 1
+                toast = KXListingCopy.pickText(language, "预约成功，已加入「我的预约」", "予約が完了しました", "Reserved — see My reservations")
+            }
+        } catch {
+            await MainActor.run {
+                inFlightSlotId = nil
+                toast = bookingErrorText(error)
+            }
+        }
+    }
+
+    private func bookingErrorText(_ error: Error) -> String {
+        let msg = (error as NSError).localizedDescription
+        if msg.contains("登录") || msg.contains("401") || msg.lowercased().contains("unauthor") {
+            return KXListingCopy.pickText(language, "请先登录后再预约", "ログインしてください", "Please sign in to book")
+        }
+        if msg.contains("约满") { return KXListingCopy.pickText(language, "该时段已约满", "満席です", "This slot is full") }
+        if msg.contains("已预约") { return KXListingCopy.pickText(language, "你已预约该时段", "予約済みです", "Already booked") }
+        return KXListingCopy.pickText(language, "预约失败，请稍后再试", "予約に失敗しました", "Booking failed, try again")
+    }
+
+    // MARK: - Formatting
+
+    private var titleText: String {
+        switch listingType {
+        case "housing", "rental", "roommate":
+            return KXListingCopy.pickText(language, "看房预约", "内見予約", "Book a viewing")
+        case "local_service", "service", "discount", "event":
+            return KXListingCopy.pickText(language, "预约到店", "来店予約", "Reserve a visit")
+        default:
+            return KXListingCopy.pickText(language, "预约时段", "予約枠", "Reservation")
+        }
+    }
+
+    private func localizedFormatter(_ template: String) -> DateFormatter {
+        let f = DateFormatter()
+        switch language {
+        case .ja: f.locale = Locale(identifier: "ja_JP")
+        case .en: f.locale = Locale(identifier: "en_US")
+        default: f.locale = Locale(identifier: "zh_CN")
+        }
+        f.setLocalizedDateFormatFromTemplate(template)
+        return f
+    }
+
+    private func weekdayText(_ date: Date?) -> String {
+        guard let date else { return "—" }
+        return localizedFormatter("EEE").string(from: date)
+    }
+
+    private func dayNumberText(_ date: Date?) -> String {
+        guard let date else { return "" }
+        return localizedFormatter("Md").string(from: date)
+    }
+
+    private func timeText(_ date: Date?) -> String {
+        guard let date else { return "" }
+        return localizedFormatter("Hm").string(from: date)
+    }
+}
+
+/// Owner-side sheet to publish one bookable slot (date + time + capacity). No money.
+struct AddBookingSlotSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.appLanguage) private var language
+    /// (ISO8601 start, capacity, note)
+    let onSave: (String, Int, String) -> Void
+
+    @State private var date = Calendar.current.date(byAdding: .hour, value: 24, to: Date()) ?? Date()
+    @State private var capacity = 1
+    @State private var note = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    DatePicker(KXListingCopy.pickText(language, "时间", "日時", "Time"),
+                               selection: $date, in: Date()..., displayedComponents: [.date, .hourAndMinute])
+                    Stepper(value: $capacity, in: 1...20) {
+                        Text(KXListingCopy.pickText(language, "可约人数：\(capacity)", "受付人数：\(capacity)", "Capacity: \(capacity)"))
+                    }
+                    TextField(KXListingCopy.pickText(language, "备注（可选，如「每场30分钟」）", "メモ（任意）", "Note (optional)"),
+                              text: $note)
+                } footer: {
+                    Text(KXListingCopy.pickText(language,
+                                               "对方可在线预约该时段，不涉及任何费用。",
+                                               "相手はこの枠をオンラインで予約できます（無料）。",
+                                               "People can reserve this slot online — no payment involved."))
+                }
+            }
+            .navigationTitle(KXListingCopy.pickText(language, "添加预约时段", "予約枠を追加", "Add a slot"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(KXListingCopy.pickText(language, "取消", "キャンセル", "Cancel")) { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(KXListingCopy.pickText(language, "添加", "追加", "Add")) {
+                        let f = ISO8601DateFormatter()
+                        f.formatOptions = [.withInternetDateTime]
+                        onSave(f.string(from: date), capacity, note.trimmingCharacters(in: .whitespacesAndNewlines))
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
 struct CityListingDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appLanguage) private var language
@@ -4293,6 +4692,8 @@ struct CityListingDetailView: View {
                 }
 
                 merchantDetailSections(listing)
+
+                ListingBookingSection(listingId: listing.id, listingType: listing.type)
 
                 KXListingSection(title: KXListingCopy.pickText(language, "发布者", "投稿者", "Poster"), icon: "person.crop.circle") {
                     HStack(spacing: 12) {

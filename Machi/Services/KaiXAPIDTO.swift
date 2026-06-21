@@ -653,6 +653,87 @@ struct KaiXListingInquiryReceiptDTO: Codable, Equatable {
     }
 }
 
+// MARK: - Reservation calendar (no money)
+
+/// A bookable time slot a merchant/landlord published on a listing.
+struct KaiXBookingSlotDTO: Codable, Identifiable, Equatable {
+    let id: String
+    let listingId: String?
+    let startAt: String?
+    let endAt: String?
+    let capacity: Int?
+    let bookedCount: Int?
+    let available: Int?
+    let isFull: Bool?
+    let note: String?
+    let status: String?
+    let bookedByMe: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case listingId = "listing_id"
+        case startAt = "start_at"
+        case endAt = "end_at"
+        case capacity
+        case bookedCount = "booked_count"
+        case available
+        case isFull = "is_full"
+        case note
+        case status
+        case bookedByMe = "booked_by_me"
+    }
+
+    var resolvedAvailable: Int { available ?? max(0, (capacity ?? 1) - (bookedCount ?? 0)) }
+    var resolvedIsFull: Bool { isFull ?? (resolvedAvailable <= 0) }
+    var resolvedBookedByMe: Bool { bookedByMe ?? false }
+
+    /// Parsed start date (ISO8601, with/without fractional seconds).
+    var startDate: Date? { KaiXBookingSlotDTO.parseISO(startAt) }
+    var endDate: Date? { KaiXBookingSlotDTO.parseISO(endAt) }
+
+    static func parseISO(_ s: String?) -> Date? {
+        guard let s, !s.isEmpty else { return nil }
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = f.date(from: s) { return d }
+        f.formatOptions = [.withInternetDateTime]
+        return f.date(from: s)
+    }
+}
+
+struct KaiXBookingSlotsResponse: Decodable {
+    let items: [KaiXBookingSlotDTO]
+    let isOwner: Bool?
+    enum CodingKeys: String, CodingKey { case items; case isOwner = "is_owner" }
+}
+
+/// A reservation the current user made (or, owner-side, received).
+struct KaiXBookingDTO: Codable, Identifiable, Equatable {
+    let id: String
+    let slotId: String?
+    let listingId: String?
+    let status: String?
+    let note: String?
+    let startAt: String?
+    let endAt: String?
+    let listingTitle: String?
+    let listingType: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case slotId = "slot_id"
+        case listingId = "listing_id"
+        case status
+        case note
+        case startAt = "start_at"
+        case endAt = "end_at"
+        case listingTitle = "listing_title"
+        case listingType = "listing_type"
+    }
+
+    var startDate: Date? { KaiXBookingSlotDTO.parseISO(startAt) }
+}
+
 struct KaiXBusinessDocumentDTO: Codable, Identifiable, Equatable {
     let id: String
     let documentId: String?
@@ -1717,6 +1798,129 @@ struct KaiXGuideFaqDTO: Codable, Equatable, Identifiable, Hashable {
     let categoryKey: String
 }
 
+// MARK: - Guide Journeys (situation -> ordered action path)
+
+struct KaiXGuideJourneyDTO: Codable, Equatable, Identifiable, Hashable {
+    let id: String
+    let key: String
+    let country: String?
+    let language: String?
+    let title: String
+    let subtitle: String
+    let audience: String
+    let icon: String
+    let color: String
+    let heroTitle: String
+    let heroSubtitle: String
+    let estimatedDays: Int
+    let sortOrder: Int
+    let status: String
+    let stepCount: Int?
+}
+
+struct KaiXGuideJourneyStepDTO: Codable, Equatable, Identifiable, Hashable {
+    let id: String
+    let journeyKey: String
+    let stepKey: String
+    let title: String
+    let summary: String
+    let body: String?
+    let actionLabel: String
+    let actionType: String
+    let actionTarget: String
+    let categoryKey: String
+    let articleSlugs: [String]
+    let productSlugs: [String]
+    let required: Bool
+    let estimatedMinutes: Int
+    let deadlineHint: String
+    let sortOrder: Int
+    let status: String
+    let relatedArticles: [KaiXGuideArticleDTO]?
+    let relatedProducts: [KaiXGuideProductDTO]?
+}
+
+struct KaiXGuideJourneysResponse: Codable {
+    let status: String
+    let country: String
+    let language: String?
+    let journeys: [KaiXGuideJourneyDTO]
+}
+
+/// Per-step progress as returned inside a journey detail's `progress` map.
+struct KaiXGuideStepProgressState: Codable, Equatable, Hashable {
+    let status: String
+    let completedAt: String?
+}
+
+struct KaiXGuideJourneyDetailResponse: Codable {
+    let status: String
+    let country: String
+    let language: String?
+    let journey: KaiXGuideJourneyDTO
+    let steps: [KaiXGuideJourneyStepDTO]
+    let progress: [String: KaiXGuideStepProgressState]?
+    let disclaimer: String?
+}
+
+struct KaiXGuideProgressDTO: Codable, Equatable, Identifiable, Hashable {
+    let id: String
+    let journeyKey: String
+    let stepKey: String
+    let status: String
+    let completedAt: String?
+    let reminderAt: String?
+    let notes: String?
+    let updatedAt: String?
+}
+
+struct KaiXGuideProgressSummaryDTO: Codable, Equatable, Hashable {
+    let journeyKey: String
+    let done: Int
+    let total: Int
+    let percent: Int
+}
+
+struct KaiXGuideProgressResponse: Codable {
+    let status: String
+    let items: [KaiXGuideProgressDTO]
+    let summary: [KaiXGuideProgressSummaryDTO]
+}
+
+struct KaiXGuideSearchScope: Codable, Equatable, Identifiable, Hashable {
+    let key: String
+    let label: String
+    var id: String { key }
+}
+
+struct KaiXGuideSearchGroups: Codable, Equatable {
+    let articles: [KaiXGuideArticleDTO]?
+    let schools: [KaiXGuideSchoolDTO]?
+    let companies: [KaiXGuideCompanyDTO]?
+    let products: [KaiXGuideProductDTO]?
+    let faq: [KaiXGuideFaqDTO]?
+    let journeys: [KaiXGuideJourneyDTO]?
+}
+
+struct KaiXGuideSearchResponse: Codable {
+    let status: String
+    let query: String
+    let scopes: [KaiXGuideSearchScope]
+    let groups: KaiXGuideSearchGroups
+}
+
+struct KaiXGuideSavedItemDTO: Codable, Equatable, Identifiable, Hashable {
+    let itemId: String
+    let itemType: String
+    let createdAt: String?
+    var id: String { "\(itemType):\(itemId)" }
+}
+
+struct KaiXGuideSavedResponse: Codable {
+    let status: String
+    let items: [KaiXGuideSavedItemDTO]
+}
+
 struct KaiXGuideHomeResponse: Codable {
     let status: String
     let country: String
@@ -1726,6 +1930,9 @@ struct KaiXGuideHomeResponse: Codable {
     let categories: [KaiXGuideCategoryDTO]
     let goals: KaiXGuideGoalsDTO?
     let goalEntries: [KaiXGuideGoalEntryDTO]
+    // Additive (Stage 1 backend): situation -> action-path entries. Optional so
+    // older cached payloads and offline fallback still decode.
+    let journeys: [KaiXGuideJourneyDTO]?
     let resourceEntries: [KaiXGuideResourceEntryDTO]?
     let featuredArticles: [KaiXGuideArticleDTO]
     let featuredProducts: [KaiXGuideProductDTO]

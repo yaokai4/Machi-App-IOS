@@ -1116,6 +1116,71 @@ final class KaiXAPIClient {
         return response.inquiry
     }
 
+    // MARK: - Reservation calendar (no money)
+
+    /// Available bookable slots a listing's owner has published (看房 / 餐厅订座 / 服务预约).
+    func listingSlots(_ listingId: String) async throws -> KaiXBookingSlotsResponse {
+        let data = try await request("GET", "/api/listings/\(listingId.encodedPathSegment)/slots")
+        return try decode(data)
+    }
+
+    /// Reserve a slot. No payment involved.
+    @discardableResult
+    func bookSlot(listingId: String, slotId: String, note: String = "") async throws -> KaiXBookingDTO {
+        struct Body: Encodable { let note: String }
+        struct Response: Decodable { let booking: KaiXBookingDTO }
+        let data = try await request(
+            "POST",
+            "/api/listings/\(listingId.encodedPathSegment)/slots/\(slotId.encodedPathSegment)/book",
+            body: Body(note: note),
+            idempotencyKey: "booking-\(slotId)-\(UUID().uuidString)"
+        )
+        let response: Response = try decode(data)
+        return response.booking
+    }
+
+    /// Reservations the current user made, newest upcoming first.
+    func myReservations() async throws -> [KaiXBookingDTO] {
+        struct Response: Decodable { let items: [KaiXBookingDTO] }
+        let data = try await request("GET", "/api/my/reservations")
+        return (try decode(data) as Response).items
+    }
+
+    func cancelReservation(_ bookingId: String) async throws {
+        _ = try await request("POST", "/api/reservations/\(bookingId.encodedPathSegment)/cancel")
+    }
+
+    /// A bookable slot the owner wants to publish.
+    struct SlotInput: Encodable {
+        let start_at: String
+        let end_at: String
+        let capacity: Int
+        let note: String
+        init(startAt: String, endAt: String = "", capacity: Int = 1, note: String = "") {
+            self.start_at = startAt
+            self.end_at = endAt
+            self.capacity = capacity
+            self.note = note
+        }
+    }
+
+    /// Owner: create one or more bookable slots on a listing.
+    @discardableResult
+    func createListingSlots(_ listingId: String, slots: [SlotInput]) async throws -> [KaiXBookingSlotDTO] {
+        struct Body: Encodable { let slots: [SlotInput] }
+        struct Response: Decodable { let items: [KaiXBookingSlotDTO] }
+        let data = try await request(
+            "POST",
+            "/api/listings/\(listingId.encodedPathSegment)/slots",
+            body: Body(slots: slots)
+        )
+        return (try decode(data) as Response).items
+    }
+
+    func deleteListingSlot(listingId: String, slotId: String) async throws {
+        _ = try await request("DELETE", "/api/listings/\(listingId.encodedPathSegment)/slots/\(slotId.encodedPathSegment)")
+    }
+
     // MARK: - Listing reviews（星级点评）+ 认证商家目录
 
     func listingReviews(_ listingId: String) async throws -> KaiXListingReviewsResponse {
@@ -1185,6 +1250,60 @@ final class KaiXAPIClient {
             URLQueryItem(name: "country", value: country),
         ])
         return try decode(data)
+    }
+
+    // MARK: - guide journeys (situation -> action path)
+
+    func guideJourneys(country: String = "jp", language: String = "zh-CN") async throws -> KaiXGuideJourneysResponse {
+        let data = try await request("GET", "/api/guide/journeys", queryItems: [
+            URLQueryItem(name: "country", value: country),
+            URLQueryItem(name: "language", value: language),
+        ])
+        return try decode(data)
+    }
+
+    func guideJourney(_ key: String, country: String = "jp", language: String = "zh-CN") async throws -> KaiXGuideJourneyDetailResponse {
+        let data = try await request("GET", "/api/guide/journeys/\(key.encodedPathSegment)", queryItems: [
+            URLQueryItem(name: "country", value: country),
+            URLQueryItem(name: "language", value: language),
+        ])
+        return try decode(data)
+    }
+
+    /// Unified Guide search — articles + schools + companies + products + faq +
+    /// journeys, grouped. Same endpoint the Web client uses, so search is
+    /// consistent across platforms.
+    func guideSearch(country: String = "jp", language: String = "zh-CN", keyword: String, scope: String = "all") async throws -> KaiXGuideSearchResponse {
+        let data = try await request("GET", "/api/guide/search", queryItems: [
+            URLQueryItem(name: "country", value: country),
+            URLQueryItem(name: "language", value: language),
+            URLQueryItem(name: "q", value: keyword),
+            URLQueryItem(name: "scope", value: scope),
+        ])
+        return try decode(data)
+    }
+
+    func guideProgress() async throws -> KaiXGuideProgressResponse {
+        let data = try await request("GET", "/api/guide/progress")
+        return try decode(data)
+    }
+
+    @discardableResult
+    func updateGuideProgress(journeyKey: String, stepKey: String, status: String, reminderAt: String? = nil, notes: String? = nil) async throws -> KaiXGuideProgressResponse {
+        var body: [String: String] = ["journeyKey": journeyKey, "stepKey": stepKey, "status": status]
+        if let reminderAt, !reminderAt.isEmpty { body["reminderAt"] = reminderAt }
+        if let notes { body["notes"] = notes }
+        let data = try await request("PATCH", "/api/guide/progress", body: body)
+        return try decode(data)
+    }
+
+    func guideSavedItems() async throws -> KaiXGuideSavedResponse {
+        let data = try await request("GET", "/api/guide/saved")
+        return try decode(data)
+    }
+
+    func setGuideSaved(itemType: String, itemId: String, on: Bool) async throws {
+        _ = try await request(on ? "POST" : "DELETE", "/api/guide/saved", body: ["itemType": itemType, "itemId": itemId])
     }
 
     func guideArticles(
