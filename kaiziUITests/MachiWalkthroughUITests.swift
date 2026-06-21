@@ -124,6 +124,35 @@ final class MachiWalkthroughUITests: XCTestCase {
         snap("17_merchant_form_bottom")
     }
 
+    /// Captures social surfaces (home feed / 信息) for store screenshots.
+    @MainActor
+    func testSocialShots() throws {
+        let app = XCUIApplication()
+        app.launch()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        for label in ["不允许", "允许", "Don't Allow", "Allow"] {
+            let b = springboard.buttons[label]
+            if b.waitForExistence(timeout: 3) { b.tap(); break }
+        }
+        let guest = app.buttons["auth.browseAsGuest"].firstMatch
+        if guest.waitForExistence(timeout: 12) { forceTap(guest) }
+        _ = app.buttons["tabbar.home"].waitForExistence(timeout: 30)
+        pause(4)
+        tapTab(app, "tabbar.home")
+        pause(3.5)
+        snap("SOC_home")
+        app.swipeUp()
+        pause(1.2)
+        snap("SOC_home2")
+        tapTab(app, "tabbar.messages")
+        pause(2.5)
+        snap("SOC_messages")
+        // open the first conversation row, if any
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.34)).tap()
+        pause(2.5)
+        snap("SOC_chat")
+    }
+
     /// Captures the Discover polish (正在发生 rank badges) and the reworked
     /// content-type picker (fewer, clearer types).
     @MainActor

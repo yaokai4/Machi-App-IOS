@@ -454,6 +454,30 @@ struct KXFadingHScroll<Content: View>: View {
     }
 }
 
+/// On wide layouts (iPad / regular width class) cap content to a readable,
+/// centred column so single-column screens don't stretch edge-to-edge. On
+/// iPhone (compact) it's a no-op. Apply to the inner scroll content (e.g. the
+/// feed LazyVStack), not the whole screen, so the page background stays
+/// full-bleed behind the centred column.
+private struct KXReadableWidth: ViewModifier {
+    @Environment(\.horizontalSizeClass) private var hSize
+    var maxWidth: CGFloat = 740
+    func body(content: Content) -> some View {
+        if hSize == .regular {
+            content.frame(maxWidth: maxWidth).frame(maxWidth: .infinity)
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    /// Centre and cap content width on iPad / regular size class. No-op on iPhone.
+    func kxReadableWidth(_ maxWidth: CGFloat = 740) -> some View {
+        modifier(KXReadableWidth(maxWidth: maxWidth))
+    }
+}
+
 struct KXFloatingComposeButton: View {
     let action: () -> Void
     @State private var tapCount = 0

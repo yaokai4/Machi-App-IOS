@@ -268,6 +268,7 @@ struct HomeTimelineView: View {
             .padding(.horizontal, KaiXTheme.horizontalPadding)
             .padding(.vertical, 7)
             .padding(.bottom, chrome.bottomContentPadding + 18)
+            .kxReadableWidth()
         }
         .refreshable {
             await viewModel.refresh(context: modelContext, currentUser: currentUser, postStore: postStore)

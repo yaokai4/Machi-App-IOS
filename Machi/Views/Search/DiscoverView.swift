@@ -212,6 +212,7 @@ struct DiscoverView: View {
                 .padding(.horizontal, KaiXTheme.horizontalPadding)
                 .padding(.top, 14)
                 .padding(.bottom, chrome.bottomContentPadding + 28)
+                .kxReadableWidth()
             }
             .refreshable {
                 await load()
@@ -2733,6 +2734,7 @@ struct CityListingChannelView: View {
                     .padding(.horizontal, KaiXTheme.horizontalPadding)
                     .padding(.top, 6)
                     .padding(.bottom, chrome.bottomContentPadding + 28)
+                    .kxReadableWidth(820)
                 }
                 .refreshable { await load() }
                 .kxScrollCollapse($headerCollapsed)
