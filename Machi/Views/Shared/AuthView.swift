@@ -256,10 +256,11 @@ struct AuthView: View {
                     }
                 }
             }
-            .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+            .signInWithAppleButtonStyle(.black)
             .frame(maxWidth: .infinity)
             .frame(height: 52)
             .clipShape(Capsule())
+            .shadow(color: KXColor.glassShadow.opacity(0.5), radius: 8, y: 3)
             .disabled(isGoogleLoading || viewModel.isLoading)
             .accessibilityIdentifier("auth.apple")
 

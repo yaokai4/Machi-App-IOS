@@ -180,7 +180,11 @@ extension SystemNotificationService: UNUserNotificationCenterDelegate {
                 Self.postConversationRefresh(conversationId)
             }
         }
-        return suppressed ? [] : [.banner, .list, .sound, .badge]
+        // willPresent only fires while the app is FOREGROUND. The user doesn't
+        // want intrusive banners/sounds while actively using the app — keep the
+        // entry in Notification Center + badge, but no banner or sound. On the
+        // chat / messages / notifications screens, suppress entirely.
+        return suppressed ? [] : [.list, .badge]
     }
 
     nonisolated func userNotificationCenter(

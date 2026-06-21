@@ -378,8 +378,13 @@ struct ChatView: View {
                             .id(message.id)
                         }
                     }
+                    // The bottom input bar is attached via .safeAreaInset, which
+                    // already insets the scroll content above it (and above the
+                    // draft preview). A small anchor is all that's needed —
+                    // the old 92/176 spacer double-counted and floated the last
+                    // bubble far above the keyboard.
                     Color.clear
-                        .frame(height: viewModel.mediaDrafts.isEmpty ? 92 : 176)
+                        .frame(height: 8)
                         .id(ChatBottomAnchor.id)
                 }
                 .padding(.horizontal, KaiXTheme.horizontalPadding)
@@ -617,7 +622,7 @@ struct KXMessageBubble: View {
     var body: some View {
         let contentType = message.resolvedType(mediaItems: mediaItems)
 
-        HStack(alignment: .bottom, spacing: 8) {
+        HStack(alignment: .top, spacing: 8) {
             if isMine { Spacer(minLength: 52) }
 
             if !isMine {

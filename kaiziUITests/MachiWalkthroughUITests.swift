@@ -124,6 +124,22 @@ final class MachiWalkthroughUITests: XCTestCase {
         snap("17_merchant_form_bottom")
     }
 
+    /// Captures the auth screen (to verify the prominent Apple button),
+    /// dismissing the system notification-permission alert if it appears.
+    @MainActor
+    func testAuthScreenAppleButton() throws {
+        let app = XCUIApplication()
+        app.launch()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        for label in ["不允许", "允许", "Don't Allow", "Allow"] {
+            let b = springboard.buttons[label]
+            if b.waitForExistence(timeout: 3) { b.tap(); break }
+        }
+        _ = app.buttons["auth.apple"].waitForExistence(timeout: 15)
+        pause(1.5)
+        snap("APPLE_auth")
+    }
+
     /// Captures the redesigned four discover channels (二手 / 租房 / 工作 /
     /// 商家与服务) — new search-first chrome, icon category rail and filter
     /// bottom sheet. PNGs land in /tmp/machi_shots/ prefixed `RD_`.
