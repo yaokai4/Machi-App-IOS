@@ -583,13 +583,9 @@ private struct MessageConversationCard: View {
                     onOpenThread()
                 }
             } label: {
+                // No presence dot: we don't have a real-time presence system,
+                // so a green "online" dot would be a fake online status.
                 AvatarView(user: peer, size: 48)
-                    .overlay(alignment: .bottomTrailing) {
-                        Circle()
-                            .fill(.green)
-                            .frame(width: 9, height: 9)
-                            .overlay(Circle().stroke(Color(.systemBackground).opacity(0.78), lineWidth: 2))
-                    }
             }
             .buttonStyle(.plain)
 

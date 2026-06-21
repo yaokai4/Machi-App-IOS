@@ -43,6 +43,7 @@ struct ChatBootstrapView: View {
 struct ConversationView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
+    @EnvironmentObject private var messageStore: MessageStore
     @State private var thread: MessageThreadEntity?
     @State private var peer: UserEntity?
     @State private var state: ScreenState = .idle
@@ -54,7 +55,7 @@ struct ConversationView: View {
         Group {
             switch state {
             case .idle, .loading:
-                LoadingView()
+                ChatSkeletonView()
             case .error(let message):
                 ErrorStateView(message: message) {
                     Task { await load() }
@@ -73,6 +74,19 @@ struct ConversationView: View {
     }
 
     private func load() async {
+        // Cache-first: if this conversation is already in the in-memory store
+        // (tapped from the list, or seen this session), render the chat
+        // instantly instead of waiting on a full conversations fetch. ChatView
+        // then seeds cached messages + refreshes from the server.
+        if thread == nil, let cached = messageStore.conversationsById[conversationId] {
+            let repository = MessageRepository(context: modelContext)
+            thread = cached
+            if let peerId = repository.peerUserId(in: cached, currentUserId: currentUser.id) {
+                peer = repository.cachedPeers()[peerId]
+            }
+            state = .loaded
+            return
+        }
         state = .loading
         do {
             if KaiXBackend.token != nil {
@@ -144,12 +158,16 @@ struct ChatView: View {
             Group {
                 switch viewModel.state {
                 case .loading, .idle:
-                    LoadingView()
+                    // No cache yet → chat-shaped skeleton (not a bare spinner),
+                    // so the page reads as "a chat that's filling in" instantly.
+                    ChatSkeletonView()
                 case .error(let message):
-                    ErrorStateView(message: message) {
+                    ChatLoadErrorView(message: message) {
                         Task { await viewModel.load(context: modelContext, thread: thread, messageStore: messageStore) }
                     }
-                case .empty, .loaded:
+                case .empty:
+                    ChatEmptyView(language: language)
+                case .loaded:
                     messageList
                 }
             }
@@ -985,6 +1003,85 @@ private struct ChatNewMessagesDivider: View {
         Rectangle()
             .fill(KXColor.accent.opacity(0.28))
             .frame(height: 1)
+    }
+}
+
+/// Chat-shaped skeleton shown only when a conversation has no cached messages
+/// yet — alternating bubble placeholders so opening a chat reads as "filling
+/// in" rather than a frozen centre spinner. Pure shapes + redaction = cheap.
+private struct ChatSkeletonView: View {
+    private let rows: [(mine: Bool, w: CGFloat)] = [
+        (false, 0.60), (false, 0.40), (true, 0.52), (false, 0.72), (true, 0.34), (false, 0.46)
+    ]
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, r in
+                HStack(alignment: .bottom, spacing: 8) {
+                    if r.mine { Spacer(minLength: 52) }
+                    if !r.mine { Circle().fill(KXColor.softBackground).frame(width: 32, height: 32) }
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(KXColor.softBackground)
+                        .frame(width: UIScreen.main.bounds.width * r.w, height: 40)
+                    if !r.mine { Spacer(minLength: 52) }
+                }
+            }
+            Spacer()
+        }
+        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.top, 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .redacted(reason: .placeholder)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Calm empty state for a conversation with no messages yet.
+private struct ChatEmptyView: View {
+    let language: AppLanguage
+    var body: some View {
+        VStack(spacing: 12) {
+            Spacer()
+            Image(systemName: "bubble.left.and.bubble.right")
+                .font(.system(size: 38, weight: .light))
+                .foregroundStyle(KXColor.livingMuted.opacity(0.5))
+            Text(language == .ja ? "まだメッセージはありません。話しかけてみましょう。"
+                 : language == .en ? "No messages yet — say hello."
+                 : "这里还没有消息，开始聊聊吧。")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// Non-intrusive load-failure state. The composer below stays usable so the
+/// user can still send once the network recovers.
+private struct ChatLoadErrorView: View {
+    let message: String
+    let onRetry: () -> Void
+    @Environment(\.appLanguage) private var language
+    var body: some View {
+        VStack(spacing: 12) {
+            Spacer()
+            Image(systemName: "wifi.exclamationmark")
+                .font(.system(size: 34, weight: .light))
+                .foregroundStyle(.secondary)
+            Text(language == .ja ? "メッセージを読み込めませんでした"
+                 : language == .en ? "Couldn't load messages" : "消息暂时加载失败")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+            Button(action: onRetry) {
+                Text(language == .ja ? "再試行" : language == .en ? "Retry" : "点击重试")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(KXColor.accent)
+                    .padding(.horizontal, 22).frame(height: 42)
+                    .background(KXColor.accent.opacity(0.10), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

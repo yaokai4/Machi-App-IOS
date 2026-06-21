@@ -106,6 +106,14 @@ final class ChatViewModel: ObservableObject {
     }
 
     func load(context: ModelContext, thread: MessageThreadEntity, messageStore: MessageStore? = nil) async {
+        // Cache-first: seed from the in-memory conversation cache so the chat
+        // shows its last messages instantly instead of a blank "加载中" spinner
+        // while the network round-trips. The fetch below then reconciles.
+        if messages.isEmpty, !hasActiveFilters,
+           let cached = messageStore?.messagesByConversationId[thread.id], !cached.isEmpty {
+            messages = cached
+            state = .loaded
+        }
         let hasCachedContent = !messages.isEmpty
         if !hasCachedContent {
             state = .loading
