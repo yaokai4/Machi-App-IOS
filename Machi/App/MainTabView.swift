@@ -274,21 +274,25 @@ struct MainTabView: View {
                     onSwitchAccount: onSwitchAccount
                 )
                 .kxRouteDestinations(currentUser: currentUser)
+                .kxEnableSwipeBack()
             }
         case .search:
             NavigationStack(path: router.binding(for: .search)) {
                 DiscoverView(currentUser: currentUser)
                     .kxRouteDestinations(currentUser: currentUser)
+                    .kxEnableSwipeBack()
             }
         case .guide:
             NavigationStack(path: router.binding(for: .guide)) {
                 GuideHomeView(currentUser: currentUser)
                     .kxRouteDestinations(currentUser: currentUser)
+                    .kxEnableSwipeBack()
             }
         case .messages:
             NavigationStack(path: router.binding(for: .messages)) {
                 MessagesView(currentUser: currentUser)
                     .kxRouteDestinations(currentUser: currentUser)
+                    .kxEnableSwipeBack()
             }
         case .profile:
             NavigationStack(path: router.binding(for: .profile)) {
@@ -299,6 +303,7 @@ struct MainTabView: View {
                     onSwitchAccount: onSwitchAccount
                 )
                     .kxRouteDestinations(currentUser: currentUser)
+                    .kxEnableSwipeBack()
             }
         }
     }

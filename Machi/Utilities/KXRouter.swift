@@ -412,3 +412,47 @@ private extension KXRoute {
         }
     }
 }
+
+import UIKit
+
+/// Re-enables the system edge-swipe-back gesture on pages that hide the
+/// navigation bar (`.toolbar(.hidden, for: .navigationBar)`). By default UIKit
+/// disables `interactivePopGestureRecognizer` while the bar is hidden, which is
+/// why Machi's custom-header pages (chat, listing detail, etc.) couldn't be
+/// swiped back. We re-point the gesture's delegate so the swipe is allowed
+/// whenever the navigation stack has something to pop. The recognizer is a
+/// left-screen-edge pan, so it never steals mid-screen horizontal scrolling.
+private struct KXSwipeBackEnabler: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> KXSwipeBackProbe { KXSwipeBackProbe() }
+    func updateUIViewController(_ uiViewController: KXSwipeBackProbe, context: Context) {}
+}
+
+final class KXSwipeBackProbe: UIViewController, UIGestureRecognizerDelegate {
+    override func didMove(toParent parent: UIViewController?) {
+        super.didMove(toParent: parent)
+        attach()
+    }
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        attach()
+    }
+    private func attach() {
+        DispatchQueue.main.async { [weak self] in
+            guard let nav = self?.navigationController,
+                  let gesture = nav.interactivePopGestureRecognizer else { return }
+            gesture.delegate = self
+            gesture.isEnabled = true
+        }
+    }
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        (navigationController?.viewControllers.count ?? 0) > 1
+    }
+}
+
+extension View {
+    /// Enable edge-swipe-back even when the nav bar is hidden. Apply once on a
+    /// NavigationStack's root content.
+    func kxEnableSwipeBack() -> some View {
+        background(KXSwipeBackEnabler().frame(width: 0, height: 0).accessibilityHidden(true))
+    }
+}
