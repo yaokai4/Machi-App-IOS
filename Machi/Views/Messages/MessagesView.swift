@@ -377,7 +377,6 @@ private struct MessagesHeaderView: View {
             Spacer()
             Menu {
                 Button { onNewDirect() } label: { Label(L("msgNewDirect", language), systemImage: "square.and.pencil") }
-                Button { onComingSoon() } label: { Label("\(L("msgNewGroup", language)) · \(L("comingSoon", language))", systemImage: "person.3") }
                 Button { onComingSoon() } label: { Label("\(L("msgScan", language)) · \(L("comingSoon", language))", systemImage: "qrcode.viewfinder") }
             } label: {
                 Image(systemName: "plus")

@@ -13,7 +13,6 @@ struct LocalizationService {
         "messages": [.zh: "信息", .ja: "メッセージ", .en: "Messages"],
         "newMessage": [.zh: "新消息", .ja: "新規メッセージ", .en: "New message"],
         "msgNewDirect": [.zh: "发起私信", .ja: "メッセージを作成", .en: "New message"],
-        "msgNewGroup": [.zh: "发起群聊", .ja: "グループを作成", .en: "New group"],
         "msgScan": [.zh: "扫一扫", .ja: "スキャン", .en: "Scan"],
         "comingSoon": [.zh: "即将支持", .ja: "近日対応", .en: "Coming soon"],
         "me": [.zh: "我的", .ja: "自分", .en: "Me"],

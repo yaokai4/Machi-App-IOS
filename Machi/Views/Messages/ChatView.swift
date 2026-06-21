@@ -752,6 +752,8 @@ private struct ChatInputBar: View {
     let send: () -> Void
 
     @State private var isShowingAttachTray = false
+    @State private var isShowingEmoji = false
+    @FocusState private var inputFocused: Bool
 
     var body: some View {
         let hasVideo = mediaDrafts.contains { $0.type == .video }
@@ -765,12 +767,22 @@ private struct ChatInputBar: View {
                 attachTray(remainingImageSlots: remainingImageSlots, imageDisabled: imageDisabled, videoDisabled: videoDisabled)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+            if isShowingEmoji {
+                ChatEmojiPanel { emoji in text += emoji }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
             inputRow
         }
         .onChange(of: mediaDrafts.count) { _, count in
             // A draft landed — collapse the tray so the preview/composer is clean.
             if count > 0, isShowingAttachTray {
                 withAnimation(.snappy(duration: 0.18)) { isShowingAttachTray = false }
+            }
+        }
+        .onChange(of: inputFocused) { _, focused in
+            // Typing replaces the emoji panel with the keyboard (no overlap).
+            if focused, isShowingEmoji {
+                withAnimation(.snappy(duration: 0.18)) { isShowingEmoji = false }
             }
         }
         .padding(.horizontal, 10)
@@ -795,7 +807,10 @@ private struct ChatInputBar: View {
     private var inputRow: some View {
         HStack(alignment: .bottom, spacing: 9) {
             Button {
-                withAnimation(.snappy(duration: 0.2)) { isShowingAttachTray.toggle() }
+                withAnimation(.snappy(duration: 0.2)) {
+                    isShowingAttachTray.toggle()
+                    if isShowingAttachTray { isShowingEmoji = false }
+                }
             } label: {
                 Image(systemName: "plus")
                     .font(.title3.weight(.semibold))
@@ -809,6 +824,7 @@ private struct ChatInputBar: View {
 
             TextField(L("messagePlaceholder", language), text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
+                .focused($inputFocused)
                 .lineLimit(1...5)
                 .submitLabel(.send)
                 .onSubmit {
@@ -829,6 +845,7 @@ private struct ChatInputBar: View {
                         .stroke(KXColor.separator.opacity(0.24), lineWidth: 0.7)
                 )
 
+            emojiButton
             sendButton
         }
         .padding(.horizontal, 9)
@@ -843,6 +860,29 @@ private struct ChatInputBar: View {
                 )
                 .shadow(color: KXColor.glassShadow.opacity(0.34), radius: 16, y: 7)
         }
+    }
+
+    private var emojiButton: some View {
+        Button {
+            withAnimation(.snappy(duration: 0.2)) {
+                isShowingEmoji.toggle()
+                if isShowingEmoji {
+                    isShowingAttachTray = false
+                    // Drop the keyboard so the emoji panel takes its place.
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                } else {
+                    inputFocused = true
+                }
+            }
+        } label: {
+            Image(systemName: isShowingEmoji ? "keyboard" : "face.smiling")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(KXColor.accent)
+                .frame(width: 36, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(language == .ja ? "絵文字" : language == .en ? "Emoji" : "表情")
     }
 
     private var sendButton: some View {
