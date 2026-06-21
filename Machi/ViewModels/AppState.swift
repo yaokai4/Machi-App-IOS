@@ -27,11 +27,10 @@ final class AppState: ObservableObject {
         if shouldShowBlockingLoader {
             state = .loading
         }
-        #if DEBUG
-        databaseRecoveryNotice = DatabaseRecoveryNoticeStore.load()
-        #else
+        // No persistent local database exists, so there is never a recovery
+        // state to surface. Keep this nil and clear any legacy stored notice.
         databaseRecoveryNotice = nil
-        #endif
+        DatabaseRecoveryNoticeStore.clear()
 
         do {
             let processInfo = ProcessInfo.processInfo
@@ -72,9 +71,22 @@ final class AppState: ObservableObject {
             } else if currentUserId == GuestSession.guestID && KaiXBackend.token == nil {
                 currentUser = GuestSession.ensureGuestUser(context: context)
             } else if KaiXBackend.token != nil {
-                currentUser = try await UserRepository(context: context).fetchUser(id: currentUserId)
-                if currentUser == nil {
-                    AuthService.shared.logout()
+                do {
+                    currentUser = try await UserRepository(context: context).fetchUser(id: currentUserId)
+                    if currentUser == nil {
+                        AuthService.shared.logout()
+                    }
+                } catch {
+                    // A stale or revoked session — e.g. the account was deleted
+                    // on the server (KaiXAPIError "user_not_found") — must not be
+                    // treated as a fatal/local-database error. Clear it and fall
+                    // back to guest browsing against production data.
+                    if Self.isInvalidSessionError(error) {
+                        AuthService.shared.logout()
+                        currentUser = nil
+                    } else {
+                        throw error
+                    }
                 }
             } else {
                 AuthService.shared.logout()
@@ -82,21 +94,18 @@ final class AppState: ObservableObject {
             }
             state = currentUser == nil ? .empty : .loaded
         } catch {
+            // Reaching here means the production server was unreachable — a
+            // transient connectivity issue, never a local-database problem
+            // (the app keeps no persistent local database). Offer a retry.
             state = .error("暂时无法连接服务器，请稍后重试。")
-            #if DEBUG
-            databaseRecoveryNotice = DatabaseRecoveryNotice(
-                mode: .ephemeral,
-                userMessage: "本地数据库需要恢复。",
-                technicalDetails: error.kaixTechnicalSummary,
-                occurredAt: .now
-            )
-            #endif
         }
     }
-}
 
-private extension Error {
-    var kaixTechnicalSummary: String {
-        "\(type(of: self)): \(localizedDescription)"
+    /// A session that the server no longer recognizes (deleted account, revoked
+    /// or expired token) — safe to clear and continue as a guest.
+    private static func isInvalidSessionError(_ error: Error) -> Bool {
+        guard let api = error as? KaiXAPIError else { return false }
+        return ["user_not_found", "http_401", "http_403", "unauthorized",
+                "invalid_token", "session_expired", "token_expired"].contains(api.error.code)
     }
 }
