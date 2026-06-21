@@ -187,8 +187,8 @@ private struct KXSplashLogoMark: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color(red: 0.11, green: 0.72, blue: 0.56),
-                            Color(red: 0.04, green: 0.48, blue: 0.42),
+                            Color(red: 0.812, green: 0.922, blue: 0.851),
+                            Color(red: 0.643, green: 0.851, blue: 0.733),
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -205,20 +205,13 @@ private struct KXSplashLogoMark: View {
                 .overlay(
                     Text("M")
                         .font(.system(size: 38, weight: .black, design: .rounded))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color(red: 0.122, green: 0.541, blue: 0.424))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .stroke(.white.opacity(0.34), lineWidth: 1.0)
+                        .stroke(Color(red: 0.122, green: 0.541, blue: 0.424).opacity(0.20), lineWidth: 1.0)
                 )
                 .shadow(color: KXColor.accent.opacity(0.20), radius: 20, y: 10)
-
-            Circle()
-                .fill(Color(red: 1.0, green: 0.63, blue: 0.18))
-                .frame(width: 11, height: 11)
-                .overlay(Circle().stroke(.white, lineWidth: 2))
-                .shadow(color: Color(red: 1.0, green: 0.63, blue: 0.18).opacity(0.22), radius: 8, y: 3)
-                .offset(x: 31, y: -31)
         }
         .accessibilityHidden(true)
     }
