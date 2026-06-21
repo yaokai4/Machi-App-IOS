@@ -1344,7 +1344,7 @@ private struct HotBoardSection: View {
                     }
                     .buttonStyle(KXPressableStyle(scale: 0.985, dim: 0.92))
                     if idx != items.count - 1 {
-                        Divider().opacity(0.14).padding(.leading, 56)
+                        Divider().opacity(0.14).padding(.leading, 62)
                     }
                 }
             }
@@ -1398,11 +1398,7 @@ private struct HotBoardRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Text("\(item.rank)")
-                .font(.title3.weight(.heavy))
-                .foregroundStyle(item.rank <= 3 ? KXColor.heat : Color.secondary)
-                .frame(width: 30, alignment: .center)
-                .monospacedDigit()
+            DiscoverRankBadge(rank: item.rank)
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.title)
                     .font(.subheadline.weight(.bold))
@@ -1566,7 +1562,7 @@ private struct HappeningSection: View {
                     }
                     .buttonStyle(KXPressableStyle(scale: 0.985, dim: 0.92))
                     if idx != posts.count - 1 {
-                        Divider().opacity(0.12).padding(.leading, 76)
+                        Divider().opacity(0.12).padding(.leading, 62)
                     }
                 }
             }
@@ -1599,17 +1595,8 @@ private struct HappeningRadarRow: View {
 
     var body: some View {
         let spec = post.contentType.spec
-        HStack(alignment: .top, spacing: 11) {
-            Text("\(rank)")
-                .font(.system(size: 15, weight: .heavy, design: .rounded))
-                .foregroundStyle(rank <= 3 ? KXColor.heat : Color.secondary)
-                .monospacedDigit()
-                .frame(width: 18, height: 34, alignment: .center)
-            Image(systemName: spec.icon)
-                .font(.footnote.weight(.bold))
-                .foregroundStyle(spec.tint)
-                .frame(width: 34, height: 34)
-                .background(spec.tint.opacity(0.12), in: Circle())
+        HStack(alignment: .top, spacing: 12) {
+            DiscoverRankBadge(rank: rank)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(post.discoverTitle)

@@ -11,7 +11,7 @@ struct CityPrimaryCategoryTabs: View {
     var body: some View {
         KXFadingHScroll {
             HStack(spacing: 8) {
-                ForEach(CityChannel.Primary.allCases) { primary in
+                ForEach(CityChannel.Primary.tabbed) { primary in
                     Button {
                         withAnimation(.snappy(duration: 0.18)) {
                             selection = primary

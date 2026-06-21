@@ -77,11 +77,14 @@ enum ContentTypeRegistry {
     /// 优惠/内推) were moved out: they each have a dedicated publish flow
     /// (workbench) and a browse channel under 同城, so surfacing them here too
     /// was redundant and read as a conflicting second entry point.
+    // First 9 are the everyday community actions (the picker's "常用"); the
+    // rarer / overlapping ones (图文 long-post, 长文, 本地告示, 吐槽, 树洞, 内推)
+    // fold under "更多" so the first screen reads as ~8 clear choices instead
+    // of a wall of 15.
     static let pickerOrder: [ContentType] = [
-        .dynamic, .image_post, .question, .rant,
-        .meetup, .dining, .event, .guide,
-        .warning, .news, .local_info, .poll,
-        .long_post, .anonymous, .referral,
+        .dynamic, .question, .guide, .warning,
+        .meetup, .dining, .event, .poll, .news,
+        .image_post, .long_post, .local_info, .rant, .anonymous, .referral,
     ]
 
     /// Marketplace / service listing types — still fully creatable, but only

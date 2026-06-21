@@ -22,7 +22,7 @@ struct ContentTypePickerView: View {
     var current: ContentType?
     var onSelect: (ContentType) -> Void
 
-    private static let commonCount = 12
+    private static let commonCount = 9
 
     private let columns: [GridItem] = Array(
         repeating: GridItem(.flexible(), spacing: 12),

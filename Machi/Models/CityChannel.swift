@@ -120,6 +120,12 @@ enum CityChannel: String, CaseIterable, Identifiable, Hashable {
 
         var id: String { rawValue }
 
+        /// Primaries shown as tabs in `CityChannelView`. Commerce (交易/工作)
+        /// moved to the dedicated listing verticals (二手/租房/招聘/商家), so the
+        /// city channel is now purely a 同城社区 discussion feed. The enum keeps
+        /// the marketplace/work cases so legacy deep-links still resolve.
+        static var tabbed: [Primary] { [.recommend, .life, .social, .info] }
+
         func title(_ language: AppLanguage) -> String {
             switch self {
             case .recommend: return L("cityPrimaryRecommend", language)
@@ -152,7 +158,8 @@ enum CityChannel: String, CaseIterable, Identifiable, Hashable {
             case .marketplace: return [.secondhand, .housing, .coupon]
             case .work:      return [.jobSeek, .jobPost]
             case .social:    return [.meetup, .dining, .event]
-            case .info:      return [.news, .service, .merchant]
+            // 商家/服务讨论交回「商家与服务」专门入口，资讯只留新闻 + 本地告示。
+            case .info:      return [.news]
             }
         }
     }

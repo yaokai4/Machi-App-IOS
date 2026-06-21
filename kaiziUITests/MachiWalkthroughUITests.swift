@@ -124,6 +124,41 @@ final class MachiWalkthroughUITests: XCTestCase {
         snap("17_merchant_form_bottom")
     }
 
+    /// Captures the Discover polish (正在发生 rank badges) and the reworked
+    /// content-type picker (fewer, clearer types).
+    @MainActor
+    func testUXBatchShots() throws {
+        let app = XCUIApplication()
+        app.launch()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        for label in ["不允许", "允许", "Don't Allow", "Allow"] {
+            let b = springboard.buttons[label]
+            if b.waitForExistence(timeout: 3) { b.tap(); break }
+        }
+        let guest = app.buttons["auth.browseAsGuest"].firstMatch
+        if guest.waitForExistence(timeout: 12) { forceTap(guest) }
+        _ = app.buttons["tabbar.search"].waitForExistence(timeout: 30)
+        pause(3)
+        tapTab(app, "tabbar.search")
+        pause(2.5)
+        snap("UX_discover_top")
+        app.swipeUp()
+        pause(1.2)
+        snap("UX_discover_happening")
+        app.swipeUp()
+        pause(1.2)
+        snap("UX_discover_happening2")
+        // Compose content-type picker via the home floating + button.
+        tapTab(app, "tabbar.home")
+        pause(1.5)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.88, dy: 0.86)).tap()
+        pause(2)
+        snap("UX_compose_picker")
+        app.swipeUp()
+        pause(0.8)
+        snap("UX_compose_picker_more")
+    }
+
     /// Captures the auth screen (to verify the prominent Apple button),
     /// dismissing the system notification-permission alert if it appears.
     @MainActor
