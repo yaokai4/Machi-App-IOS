@@ -229,6 +229,7 @@ struct DiscoverView: View {
     private var categorySection: some View {
         DiscoverCategoryGrid(
             primaryCategories: primaryCategories,
+            secondaryCategories: secondaryCategories,
             onOpen: openCategory,
             onMore: { isShowingMoreChannels = true }
         )
@@ -388,6 +389,13 @@ struct DiscoverView: View {
     /// remaining five are community/content channels.
     private var primaryCategories: [DiscoverCategory] {
         DiscoverView.primarySpecs.map { spec in resolveCategory(spec) }
+    }
+
+    /// Secondary channels (活动/优惠/指南/快讯/问答) shown as a compact chip row
+    /// under the 4 primary cards — one tap away instead of buried in 更多频道.
+    private var secondaryCategories: [DiscoverCategory] {
+        let primaryIDs = Set(DiscoverView.primarySpecs.map(\.id))
+        return allCategories.filter { !primaryIDs.contains($0.id) }
     }
 
     /// Channels shown in the MoreChannelSheet: the 4 primary entrances + the
@@ -737,6 +745,7 @@ private struct CurrentRegionCard: View {
 private struct DiscoverCategoryGrid: View {
     @Environment(\.appLanguage) private var language
     let primaryCategories: [DiscoverCategory]
+    var secondaryCategories: [DiscoverCategory] = []
     let onOpen: (DiscoverCategory) -> Void
     let onMore: () -> Void
 
@@ -773,6 +782,31 @@ private struct DiscoverCategoryGrid: View {
                     }
                     .buttonStyle(KXPressableStyle(scale: 0.97))
                 }
+            }
+            if !secondaryCategories.isEmpty {
+                KXFadingHScroll {
+                    HStack(spacing: 8) {
+                        ForEach(secondaryCategories) { category in
+                            Button { onOpen(category) } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: category.icon)
+                                        .font(.caption.weight(.bold))
+                                    Text(category.title(language))
+                                        .font(.caption.weight(.bold))
+                                        .lineLimit(1)
+                                }
+                                .foregroundStyle(category.tint)
+                                .padding(.horizontal, 13)
+                                .frame(height: 36)
+                                .background(category.tint.opacity(0.10), in: Capsule())
+                                .overlay(Capsule().stroke(category.tint.opacity(0.18), lineWidth: 0.7))
+                            }
+                            .buttonStyle(KXPressableStyle(scale: 0.95))
+                        }
+                    }
+                    .padding(.horizontal, 2)
+                }
+                .padding(.top, 2)
             }
         }
     }
