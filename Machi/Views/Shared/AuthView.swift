@@ -23,6 +23,23 @@ struct AuthView: View {
         viewModel.validate(language: language).isEmpty
     }
 
+    /// Terms + Privacy consent shown under the register button (App Store
+    /// requirement). Markdown links open the hosted pages in Safari.
+    private var registerAgreement: AttributedString {
+        let terms = "https://machicity.com/terms"
+        let privacy = "https://machicity.com/privacy"
+        let raw: String
+        switch language {
+        case .ja:
+            raw = "登録すると[利用規約](\(terms))と[プライバシーポリシー](\(privacy))に同意したものとみなされます"
+        case .en:
+            raw = "By creating an account you agree to our [Terms of Service](\(terms)) and [Privacy Policy](\(privacy))"
+        default:
+            raw = "注册即代表你已阅读并同意[《用户协议》](\(terms))与[《隐私政策》](\(privacy))"
+        }
+        return (try? AttributedString(markdown: raw)) ?? AttributedString(raw)
+    }
+
     private var usernameBinding: Binding<String> {
         Binding {
             viewModel.username
@@ -400,6 +417,17 @@ struct AuthView: View {
             .disabled(!isFormReady || viewModel.isLoading)
             .buttonStyle(KXPressableStyle(scale: 0.98, dim: 0.9))
             .accessibilityIdentifier("auth.submit")
+
+            if viewModel.mode == .register {
+                Text(registerAgreement)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .tint(KXColor.accent)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 6)
+                    .accessibilityIdentifier("auth.agreement")
+            }
 
             HStack(spacing: 10) {
                 AuthFeature(icon: "house.fill", title: L("housing", language))

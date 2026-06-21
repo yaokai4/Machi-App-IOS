@@ -91,16 +91,10 @@ struct GuideHomeView: View {
                         // 资料/服务都归到这两处，首页其余区块只做发现。
                         GuideDualEntrySection()
                         GuideGoalsSection(goals: home.goals?.title ?? guideText(language, "你现在想做什么？", "いま何をしたいですか？", "What do you want to do now?"), entries: home.goalEntries)
-                        GuideArticleSection(title: guideText(language, "精选指南", "厳選ガイド", "Featured guides"), subtitle: guideText(language, "由 Machi 编辑部整理", "Machi 編集部が整理", "Curated by Machi editors"), articles: home.featuredArticles)
-                        GuideZoneSection(country: country, title: guideText(language, "日本就职专区", "日本就職特集", "Work in Japan"), subtitle: guideText(language, "就活流程、履历书、面试与公司选择", "就活の流れ、履歴書、面接、企業選び", "Job hunting, resumes, interviews, and company choices"), categoryKey: "career_japan")
-                        GuideZoneSection(country: country, title: guideText(language, "日本升学专区", "日本進学特集", "Study in Japan"), subtitle: guideText(language, "大学院、研究计划书、教授联系与出愿", "大学院、研究計画書、教授連絡、出願", "Graduate school, research plans, professor outreach, and applications"), categoryKey: "study_japan")
-                        GuideZoneSection(country: country, title: guideText(language, "语言学校与留学专区", "語学学校・留学特集", "Language Schools and Study Abroad"), subtitle: guideText(language, "语言学校、签证、入境与费用", "語学学校、ビザ、入国、費用", "Language schools, visas, entry, and costs"), categoryKey: "study_abroad_japan")
-                        GuideZoneSection(country: country, title: guideText(language, "日语考级专区", "日本語試験特集", "Japanese Test Prep"), subtitle: guideText(language, "JLPT 备考、词汇语法与学习计划", "JLPT 対策、語彙文法、学習計画", "JLPT prep, vocabulary, grammar, and study plans"), categoryKey: "jlpt")
-                        GuideZoneSection(country: country, title: guideText(language, "在日生活专区", "日本生活特集", "Life in Japan"), subtitle: guideText(language, "役所手续、租房、手机银行卡、医疗与防灾", "役所手続き、賃貸、携帯・銀行、医療、防災", "City hall, rentals, phone and banking, healthcare, and safety"), categoryKey: "life_japan")
-                        GuideSchoolsSection(schools: home.featuredSchools ?? [], disclaimer: home.schoolDisclaimer)
-                        GuideProductsSection(products: home.featuredProducts + home.featuredServices)
-                        GuideCompaniesSection(companies: home.companyHighlights, disclaimer: home.companyDisclaimer ?? home.reviewDisclaimer)
-                        GuideArticleSection(title: guideText(language, "最新更新", "最新更新", "Latest updates"), subtitle: nil, articles: home.latestArticles, compact: true)
+                        // Removed the featured / per-zone spotlight / schools /
+                        // products / companies / latest blocks below: they were
+                        // duplicate routes into content the journeys + categories
+                        // + resource entries above already cover. Keep FAQ only.
                         GuideFAQSection(faq: home.faq)
                     }
                 }

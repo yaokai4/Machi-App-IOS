@@ -176,6 +176,14 @@ struct MyWorkbenchView: View {
                 MyInquiriesView(currentUser: currentUser)
             }
             SettingsDivider()
+            SettingsRowLink(
+                icon: "calendar.badge.clock", tint: KXColor.accent,
+                title: KXListingCopy.pickText(language, "我的预约", "予約", "My reservations"),
+                subtitle: KXListingCopy.pickText(language, "看房、到店与服务的预约时段", "内見・来店・サービスの予約", "Your viewing & visit bookings")
+            ) {
+                MyReservationsView()
+            }
+            SettingsDivider()
             SettingsRowLink(icon: "doc.text.image.fill", tint: .blue, title: L("workbenchMyPostsTitle", language), value: "\(viewModel.postCount)", subtitle: L("workbenchMyPostsSubtitle", language)) {
                 ProfileCollectionView(
                     title: L("workbenchMyPostsTitle", language),
