@@ -182,11 +182,6 @@ struct ComposePostView: View {
 
             Spacer()
 
-            Text(L("compose", language))
-                .font(.headline.weight(.semibold))
-
-            Spacer()
-
             Button {
                 if needsMembership {
                     showMembership = true

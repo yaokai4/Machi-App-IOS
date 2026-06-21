@@ -1258,24 +1258,26 @@ private struct DiscoverSegmentedTabs: View {
 // MARK: - 热榜 trend board (server-ranked topics)
 
 private enum HotBoardScope: String, CaseIterable, Identifiable {
-    case city, metro, national
+    case metro, national
     var id: String { rawValue }
-    func label(_ language: AppLanguage) -> String {
+    /// Region-aware labels: 都市圈 shows the real metro name (关东圈/关西圈…),
+    /// 全国 shows the current country name (日本…). Falls back to generic copy
+    /// when the region is unknown.
+    func label(_ region: KaiXRegionDirectory.Region?, _ language: AppLanguage) -> String {
         switch self {
-        case .city: return language == .ja ? "市内" : language == .en ? "City" : "本市"
-        case .metro: return language == .ja ? "都市圏" : language == .en ? "Metro" : "都市圈"
-        case .national: return language == .ja ? "全国" : language == .en ? "National" : "全国"
-        }
-    }
-}
-
-private enum HotBoardWindow: String, CaseIterable, Identifiable {
-    case d3 = "3d", d7 = "7d"
-    var id: String { rawValue }
-    func label(_ language: AppLanguage) -> String {
-        switch self {
-        case .d3: return language == .ja ? "3日間" : language == .en ? "3d" : "3天内"
-        case .d7: return language == .ja ? "7日間" : language == .en ? "7d" : "7天内"
+        case .metro:
+            if let region, let metro = KaiXRegionDirectory.localizedMetroName(for: region, language: language) {
+                return metro
+            }
+            return language == .ja ? "都市圏" : language == .en ? "Metro" : "都市圈"
+        case .national:
+            if let region {
+                return KaiXRegionDirectory.localizedCountryName(
+                    .init(code: region.countryCode, name: region.countryName, emoji: region.countryEmoji,
+                          tier: 1, hasProvinces: !region.provinceCode.isEmpty),
+                    language: language)
+            }
+            return language == .ja ? "全国" : language == .en ? "National" : "全国"
         }
     }
 }
@@ -1288,36 +1290,31 @@ private struct HotBoardSection: View {
     let language: AppLanguage
     let onOpenTopic: (String) -> Void
 
-    @State private var scope: HotBoardScope = .city
-    @State private var window: HotBoardWindow = .d7
+    // Default to the metro circle: a single city often has too little to rank,
+    // so the 都市圈 view is the useful default. Time window is fixed at 7 days
+    // (the 2h/24h/3d toggles added noise without value).
+    @State private var scope: HotBoardScope = .metro
+    private let window = "7d"
     @State private var items: [KaiXDiscoverHotItemDTO] = []
     @State private var isLoading = false
     @State private var didFail = false
 
-    private var reloadKey: String { "\(scope.rawValue)|\(window.rawValue)|\(region?.regionCode ?? "")" }
+    private var reloadKey: String { "\(scope.rawValue)|\(window)|\(region?.regionCode ?? "")" }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             switchers
             content
         }
         .task(id: reloadKey) { await reload() }
         .sensoryFeedback(.selection, trigger: scope)
-        .sensoryFeedback(.selection, trigger: window)
     }
 
     private var switchers: some View {
-        VStack(spacing: 8) {
-            HotPillRow(ids: HotBoardScope.allCases.map(\.id),
-                       labels: HotBoardScope.allCases.map { $0.label(language) },
-                       selected: scope.id) { id in
-                if let next = HotBoardScope(rawValue: id) { withAnimation(.snappy(duration: 0.16)) { scope = next } }
-            }
-            HotPillRow(ids: HotBoardWindow.allCases.map(\.id),
-                       labels: HotBoardWindow.allCases.map { $0.label(language) },
-                       selected: window.id, compact: true) { id in
-                if let next = HotBoardWindow(rawValue: id) { withAnimation(.snappy(duration: 0.16)) { window = next } }
-            }
+        HotPillRow(ids: HotBoardScope.allCases.map(\.id),
+                   labels: HotBoardScope.allCases.map { $0.label(region, language) },
+                   selected: scope.id) { id in
+            if let next = HotBoardScope(rawValue: id) { withAnimation(.snappy(duration: 0.16)) { scope = next } }
         }
     }
 
@@ -1358,7 +1355,7 @@ private struct HotBoardSection: View {
         didFail = false
         do {
             let resp = try await KaiXAPIClient.shared.discoverHot(
-                scope: scope.rawValue, window: window.rawValue, regionCode: region?.regionCode ?? "")
+                scope: scope.rawValue, window: window, regionCode: region?.regionCode ?? "")
             items = resp.items
         } catch {
             didFail = true
@@ -2478,6 +2475,10 @@ struct CityListingChannelView: View {
     @State private var scopeMode: ListingScopeMode = .city
     @State private var selectedScopeArea = ""
     @State private var selectedScopeRegionCode = ""
+    /// Default to the metro circle (关东圈/关西圈…) on first open: a single city
+    /// usually has too few listings, so the都市圈 view is the useful default.
+    /// Users can still switch to their exact city from the scope menu.
+    @State private var didApplyDefaultScope = false
     @State private var minimumPrice = ""
     @State private var maximumPrice = ""
     /// 属性级筛选（key → 值，布尔用 "true"，人数下限用 gte_ 前缀），
@@ -2752,7 +2753,10 @@ struct CityListingChannelView: View {
             WishlistView { id in openFromWishlist(id) }
         }
         .toolbar(.hidden, for: .navigationBar)
-        .task(id: "\(regionCode)-\(listingType)-\(activeRentalTab.rawValue)") { await load() }
+        .task(id: "\(regionCode)-\(listingType)-\(activeRentalTab.rawValue)") {
+            applyDefaultScopeIfNeeded()
+            await load()
+        }
         .onChange(of: minimumPrice) { _, _ in Task { await load(quiet: true) } }
         .onChange(of: maximumPrice) { _, _ in Task { await load(quiet: true) } }
     }
@@ -3699,6 +3703,25 @@ struct CityListingChannelView: View {
             nextCursor = nil
             nextHiringCursor = nil
         }
+    }
+
+    /// The metro area whose member cities share the current region's province
+    /// (关东圈 contains jp.chiba.*, so 千叶/柏 → kanto). nil when the current
+    /// region isn't part of a known metro circle.
+    private func defaultMetroAreaId(for region: KaiXRegionDirectory.Region) -> String? {
+        let provincePrefix = "\(region.countryCode).\(region.provinceCode)."
+        return listingScopeAreas.first { area in
+            area.regionCodes.contains { $0.hasPrefix(provincePrefix) }
+        }?.id
+    }
+
+    private func applyDefaultScopeIfNeeded() {
+        guard !didApplyDefaultScope else { return }
+        didApplyDefaultScope = true
+        guard scopeMode == .city, let region, let areaId = defaultMetroAreaId(for: region) else { return }
+        scopeMode = .area
+        selectedScopeArea = areaId
+        selectedScopeRegionCode = ""
     }
 
     private func listingScopeQuery(for region: KaiXRegionDirectory.Region) -> (citySlug: String?, regionCode: String?, regionCodes: [String], countryCode: String?) {
@@ -7328,6 +7351,21 @@ private struct KXBigPhotoSkeletonCard: View {
     }
 }
 
+/// Square cover sizing for listing cards. With a fixed `side` it's an exact
+/// square; with `nil` (card filling a flexible grid cell) it fills the cell
+/// width and stays 1:1 — fixes the ragged/overlapping grid when no width is
+/// passed (e.g. profile → 我的二手).
+private struct KXSquareCover: ViewModifier {
+    let side: CGFloat?
+    func body(content: Content) -> some View {
+        if let side {
+            content.frame(width: side, height: side)
+        } else {
+            content.frame(maxWidth: .infinity).aspectRatio(1, contentMode: .fit)
+        }
+    }
+}
+
 private struct KXSecondhandListingCard: View {
     @Environment(\.appLanguage) private var language
     let listing: KaiXCityListingDTO
@@ -7390,10 +7428,10 @@ private struct KXSecondhandListingCard: View {
             .padding(7)
             .padding(.bottom, 2)
             .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .frame(width: width, alignment: .leading)
+            .frame(maxWidth: width ?? .infinity, alignment: .leading)
             .kxLivingSurface(radius: 18)
         }
-        .frame(width: width, alignment: .leading)
+        .frame(maxWidth: width ?? .infinity, alignment: .leading)
         .buttonStyle(.plain)
     }
 
@@ -7415,7 +7453,7 @@ private struct KXSecondhandListingCard: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             }
         }
-        .frame(width: innerWidth, height: innerWidth)
+        .modifier(KXSquareCover(side: innerWidth))
         .overlay(alignment: .topLeading) {
             HStack(spacing: 4) {
                 Circle()
