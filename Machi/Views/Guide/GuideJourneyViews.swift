@@ -178,7 +178,11 @@ struct GuideJourneyCard: View {
                         .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(.white)
                         .frame(width: 40, height: 40)
-                        .background(tint, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                        .background(
+                            LinearGradient(colors: [tint, tint.opacity(0.82)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                            in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        )
+                        .shadow(color: tint.opacity(0.35), radius: 8, y: 4)
                     Spacer()
                     if let total = journey.stepCount, total > 0 {
                         Text(doneCount > 0 ? "\(doneCount)/\(total)" : "\(total) 步")
