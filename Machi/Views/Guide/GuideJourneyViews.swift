@@ -312,7 +312,9 @@ struct GuideJourneyDetailView: View {
                         GuideJourneyStepRow(
                             step: step,
                             index: index + 1,
+                            total: detail.steps.count,
                             isDone: progress.isDone(journey: journeyKey, step: step.stepKey),
+                            tint: guideHexColor(detail.journey.color),
                             language: language,
                             onToggle: { Task { await model.toggle(step: step, journeyKey: journeyKey) } },
                             onOpenArticle: { router.open(.guideArticle(slug: $0)) },
@@ -349,7 +351,11 @@ struct GuideJourneyDetailView: View {
                     .font(.system(size: 22, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(width: 54, height: 54)
-                    .background(tint, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+                    .background(
+                        LinearGradient(colors: [tint, tint.opacity(0.82)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                        in: RoundedRectangle(cornerRadius: 17, style: .continuous)
+                    )
+                    .shadow(color: tint.opacity(0.38), radius: 10, y: 5)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(journey.heroTitle.isEmpty ? journey.title : journey.heroTitle)
                         .font(.title3.weight(.bold))
@@ -391,7 +397,9 @@ struct GuideJourneyDetailView: View {
 private struct GuideJourneyStepRow: View {
     let step: KaiXGuideJourneyStepDTO
     let index: Int
+    var total: Int = 0
     let isDone: Bool
+    var tint: Color = KXColor.accent
     let language: AppLanguage
     let onToggle: () -> Void
     let onOpenArticle: (String) -> Void
@@ -401,17 +409,21 @@ private struct GuideJourneyStepRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 12) {
-                Button(action: onToggle) {
+                Button {
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.62)) { onToggle() }
+                } label: {
                     Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
                         .font(.system(size: 24, weight: .semibold))
-                        .foregroundStyle(isDone ? KXColor.accent : Color.secondary.opacity(0.5))
+                        .foregroundStyle(isDone ? tint : Color.secondary.opacity(0.5))
+                        .scaleEffect(isDone ? 1.08 : 1)
                 }
                 .buttonStyle(.plain)
+                .sensoryFeedback(.success, trigger: isDone)
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         Text(journeyText(language, "第 \(index) 步", "ステップ \(index)", "Step \(index)"))
                             .font(.caption2.weight(.bold))
-                            .foregroundStyle(KXColor.accent)
+                            .foregroundStyle(tint)
                         if !step.required {
                             GuideJourneyTag(text: journeyText(language, "可选", "任意", "Optional"))
                         }
@@ -496,6 +508,18 @@ private struct GuideJourneyStepRow: View {
         .padding(15)
         .frame(maxWidth: .infinity, alignment: .leading)
         .kxGlassSurface(radius: 18)
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(tint.opacity(isDone ? 0.06 : 0))
+                .allowsHitTesting(false)
+        )
+        .overlay(alignment: .leading) {
+            // slim left accent bar that fills in once the step is done
+            RoundedRectangle(cornerRadius: 2)
+                .fill(isDone ? tint : Color.clear)
+                .frame(width: 3)
+                .padding(.vertical, 14)
+        }
     }
 }
 
