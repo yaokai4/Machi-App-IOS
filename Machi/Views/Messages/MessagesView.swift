@@ -21,9 +21,15 @@ struct MessagesView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            MessagesHeaderView(title: L("messages", language), unreadCount: notificationStore.unreadCount) {
-                isShowingNotifications = true
-            }
+            MessagesHeaderView(
+                title: L("messages", language),
+                unreadCount: notificationStore.unreadCount,
+                onNewDirect: { isShowingNewConversation = true },
+                onComingSoon: {
+                    withAnimation(.snappy(duration: 0.2)) { viewModel.transientError = L("comingSoon", language) }
+                },
+                onOpenNotifications: { isShowingNotifications = true }
+            )
 
             inboxModePicker
 
@@ -360,13 +366,27 @@ private struct MessagesHeaderView: View {
     @Environment(\.appLanguage) private var language
     let title: String
     let unreadCount: Int
+    var onNewDirect: () -> Void = {}
+    var onComingSoon: () -> Void = {}
     let onOpenNotifications: () -> Void
 
     var body: some View {
-        HStack {
+        HStack(spacing: 10) {
             Text(title)
                 .font(.system(size: 32, weight: .semibold))
             Spacer()
+            Menu {
+                Button { onNewDirect() } label: { Label(L("msgNewDirect", language), systemImage: "square.and.pencil") }
+                Button { onComingSoon() } label: { Label("\(L("msgNewGroup", language)) · \(L("comingSoon", language))", systemImage: "person.3") }
+                Button { onComingSoon() } label: { Label("\(L("msgScan", language)) · \(L("comingSoon", language))", systemImage: "qrcode.viewfinder") }
+            } label: {
+                Image(systemName: "plus")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 40, height: 40)
+                    .kxGlassCircle()
+            }
+            .accessibilityLabel(L("msgNewDirect", language))
             Button(action: onOpenNotifications) {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: unreadCount > 0 ? "bell.badge.fill" : "bell")
@@ -599,10 +619,12 @@ private struct MessageConversationCard: View {
                                 .lineLimit(1)
                             KXUserBadge(user: peer)
                             Spacer()
-                            Text(DateFormatterUtils.relativeText(from: thread.lastMessageAt, language: language))
+                            Text(DateFormatterUtils.conversationTimestamp(thread.lastMessageAt, language: language))
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(isUnread ? KXColor.accent : .secondary)
                                 .monospacedDigit()
+                                .lineLimit(1)
+                                .layoutPriority(1)
                         }
 
                         HStack(spacing: 5) {
