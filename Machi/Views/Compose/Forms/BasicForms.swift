@@ -12,7 +12,7 @@ struct BasicTitleFormView: View {
 
     var body: some View {
         TypedFormSection(titleKey: titleKey, icon: icon) {
-            TypedTextField("fld_title", text: viewModel.stringBinding(PostAttributeKeys.title), isRequired: true)
+            TypedTextField("fld_title", text: viewModel.stringBinding(PostAttributeKeys.title))
             if includesSummary {
                 TypedTextField("fld_summary", text: viewModel.stringBinding(PostAttributeKeys.summary), axis: .vertical)
             }
@@ -41,7 +41,7 @@ struct AnonymousFormView: View {
     var body: some View {
         TypedFormSection(titleKey: "ct_anonymous", icon: "eye.slash") {
             TypedTextField("fld_title", text: viewModel.stringBinding(PostAttributeKeys.title))
-            TypedTextField("fld_description", text: viewModel.stringBinding(PostAttributeKeys.description), axis: .vertical, isRequired: true)
+            TypedTextField("fld_description", text: viewModel.stringBinding(PostAttributeKeys.description), axis: .vertical)
             Toggle(isOn: viewModel.boolBinding(PostAttributeKeys.anonymous)) {
                 Text(L("fld_anonymous", language))
                     .font(.subheadline.weight(.semibold))

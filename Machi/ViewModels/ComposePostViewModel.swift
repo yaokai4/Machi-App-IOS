@@ -205,7 +205,9 @@ final class ComposePostViewModel: ObservableObject {
     var requiredAttributeKeys: [String] {
         switch contentType {
         case .image_post, .long_post, .rant, .anonymous:
-            return [PostAttributeKeys.title]
+            // Body-first posts: the composer body / media is the content,
+            // so nothing in the typed form is required.
+            return []
         case .news, .local_info:
             return [PostAttributeKeys.title]
         case .guide:
@@ -225,11 +227,11 @@ final class ComposePostViewModel: ObservableObject {
         case .referral:
             return [PostAttributeKeys.jobTitle]
         case .meetup:
-            return [PostAttributeKeys.title, PostAttributeKeys.meetupTime]
+            return [PostAttributeKeys.title]
         case .dining:
-            return [PostAttributeKeys.restaurantOrArea, PostAttributeKeys.meetupTime]
+            return [PostAttributeKeys.restaurantOrArea]
         case .event:
-            return [PostAttributeKeys.title, PostAttributeKeys.eventTime]
+            return [PostAttributeKeys.title]
         case .service:
             return [PostAttributeKeys.serviceType]
         case .merchant:
