@@ -275,6 +275,7 @@ struct MessagesView: View {
         .scrollContentBackground(.hidden)
         .contentMargins(.top, KXSpacing.md, for: .scrollContent)
         .contentMargins(.bottom, chrome.bottomContentPadding + 24, for: .scrollContent)
+        .kxReadableWidth()
         .refreshable {
             await viewModel.load(context: modelContext, currentUser: currentUser, messageStore: messageStore)
         }

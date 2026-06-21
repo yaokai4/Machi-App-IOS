@@ -220,6 +220,7 @@ struct ProfileView: View {
                 .padding(.horizontal, KaiXTheme.horizontalPadding)
                 .padding(.top, KXSpacing.sm)
                 .padding(.bottom, (showsBackButton ? KXSpacing.xl : chrome.bottomContentPadding) + 24)
+                .kxReadableWidth()
             }
             .refreshable {
                 await loadProfileAndContent(showLoading: false)

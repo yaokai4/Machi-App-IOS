@@ -104,6 +104,7 @@ struct GuideHomeView: View {
                 .padding(.horizontal, KXSpacing.screen)
                 .padding(.top, 10)
                 .guideBottomInset()
+                .kxReadableWidth()
             }
         } else {
             LoadingView()

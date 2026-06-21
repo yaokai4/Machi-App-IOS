@@ -408,6 +408,7 @@ struct ChatView: View {
                 .padding(.horizontal, KaiXTheme.horizontalPadding)
                 .padding(.top, 10)
                 .padding(.bottom, 12)
+                .kxReadableWidth()
             }
             .scrollDismissesKeyboard(.interactively)
             .onAppear {

@@ -62,6 +62,7 @@ struct SettingsView: View {
                 .padding(.horizontal, KaiXTheme.horizontalPadding)
                 .padding(.top, 12)
                 .padding(.bottom, 96)
+                .kxReadableWidth()
             }
             .kxPageBackground()
             .toolbar(.hidden, for: .navigationBar)

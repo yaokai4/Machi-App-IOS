@@ -2882,11 +2882,53 @@ struct CityListingChannelView: View {
             }
             heroSearchBar
             categoryIconRail
+            serviceSubCategoryRail
             if !headerCollapsed {
                 resultSummaryRow
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
+    }
+
+    /// Web-parity second-level menu for 商家与服务: once a primary section
+    /// (餐厅 / 旅行票务 …) is chosen, its sub-categories appear as a chip row so
+    /// users can drill in (e.g. 餐厅 → 中餐 / 日料 / 火锅). Driven by the existing
+    /// serviceSections taxonomy + selectedCategory state.
+    @ViewBuilder private var serviceSubCategoryRail: some View {
+        if baseType == "local_service", serviceSection != "all" {
+            let subs = Self.serviceSections.first { $0.key == serviceSection }?.categories ?? []
+            if !subs.isEmpty {
+                KXFadingHScroll {
+                    HStack(spacing: 8) {
+                        serviceSubChip(ListingFilterLocalizer.text("全部", language), value: "全部")
+                        ForEach(subs, id: \.self) { cat in
+                            serviceSubChip(ListingFilterLocalizer.text(cat, language), value: cat)
+                        }
+                    }
+                    .padding(.horizontal, 2)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+
+    private func serviceSubChip(_ title: String, value: String) -> some View {
+        let selected = selectedCategory == value
+        return Button {
+            withAnimation(.snappy(duration: 0.18)) {
+                selectedCategory = value
+                Task { await load(quiet: true) }
+            }
+        } label: {
+            Text(title)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(selected ? Color.white : KXColor.livingInk)
+                .padding(.horizontal, 13)
+                .frame(height: 32)
+                .background(selected ? KXColor.livingAccent : KXColor.softBackground.opacity(0.88), in: Capsule())
+                .overlay(Capsule().stroke(selected ? Color.clear : KXColor.separator.opacity(0.6), lineWidth: 0.7))
+        }
+        .buttonStyle(.plain)
     }
 
     /// 爱彼迎式搜索条：左端城市/范围菜单 + 内联搜索框，合成一颗悬浮胶囊。
