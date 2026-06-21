@@ -25,9 +25,6 @@ struct MessagesView: View {
                 title: L("messages", language),
                 unreadCount: notificationStore.unreadCount,
                 onNewDirect: { isShowingNewConversation = true },
-                onComingSoon: {
-                    withAnimation(.snappy(duration: 0.2)) { viewModel.transientError = L("comingSoon", language) }
-                },
                 onOpenNotifications: { isShowingNotifications = true }
             )
 
@@ -367,7 +364,6 @@ private struct MessagesHeaderView: View {
     let title: String
     let unreadCount: Int
     var onNewDirect: () -> Void = {}
-    var onComingSoon: () -> Void = {}
     let onOpenNotifications: () -> Void
 
     var body: some View {
@@ -375,16 +371,14 @@ private struct MessagesHeaderView: View {
             Text(title)
                 .font(.system(size: 32, weight: .semibold))
             Spacer()
-            Menu {
-                Button { onNewDirect() } label: { Label(L("msgNewDirect", language), systemImage: "square.and.pencil") }
-                Button { onComingSoon() } label: { Label("\(L("msgScan", language)) · \(L("comingSoon", language))", systemImage: "qrcode.viewfinder") }
-            } label: {
+            Button(action: onNewDirect) {
                 Image(systemName: "plus")
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(.primary)
                     .frame(width: 40, height: 40)
                     .kxGlassCircle()
             }
+            .buttonStyle(.plain)
             .accessibilityLabel(L("msgNewDirect", language))
             Button(action: onOpenNotifications) {
                 ZStack(alignment: .topTrailing) {
