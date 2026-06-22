@@ -2099,6 +2099,28 @@ struct KaiXGuideActivePlanResponse: Codable {
     let suggestedJourneys: [KaiXGuideSuggestedJourney]?
     let defaultJourneyKey: String?
     let recommendedNextActions: [KaiXGuideNextAction]?
+    // Retention signals (spec P1).
+    let retention: KaiXGuideRetention?
+}
+
+struct KaiXGuideRetention: Codable, Equatable, Hashable {
+    let weekDone: Int
+    let streakDays: Int
+}
+
+struct KaiXGuideLifePreset: Codable, Equatable, Identifiable, Hashable {
+    let type: String
+    let label: String
+    let icon: String
+    let recurrence: String
+    let reminderDaysBefore: Int
+    let kind: String
+    var id: String { type }
+}
+
+struct KaiXGuideLifePresetsResponse: Codable {
+    let status: String
+    let items: [KaiXGuideLifePreset]
 }
 
 struct KaiXGuideSuggestedJourney: Codable, Equatable, Identifiable, Hashable {
@@ -2193,6 +2215,9 @@ struct KaiXGuideApplicationPayload: Encodable {
     var interviewAt: String?
     var resultAt: String?
     var notes: String?
+    /// "shinsotsu" (新卒) | "tenshoku" (社会人转职) — picks the company milestone
+    /// ladder; ignored for school. (spec iOS sync)
+    var careerTrack: String?
 }
 
 struct KaiXGuideLifeItemPayload: Encodable {

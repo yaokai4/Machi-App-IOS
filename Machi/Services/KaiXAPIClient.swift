@@ -1465,6 +1465,12 @@ final class KaiXAPIClient {
         return try decode(data)
     }
 
+    /// Public catalog of life-bill presets with smart defaults (spec P1).
+    func guideLifePresets(language: String = "zh-CN") async throws -> KaiXGuideLifePresetsResponse {
+        let data = try await request("GET", "/api/guide/life-presets", queryItems: [URLQueryItem(name: "language", value: language)])
+        return try decode(data)
+    }
+
     /// Materials + services that help finish a given todo / plan stage. A single
     /// recommendation query failing never breaks Guide — the server returns an
     /// empty list rather than 500.

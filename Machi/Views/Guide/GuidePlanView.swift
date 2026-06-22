@@ -25,6 +25,24 @@ struct GuidePlanView: View {
                 LazyVStack(alignment: .leading, spacing: 14) {
                     GuideOSHeaderRow(title: guideOSText(language, "我的 Guide 计划", "マイ Guide 計画", "My Guide plan"), subtitle: guideOSText(language, "所有手续、学习、申请、面试和生活截止日都在这里推进", "手続き・学習・申請・面接・生活期限をここで進めます", "Move every task and deadline from here"))
                     GuideOSPlanCard(plan: model.dashboard?.plan, isGuest: !model.isLoggedIn, isLoading: model.isLoading, onOpenPlan: {}, onOpenProfile: { router.open(.guideProfile) })
+                    // Lightweight retention (spec P1): 本周已完成 + 连续打卡.
+                    if let r = model.dashboard?.retention, r.weekDone > 0 || r.streakDays > 0 {
+                        HStack(spacing: 8) {
+                            Label("本周已完成 \(r.weekDone)", systemImage: "flame.fill")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(KXColor.accent)
+                                .padding(.horizontal, 10).padding(.vertical, 6)
+                                .background(KXColor.accentSoft, in: Capsule())
+                            if r.streakDays > 0 {
+                                Label("连续打卡 \(r.streakDays) 天", systemImage: "calendar.badge.checkmark")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 10).padding(.vertical, 6)
+                                    .background(KXColor.softBackground, in: Capsule())
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    }
                     // Identity-driven: surface the journeys ordered for this user
                     // when they have no active plan yet (spec P0.1).
                     if model.dashboard?.plan == nil, let suggested = model.dashboard?.suggestedJourneys, !suggested.isEmpty {

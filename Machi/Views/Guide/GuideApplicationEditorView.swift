@@ -3,7 +3,9 @@ import SwiftUI
 struct GuideApplicationPlannerView: View {
     @Environment(\.appLanguage) private var language
     @StateObject private var model = GuideTodoViewModel()
-    @State private var type = "school"
+    // Four tracks (spec iOS sync): each maps to a (type, careerTrack) pair so the
+    // backend picks the right milestone ladder (出愿 / 新卒 / 转职 / JLPT).
+    @State private var track = "school"
     @State private var name = ""
     @State private var department = ""
     @State private var position = ""
@@ -12,36 +14,58 @@ struct GuideApplicationPlannerView: View {
     @State private var hasInterview = false
     @State private var notes = ""
 
+    private var apiType: String {
+        switch track {
+        case "school": return "school"
+        case "jlpt": return "jlpt"
+        default: return "company"
+        }
+    }
+    private var careerTrack: String? { track == "shinsotsu" ? "shinsotsu" : (track == "tenshoku" ? "tenshoku" : nil) }
+    private var isSchool: Bool { track == "school" }
+    private var isJlpt: Bool { track == "jlpt" }
+
     var body: some View {
         GuidePlannerFormShell(
             title: guideOSText(language, "出愿 / ES / 面试计划", "出願 / ES / 面接計画", "Applications"),
-            subtitle: guideOSText(language, "大学出愿、公司 ES、面试、结果确认全部生成 Todo 和日历项", "大学出願・会社ES・面接・結果確認をTodoとカレンダーにします", "Turn applications, ES deadlines, interviews, and results into todos"),
+            subtitle: guideOSText(language, "大学出愿、新卒就活、社会人转职、JLPT 考试全部生成 Todo 和日历项", "大学出願・新卒・転職・JLPTをTodoとカレンダーにします", "Turn applications, ES deadlines, interviews, and exams into todos"),
             model: model
         ) {
-            Picker("类型", selection: $type) {
-                Text("大学 / 大学院").tag("school")
-                Text("公司 / 转职").tag("company")
+            Picker("类型", selection: $track) {
+                Text("学校出愿").tag("school")
+                Text("新卒就活").tag("shinsotsu")
+                Text("社会人转职").tag("tenshoku")
+                Text("JLPT 考试").tag("jlpt")
             }
             .pickerStyle(.segmented)
-            GuideOSLibraryPickerField(type: type, text: $name)
-            GuideOSTextField(title: type == "school" ? "研究科 / 学部" : "部门 / 岗位方向", text: $department)
-            GuideOSTextField(title: "职位 / 教授 / 备注对象", text: $position)
-            DatePicker(type == "school" ? "出愿截止" : "ES 截止", selection: $deadline, displayedComponents: .date)
-            Toggle("已有面试时间", isOn: $hasInterview)
-            if hasInterview {
-                DatePicker("面试日期", selection: $interview, displayedComponents: .date)
+            if isJlpt {
+                GuideOSTextField(title: "考试名称（如 JLPT N2）", text: $name)
+            } else {
+                GuideOSLibraryPickerField(type: apiType, text: $name)
+            }
+            if !isJlpt {
+                GuideOSTextField(title: isSchool ? "研究科 / 学部" : "部门 / 岗位方向", text: $department)
+                GuideOSTextField(title: "职位 / 教授 / 备注对象", text: $position)
+            }
+            DatePicker(isSchool ? "出愿截止" : (isJlpt ? "考试日期" : "ES 截止"), selection: $deadline, displayedComponents: .date)
+            if !isJlpt {
+                Toggle("已有面试时间", isOn: $hasInterview)
+                if hasInterview {
+                    DatePicker("面试日期", selection: $interview, displayedComponents: .date)
+                }
             }
             GuideOSTextField(title: "备注", text: $notes)
             GuideOSPrimaryButton(title: model.isSaving ? "添加中" : "添加申请计划") {
                 Task {
                     let ok = await model.createApplication(.init(
-                        type: type,
+                        type: apiType,
                         name: name,
                         department: department,
                         position: position,
                         deadline: GuideOSDate.iso(deadline),
-                        interviewAt: hasInterview ? GuideOSDate.iso(interview) : nil,
-                        notes: notes
+                        interviewAt: (!isJlpt && hasInterview) ? GuideOSDate.iso(interview) : nil,
+                        notes: notes,
+                        careerTrack: careerTrack
                     ))
                     if ok {
                         name = ""

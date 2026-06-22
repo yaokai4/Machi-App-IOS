@@ -9,6 +9,14 @@ struct GuideLifePlannerView: View {
     @State private var amount = ""
     @State private var dueDate = Date()
     @State private var reminderDays = 3
+    @State private var recurrence = "monthly"
+
+    private func applyPreset(_ presetType: String) {
+        guard let p = model.lifePresets.first(where: { $0.type == presetType }) else { return }
+        title = p.label
+        recurrence = p.recurrence
+        reminderDays = p.reminderDaysBefore
+    }
 
     var body: some View {
         GuidePlannerFormShell(
@@ -16,27 +24,30 @@ struct GuideLifePlannerView: View {
             subtitle: guideOSText(language, "房租、学费、水电、网络、手机费、保险、年金、签证、租约截止日统一进日历", "家賃・学費・公共料金・通信・保険・年金・ビザ・契約期限をまとめます", "Rent, tuition, utilities, phone, visa, insurance, and contract deadlines"),
             model: model
         ) {
+            // Server preset catalog (spec P1) — selecting a type pre-fills its
+            // smart defaults (周期 + 提前提醒天数); falls back to a built-in list.
             Picker("类型", selection: $type) {
-                Text("房租").tag("rent")
-                Text("电费").tag("electric")
-                Text("燃气").tag("gas")
-                Text("水费").tag("water")
-                Text("网络").tag("internet")
-                Text("手机").tag("phone")
-                Text("学费").tag("tuition")
-                Text("交通").tag("transport")
-                Text("信用卡").tag("credit_card")
-                Text("保险").tag("insurance")
-                Text("年金").tag("pension")
-                Text("签证").tag("visa")
+                if model.lifePresets.isEmpty {
+                    Text("房租").tag("rent"); Text("电费").tag("electricity"); Text("燃气").tag("gas")
+                    Text("水费").tag("water"); Text("网络").tag("internet"); Text("手机").tag("phone")
+                    Text("信用卡").tag("credit_card"); Text("国保").tag("kokumin_hoken"); Text("年金").tag("nenkin")
+                    Text("住民税").tag("juminzei"); Text("在留卡").tag("zairyu_card"); Text("签证更新").tag("visa_renewal")
+                } else {
+                    ForEach(model.lifePresets) { p in Text(p.label).tag(p.type) }
+                }
             }
             .pickerStyle(.menu)
+            .onChange(of: type) { _, newValue in applyPreset(newValue) }
+            Text(guideOSText(language, "默认周期：\(recurrenceLabel(recurrence)) · 提前 \(reminderDays) 天提醒", "周期：\(recurrenceLabel(recurrence)) · \(reminderDays)日前に通知", "\(recurrenceLabel(recurrence)) · remind \(reminderDays)d before"))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
             GuideOSTextField(title: "标题", text: $title)
             GuideOSTextField(title: "公司 / 房东 / 机构", text: $provider)
             GuideOSTextField(title: "金额（JPY）", text: $amount)
                 .keyboardType(.numberPad)
             DatePicker("截止日期", selection: $dueDate, displayedComponents: .date)
-            Stepper("提前 \(reminderDays) 天提醒", value: $reminderDays, in: 0...30)
+            Stepper("提前 \(reminderDays) 天提醒", value: $reminderDays, in: 0...90)
             GuideOSPrimaryButton(title: model.isSaving ? "添加中" : "添加生活截止日") {
                 Task {
                     let ok = await model.createLifeItem(.init(
@@ -46,7 +57,7 @@ struct GuideLifePlannerView: View {
                         amount: Int(amount),
                         currency: "JPY",
                         dueAt: GuideOSDate.iso(dueDate),
-                        recurrence: "monthly",
+                        recurrence: recurrence,
                         reminderDaysBefore: reminderDays
                     ))
                     if ok {
@@ -72,10 +83,22 @@ struct GuideLifePlannerView: View {
             }
         }
         .task {
+            await model.loadLifePresets()
             if !model.requireLogin() { return }
             await model.loadLifeItems()
             await model.loadTodos(type: "life_payment")
         }
+    }
+}
+
+private func recurrenceLabel(_ r: String) -> String {
+    switch r {
+    case "monthly": return "每月"
+    case "quarterly": return "每季"
+    case "yearly": return "每年"
+    case "once": return "一次性"
+    case "weekly": return "每周"
+    default: return r
     }
 }
 

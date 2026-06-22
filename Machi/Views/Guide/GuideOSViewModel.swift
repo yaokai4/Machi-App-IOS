@@ -147,6 +147,16 @@ class GuideOSViewModel: ObservableObject {
     }
 
     @Published var studyTodos: [KaiXGuideTodoDTO] = []
+    @Published var lifePresets: [KaiXGuideLifePreset] = []
+
+    func loadLifePresets() async {
+        guard lifePresets.isEmpty else { return }
+        do {
+            lifePresets = try await KaiXAPIClient.shared.guideLifePresets(language: currentGuideOSLanguage()).items
+        } catch {
+            // Presets are a nicety; the editor still works with manual entry.
+        }
+    }
 
     /// Spec P0.2: generate recurring JLPT/study habits from target + exam date.
     func generateStudyPlan(level: String, examDate: String, dailyMinutes: Int) async -> Bool {
