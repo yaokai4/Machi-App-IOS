@@ -74,11 +74,12 @@ private enum GuideCalendarCountdown {
 
 private struct GuideCalendarCountdownStrip: View {
     let items: [(date: String, title: String, days: Int)]
+    @Environment(\.appLanguage) private var language
 
     var body: some View {
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
-                Text("最近倒数")
+                Text(guideOSText(language, "最近倒数", "直近のカウントダウン", "Upcoming countdown"))
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(.primary)
                 ScrollView(.horizontal, showsIndicators: false) {

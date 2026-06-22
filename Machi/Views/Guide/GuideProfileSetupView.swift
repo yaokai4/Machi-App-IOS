@@ -34,11 +34,11 @@ struct GuideProfileSetupView: View {
                     GuideOSHeaderRow(title: guideOSText(language, "身份路径", "属性ルート", "Profile route"), subtitle: guideOSText(language, "不同身份看到不同目标：大学生、语言学校、社会人、转职、升学、日语计划都分开", "属性ごとに目標を分けます", "Personalize goals by identity"))
                     VStack(spacing: 12) {
                         Picker(guideOSText(language, "身份", "属性", "Identity"), selection: $identityType) {
-                            Text("大学生").tag("student")
-                            Text("语言学校").tag("language_school_student")
-                            Text("社会人").tag("worker")
-                            Text("转职").tag("career_change")
-                            Text("升学").tag("applicant")
+                            Text(guideOSText(language, "大学生", "大学生", "University")).tag("student")
+                            Text(guideOSText(language, "语言学校", "語学学校", "Language school")).tag("language_school_student")
+                            Text(guideOSText(language, "社会人", "社会人", "Working")).tag("worker")
+                            Text(guideOSText(language, "转职", "転職", "Career change")).tag("career_change")
+                            Text(guideOSText(language, "升学", "進学", "Applicant")).tag("applicant")
                         }
                         .pickerStyle(.segmented)
                         GuideOSTextField(title: "城市", text: $city)
@@ -173,18 +173,22 @@ private enum GuideProfileDate {
 
 private struct GuidePermanentResidencyHint: View {
     let visaExpiry: Date?
+    @Environment(\.appLanguage) private var language
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label("长期在日与永住准备", systemImage: "checkmark.shield.fill")
+            Label(guideOSText(language, "长期在日与永住准备", "長期在留・永住の準備", "Long-term stay & PR prep"), systemImage: "checkmark.shield.fill")
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(KXColor.accent)
-            Text("先把城市、在留资格、在留期限、毕业/入社时间、日语目标保存好。未来判断永住、高度人才或签证更新时，通常会回看居住年数、纳税年金、收入稳定性、在留期限和材料连续性；具体条件以入管最新公告为准。")
+            Text(guideOSText(language,
+                "先把城市、在留资格、在留期限、毕业/入社时间、日语目标保存好。未来判断永住、高度人才或签证更新时，通常会回看居住年数、纳税年金、收入稳定性、在留期限和材料连续性；具体条件以入管最新公告为准。",
+                "都市・在留資格・在留期限・卒業/入社時期・日本語目標を保存しておきましょう。永住・高度人材・ビザ更新の判断では、居住年数・納税年金・収入の安定・在留期限・書類の連続性が見られます。詳細は入管の最新公告をご確認ください。",
+                "Save your city, status of residence, expiry, graduation/start date, and Japanese goal. PR, HSP, and visa renewals typically look at years of residence, taxes/pension, income stability, expiry, and document continuity — always check Immigration's latest notice."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if let visaExpiry {
-                Text("在留期限倒数 \(max(0, Calendar.current.dateComponents([.day], from: Date(), to: visaExpiry).day ?? 0)) 天")
+                Text(guideOSText(language, "在留期限倒数", "在留期限まで", "Status expires in") + " \(max(0, Calendar.current.dateComponents([.day], from: Date(), to: visaExpiry).day ?? 0)) " + guideOSText(language, "天", "日", "days"))
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.orange)
             }

@@ -9,7 +9,9 @@ struct GuideApplicationPlannerView: View {
     @State private var name = ""
     @State private var department = ""
     @State private var position = ""
-    @State private var deadline = Date()
+    // Default ~90 days out, not today: the backend back-plans the T-90→T-0
+    // ladder from this date, so a today default would make every milestone overdue.
+    @State private var deadline = Calendar.current.date(byAdding: .day, value: 90, to: Date()) ?? Date()
     @State private var interview = Date()
     @State private var hasInterview = false
     @State private var notes = ""
@@ -31,15 +33,15 @@ struct GuideApplicationPlannerView: View {
             subtitle: guideOSText(language, "大学出愿、新卒就活、社会人转职、JLPT 考试全部生成 Todo 和日历项", "大学出願・新卒・転職・JLPTをTodoとカレンダーにします", "Turn applications, ES deadlines, interviews, and exams into todos"),
             model: model
         ) {
-            Picker("类型", selection: $track) {
-                Text("学校出愿").tag("school")
-                Text("新卒就活").tag("shinsotsu")
-                Text("社会人转职").tag("tenshoku")
-                Text("JLPT 考试").tag("jlpt")
+            Picker(guideOSText(language, "类型", "種類", "Type"), selection: $track) {
+                Text(guideOSText(language, "学校出愿", "学校出願", "School")).tag("school")
+                Text(guideOSText(language, "新卒就活", "新卒就活", "New grad")).tag("shinsotsu")
+                Text(guideOSText(language, "社会人转职", "社会人転職", "Career change")).tag("tenshoku")
+                Text(guideOSText(language, "JLPT 考试", "JLPT 試験", "JLPT")).tag("jlpt")
             }
             .pickerStyle(.segmented)
             if isJlpt {
-                GuideOSTextField(title: "考试名称（如 JLPT N2）", text: $name)
+                GuideOSTextField(title: guideOSText(language, "考试名称（如 JLPT N2）", "試験名（例: JLPT N2）", "Exam name (e.g. JLPT N2)"), text: $name)
             } else {
                 GuideOSLibraryPickerField(type: apiType, text: $name)
             }

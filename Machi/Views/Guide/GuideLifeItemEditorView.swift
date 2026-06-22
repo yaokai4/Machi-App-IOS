@@ -26,12 +26,12 @@ struct GuideLifePlannerView: View {
         ) {
             // Server preset catalog (spec P1) — selecting a type pre-fills its
             // smart defaults (周期 + 提前提醒天数); falls back to a built-in list.
-            Picker("类型", selection: $type) {
+            Picker(guideOSText(language, "类型", "種類", "Type"), selection: $type) {
                 if model.lifePresets.isEmpty {
-                    Text("房租").tag("rent"); Text("电费").tag("electricity"); Text("燃气").tag("gas")
-                    Text("水费").tag("water"); Text("网络").tag("internet"); Text("手机").tag("phone")
-                    Text("信用卡").tag("credit_card"); Text("国保").tag("kokumin_hoken"); Text("年金").tag("nenkin")
-                    Text("住民税").tag("juminzei"); Text("在留卡").tag("zairyu_card"); Text("签证更新").tag("visa_renewal")
+                    Text(guideOSText(language, "房租", "家賃", "Rent")).tag("rent"); Text(guideOSText(language, "电费", "電気", "Electricity")).tag("electricity"); Text(guideOSText(language, "燃气", "ガス", "Gas")).tag("gas")
+                    Text(guideOSText(language, "水费", "水道", "Water")).tag("water"); Text(guideOSText(language, "网络", "ネット", "Internet")).tag("internet"); Text(guideOSText(language, "手机", "携帯", "Phone")).tag("phone")
+                    Text(guideOSText(language, "信用卡", "クレカ", "Credit card")).tag("credit_card"); Text(guideOSText(language, "国保", "国保", "Health ins.")).tag("kokumin_hoken"); Text(guideOSText(language, "年金", "年金", "Pension")).tag("nenkin")
+                    Text(guideOSText(language, "住民税", "住民税", "Resident tax")).tag("juminzei"); Text(guideOSText(language, "在留卡", "在留カード", "Residence card")).tag("zairyu_card"); Text(guideOSText(language, "签证更新", "ビザ更新", "Visa renewal")).tag("visa_renewal")
                 } else {
                     ForEach(model.lifePresets) { p in Text(p.label).tag(p.type) }
                 }
