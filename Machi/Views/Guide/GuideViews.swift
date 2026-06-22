@@ -801,6 +801,7 @@ struct GuideProductDetailView: View {
                             .foregroundStyle(GuideCopy.productActionEnabled(product, busy: isSubmitting) ? Color.white : Color.secondary)
                     }
                     .buttonStyle(.plain)
+        .contentShape(Rectangle())
                     .disabled(!GuideCopy.productActionEnabled(product, busy: isSubmitting))
                 }
             }
@@ -1059,6 +1060,7 @@ struct GuideSchoolListView: View {
                     .background(activeFilterCount > 0 ? KXColor.accent : KXColor.accentSoft, in: Capsule())
                 }
                 .buttonStyle(.plain)
+        .contentShape(Rectangle())
             }
         }
     }
@@ -1452,6 +1454,7 @@ struct GuideSchoolDetailView: View {
                         .foregroundStyle(.white)
                 }
                 .buttonStyle(.plain)
+        .contentShape(Rectangle())
                 .disabled(isSubmitting)
 
                 TextField(guideText(language, "发现官网、招生信息有误？在这里提交纠错", "公式サイトや入試情報の誤りを見つけたら、ここから修正を送信", "Found an error in the website or admissions info? Submit a correction here"), text: $correctionText, axis: .vertical)
@@ -1663,6 +1666,7 @@ struct GuideCompanyDetailView: View {
                                     .foregroundStyle(.white)
                             }
                             .buttonStyle(.plain)
+        .contentShape(Rectangle())
                         }
                         if let related = response.relatedArticles, !related.isEmpty {
                             GuideArticleSection(title: guideText(language, "相关指南", "関連ガイド", "Related guides"), subtitle: nil, articles: related, compact: true)
@@ -1782,6 +1786,7 @@ struct GuideCompanyDetailView: View {
                         .foregroundStyle(.white)
                 }
                 .buttonStyle(.plain)
+        .contentShape(Rectangle())
                 .disabled(isSubmitting)
 
                 TextField(guideText(language, "发现招聘页、签证信息有误？在这里提交纠错", "採用ページやビザ情報の誤りを見つけたら、ここから修正を送信", "Found an error in careers or visa info? Submit a correction here"), text: $correctionText, axis: .vertical)
@@ -1982,6 +1987,7 @@ struct GuideCompanyReviewsView: View {
                                 .foregroundStyle(.white)
                         }
                         .buttonStyle(.plain)
+        .contentShape(Rectangle())
 
                         if selectedTab == .interview {
                             if response.interviewReviews.isEmpty {
@@ -2313,6 +2319,7 @@ struct GuideComingSoonView: View {
                     .foregroundStyle(.white)
             }
             .buttonStyle(.plain)
+        .contentShape(Rectangle())
             Spacer(minLength: 80)
         }
         .padding()
@@ -2428,6 +2435,7 @@ private struct GuideHeroSection: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
+        .contentShape(Rectangle())
                 }
             }
             .padding(.horizontal, 14)
@@ -2452,6 +2460,7 @@ private struct GuideHeroSection: View {
                             .background(KXColor.livingSurface.opacity(0.82), in: Capsule())
                     }
                     .buttonStyle(.plain)
+        .contentShape(Rectangle())
                 }
             }
         }
@@ -2575,6 +2584,7 @@ private struct GuideResourceEntriesSection: View {
                         .shadow(color: Color.black.opacity(0.035), radius: 10, y: 5)
                     }
                     .buttonStyle(.plain)
+        .contentShape(Rectangle())
                 }
             }
         }
@@ -2624,6 +2634,7 @@ private struct GuideGoalsSection: View {
                             .overlay(Capsule().stroke(KXColor.separator, lineWidth: 0.8))
                         }
                         .buttonStyle(.plain)
+        .contentShape(Rectangle())
                     }
                 }
                 .padding(.vertical, 2)
@@ -2771,6 +2782,7 @@ private struct GuideDualEntrySection: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .contentShape(Rectangle())
     }
 }
 
@@ -2835,6 +2847,7 @@ private struct GuideCompaniesSection: View {
                     .foregroundStyle(KXColor.accent)
             }
             .buttonStyle(.plain)
+        .contentShape(Rectangle())
             if let disclaimer, !disclaimer.isEmpty {
                 Text(disclaimer)
                     .font(.caption2)
@@ -2921,6 +2934,7 @@ private struct GuideCategoryCard: View {
             .kxLivingSurface(radius: 22)
         }
         .buttonStyle(.plain)
+        .contentShape(Rectangle())
     }
 }
 
@@ -2973,6 +2987,7 @@ private struct GuideArticleCard: View {
             .kxLivingSurface(radius: 20)
         }
         .buttonStyle(.plain)
+        .contentShape(Rectangle())
     }
 }
 
@@ -3020,6 +3035,7 @@ private struct GuideProductCard: View {
             .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
         }
         .buttonStyle(.plain)
+        .contentShape(Rectangle())
     }
 }
 
@@ -3079,6 +3095,7 @@ private struct GuideSchoolCard: View {
             .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
         }
         .buttonStyle(.plain)
+        .contentShape(Rectangle())
     }
 }
 
@@ -3140,6 +3157,7 @@ private struct GuideCompanyCard: View {
             .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
         }
         .buttonStyle(.plain)
+        .contentShape(Rectangle())
     }
 }
 
@@ -3323,6 +3341,7 @@ private struct GuidePillButton: View {
                 .overlay(Capsule().stroke(isSelected ? Color.clear : KXColor.separator, lineWidth: 0.8))
         }
         .buttonStyle(.plain)
+        .contentShape(Rectangle())
     }
 }
 

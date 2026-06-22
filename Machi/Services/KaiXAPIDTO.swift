@@ -2107,6 +2107,13 @@ struct KaiXGuideLifeItemsResponse: Codable {
     let total: Int
 }
 
+struct KaiXGuideRecommendationsResponse: Codable {
+    let status: String
+    let materials: [KaiXGuideProductDTO]
+    let services: [KaiXGuideProductDTO]
+    let products: [KaiXGuideProductDTO]
+}
+
 struct KaiXGuideProfileUpdatePayload: Encodable {
     var identityType: String? = nil
     var city: String? = nil

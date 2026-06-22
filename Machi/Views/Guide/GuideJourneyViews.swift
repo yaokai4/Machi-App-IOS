@@ -149,6 +149,7 @@ struct GuideJourneyCard: View {
             .kxGlassSurface(radius: 20)
         }
         .buttonStyle(.plain)
+        .contentShape(Rectangle())
     }
 }
 
@@ -290,6 +291,7 @@ struct GuideJourneyDetailView: View {
                                 .frame(height: 44)
                         }
                         .buttonStyle(.plain)
+        .contentShape(Rectangle())
                         .foregroundStyle(.white)
                         .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                         .disabled(model.isStartingPlan)
@@ -301,6 +303,7 @@ struct GuideJourneyDetailView: View {
                                 .frame(height: 44)
                         }
                         .buttonStyle(.plain)
+        .contentShape(Rectangle())
                         .foregroundStyle(KXColor.accent)
                         .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     }
@@ -426,8 +429,10 @@ private struct GuideJourneyStepRow: View {
                         .font(.system(size: 24, weight: .semibold))
                         .foregroundStyle(isDone ? tint : Color.secondary.opacity(0.5))
                         .scaleEffect(isDone ? 1.08 : 1)
+                        .frame(width: 38, height: 38)
                 }
                 .buttonStyle(.plain)
+        .contentShape(Rectangle())
                 .sensoryFeedback(.success, trigger: isDone)
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
@@ -477,6 +482,7 @@ private struct GuideJourneyStepRow: View {
                             .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 11))
                         }
                         .buttonStyle(.plain)
+        .contentShape(Rectangle())
                     }
                 }
             }
@@ -500,6 +506,7 @@ private struct GuideJourneyStepRow: View {
                         .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 11))
                     }
                     .buttonStyle(.plain)
+        .contentShape(Rectangle())
                 }
             }
 
@@ -513,6 +520,7 @@ private struct GuideJourneyStepRow: View {
                     .foregroundStyle(KXColor.accent)
                 }
                 .buttonStyle(.plain)
+        .contentShape(Rectangle())
             }
         }
         .padding(15)
@@ -580,6 +588,7 @@ struct GuideJourneyNextStepCard: View {
                 .kxGlassSurface(radius: 20)
             }
             .buttonStyle(.plain)
+        .contentShape(Rectangle())
         }
     }
 }

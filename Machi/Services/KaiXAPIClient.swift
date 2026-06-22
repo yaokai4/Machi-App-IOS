@@ -1452,6 +1452,19 @@ final class KaiXAPIClient {
         return try decode(data)
     }
 
+    /// Materials + services that help finish a given todo / plan stage. A single
+    /// recommendation query failing never breaks Guide — the server returns an
+    /// empty list rather than 500.
+    func guideRecommendations(todoId: String? = nil, planType: String? = nil, todoType: String? = nil,
+                              country: String = "jp", language: String = "zh-CN") async throws -> KaiXGuideRecommendationsResponse {
+        var query: [URLQueryItem] = [URLQueryItem(name: "country", value: country), URLQueryItem(name: "language", value: language)]
+        if let todoId, !todoId.isEmpty { query.append(URLQueryItem(name: "todoId", value: todoId)) }
+        if let planType, !planType.isEmpty { query.append(URLQueryItem(name: "planType", value: planType)) }
+        if let todoType, !todoType.isEmpty { query.append(URLQueryItem(name: "todoType", value: todoType)) }
+        let data = try await request("GET", "/api/guide/recommendations", queryItems: query)
+        return try decode(data)
+    }
+
     @discardableResult
     func createGuideLifeItem(_ payload: KaiXGuideLifeItemPayload) async throws -> KaiXGuideLifeItemResponse {
         let data = try await request("POST", "/api/guide/life-items", body: payload)
