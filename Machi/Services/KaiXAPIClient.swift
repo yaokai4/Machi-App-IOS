@@ -215,6 +215,25 @@ final class KaiXAPIClient {
         return response
     }
 
+    /// Bind a Sign in with Apple identity to the CURRENT logged-in account (does
+    /// NOT swap the session). Posts the verified identity token + raw nonce to
+    /// `/api/auth/apple/link`; returns the refreshed user so the UI can flip to
+    /// "linked" immediately.
+    @discardableResult
+    func linkApple(identityToken: String, nonce: String) async throws -> KaiXUserDTO {
+        struct Wrapper: Codable { let user: KaiXUserDTO }
+        let data = try await request("POST", "/api/auth/apple/link", body: ["identity_token": identityToken, "nonce": nonce])
+        return try decode(data) as Wrapper |> \.user
+    }
+
+    /// Unbind Apple from the current (logged-in) account; returns the refreshed user.
+    @discardableResult
+    func appleUnlink() async throws -> KaiXUserDTO {
+        struct Wrapper: Codable { let user: KaiXUserDTO }
+        let data = try await request("POST", "/api/auth/apple/unlink")
+        return try decode(data) as Wrapper |> \.user
+    }
+
     func googleAuthStart(redirect: String = "machi://auth/google", intent: String = "login") async throws -> KaiXGoogleAuthStartResponse {
         let data = try await request("GET", "/api/auth/google/start", queryItems: [
             URLQueryItem(name: "client", value: "ios"),
@@ -1289,11 +1308,125 @@ final class KaiXAPIClient {
     }
 
     @discardableResult
-    func updateGuideProgress(journeyKey: String, stepKey: String, status: String, reminderAt: String? = nil, notes: String? = nil) async throws -> KaiXGuideProgressResponse {
-        var body: [String: String] = ["journeyKey": journeyKey, "stepKey": stepKey, "status": status]
-        if let reminderAt, !reminderAt.isEmpty { body["reminderAt"] = reminderAt }
-        if let notes { body["notes"] = notes }
+    func updateGuideProgress(
+        journeyKey: String,
+        stepKey: String,
+        status: String,
+        reminderAt: String? = nil,
+        plannedDate: String? = nil,
+        dueAt: String? = nil,
+        priority: String? = nil,
+        notifyEnabled: Bool? = nil,
+        calendarNote: String? = nil,
+        notes: String? = nil
+    ) async throws -> KaiXGuideProgressResponse {
+        let body = KaiXGuideProgressUpdatePayload(
+            journeyKey: journeyKey,
+            stepKey: stepKey,
+            status: status,
+            reminderAt: reminderAt,
+            plannedDate: plannedDate,
+            dueAt: dueAt,
+            priority: priority,
+            notifyEnabled: notifyEnabled,
+            calendarNote: calendarNote,
+            notes: notes
+        )
         let data = try await request("PATCH", "/api/guide/progress", body: body)
+        return try decode(data)
+    }
+
+    func guideProfile() async throws -> KaiXGuideProfileResponse {
+        let data = try await request("GET", "/api/guide/profile")
+        return try decode(data)
+    }
+
+    @discardableResult
+    func updateGuideProfile(_ payload: KaiXGuideProfileUpdatePayload) async throws -> KaiXGuideProfileResponse {
+        let data = try await request("PATCH", "/api/guide/profile", body: payload)
+        return try decode(data)
+    }
+
+    func guidePlans() async throws -> KaiXGuidePlanListResponse {
+        let data = try await request("GET", "/api/guide/plans")
+        return try decode(data)
+    }
+
+    func guideActivePlan(language: String = "zh-CN") async throws -> KaiXGuideActivePlanResponse {
+        let data = try await request("GET", "/api/guide/plans/active", queryItems: [
+            URLQueryItem(name: "language", value: language),
+        ])
+        return try decode(data)
+    }
+
+    @discardableResult
+    func startGuidePlan(journeyKey: String, planType: String? = nil, targetDate: String? = nil) async throws -> KaiXGuidePlanStartResponse {
+        struct Body: Encodable {
+            let journeyKey: String
+            let planType: String?
+            let targetDate: String?
+        }
+        let data = try await request("POST", "/api/guide/plans/start", body: Body(journeyKey: journeyKey, planType: planType, targetDate: targetDate))
+        return try decode(data)
+    }
+
+    @discardableResult
+    func updateGuidePlan(id: String, title: String? = nil, subtitle: String? = nil, status: String? = nil, targetDate: String? = nil) async throws -> KaiXGuidePlanResponse {
+        struct Body: Encodable {
+            let title: String?
+            let subtitle: String?
+            let status: String?
+            let targetDate: String?
+        }
+        let data = try await request("PATCH", "/api/guide/plans/\(id.encodedPathSegment)", body: Body(title: title, subtitle: subtitle, status: status, targetDate: targetDate))
+        return try decode(data)
+    }
+
+    @discardableResult
+    func resetGuidePlan(id: String) async throws -> KaiXGuidePlanResponse {
+        let data = try await request("POST", "/api/guide/plans/\(id.encodedPathSegment)/reset", body: [String: String]())
+        return try decode(data)
+    }
+
+    func guideTodos(status: String? = nil, type: String? = nil, from: String? = nil, to: String? = nil, limit: Int = 50) async throws -> KaiXGuideTodoListResponse {
+        var query: [URLQueryItem] = [URLQueryItem(name: "limit", value: "\(limit)")]
+        if let status, !status.isEmpty { query.append(URLQueryItem(name: "status", value: status)) }
+        if let type, !type.isEmpty { query.append(URLQueryItem(name: "type", value: type)) }
+        if let from, !from.isEmpty { query.append(URLQueryItem(name: "from", value: from)) }
+        if let to, !to.isEmpty { query.append(URLQueryItem(name: "to", value: to)) }
+        let data = try await request("GET", "/api/guide/todos", queryItems: query)
+        return try decode(data)
+    }
+
+    @discardableResult
+    func updateGuideTodo(id: String, payload: KaiXGuideTodoUpdatePayload) async throws -> KaiXGuideTodoResponse {
+        let data = try await request("PATCH", "/api/guide/todos/\(id.encodedPathSegment)", body: payload)
+        return try decode(data)
+    }
+
+    @discardableResult
+    func completeGuideTodo(id: String) async throws -> KaiXGuideTodoResponse {
+        let data = try await request("POST", "/api/guide/todos/\(id.encodedPathSegment)/complete", body: [String: String]())
+        return try decode(data)
+    }
+
+    func guideCalendar(from: String? = nil, to: String? = nil, limit: Int = 200) async throws -> KaiXGuideCalendarResponse {
+        var query: [URLQueryItem] = [URLQueryItem(name: "limit", value: "\(limit)")]
+        if let from, !from.isEmpty { query.append(URLQueryItem(name: "from", value: from)) }
+        if let to, !to.isEmpty { query.append(URLQueryItem(name: "to", value: to)) }
+        let data = try await request("GET", "/api/guide/calendar", queryItems: query)
+        return try decode(data)
+    }
+
+    @discardableResult
+    func createGuideApplication(_ payload: KaiXGuideApplicationPayload) async throws -> KaiXGuideApplicationResponse {
+        let data = try await request("POST", "/api/guide/applications", body: payload)
+        return try decode(data)
+    }
+
+    @discardableResult
+    func createGuideLifeItem(_ payload: KaiXGuideLifeItemPayload) async throws -> KaiXGuideLifeItemResponse {
+        let data = try await request("POST", "/api/guide/life-items", body: payload)
         return try decode(data)
     }
 

@@ -212,6 +212,10 @@ struct KaiXUserDTO: Codable, Equatable {
     let auth_provider: String?
     let has_google: Bool?
     let can_unlink_google: Bool?
+    // Apple account binding (mirrors serialize_user in server.py). Optional so
+    // older responses and accounts without Apple linked keep decoding.
+    let has_apple: Bool?
+    let can_unlink_apple: Bool?
 }
 
 struct KaiXListingMediaDTO: Codable, Equatable, Hashable {
@@ -1851,6 +1855,11 @@ struct KaiXGuideJourneysResponse: Codable {
 struct KaiXGuideStepProgressState: Codable, Equatable, Hashable {
     let status: String
     let completedAt: String?
+    let plannedDate: String?
+    let dueAt: String?
+    let priority: String?
+    let notifyEnabled: Bool?
+    let calendarNote: String?
 }
 
 struct KaiXGuideJourneyDetailResponse: Codable {
@@ -1870,6 +1879,11 @@ struct KaiXGuideProgressDTO: Codable, Equatable, Identifiable, Hashable {
     let status: String
     let completedAt: String?
     let reminderAt: String?
+    let plannedDate: String?
+    let dueAt: String?
+    let priority: String?
+    let notifyEnabled: Bool?
+    let calendarNote: String?
     let notes: String?
     let updatedAt: String?
 }
@@ -1885,6 +1899,254 @@ struct KaiXGuideProgressResponse: Codable {
     let status: String
     let items: [KaiXGuideProgressDTO]
     let summary: [KaiXGuideProgressSummaryDTO]
+}
+
+struct KaiXGuideProgressUpdatePayload: Encodable {
+    var journeyKey: String
+    var stepKey: String
+    var status: String
+    var reminderAt: String?
+    var plannedDate: String?
+    var dueAt: String?
+    var priority: String?
+    var notifyEnabled: Bool?
+    var calendarNote: String?
+    var notes: String?
+}
+
+// MARK: - Guide OS (server-first plans / todos / calendar)
+
+struct KaiXGuideProfileDTO: Codable, Equatable, Identifiable, Hashable {
+    let id: String
+    let userId: String
+    let identityType: String
+    let country: String
+    let city: String
+    let isInJapan: Bool
+    let visaStatus: String
+    let visaExpiresAt: String?
+    let japaneseLevel: String
+    let targetJapaneseLevel: String
+    let targetLevel: String
+    let graduationDate: String?
+    let targetEntryTerm: String
+    let targetIndustry: String
+    let targetSchoolType: String
+    let weeklyAvailableMinutes: Int
+    let needsMaterials: Bool
+    let needsServices: Bool
+    let createdAt: String?
+    let updatedAt: String?
+}
+
+struct KaiXGuideTodoDTO: Codable, Equatable, Identifiable, Hashable {
+    let id: String
+    let userId: String
+    let planId: String
+    let sourceType: String
+    let sourceId: String
+    let journeyKey: String
+    let stepKey: String
+    let title: String
+    let summary: String
+    let todoType: String
+    let status: String
+    let priority: String
+    let plannedDate: String?
+    let dueAt: String?
+    let reminderAt: String?
+    let completedAt: String?
+    let estimatedMinutes: Int
+    let notes: String
+    let relatedArticleSlugs: [String]
+    let relatedProductSlugs: [String]
+    let relatedServiceSlugs: [String]
+    let createdAt: String?
+    let updatedAt: String?
+
+    var isDone: Bool { status == "done" }
+    var displayDate: String? { plannedDate ?? dueAt ?? reminderAt }
+}
+
+struct KaiXGuidePlanDTO: Codable, Equatable, Identifiable, Hashable {
+    let id: String
+    let userId: String
+    let planType: String
+    let title: String
+    let subtitle: String
+    let status: String
+    let targetDate: String?
+    let startedAt: String?
+    let progressPercent: Int
+    let currentTodoId: String
+    let sourceJourneyKey: String
+    let todoTotal: Int?
+    let todoDone: Int?
+    let nextTodo: KaiXGuideTodoDTO?
+    let createdAt: String?
+    let updatedAt: String?
+}
+
+struct KaiXGuideCalendarItemDTO: Codable, Equatable, Identifiable, Hashable {
+    let id: String
+    let todoId: String
+    let title: String
+    let date: String?
+    let startAt: String?
+    let endAt: String?
+    let type: String
+    let status: String
+    let planId: String
+    let todo: KaiXGuideTodoDTO?
+}
+
+struct KaiXGuideApplicationDTO: Codable, Equatable, Identifiable, Hashable {
+    let id: String
+    let userId: String
+    let planId: String
+    let type: String
+    let name: String
+    let department: String
+    let position: String
+    let deadline: String?
+    let interviewAt: String?
+    let resultAt: String?
+    let status: String
+    let notes: String
+    let createdAt: String?
+    let updatedAt: String?
+}
+
+struct KaiXGuideLifeItemDTO: Codable, Equatable, Identifiable, Hashable {
+    let id: String
+    let userId: String
+    let type: String
+    let title: String
+    let provider: String
+    let amount: Int
+    let currency: String
+    let paymentMethod: String
+    let dueDay: Int
+    let dueAt: String?
+    let recurrence: String
+    let reminderDaysBefore: Int
+    let notes: String
+    let active: Bool
+    let createdAt: String?
+    let updatedAt: String?
+}
+
+struct KaiXGuideProfileResponse: Codable {
+    let status: String
+    let profile: KaiXGuideProfileDTO?
+}
+
+struct KaiXGuidePlanListResponse: Codable {
+    let status: String
+    let items: [KaiXGuidePlanDTO]
+}
+
+struct KaiXGuidePlanResponse: Codable {
+    let status: String
+    let plan: KaiXGuidePlanDTO?
+}
+
+struct KaiXGuidePlanStartResponse: Codable {
+    let status: String
+    let plan: KaiXGuidePlanDTO?
+    let todos: [KaiXGuideTodoDTO]
+}
+
+struct KaiXGuideTodoListResponse: Codable {
+    let status: String
+    let items: [KaiXGuideTodoDTO]
+    let total: Int
+}
+
+struct KaiXGuideTodoResponse: Codable {
+    let status: String
+    let todo: KaiXGuideTodoDTO?
+}
+
+struct KaiXGuideCalendarResponse: Codable {
+    let status: String
+    let items: [KaiXGuideCalendarItemDTO]
+    let total: Int
+}
+
+struct KaiXGuideActivePlanResponse: Codable {
+    let status: String
+    let profile: KaiXGuideProfileDTO?
+    let plan: KaiXGuidePlanDTO?
+    let todayTodos: [KaiXGuideTodoDTO]
+    let upcomingTodos: [KaiXGuideTodoDTO]
+    let openTodos: [KaiXGuideTodoDTO]
+    let recommendedProducts: [KaiXGuideProductDTO]?
+    let recommendedServices: [KaiXGuideProductDTO]?
+}
+
+struct KaiXGuideApplicationResponse: Codable {
+    let status: String
+    let application: KaiXGuideApplicationDTO?
+}
+
+struct KaiXGuideLifeItemResponse: Codable {
+    let status: String
+    let item: KaiXGuideLifeItemDTO?
+}
+
+struct KaiXGuideProfileUpdatePayload: Encodable {
+    var identityType: String? = nil
+    var city: String? = nil
+    var isInJapan: Bool? = nil
+    var visaStatus: String? = nil
+    var visaExpiresAt: String? = nil
+    var japaneseLevel: String? = nil
+    var targetJapaneseLevel: String? = nil
+    var graduationDate: String? = nil
+    var targetEntryTerm: String? = nil
+    var targetIndustry: String? = nil
+    var targetSchoolType: String? = nil
+    var weeklyAvailableMinutes: Int? = nil
+    var needsMaterials: Bool? = nil
+    var needsServices: Bool? = nil
+}
+
+struct KaiXGuideTodoUpdatePayload: Encodable {
+    var title: String? = nil
+    var summary: String? = nil
+    var status: String? = nil
+    var priority: String? = nil
+    var notes: String? = nil
+    var plannedDate: String? = nil
+    var dueAt: String? = nil
+    var reminderAt: String? = nil
+}
+
+struct KaiXGuideApplicationPayload: Encodable {
+    var planId: String?
+    var type: String
+    var name: String
+    var department: String?
+    var position: String?
+    var deadline: String?
+    var interviewAt: String?
+    var resultAt: String?
+    var notes: String?
+}
+
+struct KaiXGuideLifeItemPayload: Encodable {
+    var type: String
+    var title: String
+    var provider: String?
+    var amount: Int?
+    var currency: String?
+    var paymentMethod: String?
+    var dueDay: Int?
+    var dueAt: String?
+    var recurrence: String?
+    var reminderDaysBefore: Int?
+    var notes: String?
 }
 
 struct KaiXGuideSearchScope: Codable, Equatable, Identifiable, Hashable {

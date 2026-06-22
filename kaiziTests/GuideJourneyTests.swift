@@ -1,8 +1,8 @@
 import XCTest
 @testable import Machi
 
-/// Offline, deterministic tests for the Guide Journey (action-path) system:
-/// DTO decoding, unified-search grouping, and the local-first progress store.
+/// Offline, deterministic tests for the Guide Journey / Guide OS system:
+/// DTO decoding, unified-search grouping, and server-first progress payloads.
 /// No backend required — these stay green in CI without a running server.
 @MainActor
 final class GuideJourneyTests: XCTestCase {
@@ -88,43 +88,40 @@ final class GuideJourneyTests: XCTestCase {
         XCTAssertNil(response.groups.schools)
     }
 
-    // MARK: - Local-first progress store
+    // MARK: - Server-first Guide OS payloads
 
-    func testProgressStoreLocalFirstAndRollback() {
-        let store = GuideProgressStore.shared
-        let j = "test_journey_unit"
-        // Clean any prior run.
-        store.setStatus(journey: j, step: "a", "not_started")
-        store.setStatus(journey: j, step: "b", "not_started")
-
-        XCTAssertFalse(store.isDone(journey: j, step: "a"))
-        let previous = store.setStatus(journey: j, step: "a", "done")
-        XCTAssertEqual(previous, "not_started")
-        XCTAssertTrue(store.isDone(journey: j, step: "a"))
-
-        store.setStatus(journey: j, step: "b", "done")
-        XCTAssertEqual(store.doneCount(journey: j), 2)
-
-        // Simulate a failed server sync rolling back the optimistic change.
-        let prevB = store.setStatus(journey: j, step: "b", "not_started")
-        XCTAssertEqual(prevB, "done")
-        XCTAssertEqual(store.doneCount(journey: j), 1)
-
-        // Cleanup so the shared store doesn't leak test state.
-        store.setStatus(journey: j, step: "a", "not_started")
-        XCTAssertEqual(store.doneCount(journey: j), 0)
+    func testActivePlanDecodingIncludesContextualRecommendations() throws {
+        let json = """
+        {"status":"ok","profile":null,"plan":null,
+         "todayTodos":[],"upcomingTodos":[],"openTodos":[],
+         "recommendedProducts":[],"recommendedServices":[]}
+        """
+        let response = try decode(json, as: KaiXGuideActivePlanResponse.self)
+        XCTAssertEqual(response.status, "ok")
+        XCTAssertEqual(response.recommendedProducts?.count, 0)
+        XCTAssertEqual(response.recommendedServices?.count, 0)
     }
 
-    func testProgressStoreMergeFromServer() {
-        let store = GuideProgressStore.shared
-        let j = "test_journey_merge"
-        store.setStatus(journey: j, step: "x", "not_started")
-
-        store.merge(server: ["x": KaiXGuideStepProgressState(status: "done", completedAt: nil)], journey: j)
-        XCTAssertTrue(store.isDone(journey: j, step: "x"))
-
-        // Cleanup.
-        store.setStatus(journey: j, step: "x", "not_started")
+    func testProgressMapDecodingUsesServerDatesAndReminderState() throws {
+        let json = """
+        {"status":"ok","country":"jp","language":"zh-CN",
+         "journey":{"id":"j1","key":"arrival","title":"刚到日本","subtitle":"...","audience":"life",
+           "icon":"plane","color":"#147067","heroTitle":"刚到日本一周计划","heroSubtitle":"...",
+           "estimatedDays":7,"sortOrder":1,"status":"published"},
+         "steps":[],
+         "progress":{"resident_registration":{"status":"done","completedAt":"2026-06-21T00:00:00Z",
+           "plannedDate":"2026-06-22","dueAt":"2026-06-30","priority":"high","notifyEnabled":true,
+           "calendarNote":"带在留卡和护照"}},
+         "disclaimer":"仅供参考"}
+        """
+        let response = try decode(json, as: KaiXGuideJourneyDetailResponse.self)
+        let progress = try XCTUnwrap(response.progress?["resident_registration"])
+        XCTAssertEqual(progress.status, "done")
+        XCTAssertEqual(progress.plannedDate, "2026-06-22")
+        XCTAssertEqual(progress.dueAt, "2026-06-30")
+        XCTAssertEqual(progress.priority, "high")
+        XCTAssertEqual(progress.notifyEnabled, true)
+        XCTAssertEqual(progress.calendarNote, "带在留卡和护照")
     }
 
     // MARK: - Category -> journey mapping (article "next step")

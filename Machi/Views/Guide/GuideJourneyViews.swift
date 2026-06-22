@@ -1,72 +1,7 @@
 import Combine
 import SwiftUI
 
-// MARK: - Local-first progress store
-//
-// Step completion is stored locally (UserDefaults) so guests get a real sense
-// of progress without logging in — the same local-first pattern the Discover
-// favorites use. When the user is logged in, changes are best-effort synced to
-// `/api/guide/progress` and server state is merged back in on load. Source of
-// truth for a guest is the device; for a logged-in user the server reconciles.
-@MainActor
-final class GuideProgressStore: ObservableObject {
-    static let shared = GuideProgressStore()
-
-    @Published private(set) var statuses: [String: String] = [:]   // "journeyKey/stepKey" -> status
-    private let defaultsKey = "guide_progress_v1"
-
-    init() { load() }
-
-    private func composite(_ journey: String, _ step: String) -> String { "\(journey)/\(step)" }
-
-    func status(journey: String, step: String) -> String {
-        statuses[composite(journey, step)] ?? "not_started"
-    }
-
-    func isDone(journey: String, step: String) -> Bool {
-        status(journey: journey, step: step) == "done"
-    }
-
-    func doneCount(journey: String) -> Int {
-        let prefix = "\(journey)/"
-        return statuses.filter { $0.key.hasPrefix(prefix) && $0.value == "done" }.count
-    }
-
-    /// Apply a status locally and persist. Returns the previous value so the
-    /// caller can roll back if a server sync fails.
-    @discardableResult
-    func setStatus(journey: String, step: String, _ status: String) -> String {
-        let key = composite(journey, step)
-        let previous = statuses[key] ?? "not_started"
-        if status == "not_started" {
-            statuses.removeValue(forKey: key)
-        } else {
-            statuses[key] = status
-        }
-        persist()
-        return previous
-    }
-
-    /// Fold server progress into the local store in one write (load path).
-    func merge(server entries: [String: KaiXGuideStepProgressState], journey: String) {
-        for (stepKey, state) in entries where !stepKey.isEmpty {
-            statuses[composite(journey, stepKey)] = state.status
-        }
-        persist()
-    }
-
-    private func persist() {
-        if let data = try? JSONEncoder().encode(statuses) {
-            UserDefaults.standard.set(data, forKey: defaultsKey)
-        }
-    }
-
-    private func load() {
-        guard let data = UserDefaults.standard.data(forKey: defaultsKey),
-              let decoded = try? JSONDecoder().decode([String: String].self, from: data) else { return }
-        statuses = decoded
-    }
-}
+// MARK: - Server-first Guide journey helpers
 
 // MARK: - Shared helpers (file-scoped; GuideViews' equivalents are private)
 
@@ -130,9 +65,9 @@ enum GuideViewModelJourneyTitles {
 struct GuideJourneyGrid: View {
     @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
-    @ObservedObject private var progress = GuideProgressStore.shared
 
     let journeys: [KaiXGuideJourneyDTO]
+    var activePlan: KaiXGuidePlanDTO? = nil
 
     private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
 
@@ -152,7 +87,8 @@ struct GuideJourneyGrid: View {
                 ForEach(journeys) { journey in
                     GuideJourneyCard(
                         journey: journey,
-                        doneCount: progress.doneCount(journey: journey.key)
+                        doneCount: activePlan?.sourceJourneyKey == journey.key ? (activePlan?.todoDone ?? 0) : 0,
+                        totalOverride: activePlan?.sourceJourneyKey == journey.key ? activePlan?.todoTotal : nil
                     ) {
                         router.open(.guideJourney(key: journey.key))
                     }
@@ -166,6 +102,7 @@ struct GuideJourneyCard: View {
     @Environment(\.appLanguage) private var language
     let journey: KaiXGuideJourneyDTO
     let doneCount: Int
+    var totalOverride: Int? = nil
     let action: () -> Void
 
     private var tint: Color { guideHexColor(journey.color) }
@@ -184,7 +121,7 @@ struct GuideJourneyCard: View {
                         )
                         .shadow(color: tint.opacity(0.35), radius: 8, y: 4)
                     Spacer()
-                    if let total = journey.stepCount, total > 0 {
+                    if let total = totalOverride ?? journey.stepCount, total > 0 {
                         Text(doneCount > 0 ? "\(doneCount)/\(total)" : "\(total) 步")
                             .font(.caption2.weight(.bold))
                             .foregroundStyle(doneCount > 0 ? tint : .secondary)
@@ -202,7 +139,7 @@ struct GuideJourneyCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
-                if let total = journey.stepCount, total > 0, doneCount > 0 {
+                if let total = totalOverride ?? journey.stepCount, total > 0, doneCount > 0 {
                     ProgressView(value: Double(min(doneCount, total)), total: Double(total))
                         .tint(tint)
                 }
@@ -220,9 +157,11 @@ struct GuideJourneyCard: View {
 @MainActor
 final class GuideJourneyDetailViewModel: ObservableObject {
     @Published var detail: KaiXGuideJourneyDetailResponse?
+    @Published private(set) var progress: [String: KaiXGuideStepProgressState] = [:]
     @Published var isLoading = true
     @Published var errorMessage: String?
     @Published var syncMessage: String?
+    @Published var isStartingPlan = false
 
     func load(journeyKey: String, country: String, language: String) async {
         guard country == "jp" else { detail = nil; isLoading = false; return }
@@ -232,26 +171,64 @@ final class GuideJourneyDetailViewModel: ObservableObject {
         do {
             let response = try await KaiXAPIClient.shared.guideJourney(journeyKey, country: country, language: language)
             detail = response
-            if let serverProgress = response.progress, !serverProgress.isEmpty {
-                GuideProgressStore.shared.merge(server: serverProgress, journey: journeyKey)
-            }
+            progress = response.progress ?? [:]
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    /// Optimistic local toggle; logged-in users sync to the server and roll the
-    /// local change back if the sync fails. Guests stay purely local.
+    func isDone(stepKey: String) -> Bool {
+        progress[stepKey]?.status == "done"
+    }
+
+    func doneCount(steps: [KaiXGuideJourneyStepDTO]) -> Int {
+        steps.filter { isDone(stepKey: $0.stepKey) }.count
+    }
+
+    /// Server-first toggle. Guests can read the Guide, but writing progress is
+    /// a login-only feature so the plan, Todo, calendar, and paid services stay
+    /// consistent across iOS/Web.
     func toggle(step: KaiXGuideJourneyStepDTO, journeyKey: String) async {
-        let store = GuideProgressStore.shared
-        let newStatus = store.isDone(journey: journeyKey, step: step.stepKey) ? "not_started" : "done"
-        let previous = store.setStatus(journey: journeyKey, step: step.stepKey, newStatus)
         guard KaiXBackend.token != nil else { return }
+        let previous = progress[step.stepKey]
+        let newStatus = isDone(stepKey: step.stepKey) ? "not_started" : "done"
+        progress[step.stepKey] = KaiXGuideStepProgressState(
+            status: newStatus,
+            completedAt: newStatus == "done" ? ISO8601DateFormatter().string(from: Date()) : nil,
+            plannedDate: previous?.plannedDate,
+            dueAt: previous?.dueAt,
+            priority: previous?.priority,
+            notifyEnabled: previous?.notifyEnabled,
+            calendarNote: previous?.calendarNote
+        )
         do {
             _ = try await KaiXAPIClient.shared.updateGuideProgress(journeyKey: journeyKey, stepKey: step.stepKey, status: newStatus)
         } catch {
-            store.setStatus(journey: journeyKey, step: step.stepKey, previous)
+            if let previous {
+                progress[step.stepKey] = previous
+            } else {
+                progress.removeValue(forKey: step.stepKey)
+            }
             syncMessage = "进度未能同步到云端，已恢复本机状态，请稍后再试。"
+        }
+    }
+
+    @discardableResult
+    func startPlan(journeyKey: String, planType: String) async -> Bool {
+        guard KaiXBackend.token != nil else {
+            GuestGate.shared.requireLogin("登录后可以把这条路径生成 Todo 计划。")
+            return false
+        }
+        isStartingPlan = true
+        syncMessage = nil
+        defer { isStartingPlan = false }
+        do {
+            _ = try await KaiXAPIClient.shared.startGuidePlan(journeyKey: journeyKey, planType: planType.isEmpty ? "guide" : planType)
+            syncMessage = "已生成 Todo 计划，可以在「我的计划」里继续推进。"
+            return true
+        } catch {
+            syncMessage = "计划生成失败，请稍后再试。"
+            return false
         }
     }
 }
@@ -260,7 +237,6 @@ struct GuideJourneyDetailView: View {
     @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     @ObservedObject private var regionStore = RegionStore.shared
-    @ObservedObject private var progress = GuideProgressStore.shared
     @StateObject private var model = GuideJourneyDetailViewModel()
 
     let journeyKey: String
@@ -300,6 +276,34 @@ struct GuideJourneyDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     header(detail.journey, steps: detail.steps)
+                    HStack(spacing: 10) {
+                        Button {
+                            Task {
+                                if await model.startPlan(journeyKey: journeyKey, planType: detail.journey.audience) {
+                                    router.open(.guidePlan)
+                                }
+                            }
+                        } label: {
+                            Label(model.isStartingPlan ? journeyText(language, "生成中", "作成中", "Creating") : journeyText(language, "生成 Todo 计划", "Todo 計画を作成", "Create Todo plan"), systemImage: "calendar.badge.plus")
+                                .font(.caption.weight(.bold))
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 44)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.white)
+                        .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .disabled(model.isStartingPlan)
+
+                        Button { router.open(.guidePlan) } label: {
+                            Label(journeyText(language, "我的计划", "マイ計画", "My plan"), systemImage: "list.bullet.clipboard")
+                                .font(.caption.weight(.bold))
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 44)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(KXColor.accent)
+                        .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
                     if let sync = model.syncMessage, !sync.isEmpty {
                         Text(sync)
                             .font(.caption)
@@ -313,10 +317,16 @@ struct GuideJourneyDetailView: View {
                             step: step,
                             index: index + 1,
                             total: detail.steps.count,
-                            isDone: progress.isDone(journey: journeyKey, step: step.stepKey),
+                            isDone: model.isDone(stepKey: step.stepKey),
                             tint: guideHexColor(detail.journey.color),
                             language: language,
-                            onToggle: { Task { await model.toggle(step: step, journeyKey: journeyKey) } },
+                            onToggle: {
+                                if KaiXBackend.token == nil {
+                                    GuestGate.shared.requireLogin("登录后可以同步 Guide 进度、Todo 和提醒。")
+                                } else {
+                                    Task { await model.toggle(step: step, journeyKey: journeyKey) }
+                                }
+                            },
                             onOpenArticle: { router.open(.guideArticle(slug: $0)) },
                             onOpenProduct: { router.open(.guideProduct(slug: $0)) },
                             onOpenJourney: { router.open(.guideJourney(key: $0)) }
@@ -343,7 +353,7 @@ struct GuideJourneyDetailView: View {
 
     private func header(_ journey: KaiXGuideJourneyDTO, steps: [KaiXGuideJourneyStepDTO]) -> some View {
         let total = steps.count
-        let done = min(progress.doneCount(journey: journeyKey), total)
+        let done = min(model.doneCount(steps: steps), total)
         let tint = guideHexColor(journey.color)
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {

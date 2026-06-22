@@ -5,7 +5,7 @@ import SwiftUI
 /// while the tab bar shows; a small value once a detail page hides it) + extra —
 /// the same source Home/Discover use, so Guide stops being occluded and stays
 /// consistent across iPhone SE / Dynamic Island / Pro Max safe areas.
-private struct GuideBottomInset: ViewModifier {
+struct GuideBottomInset: ViewModifier {
     @EnvironmentObject private var chrome: AppChromeState
     var extra: CGFloat = KXSpacing.xl
     func body(content: Content) -> some View {
@@ -13,7 +13,7 @@ private struct GuideBottomInset: ViewModifier {
     }
 }
 
-private extension View {
+extension View {
     func guideBottomInset(extra: CGFloat = KXSpacing.xl) -> some View {
         modifier(GuideBottomInset(extra: extra))
     }
@@ -43,9 +43,11 @@ struct GuideHomeView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task(id: country) {
             await viewModel.load(country: country)
+            await viewModel.loadGuideOS()
         }
         .refreshable {
             await viewModel.load(country: country, force: true)
+            await viewModel.loadGuideOS(force: true)
         }
     }
 
@@ -82,9 +84,24 @@ struct GuideHomeView: View {
                             companies: viewModel.companyResults
                         )
                     } else {
-                        // Situation -> action path is the primary entry now;
-                        // categories are demoted below it.
-                        GuideJourneyGrid(journeys: home.journeys ?? [])
+                        GuideOSDashboardSection(
+                            data: viewModel.guideOS,
+                            isLoading: viewModel.isGuideOSLoading,
+                            message: viewModel.guideOSMessage,
+                            isGuest: currentUser.isGuest,
+                            onOpenPlan: { router.open(.guidePlan) },
+                            onOpenCalendar: { router.open(.guideCalendar) },
+                            onOpenProfile: { router.open(.guideProfile) },
+                            onOpenLife: { router.open(.guideLifePlanner) },
+                            onOpenApplications: { router.open(.guideApplications) },
+                            onOpenServices: { router.open(.guideServices) },
+                            onOpenProduct: { slug in router.open(.guideProduct(slug: slug)) },
+                            onCompleteTodo: { todo in Task { await viewModel.completeGuideTodo(todo) } }
+                        )
+                        // Situation -> action path remains the primary public
+                        // browse entry, but personal server-side plans now sit
+                        // above it so users know what to do today.
+                        GuideJourneyGrid(journeys: home.journeys ?? [], activePlan: viewModel.guideOS?.plan)
                         GuideCategoryGrid(categories: home.categories)
                         GuideResourceEntriesSection(entries: home.resourceEntries ?? [])
                         // 两个固定大门：会员权益内容 vs 付费商城——所有

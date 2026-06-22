@@ -1,3 +1,4 @@
+import AuthenticationServices
 import SwiftData
 import SwiftUI
 import UIKit
@@ -892,6 +893,10 @@ struct AccountSecuritySettingsView: View {
                 GoogleAccountSettingsView(currentUser: currentUser)
             }
             SettingsDivider()
+            SettingsRowLink(icon: "apple.logo", tint: .primary, title: settingsText(language, "Apple 账号", "Apple アカウント", "Apple account"), subtitle: settingsText(language, "绑定后可用 Apple 一键登录", "連携すると Apple でワンタップログインできます", "Link Apple for one-tap sign-in")) {
+                AppleAccountSettingsView(currentUser: currentUser)
+            }
+            SettingsDivider()
             SettingsRowLink(icon: "envelope.badge", tint: .teal, title: L("contactInfo", language), value: currentUser.email.isEmpty ? nil : currentUser.email, subtitle: L("contactSubtitle", language)) {
                 ContactSettingsView(user: currentUser)
             }
@@ -1040,6 +1045,151 @@ struct GoogleAccountSettingsView: View {
             return settingsText(language, "已取消 Google 授权。", "Google 認証をキャンセルしました。", "Google authorization was cancelled.")
         default:
             return fallback.isEmpty ? settingsText(language, "Google 绑定失败，请重试。", "Google 連携に失敗しました。もう一度お試しください。", "Google linking failed. Please try again.") : fallback
+        }
+    }
+}
+
+/// Bind / unbind a Sign in with Apple identity for the current Machi account.
+/// State is read live from `me()` (no SwiftData column needed) and refreshed
+/// after each action. Linking runs the native `SignInWithAppleButton`, extracts
+/// the identity token and posts it to `/api/auth/apple/link` — no session swap.
+struct AppleAccountSettingsView: View {
+    @Environment(\.appLanguage) private var language
+    @Environment(\.colorScheme) private var colorScheme
+    let currentUser: UserEntity
+
+    @State private var hasApple = false
+    @State private var canUnlink = false
+    @State private var isLoading = true
+    @State private var isWorking = false
+    @State private var message: String?
+    @State private var showUnlinkConfirm = false
+    @State private var appleNonce = ""
+
+    var body: some View {
+        SettingsFormPage(title: settingsText(language, "Apple 账号", "Apple アカウント", "Apple account")) {
+            VStack(alignment: .leading, spacing: 10) {
+                Label(hasApple ? settingsText(language, "已绑定 Apple", "Apple 連携済み", "Apple linked") : settingsText(language, "未绑定 Apple", "Apple 未連携", "Apple not linked"),
+                      systemImage: hasApple ? "checkmark.seal.fill" : "apple.logo")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(hasApple ? Color.green : Color.secondary)
+                Text(hasApple
+                     ? settingsText(language, "你可以使用 Apple 一键登录这个 Machi 账号。", "この Machi アカウントに Apple でログインできます。", "You can sign in to this Machi account with Apple.")
+                     : settingsText(language, "绑定后，下次可直接用 Apple 一键登录，无需输入密码。", "連携すると次回から Apple でログインでき、パスワード入力は不要です。", "After linking, you can sign in with Apple without entering a password."))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            if isLoading {
+                ProgressView().controlSize(.large)
+            } else if hasApple {
+                Button(role: .destructive) {
+                    showUnlinkConfirm = true
+                } label: {
+                    if isWorking { ProgressView() } else { Text(settingsText(language, "解绑 Apple", "Apple 連携を解除", "Unlink Apple")) }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .disabled(isWorking || !canUnlink)
+                if !canUnlink {
+                    Text(settingsText(language, "该账号通过 Apple 创建，请先绑定邮箱并设置登录密码，再解绑 Apple，以免无法再次登录。", "このアカウントは Apple で作成されています。ログインできなくならないよう、先にメール連携とパスワード設定を行ってください。", "This account was created with Apple. Add an email and password before unlinking so you can still sign in."))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                SignInWithAppleButton(.continue) { request in
+                    let nonce = AppleAuthService.randomNonce()
+                    appleNonce = nonce
+                    request.requestedScopes = [.fullName, .email]
+                    request.nonce = AppleAuthService.sha256(nonce)
+                } onCompletion: { result in
+                    switch result {
+                    case .success(let authorization):
+                        Task { await link(authorization) }
+                    case .failure(let error):
+                        let nsError = error as NSError
+                        let canceled = nsError.domain == ASAuthorizationError.errorDomain
+                            && nsError.code == ASAuthorizationError.Code.canceled.rawValue
+                        if !canceled {
+                            message = settingsText(language, "Apple 绑定失败，请重试。", "Apple 連携に失敗しました。もう一度お試しください。", "Apple linking failed. Please try again.")
+                        }
+                    }
+                }
+                .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+                .clipShape(Capsule())
+                .disabled(isWorking)
+                if isWorking { ProgressView() }
+            }
+
+            if let message {
+                Text(message).font(.subheadline).foregroundStyle(.secondary)
+            }
+        }
+        .task { await refresh() }
+        .confirmationDialog(settingsText(language, "解绑 Apple 账号？", "Apple 連携を解除しますか？", "Unlink Apple account?"), isPresented: $showUnlinkConfirm, titleVisibility: .visible) {
+            Button(settingsText(language, "解绑", "解除", "Unlink"), role: .destructive) { Task { await unlink() } }
+            Button(settingsText(language, "取消", "キャンセル", "Cancel"), role: .cancel) {}
+        } message: {
+            Text(settingsText(language, "解绑后将无法使用 Apple 一键登录，仍可用用户名 / 邮箱和密码登录。", "解除後は Apple ログインを利用できません。ユーザー名 / メールとパスワードでは引き続きログインできます。", "After unlinking, Apple sign-in will no longer work. You can still sign in with username/email and password."))
+        }
+    }
+
+    private func refresh() async {
+        do {
+            let me = try await KaiXAPIClient.shared.me()
+            hasApple = me.has_apple ?? false
+            canUnlink = me.can_unlink_apple ?? false
+        } catch {
+            message = error.kaixUserMessage
+        }
+        isLoading = false
+    }
+
+    private func link(_ authorization: ASAuthorization) async {
+        guard !isWorking else { return }
+        isWorking = true
+        message = nil
+        defer { isWorking = false }
+        do {
+            try await AppleAuthService.completeLink(authorization: authorization, rawNonce: appleNonce)
+            await refresh()
+            message = settingsText(language, "已绑定 Apple 账号。", "Apple アカウントを連携しました。", "Apple account linked.")
+        } catch let apiError as KaiXAPIError {
+            message = Self.linkErrorMessage(apiError.error.code, language: language, fallback: apiError.error.message)
+        } catch {
+            message = error.kaixUserMessage
+        }
+    }
+
+    private func unlink() async {
+        guard !isWorking else { return }
+        isWorking = true
+        message = nil
+        defer { isWorking = false }
+        do {
+            let me = try await KaiXAPIClient.shared.appleUnlink()
+            hasApple = me.has_apple ?? false
+            canUnlink = me.can_unlink_apple ?? false
+            message = settingsText(language, "已解绑 Apple 账号。", "Apple 連携を解除しました。", "Apple account unlinked.")
+        } catch let apiError as KaiXAPIError {
+            message = apiError.error.message
+        } catch {
+            message = error.kaixUserMessage
+        }
+    }
+
+    private static func linkErrorMessage(_ code: String, language: AppLanguage, fallback: String) -> String {
+        switch code {
+        case "apple_already_linked":
+            return settingsText(language, "该 Apple 账号已绑定到其他 Machi 账号。", "この Apple アカウントは別の Machi アカウントに連携されています。", "This Apple account is already linked to another Machi account.")
+        case "already_linked_other":
+            return settingsText(language, "当前账号已绑定了另一个 Apple 账号，请先解绑。", "現在のアカウントは別の Apple アカウントと連携済みです。先に解除してください。", "This account is already linked to another Apple account. Unlink it first.")
+        case "apple_token_invalid", "apple_verify_unavailable":
+            return settingsText(language, "Apple 凭证验证失败，请稍后重试。", "Apple 認証の検証に失敗しました。後でもう一度お試しください。", "Apple credential verification failed. Please try again later.")
+        default:
+            return fallback.isEmpty ? settingsText(language, "Apple 绑定失败，请重试。", "Apple 連携に失敗しました。もう一度お試しください。", "Apple linking failed. Please try again.") : fallback
         }
     }
 }

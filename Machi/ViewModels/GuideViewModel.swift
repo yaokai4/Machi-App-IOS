@@ -12,6 +12,9 @@ final class GuideViewModel: ObservableObject {
     @Published private(set) var schoolResults: [KaiXGuideSchoolDTO] = []
     @Published private(set) var companyResults: [KaiXGuideCompanyDTO] = []
     @Published private(set) var isSearching = false
+    @Published private(set) var guideOS: KaiXGuideActivePlanResponse?
+    @Published private(set) var isGuideOSLoading = false
+    @Published private(set) var guideOSMessage: String?
     @Published var searchText = ""
 
     var hasAnySearchResult: Bool {
@@ -45,6 +48,55 @@ final class GuideViewModel: ObservableObject {
             } else {
                 errorMessage = error.localizedDescription
             }
+        }
+    }
+
+    func loadGuideOS(force: Bool = false) async {
+        guard KaiXBackend.token != nil else {
+            guideOS = nil
+            guideOSMessage = nil
+            return
+        }
+        if !force, guideOS != nil { return }
+        isGuideOSLoading = true
+        guideOSMessage = nil
+        defer { isGuideOSLoading = false }
+        do {
+            guideOS = try await KaiXAPIClient.shared.guideActivePlan(language: currentGuideLanguage())
+        } catch {
+            guideOSMessage = "个人计划暂时无法同步，稍后下拉刷新即可恢复。"
+        }
+    }
+
+    @discardableResult
+    func completeGuideTodo(_ todo: KaiXGuideTodoDTO) async -> Bool {
+        guard KaiXBackend.token != nil else {
+            GuestGate.shared.requireLogin("登录后可以同步 Guide 计划、Todo 和提醒。")
+            return false
+        }
+        do {
+            _ = try await KaiXAPIClient.shared.completeGuideTodo(id: todo.id)
+            await loadGuideOS(force: true)
+            return true
+        } catch {
+            guideOSMessage = "任务完成状态没有保存成功，请稍后再试。"
+            return false
+        }
+    }
+
+    @discardableResult
+    func startPlan(journeyKey: String, planType: String = "guide") async -> Bool {
+        guard KaiXBackend.token != nil else {
+            GuestGate.shared.requireLogin("登录后可以把指南生成可执行计划。")
+            return false
+        }
+        do {
+            _ = try await KaiXAPIClient.shared.startGuidePlan(journeyKey: journeyKey, planType: planType)
+            await loadGuideOS(force: true)
+            return true
+        } catch {
+            guideOSMessage = "计划生成失败，请稍后再试。"
+            return false
         }
     }
 

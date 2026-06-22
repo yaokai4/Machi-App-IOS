@@ -139,4 +139,17 @@ enum AppleAuthService {
         _ = context
         return entity
     }
+
+    /// Bind Apple to the ALREADY-authenticated account (no session swap). Runs
+    /// from `Settings → Apple 账号`: the system controller returns a credential,
+    /// we forward its identity token + raw nonce to `/api/auth/apple/link`.
+    @MainActor
+    static func completeLink(authorization: ASAuthorization, rawNonce: String) async throws {
+        guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+              let tokenData = credential.identityToken,
+              let identityToken = String(data: tokenData, encoding: .utf8), !identityToken.isEmpty else {
+            throw KaiXAPIError(error: .init(code: "apple_no_token", message: "Apple 授权未返回凭证。"))
+        }
+        _ = try await KaiXAPIClient.shared.linkApple(identityToken: identityToken, nonce: rawNonce)
+    }
 }
