@@ -146,6 +146,25 @@ class GuideOSViewModel: ObservableObject {
         }
     }
 
+    @Published var studyTodos: [KaiXGuideTodoDTO] = []
+
+    /// Spec P0.2: generate recurring JLPT/study habits from target + exam date.
+    func generateStudyPlan(level: String, examDate: String, dailyMinutes: Int) async -> Bool {
+        guard requireLogin("登录后可以保存日语学习计划和提醒。") else { return false }
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            let resp = try await KaiXAPIClient.shared.generateStudyPlan(targetLevel: level, examDate: examDate, dailyMinutes: dailyMinutes)
+            studyTodos = resp.todos
+            message = "已生成 \(resp.todos.count) 个学习任务。"
+            await loadTodos(status: "open")
+            return true
+        } catch {
+            message = "生成失败，请确认考试日期。"
+            return false
+        }
+    }
+
     /// Set a server-side reminder for a todo (APNs is the primary channel).
     func setReminder(todoId: String, reminderAt: String) async -> Bool {
         guard requireLogin("登录后可以设置提醒。") else { return false }

@@ -1958,6 +1958,7 @@ struct KaiXGuideTodoDTO: Codable, Equatable, Identifiable, Hashable {
     let completedAt: String?
     let estimatedMinutes: Int
     let notes: String
+    let recurrence: String?
     let relatedArticleSlugs: [String]
     let relatedProductSlugs: [String]
     let relatedServiceSlugs: [String]
@@ -1966,6 +1967,15 @@ struct KaiXGuideTodoDTO: Codable, Equatable, Identifiable, Hashable {
 
     var isDone: Bool { status == "done" }
     var displayDate: String? { plannedDate ?? dueAt ?? reminderAt }
+    /// "daily" / "weekly" / "" — a recurring study habit vs a one-off task.
+    var recurrenceLabel: String? {
+        switch recurrence {
+        case "daily": return "每日"
+        case "weekly": return "每周"
+        case "monthly": return "每月"
+        default: return nil
+        }
+    }
 }
 
 struct KaiXGuidePlanDTO: Codable, Equatable, Identifiable, Hashable {
@@ -2083,6 +2093,37 @@ struct KaiXGuideActivePlanResponse: Codable {
     let openTodos: [KaiXGuideTodoDTO]
     let recommendedProducts: [KaiXGuideProductDTO]?
     let recommendedServices: [KaiXGuideProductDTO]?
+    // Identity-driven personalization (spec P0.1). Optional so older backends
+    // keep decoding.
+    let identityType: String?
+    let suggestedJourneys: [KaiXGuideSuggestedJourney]?
+    let defaultJourneyKey: String?
+    let recommendedNextActions: [KaiXGuideNextAction]?
+}
+
+struct KaiXGuideSuggestedJourney: Codable, Equatable, Identifiable, Hashable {
+    let key: String
+    let title: String
+    let subtitle: String
+    let icon: String
+    let color: String
+    var id: String { key }
+}
+
+struct KaiXGuideNextAction: Codable, Equatable, Identifiable, Hashable {
+    let kind: String
+    let title: String
+    let subtitle: String?
+    let todoId: String?
+    let todoType: String?
+    let journeyKey: String?
+    var id: String { "\(kind)-\(journeyKey ?? todoId ?? title)" }
+}
+
+struct KaiXGuideStudyPlanResponse: Codable {
+    let status: String
+    let plan: KaiXGuidePlanDTO?
+    let todos: [KaiXGuideTodoDTO]
 }
 
 struct KaiXGuideApplicationResponse: Codable {

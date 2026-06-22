@@ -1370,6 +1370,19 @@ final class KaiXAPIClient {
         return try decode(data)
     }
 
+    /// Spec P0.2: generate a JLPT/日语 study plan of recurring habit todos
+    /// (每日词汇 / 每周语法 / 周末模考) + registration & sprint milestones.
+    @discardableResult
+    func generateStudyPlan(targetLevel: String, examDate: String, dailyMinutes: Int) async throws -> KaiXGuideStudyPlanResponse {
+        struct Body: Encodable {
+            let targetLevel: String
+            let examDate: String
+            let dailyMinutes: Int
+        }
+        let data = try await request("POST", "/api/guide/study-plan", body: Body(targetLevel: targetLevel, examDate: examDate, dailyMinutes: dailyMinutes))
+        return try decode(data)
+    }
+
     @discardableResult
     func updateGuidePlan(id: String, title: String? = nil, subtitle: String? = nil, status: String? = nil, targetDate: String? = nil) async throws -> KaiXGuidePlanResponse {
         struct Body: Encodable {
