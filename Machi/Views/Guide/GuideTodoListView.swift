@@ -21,7 +21,11 @@ struct GuideOSTodoCard: View {
     let onComplete: () -> Void
     /// When provided, a bell button appears that opens `GuideReminderSheet`.
     var onSetReminder: ((_ reminderAt: String) async -> Bool)? = nil
+    /// When provided, a "改期" menu reschedules the todo's planned date (spec P2).
+    var onReschedule: ((_ plannedDate: String) -> Void)? = nil
     @State private var showReminder = false
+    @State private var showDatePicker = false
+    @State private var pickedDate = Date()
 
     private var tint: Color {
         switch todo.priority {
@@ -29,6 +33,10 @@ struct GuideOSTodoCard: View {
         case "low": return .secondary
         default: return KXColor.accent
         }
+    }
+
+    private func shifted(_ days: Int) -> String {
+        GuideOSDate.iso(Calendar.current.date(byAdding: .day, value: days, to: Date()) ?? Date())
     }
 
     var body: some View {
@@ -56,6 +64,20 @@ struct GuideOSTodoCard: View {
                             .padding(.vertical, 3)
                             .background(tint.opacity(0.12), in: Capsule())
                     }
+                    if let onReschedule, !todo.isDone {
+                        Menu {
+                            Button("今天") { onReschedule(shifted(0)) }
+                            Button("明天") { onReschedule(shifted(1)) }
+                            Button("+7 天") { onReschedule(shifted(7)) }
+                            Button("自定义日期…") { showDatePicker = true }
+                        } label: {
+                            Image(systemName: "calendar.badge.clock")
+                                .font(.caption)
+                                .foregroundStyle(tint)
+                                .frame(width: 32, height: 32)
+                        }
+                        .contentShape(Rectangle())
+                    }
                     if onSetReminder != nil {
                         Button { showReminder = true } label: {
                             Image(systemName: (todo.reminderAt ?? "").isEmpty ? "bell" : "bell.fill")
@@ -75,6 +97,13 @@ struct GuideOSTodoCard: View {
                 }
                 HStack(spacing: 6) {
                     GuideOSMiniBadge(text: todo.todoType.replacingOccurrences(of: "_", with: " "))
+                    if let r = todo.recurrenceLabel {
+                        Label(r + "循环", systemImage: "repeat")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(KXColor.accent)
+                            .padding(.horizontal, 7).padding(.vertical, 2)
+                            .background(KXColor.accent.opacity(0.12), in: Capsule())
+                    }
                     if todo.estimatedMinutes > 0 { GuideOSMiniBadge(text: "\(todo.estimatedMinutes) 分") }
                 }
             }
@@ -90,6 +119,24 @@ struct GuideOSTodoCard: View {
                 GuideReminderSheet(todo: todo, onSave: onSetReminder)
             }
         }
+        .sheet(isPresented: $showDatePicker) {
+            NavigationStack {
+                DatePicker("改到", selection: $pickedDate, displayedComponents: .date)
+                    .datePickerStyle(.graphical)
+                    .padding()
+                    .navigationTitle("改期")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("确定") { onReschedule?(GuideOSDate.iso(pickedDate)); showDatePicker = false }
+                        }
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("取消") { showDatePicker = false }
+                        }
+                    }
+            }
+            .presentationDetents([.medium, .large])
+        }
     }
 }
 
@@ -100,6 +147,29 @@ struct GuideTodoListView: View {
     @Environment(\.appLanguage) private var language
     @StateObject private var model = GuideTodoViewModel()
     @State private var filter = "open"
+
+    // Spec P2: bucket todos into 逾期 / 今天 / 未来 7 天 / 以后, urgent-first.
+    private var groupedTodos: [(String, [KaiXGuideTodoDTO], Bool)] {
+        if filter == "done" { return [(guideOSText(language, "已完成", "完了", "Done"), model.todos, false)] }
+        let today = GuideOSDate.today()
+        let week = GuideOSDate.today(offset: 7)
+        var overdue: [KaiXGuideTodoDTO] = [], todayList: [KaiXGuideTodoDTO] = []
+        var soon: [KaiXGuideTodoDTO] = [], later: [KaiXGuideTodoDTO] = []
+        for t in model.todos {
+            let when = String((t.displayDate ?? "").prefix(10))
+            if when.isEmpty { later.append(t) }
+            else if when < today { overdue.append(t) }
+            else if when == today { todayList.append(t) }
+            else if when <= week { soon.append(t) }
+            else { later.append(t) }
+        }
+        return [
+            (guideOSText(language, "逾期", "期限切れ", "Overdue"), overdue, true),
+            (guideOSText(language, "今天", "今日", "Today"), todayList, false),
+            (guideOSText(language, "未来 7 天", "今後 7 日", "Next 7 days"), soon, false),
+            (guideOSText(language, "以后 / 待安排", "以降 / 未定", "Later"), later, false),
+        ]
+    }
 
     var body: some View {
         ZStack {
@@ -115,12 +185,20 @@ struct GuideTodoListView: View {
                     if model.todos.isEmpty && !model.isLoading {
                         GuideOSEmptyMini(text: guideOSText(language, "这里会汇总你所有计划的待办。", "すべての計画のタスクがここに集まります。", "Every plan's todos collect here."))
                     } else {
-                        ForEach(model.todos) { todo in
-                            GuideOSTodoCard(
-                                todo: todo,
-                                onComplete: { Task { await model.complete(todo) } },
-                                onSetReminder: { at in await model.setReminder(todoId: todo.id, reminderAt: at) }
-                            )
+                        ForEach(groupedTodos, id: \.0) { section in
+                            if !section.1.isEmpty {
+                                Text(section.0)
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundStyle(section.2 ? Color.orange : Color.primary)
+                                ForEach(section.1) { todo in
+                                    GuideOSTodoCard(
+                                        todo: todo,
+                                        onComplete: { Task { await model.complete(todo) } },
+                                        onSetReminder: { at in await model.setReminder(todoId: todo.id, reminderAt: at) },
+                                        onReschedule: { date in Task { await model.reschedule(todo, to: date) } }
+                                    )
+                                }
+                            }
                         }
                     }
                 }

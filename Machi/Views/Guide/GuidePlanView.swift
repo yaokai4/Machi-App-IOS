@@ -80,7 +80,8 @@ struct GuidePlanView: View {
                             GuideOSTodoCard(
                                 todo: todo,
                                 onComplete: { Task { await model.complete(todo) } },
-                                onSetReminder: { at in await model.setReminder(todoId: todo.id, reminderAt: at) }
+                                onSetReminder: { at in await model.setReminder(todoId: todo.id, reminderAt: at) },
+                                onReschedule: { date in Task { await model.reschedule(todo, to: date) } }
                             )
                         }
                         NavigationLink {

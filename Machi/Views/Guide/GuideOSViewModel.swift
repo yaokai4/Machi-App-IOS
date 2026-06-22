@@ -1,6 +1,23 @@
 import Foundation
 import Combine
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
+
+/// Subtle haptics for Guide OS interactions (spec #2 polish).
+enum GuideHaptics {
+    static func success() {
+        #if canImport(UIKit)
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        #endif
+    }
+    static func tap() {
+        #if canImport(UIKit)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        #endif
+    }
+}
 
 func guideOSText(_ language: AppLanguage, _ zh: String, _ ja: String, _ en: String) -> String {
     KXListingCopy.pickText(language, zh, ja, en)
@@ -162,10 +179,26 @@ class GuideOSViewModel: ObservableObject {
         guard requireLogin() else { return }
         do {
             _ = try await KaiXAPIClient.shared.completeGuideTodo(id: todo.id)
-            todos.removeAll { $0.id == todo.id }
+            GuideHaptics.success()
+            withAnimation(.easeInOut(duration: 0.25)) {
+                todos.removeAll { $0.id == todo.id }
+            }
             await loadDashboard()
         } catch {
             message = "任务完成状态没有保存成功。"
+        }
+    }
+
+    /// Spec P2 planning depth: move a todo's planned date (今天/明天/+7天/自定义).
+    func reschedule(_ todo: KaiXGuideTodoDTO, to date: String) async {
+        guard requireLogin() else { return }
+        do {
+            _ = try await KaiXAPIClient.shared.updateGuideTodo(id: todo.id, payload: .init(plannedDate: date))
+            message = "已改期。"
+            await loadTodos()
+            await loadDashboard()
+        } catch {
+            message = "改期失败，请稍后重试。"
         }
     }
 
