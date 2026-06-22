@@ -81,9 +81,18 @@ class GuideOSViewModel: ObservableObject {
         message = nil
         defer { isLoading = false }
         do {
-            dashboard = try await KaiXAPIClient.shared.guideActivePlan(language: currentGuideOSLanguage())
+            let fresh = try await KaiXAPIClient.shared.guideActivePlan(language: currentGuideOSLanguage())
+            dashboard = fresh
+            GuideOSCache.save(fresh, key: "dashboard")
         } catch {
-            message = "Guide 计划暂时无法同步，请稍后下拉刷新。"
+            // Offline / transient failure: fall back to the last cached plan so
+            // the home isn't blank. Server stays the source of truth on reconnect.
+            if dashboard == nil, let cached = GuideOSCache.load(KaiXGuideActivePlanResponse.self, key: "dashboard") {
+                dashboard = cached
+                message = "离线模式：显示上次同步的计划，联网后自动更新。"
+            } else {
+                message = "Guide 计划暂时无法同步，请稍后下拉刷新。"
+            }
         }
     }
 
@@ -93,9 +102,17 @@ class GuideOSViewModel: ObservableObject {
         message = nil
         defer { isLoading = false }
         do {
-            todos = try await KaiXAPIClient.shared.guideTodos(status: status, type: type, limit: limit).items
+            let items = try await KaiXAPIClient.shared.guideTodos(status: status, type: type, limit: limit).items
+            todos = items
+            // Only the default open-todo view is cached (the offline home set).
+            if status == "open" && type == nil { GuideOSCache.save(items, key: "todos-open") }
         } catch {
-            message = "任务列表加载失败，请稍后再试。"
+            if todos.isEmpty, status == "open", type == nil,
+               let cached = GuideOSCache.load([KaiXGuideTodoDTO].self, key: "todos-open") {
+                todos = cached
+            } else {
+                message = "任务列表加载失败，请稍后再试。"
+            }
         }
     }
 
@@ -105,9 +122,15 @@ class GuideOSViewModel: ObservableObject {
         message = nil
         defer { isLoading = false }
         do {
-            calendarItems = try await KaiXAPIClient.shared.guideCalendar(from: GuideOSDate.today(), to: GuideOSDate.today(offset: days)).items
+            let items = try await KaiXAPIClient.shared.guideCalendar(from: GuideOSDate.today(), to: GuideOSDate.today(offset: days)).items
+            calendarItems = items
+            GuideOSCache.save(items, key: "calendar")
         } catch {
-            message = "日历暂时无法同步，请稍后再试。"
+            if calendarItems.isEmpty, let cached = GuideOSCache.load([KaiXGuideCalendarItemDTO].self, key: "calendar") {
+                calendarItems = cached
+            } else {
+                message = "日历暂时无法同步，请稍后再试。"
+            }
         }
     }
 
