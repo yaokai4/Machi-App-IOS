@@ -1410,11 +1410,24 @@ final class KaiXAPIClient {
         return try decode(data)
     }
 
+    /// Set/clear a todo's reminder time; server-side reminderAt is the source of
+    /// truth (APNs is the primary channel, local notifications a supplement).
+    @discardableResult
+    func setGuideTodoReminder(id: String, reminderAt: String) async throws -> KaiXGuideTodoResponse {
+        let data = try await request("POST", "/api/guide/todos/\(id.encodedPathSegment)/reminder", body: ["reminderAt": reminderAt])
+        return try decode(data)
+    }
+
     func guideCalendar(from: String? = nil, to: String? = nil, limit: Int = 200) async throws -> KaiXGuideCalendarResponse {
         var query: [URLQueryItem] = [URLQueryItem(name: "limit", value: "\(limit)")]
         if let from, !from.isEmpty { query.append(URLQueryItem(name: "from", value: from)) }
         if let to, !to.isEmpty { query.append(URLQueryItem(name: "to", value: to)) }
         let data = try await request("GET", "/api/guide/calendar", queryItems: query)
+        return try decode(data)
+    }
+
+    func guideApplications() async throws -> KaiXGuideApplicationsResponse {
+        let data = try await request("GET", "/api/guide/applications")
         return try decode(data)
     }
 
@@ -1425,9 +1438,34 @@ final class KaiXAPIClient {
     }
 
     @discardableResult
+    func updateGuideApplication(id: String, payload: KaiXGuideApplicationPayload) async throws -> KaiXGuideApplicationResponse {
+        let data = try await request("PATCH", "/api/guide/applications/\(id.encodedPathSegment)", body: payload)
+        return try decode(data)
+    }
+
+    func deleteGuideApplication(id: String) async throws {
+        _ = try await request("DELETE", "/api/guide/applications/\(id.encodedPathSegment)")
+    }
+
+    func guideLifeItems() async throws -> KaiXGuideLifeItemsResponse {
+        let data = try await request("GET", "/api/guide/life-items")
+        return try decode(data)
+    }
+
+    @discardableResult
     func createGuideLifeItem(_ payload: KaiXGuideLifeItemPayload) async throws -> KaiXGuideLifeItemResponse {
         let data = try await request("POST", "/api/guide/life-items", body: payload)
         return try decode(data)
+    }
+
+    @discardableResult
+    func updateGuideLifeItem(id: String, payload: KaiXGuideLifeItemPayload) async throws -> KaiXGuideLifeItemResponse {
+        let data = try await request("PATCH", "/api/guide/life-items/\(id.encodedPathSegment)", body: payload)
+        return try decode(data)
+    }
+
+    func deleteGuideLifeItem(id: String) async throws {
+        _ = try await request("DELETE", "/api/guide/life-items/\(id.encodedPathSegment)")
     }
 
     func guideSavedItems() async throws -> KaiXGuideSavedResponse {

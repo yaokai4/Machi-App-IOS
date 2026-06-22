@@ -2090,9 +2090,21 @@ struct KaiXGuideApplicationResponse: Codable {
     let application: KaiXGuideApplicationDTO?
 }
 
+struct KaiXGuideApplicationsResponse: Codable {
+    let status: String
+    let items: [KaiXGuideApplicationDTO]
+    let total: Int
+}
+
 struct KaiXGuideLifeItemResponse: Codable {
     let status: String
     let item: KaiXGuideLifeItemDTO?
+}
+
+struct KaiXGuideLifeItemsResponse: Codable {
+    let status: String
+    let items: [KaiXGuideLifeItemDTO]
+    let total: Int
 }
 
 struct KaiXGuideProfileUpdatePayload: Encodable {

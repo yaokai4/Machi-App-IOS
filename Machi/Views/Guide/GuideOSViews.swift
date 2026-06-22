@@ -43,6 +43,8 @@ final class GuideOSViewModel: ObservableObject {
     @Published var dashboard: KaiXGuideActivePlanResponse?
     @Published var todos: [KaiXGuideTodoDTO] = []
     @Published var calendarItems: [KaiXGuideCalendarItemDTO] = []
+    @Published var applications: [KaiXGuideApplicationDTO] = []
+    @Published var lifeItems: [KaiXGuideLifeItemDTO] = []
     @Published var profile: KaiXGuideProfileDTO?
     @Published var isLoading = false
     @Published var isSaving = false
@@ -129,6 +131,15 @@ final class GuideOSViewModel: ObservableObject {
         }
     }
 
+    func loadApplications() async {
+        guard isLoggedIn else { applications = []; return }
+        do {
+            applications = try await KaiXAPIClient.shared.guideApplications().items
+        } catch {
+            // A list failure shouldn't blank the whole planner; keep prior state.
+        }
+    }
+
     func createApplication(_ payload: KaiXGuideApplicationPayload) async -> Bool {
         guard requireLogin("登录后可以保存出愿、ES、面试和结果日期。") else { return false }
         isSaving = true
@@ -136,11 +147,33 @@ final class GuideOSViewModel: ObservableObject {
         do {
             _ = try await KaiXAPIClient.shared.createGuideApplication(payload)
             message = "已加入申请/面试计划。"
+            await loadApplications()
             await loadTodos(status: "open")
             return true
         } catch {
             message = "添加失败，请确认名称和日期。"
             return false
+        }
+    }
+
+    func deleteApplication(_ app: KaiXGuideApplicationDTO) async {
+        guard requireLogin() else { return }
+        do {
+            try await KaiXAPIClient.shared.deleteGuideApplication(id: app.id)
+            applications.removeAll { $0.id == app.id }
+            message = "已删除该申请及其待办。"
+            await loadTodos(status: "open")
+        } catch {
+            message = "删除失败，请稍后重试。"
+        }
+    }
+
+    func loadLifeItems() async {
+        guard isLoggedIn else { lifeItems = []; return }
+        do {
+            lifeItems = try await KaiXAPIClient.shared.guideLifeItems().items
+        } catch {
+            // Keep prior state on a transient list failure.
         }
     }
 
@@ -151,11 +184,24 @@ final class GuideOSViewModel: ObservableObject {
         do {
             _ = try await KaiXAPIClient.shared.createGuideLifeItem(payload)
             message = "已加入生活缴费提醒。"
+            await loadLifeItems()
             await loadTodos(type: "life_payment")
             return true
         } catch {
             message = "添加失败，请确认标题和截止日。"
             return false
+        }
+    }
+
+    func deleteLifeItem(_ item: KaiXGuideLifeItemDTO) async {
+        guard requireLogin() else { return }
+        do {
+            try await KaiXAPIClient.shared.deleteGuideLifeItem(id: item.id)
+            lifeItems.removeAll { $0.id == item.id }
+            message = "已删除该生活事项及其待办。"
+            await loadTodos(type: "life_payment")
+        } catch {
+            message = "删除失败，请稍后重试。"
         }
     }
 }
@@ -473,9 +519,21 @@ struct GuideLifePlannerView: View {
                     }
                 }
             }
+        } savedSection: {
+            if !model.lifeItems.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(guideOSText(language, "我的生活事项", "マイ生活項目", "My life items"))
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.primary)
+                    ForEach(model.lifeItems) { item in
+                        GuideOSLifeItemRow(item: item) { Task { await model.deleteLifeItem(item) } }
+                    }
+                }
+            }
         }
         .task {
             if !model.requireLogin() { return }
+            await model.loadLifeItems()
             await model.loadTodos(type: "life_payment")
         }
     }
@@ -532,20 +590,33 @@ struct GuideApplicationPlannerView: View {
                     }
                 }
             }
+        } savedSection: {
+            if !model.applications.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(guideOSText(language, "我的申请", "マイ申請", "My applications"))
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.primary)
+                    ForEach(model.applications) { app in
+                        GuideOSApplicationRow(app: app) { Task { await model.deleteApplication(app) } }
+                    }
+                }
+            }
         }
         .task {
             if !model.requireLogin() { return }
+            await model.loadApplications()
             await model.loadTodos(status: "open")
         }
     }
 }
 
-private struct GuidePlannerFormShell<Fields: View>: View {
+private struct GuidePlannerFormShell<Fields: View, Saved: View>: View {
     @Environment(\.appLanguage) private var language
     let title: String
     let subtitle: String
     @ObservedObject var model: GuideOSViewModel
     @ViewBuilder let fields: () -> Fields
+    @ViewBuilder let savedSection: () -> Saved
 
     var body: some View {
         ZStack {
@@ -557,6 +628,7 @@ private struct GuidePlannerFormShell<Fields: View>: View {
                         .padding(15)
                         .kxGlassSurface(radius: 22)
                     if let message = model.message { GuideOSNotice(message: message) }
+                    savedSection()
                     if model.todos.isEmpty && !model.isLoading {
                         GuideOSEmptyMini(text: guideOSText(language, "添加后会自动出现在我的计划和日历里。", "追加するとマイ計画とカレンダーに表示されます。", "New items will appear in My plan and Calendar."))
                     } else {
@@ -867,6 +939,106 @@ private struct GuideOSTextField: View {
             .padding(.horizontal, 12)
             .frame(height: 44)
             .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+    }
+}
+
+private struct GuideOSDeleteCardChip: View {
+    let text: String
+    var body: some View {
+        Text(text)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(KXColor.softBackground, in: Capsule())
+    }
+}
+
+/// A saved application row with its key dates + a delete button. Deleting the
+/// application also clears its generated reverse-countdown todos + reminders
+/// server-side. A confirmation dialog guards against accidental loss.
+private struct GuideOSApplicationRow: View {
+    let app: KaiXGuideApplicationDTO
+    let onDelete: () -> Void
+    @State private var confirming = false
+
+    private var isSchool: Bool { app.type == "school" }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: isSchool ? "graduationcap.fill" : "briefcase.fill")
+                .font(.subheadline)
+                .foregroundStyle(KXColor.accent)
+                .frame(width: 30, height: 30)
+                .background(KXColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            VStack(alignment: .leading, spacing: 5) {
+                Text(app.name).font(.subheadline.weight(.bold)).foregroundStyle(.primary).lineLimit(1)
+                let sub = isSchool ? app.department : app.position
+                if !sub.isEmpty {
+                    Text(sub).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                }
+                HStack(spacing: 6) {
+                    if let d = app.deadline, !d.isEmpty { GuideOSDeleteCardChip(text: (isSchool ? "出愿 " : "ES ") + GuideOSDate.short(d)) }
+                    if let i = app.interviewAt, !i.isEmpty { GuideOSDeleteCardChip(text: "面试 " + GuideOSDate.short(i)) }
+                    if let r = app.resultAt, !r.isEmpty { GuideOSDeleteCardChip(text: "结果 " + GuideOSDate.short(r)) }
+                }
+            }
+            Spacer(minLength: 0)
+            Button(role: .destructive) { confirming = true } label: {
+                Image(systemName: "trash").font(.subheadline).foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(12)
+        .kxGlassSurface(radius: 16)
+        .confirmationDialog("删除该申请？", isPresented: $confirming, titleVisibility: .visible) {
+            Button("删除（含倒排待办）", role: .destructive, action: onDelete)
+            Button("取消", role: .cancel) {}
+        }
+    }
+}
+
+/// A saved life item row with amount + due day and a delete button. Deleting
+/// also removes its generated payment todos + reminders server-side.
+private struct GuideOSLifeItemRow: View {
+    let item: KaiXGuideLifeItemDTO
+    let onDelete: () -> Void
+    @State private var confirming = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "yensign.circle.fill")
+                .font(.subheadline)
+                .foregroundStyle(KXColor.accent)
+                .frame(width: 30, height: 30)
+                .background(KXColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            VStack(alignment: .leading, spacing: 5) {
+                Text(item.title).font(.subheadline.weight(.bold)).foregroundStyle(.primary).lineLimit(1)
+                if !item.provider.isEmpty {
+                    Text(item.provider).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                }
+                HStack(spacing: 6) {
+                    if item.amount > 0 { GuideOSDeleteCardChip(text: "\(item.currency.isEmpty ? "JPY" : item.currency) \(item.amount)") }
+                    if item.dueDay > 0 {
+                        GuideOSDeleteCardChip(text: "每月 \(item.dueDay) 号")
+                    } else if let d = item.dueAt, !d.isEmpty {
+                        GuideOSDeleteCardChip(text: GuideOSDate.short(d))
+                    }
+                    if !item.paymentMethod.isEmpty { GuideOSDeleteCardChip(text: item.paymentMethod) }
+                }
+            }
+            Spacer(minLength: 0)
+            Button(role: .destructive) { confirming = true } label: {
+                Image(systemName: "trash").font(.subheadline).foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(12)
+        .kxGlassSurface(radius: 16)
+        .confirmationDialog("删除该生活事项？", isPresented: $confirming, titleVisibility: .visible) {
+            Button("删除（含待办）", role: .destructive, action: onDelete)
+            Button("取消", role: .cancel) {}
+        }
     }
 }
 
