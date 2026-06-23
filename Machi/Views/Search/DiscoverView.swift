@@ -759,12 +759,12 @@ private struct DiscoverCategoryGrid: View {
         let core = Array(primaryCategories.prefix(4))
         return VStack(alignment: .leading, spacing: KXSpacing.sm) {
             HStack(alignment: .center) {
-                DiscoverSectionTitle(title: KXListingCopy.pickText(language, "城市功能入口", "街の機能", "City tools"), trailing: nil)
+                DiscoverSectionTitle(title: KXListingCopy.pickText(language, "生活功能入口", "生活機能", "Life features"), trailing: nil)
                 Spacer(minLength: 10)
                 Button(action: onMore) {
                     HStack(spacing: 4) {
                         Image(systemName: "square.grid.2x2")
-                        Text(KXListingCopy.pickText(language, "更多频道", "もっと見る", "More"))
+                        Text(KXListingCopy.pickText(language, "更多功能", "もっと", "More"))
                     }
                     .font(.caption.weight(.bold))
                     .foregroundStyle(KXColor.accent)
