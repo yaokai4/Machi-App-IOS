@@ -1293,18 +1293,18 @@ private struct DiscoverSegmentedTabs: View {
 // MARK: - 热榜 trend board (server-ranked topics)
 
 private enum HotBoardScope: String, CaseIterable, Identifiable {
-    case metro, national
+    case prefecture, national
     var id: String { rawValue }
-    /// Region-aware labels: 都市圈 shows the real metro name (关东圈/关西圈…),
+    /// Region-aware labels: 都道府県 shows the current prefecture (千叶县/东京都…),
     /// 全国 shows the current country name (日本…). Falls back to generic copy
     /// when the region is unknown.
     func label(_ region: KaiXRegionDirectory.Region?, _ language: AppLanguage) -> String {
         switch self {
-        case .metro:
-            if let region, let metro = KaiXRegionDirectory.localizedMetroName(for: region, language: language) {
-                return metro
+        case .prefecture:
+            if let region, !region.provinceName.isEmpty {
+                return region.provinceName
             }
-            return language == .ja ? "都市圏" : language == .en ? "Metro" : "都市圈"
+            return language == .ja ? "都道府県" : language == .en ? "Prefecture" : "都道府县"
         case .national:
             if let region {
                 return KaiXRegionDirectory.localizedCountryName(
@@ -1325,10 +1325,10 @@ private struct HotBoardSection: View {
     let language: AppLanguage
     let onOpenTopic: (String) -> Void
 
-    // Default to the metro circle: a single city often has too little to rank,
-    // so the 都市圈 view is the useful default. Time window is fixed at 7 days
-    // (the 2h/24h/3d toggles added noise without value).
-    @State private var scope: HotBoardScope = .metro
+    // Default to the prefecture (都道府県) board: ranks within the user's
+    // prefecture (e.g. 千叶县), with a 日本 (national) toggle. Time window is
+    // fixed at 7 days (the 2h/24h/3d toggles added noise without value).
+    @State private var scope: HotBoardScope = .prefecture
     private let window = "7d"
     @State private var items: [KaiXDiscoverHotItemDTO] = []
     @State private var isLoading = false
@@ -1520,8 +1520,14 @@ private struct HappeningSection: View {
     private var pollKey: String { region?.regionCode ?? "all" }
 
     private var regionTitle: String {
-        region.map { "\((KaiXRegionDirectory.localizedMetroName(for: $0, language: language) ?? $0.cityName))\(language == .ja ? "の最新" : language == .en ? " · Live" : "正在发生")" }
-            ?? (language == .ja ? "いま起きていること" : language == .en ? "Happening now" : "正在发生")
+        // The tab is already labelled 正在发生, so don't repeat it here (and don't
+        // use the 关东圈 metro name): show the prefecture with a neutral "最新".
+        guard let region else {
+            return language == .ja ? "いま起きていること" : language == .en ? "Happening now" : "正在发生"
+        }
+        let base = region.provinceName.isEmpty ? region.cityName : region.provinceName
+        let suffix = language == .ja ? "の最新" : language == .en ? " · Live" : " · 最新"
+        return base + suffix
     }
 
     var body: some View {
