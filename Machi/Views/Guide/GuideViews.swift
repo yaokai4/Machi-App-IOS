@@ -98,16 +98,11 @@ struct GuideHomeView: View {
                             onOpenProduct: { slug in router.open(.guideProduct(slug: slug)) },
                             onCompleteTodo: { todo in Task { await viewModel.completeGuideTodo(todo) } }
                         )
-                        // Situation -> action path remains the primary public
-                        // browse entry, but personal server-side plans now sit
-                        // above it so users know what to do today.
-                        GuideJourneyGrid(journeys: home.journeys ?? [], activePlan: viewModel.guideOS?.plan)
                         GuideCategoryGrid(categories: home.categories)
+                        // Action paths are now templates that generate Todo /
+                        // calendar plans, not the primary browsing taxonomy.
+                        GuideJourneyGrid(journeys: home.journeys ?? [], activePlan: viewModel.guideOS?.plan, suggestedKeys: viewModel.guideOS?.suggestedJourneys?.map(\.key) ?? [])
                         GuideResourceEntriesSection(entries: home.resourceEntries ?? [])
-                        // 两个固定大门：会员权益内容 vs 付费商城——所有
-                        // 资料/服务都归到这两处，首页其余区块只做发现。
-                        GuideDualEntrySection()
-                        GuideGoalsSection(goals: home.goals?.title ?? guideText(language, "你现在想做什么？", "いま何をしたいですか？", "What do you want to do now?"), entries: home.goalEntries)
                         // Removed the featured / per-zone spotlight / schools /
                         // products / companies / latest blocks below: they were
                         // duplicate routes into content the journeys + categories

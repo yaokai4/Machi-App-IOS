@@ -68,8 +68,18 @@ struct GuideJourneyGrid: View {
 
     let journeys: [KaiXGuideJourneyDTO]
     var activePlan: KaiXGuidePlanDTO? = nil
+    /// Identity-suggested journey keys (from /plans/active); reorders the grid so
+    /// the most relevant paths lead. Empty = keep server order.
+    var suggestedKeys: [String] = []
 
     private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+
+    private var orderedJourneys: [KaiXGuideJourneyDTO] {
+        guard !suggestedKeys.isEmpty else { return journeys }
+        return journeys.sorted {
+            (suggestedKeys.firstIndex(of: $0.key) ?? 99) < (suggestedKeys.firstIndex(of: $1.key) ?? 99)
+        }
+    }
 
     var body: some View {
         if !journeys.isEmpty {
@@ -84,7 +94,7 @@ struct GuideJourneyGrid: View {
             .padding(.top, 2)
 
             LazyVGrid(columns: columns, spacing: 10) {
-                ForEach(journeys) { journey in
+                ForEach(orderedJourneys) { journey in
                     GuideJourneyCard(
                         journey: journey,
                         doneCount: activePlan?.sourceJourneyKey == journey.key ? (activePlan?.todoDone ?? 0) : 0,
@@ -214,6 +224,38 @@ final class GuideJourneyDetailViewModel: ObservableObject {
         }
     }
 
+    func schedule(step: KaiXGuideJourneyStepDTO, journeyKey: String, date: String) async {
+        guard KaiXBackend.token != nil else { return }
+        let previous = progress[step.stepKey]
+        let status = previous?.status ?? "in_progress"
+        progress[step.stepKey] = KaiXGuideStepProgressState(
+            status: status,
+            completedAt: previous?.completedAt,
+            plannedDate: date,
+            dueAt: date,
+            priority: previous?.priority,
+            notifyEnabled: previous?.notifyEnabled,
+            calendarNote: previous?.calendarNote
+        )
+        do {
+            _ = try await KaiXAPIClient.shared.updateGuideProgress(
+                journeyKey: journeyKey,
+                stepKey: step.stepKey,
+                status: status,
+                plannedDate: date,
+                dueAt: date
+            )
+            syncMessage = "已安排到 Guide 日历。"
+        } catch {
+            if let previous {
+                progress[step.stepKey] = previous
+            } else {
+                progress.removeValue(forKey: step.stepKey)
+            }
+            syncMessage = "安排日期失败，请稍后再试。"
+        }
+    }
+
     @discardableResult
     func startPlan(journeyKey: String, planType: String) async -> Bool {
         guard KaiXBackend.token != nil else {
@@ -321,6 +363,7 @@ struct GuideJourneyDetailView: View {
                             index: index + 1,
                             total: detail.steps.count,
                             isDone: model.isDone(stepKey: step.stepKey),
+                            scheduledDate: model.progress[step.stepKey]?.plannedDate ?? model.progress[step.stepKey]?.dueAt,
                             tint: guideHexColor(detail.journey.color),
                             language: language,
                             onToggle: {
@@ -328,6 +371,13 @@ struct GuideJourneyDetailView: View {
                                     GuestGate.shared.requireLogin("登录后可以同步 Guide 进度、Todo 和提醒。")
                                 } else {
                                     Task { await model.toggle(step: step, journeyKey: journeyKey) }
+                                }
+                            },
+                            onSchedule: { date in
+                                if KaiXBackend.token == nil {
+                                    GuestGate.shared.requireLogin("登录后可以把步骤安排到 Guide 日历。")
+                                } else {
+                                    Task { await model.schedule(step: step, journeyKey: journeyKey, date: date) }
                                 }
                             },
                             onOpenArticle: { router.open(.guideArticle(slug: $0)) },
@@ -412,9 +462,11 @@ private struct GuideJourneyStepRow: View {
     let index: Int
     var total: Int = 0
     let isDone: Bool
+    let scheduledDate: String?
     var tint: Color = KXColor.accent
     let language: AppLanguage
     let onToggle: () -> Void
+    let onSchedule: (String) -> Void
     let onOpenArticle: (String) -> Void
     let onOpenProduct: (String) -> Void
     let onOpenJourney: (String) -> Void
@@ -443,7 +495,10 @@ private struct GuideJourneyStepRow: View {
                             GuideJourneyTag(text: journeyText(language, "可选", "任意", "Optional"))
                         }
                         if step.estimatedMinutes > 0 {
-                            GuideJourneyTag(text: journeyText(language, "约 \(step.estimatedMinutes) 分钟", "約 \(step.estimatedMinutes) 分", "~\(step.estimatedMinutes) min"))
+                            GuideJourneyTag(text: journeyText(language, "建议预留 \(min(step.estimatedMinutes, 30)) 分", "\(min(step.estimatedMinutes, 30)) 分を目安", "Plan \(min(step.estimatedMinutes, 30)) min"))
+                        }
+                        if let scheduledDate, !scheduledDate.isEmpty {
+                            GuideJourneyTag(text: journeyText(language, "已安排 \(String(scheduledDate.prefix(10)))", "\(String(scheduledDate.prefix(10))) 予定", "Scheduled \(String(scheduledDate.prefix(10)))"), tint: tint)
                         }
                         if !step.deadlineHint.isEmpty {
                             GuideJourneyTag(text: step.deadlineHint, tint: .orange)
@@ -510,6 +565,26 @@ private struct GuideJourneyStepRow: View {
                 }
             }
 
+            if !isDone {
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(journeyText(language, "安排到日历", "カレンダーに入れる", "Schedule"))
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 7) {
+                        GuideScheduleChip(title: journeyText(language, "今天", "今日", "Today")) {
+                            onSchedule(guideISODate(daysFromToday: 0))
+                        }
+                        GuideScheduleChip(title: journeyText(language, "明天", "明日", "Tomorrow")) {
+                            onSchedule(guideISODate(daysFromToday: 1))
+                        }
+                        GuideScheduleChip(title: "+7") {
+                            onSchedule(guideISODate(daysFromToday: 7))
+                        }
+                    }
+                }
+                .padding(.top, 2)
+            }
+
             if step.actionType == "journey", !step.actionTarget.isEmpty {
                 Button { onOpenJourney(step.actionTarget) } label: {
                     HStack(spacing: 6) {
@@ -538,6 +613,34 @@ private struct GuideJourneyStepRow: View {
                 .frame(width: 3)
                 .padding(.vertical, 14)
         }
+    }
+}
+
+private func guideISODate(daysFromToday days: Int) -> String {
+    let date = Calendar.current.date(byAdding: .day, value: days, to: Date()) ?? Date()
+    let formatter = DateFormatter()
+    formatter.calendar = Calendar(identifier: .gregorian)
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd"
+    return formatter.string(from: date)
+}
+
+private struct GuideScheduleChip: View {
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.caption2.weight(.black))
+                .foregroundStyle(KXColor.accent)
+                .frame(minWidth: 48)
+                .frame(height: 28)
+                .background(KXColor.accentSoft, in: Capsule())
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .contentShape(Rectangle())
     }
 }
 
