@@ -21,10 +21,10 @@ struct GuideOSDashboardSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             GuideOSHeaderRow(
-                title: guideOSText(language, "今日 Guide OS", "今日の Guide OS", "Guide OS today"),
+                title: guideOSText(language, "今日计划", "今日の計画", "Today"),
                 subtitle: isGuest
-                    ? guideOSText(language, "登录后把指南变成计划、Todo、日历和服务记录", "ログインするとガイドを計画・Todo・カレンダーにできます", "Log in to turn guides into plans, todos, and calendar")
-                    : guideOSText(language, "把日本生活、升学、就职和日语计划推进到下一步", "生活・進学・就職・日本語を次の一歩へ", "Move life, study, career, and Japanese forward")
+                    ? guideOSText(language, "登录后同步 Todo、日历和截止日", "ログインするとTodo・カレンダー・期限を同期できます", "Log in to sync todos, calendar, and deadlines")
+                    : guideOSText(language, "这里放今天要做的事，主题和路径在下方继续浏览", "今日やることをここに表示します", "Your actual todos and deadlines live here")
             )
 
             if let message, !message.isEmpty {
@@ -35,29 +35,23 @@ struct GuideOSDashboardSection: View {
 
             if let todos = data?.todayTodos, !todos.isEmpty {
                 GuideOSTodoStrip(title: guideOSText(language, "今天要做", "今日やること", "Today"), todos: todos, onComplete: onCompleteTodo)
-            } else if !isGuest {
-                GuideOSEmptyMini(text: guideOSText(language, "今天没有到期任务。可以从路径生成计划，或添加生活/申请截止日。", "今日の期限タスクはありません。パスから計画を作成するか、生活/申請期限を追加できます。", "No due tasks today. Create a plan or add life/application deadlines."))
             }
 
             if let upcoming = data?.upcomingTodos, !upcoming.isEmpty {
                 GuideOSTodoStrip(title: guideOSText(language, "未来 7 天", "今後 7 日", "Next 7 days"), todos: Array(upcoming.prefix(6)), onComplete: onCompleteTodo)
             }
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                GuideOSActionTile(title: guideOSText(language, "我的计划", "マイ計画", "My plan"), icon: "list.bullet.clipboard.fill", tint: KXColor.accent, action: onOpenPlan)
-                GuideOSActionTile(title: guideOSText(language, "日历", "カレンダー", "Calendar"), icon: "calendar", tint: .indigo, action: onOpenCalendar)
-                GuideOSActionTile(title: guideOSText(language, "身份路径", "属性ルート", "Profile"), icon: "person.crop.circle.badge.checkmark", tint: .teal, action: onOpenProfile)
-                GuideOSActionTile(title: guideOSText(language, "生活缴费", "生活支払い", "Life bills"), icon: "yensign.circle.fill", tint: .orange, action: onOpenLife)
-                GuideOSActionTile(title: guideOSText(language, "出愿 / ES", "出願 / ES", "Applications"), icon: "doc.text.magnifyingglass", tint: .pink, action: onOpenApplications)
-                GuideOSActionTile(title: guideOSText(language, "资料服务", "資料・サービス", "Services"), icon: "bag.fill", tint: .purple, action: onOpenServices)
-            }
+            GuideOSQuickRow(items: [
+                .init(title: guideOSText(language, "计划", "計画", "Plan"), icon: "list.bullet.clipboard.fill", action: onOpenPlan),
+                .init(title: guideOSText(language, "日历", "カレンダー", "Calendar"), icon: "calendar", action: onOpenCalendar),
+                .init(title: guideOSText(language, "身份", "属性", "Profile"), icon: "person.crop.circle.badge.checkmark", action: onOpenProfile)
+            ])
+            GuideOSQuickRow(items: [
+                .init(title: guideOSText(language, "生活", "生活", "Life"), icon: "yensign.circle.fill", action: onOpenLife),
+                .init(title: guideOSText(language, "出愿/ES", "出願/ES", "Apps"), icon: "doc.text.magnifyingglass", action: onOpenApplications),
+                .init(title: guideOSText(language, "资料", "資料", "Resources"), icon: "bag.fill", action: onOpenServices)
+            ])
 
-            GuideOSRecommendationStrip(
-                products: data?.recommendedProducts ?? [],
-                services: data?.recommendedServices ?? [],
-                onOpenProduct: onOpenProduct,
-                onOpenServices: onOpenServices
-            )
         }
         .padding(15)
         .kxGlassSurface(radius: 24, elevated: true)
@@ -156,19 +150,24 @@ struct GuideOSQuickRow: View {
     let items: [Item]
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             ForEach(items) { item in
                 Button(action: item.action) {
-                    Label(item.title, systemImage: item.icon)
-                        .font(.caption.weight(.bold))
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 40)
+                    VStack(spacing: 7) {
+                        Image(systemName: item.icon)
+                            .font(.system(size: 21, weight: .semibold))
+                        Text(item.title)
+                            .font(.caption.weight(.bold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 70)
                 }
                 .buttonStyle(.plain)
-        .contentShape(Rectangle())
+                .contentShape(Rectangle())
                 .foregroundStyle(KXColor.accent)
-                .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
             }
         }
     }
