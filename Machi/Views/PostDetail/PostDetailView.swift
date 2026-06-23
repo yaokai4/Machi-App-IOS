@@ -72,17 +72,22 @@ struct PostDetailView: View {
                 switch viewModel.state {
                 case .loading, .idle:
                     LoadingView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 case .error(let message):
                     ErrorStateView(message: message) {
                         Task { await viewModel.load(context: modelContext, postId: postId, currentUser: currentUser, postStore: postStore, commentStore: commentStore) }
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 case .empty:
                     postUnavailableState
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 case .loaded:
                     content
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .kxPageBackground()
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -489,13 +494,8 @@ struct PostDetailView: View {
                             .padding(.top, KXSpacing.xs)
                         }
                     }
-                    .padding(.horizontal, KXSpacing.sm)
-                    .padding(.vertical, KXSpacing.xs)
-                    .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
-                            .stroke(KXColor.separator, lineWidth: 0.6)
-                    }
+                    .padding(.leading, KXSpacing.xs)
+                    .padding(.vertical, KXSpacing.xxs)
                 }
                 .padding(.leading, KXAvatarSize.sm + KXSpacing.sm)
             }
@@ -723,7 +723,7 @@ private struct CommentRowView: View {
                 Text(comment.content)
                     .font(KXTypography.body)
 
-                HStack(spacing: KXSpacing.sm) {
+                HStack(spacing: KXSpacing.lg) {
                     CommentActionButton(title: L("reply", language), systemImage: "arrowshape.turn.up.left", action: onReply)
 
                     CommentActionButton(
@@ -791,7 +791,7 @@ private struct ReplyRowView: View {
                 Text(comment.content)
                     .font(.subheadline)
 
-                HStack(spacing: KXSpacing.sm) {
+                HStack(spacing: KXSpacing.lg) {
                     CommentActionButton(title: L("reply", language), systemImage: "arrowshape.turn.up.left", action: onReply)
 
                     CommentActionButton(

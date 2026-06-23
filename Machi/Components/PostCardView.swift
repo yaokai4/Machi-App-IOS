@@ -85,11 +85,20 @@ struct PostCardView: View, Equatable {
             } else {
                 VStack(alignment: .leading, spacing: KXSpacing.sm) {
                     if post.repostOfPostId != nil {
-                        Label("\(author?.displayName ?? L("unknownUser", language)) \(isQuoteRepost ? L("quotePost", language) : L("repostedBy", language))", systemImage: "arrow.2.squarepath")
-                            .font(KXTypography.metaEmphasis)
+                        Button(action: onAuthor) {
+                            HStack(spacing: 5) {
+                                Image(systemName: "arrow.2.squarepath")
+                                    .font(.caption2.weight(.bold))
+                                KXAvatar(user: author, size: 18)
+                                Text("\(author?.displayName ?? L("unknownUser", language)) \(isQuoteRepost ? L("quotePost", language) : L("repostedBy", language))")
+                                    .font(KXTypography.metaEmphasis)
+                                    .lineLimit(1)
+                            }
                             .foregroundStyle(.secondary)
-                            .lineLimit(1)
                             .padding(.leading, 2)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
                     }
 
                     HStack(alignment: .top, spacing: KXSpacing.sm) {
