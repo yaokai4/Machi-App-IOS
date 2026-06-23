@@ -65,7 +65,7 @@ final class AuthViewModel: ObservableObject {
             switch mode {
             case .login:
                 guard let user = try await AuthService.shared.login(
-                    username: AuthValidation.normalizedHandle(username),
+                    username: AuthValidation.normalizedLoginIdentifier(username),
                     password: password,
                     captchaId: captchaEnabled && !captchaId.isEmpty ? captchaId : nil,
                     captchaCode: captchaCode.trimmingCharacters(in: .whitespaces),
@@ -319,6 +319,14 @@ enum AuthValidation {
             .lowercased()
     }
 
+    /// Login accepts a handle OR an email. Emails must keep their "@", so only
+    /// trim + lowercase them; plain handles still get the strict normalization.
+    static func normalizedLoginIdentifier(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.contains("@") { return trimmed.lowercased() }
+        return normalizedHandle(trimmed)
+    }
+
     static func sanitizedRegisterHandle(_ value: String) -> String {
         let allowed = Set("abcdefghijklmnopqrstuvwxyz0123456789_.")
         return String(normalizedHandle(value).filter { allowed.contains($0) }.prefix(20))
@@ -330,7 +338,7 @@ enum AuthValidation {
 
     static func loginErrors(username: String, password: String, language: AppLanguage) -> [AuthViewModel.Field: String] {
         var errors: [AuthViewModel.Field: String] = [:]
-        if normalizedHandle(username).isEmpty {
+        if normalizedLoginIdentifier(username).isEmpty {
             errors[.username] = L("authUsernameRequired", language)
         }
         if password.isEmpty {

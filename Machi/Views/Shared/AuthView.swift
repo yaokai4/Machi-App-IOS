@@ -225,11 +225,13 @@ struct AuthView: View {
                     if isGoogleLoading {
                         KXSpinner(size: 22, lineWidth: 2.4)
                     } else {
-                        Text("G")
-                            .font(.headline.weight(.black))
-                            .foregroundStyle(KXColor.accent)
-                            .frame(width: 24, height: 24)
+                        Image("GoogleLogo")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 18, height: 18)
+                            .frame(width: 26, height: 26)
                             .background(.white, in: Circle())
+                            .overlay(Circle().strokeBorder(Color.black.opacity(0.06)))
                     }
                     Text(isGoogleLoading ? L("googleSigningIn", language) : L("continueWithGoogle", language))
                 }
@@ -283,13 +285,13 @@ struct AuthView: View {
 
             VStack(spacing: 14) {
                 AuthInputField(
-                    title: L("username", language),
-                    placeholder: "your_handle",
+                    title: viewModel.mode == .register ? L("username", language) : L("loginIdentifier", language),
+                    placeholder: viewModel.mode == .register ? "your_handle" : L("loginIdentifier", language),
                     text: usernameBinding,
                     icon: "at",
                     accessibilityIdentifier: "auth.username",
                     error: viewModel.fieldError(.username),
-                    keyboardType: .asciiCapable
+                    keyboardType: viewModel.mode == .register ? .asciiCapable : .emailAddress
                 )
 
                 if viewModel.mode == .register {

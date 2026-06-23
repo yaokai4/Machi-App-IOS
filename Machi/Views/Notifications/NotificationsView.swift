@@ -77,7 +77,10 @@ struct NotificationsView: View {
                 .font(KXTypography.largeTitle)
             Spacer()
             Button {
-                Task { await viewModel.markAllRead(context: modelContext, notificationStore: notificationStore) }
+                Task {
+                    await viewModel.markAllRead(context: modelContext, notificationStore: notificationStore)
+                    dismiss()
+                }
             } label: {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.headline.weight(.semibold))
@@ -88,7 +91,7 @@ struct NotificationsView: View {
             .buttonStyle(.plain)
         }
         .padding(.horizontal, KXSpacing.screen)
-        .padding(.top, KXSpacing.sm)
+        .padding(.top, KXSpacing.xl)
         .padding(.bottom, KXSpacing.md)
         .kxGlassBar(ignoresTopSafeArea: true)
         .overlay(alignment: .bottom) {

@@ -158,6 +158,7 @@ struct DiscoverView: View {
                 NotificationsView(currentUser: currentUser)
                     .kxRouteDestinations(currentUser: currentUser)
             }
+            .presentationDragIndicator(.visible)
         }
     }
 
