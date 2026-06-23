@@ -31,7 +31,7 @@ struct GuideProfileSetupView: View {
             GuideBackground()
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    GuideOSHeaderRow(title: guideOSText(language, "身份路径", "属性ルート", "Profile route"), subtitle: guideOSText(language, "不同身份看到不同目标：大学生、语言学校、社会人、转职、升学、日语计划都分开", "属性ごとに目標を分けます", "Personalize goals by identity"))
+                    GuideOSHeaderRow(title: guideOSText(language, "身份路径", "属性ルート", "Profile route"), subtitle: guideOSText(language, "填好身份和在留/毕业时间，Machi 会自动生成在留更新倒计时、就活/升学时间线和你的专属计划。", "属性と在留/卒業時期を入力すると、在留更新のカウントダウン・就活/進学のタイムライン・専用プランを自動生成します。", "Set your identity and visa/graduation dates and Machi auto-generates a renewal countdown, a job/study timeline, and your personalized plan."))
                     VStack(spacing: 12) {
                         Picker(guideOSText(language, "身份", "属性", "Identity"), selection: $identityType) {
                             Text(guideOSText(language, "大学生", "大学生", "University")).tag("student")
