@@ -1559,6 +1559,49 @@ final class KaiXAPIClient {
         _ = try await request("DELETE", "/api/guide/life-items/\(id.encodedPathSegment)")
     }
 
+    // MARK: Finance (manual ledger + budgets + summary)
+
+    func guideFinanceCategories() async throws -> KaiXGuideFinanceCategoriesResponse {
+        let data = try await request("GET", "/api/guide/finance/categories")
+        return try decode(data)
+    }
+
+    func guideFinanceSummary(month: String? = nil) async throws -> KaiXGuideFinanceSummaryDTO {
+        var query: [URLQueryItem] = []
+        if let month, !month.isEmpty { query.append(URLQueryItem(name: "month", value: month)) }
+        let data = try await request("GET", "/api/guide/finance/summary", queryItems: query)
+        return try decode(data)
+    }
+
+    func guideTransactions(month: String? = nil, limit: Int = 200) async throws -> KaiXGuideTransactionsResponse {
+        var query: [URLQueryItem] = [URLQueryItem(name: "limit", value: String(limit))]
+        if let month, !month.isEmpty { query.append(URLQueryItem(name: "month", value: month)) }
+        let data = try await request("GET", "/api/guide/transactions", queryItems: query)
+        return try decode(data)
+    }
+
+    @discardableResult
+    func createGuideTransaction(_ payload: KaiXGuideTransactionPayload) async throws -> KaiXGuideTransactionDTO {
+        let data = try await request("POST", "/api/guide/transactions", body: payload)
+        let resp: KaiXGuideTransactionResponse = try decode(data)
+        return resp.transaction
+    }
+
+    func deleteGuideTransaction(id: String) async throws {
+        _ = try await request("DELETE", "/api/guide/transactions/\(id.encodedPathSegment)")
+    }
+
+    func guideBudgets() async throws -> KaiXGuideBudgetsResponse {
+        let data = try await request("GET", "/api/guide/budgets")
+        return try decode(data)
+    }
+
+    @discardableResult
+    func setGuideBudget(category: String, monthlyLimit: Int) async throws -> KaiXGuideBudgetsResponse {
+        let data = try await request("POST", "/api/guide/budgets", body: KaiXGuideBudgetSetPayload(category: category, monthlyLimit: monthlyLimit))
+        return try decode(data)
+    }
+
     func guideContracts() async throws -> KaiXGuideContractsResponse {
         let data = try await request("GET", "/api/guide/contracts")
         return try decode(data)

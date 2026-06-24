@@ -461,6 +461,13 @@ struct GuideManageView: View {
     private var items: [GuideManageItem] {
         [
             .init(
+                title: guideOSText(language, "收支记账", "家計簿", "Finance"),
+                subtitle: guideOSText(language, "记一笔收支、看本月结余、设分类预算；不连银行，只记你填的数", "収入・支出を記録、今月の収支、カテゴリ予算。銀行連携なし", "Log income/expense, monthly balance, budgets. No bank link."),
+                icon: "wallet.bifold.fill",
+                tint: .green,
+                action: { router.open(.guideFinance) }
+            ),
+            .init(
                 title: guideOSText(language, "生活缴费", "生活支払い", "Bills"),
                 subtitle: guideOSText(language, "房租、水电、网络、手机、保险、年金、税金、学费", "家賃・公共料金・ネット・携帯・保険・年金・税金・学費", "Rent, utilities, phone, insurance, pension, tax, tuition"),
                 icon: "yensign.circle.fill",

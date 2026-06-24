@@ -2075,6 +2075,79 @@ struct KaiXGuideApplicationStage: Codable, Equatable, Identifiable, Hashable {
     let createdAt: String?
 }
 
+struct KaiXGuideTransactionDTO: Codable, Equatable, Identifiable, Hashable {
+    let id: String
+    let kind: String
+    let amount: Int
+    let currency: String
+    let category: String
+    let account: String?
+    let occurredOn: String?
+    let note: String
+    let source: String?
+    var isIncome: Bool { kind == "income" }
+}
+
+struct KaiXGuideFinanceCategoryDTO: Codable, Equatable, Identifiable, Hashable {
+    var id: String { code }
+    let code: String
+    let zh: String
+    let ja: String
+    let en: String
+    let icon: String
+}
+
+struct KaiXGuideBudgetDTO: Codable, Equatable, Hashable {
+    let category: String
+    let monthlyLimit: Int
+    let currency: String?
+}
+
+struct KaiXGuideFinanceSummaryDTO: Codable, Equatable {
+    struct CategoryAmount: Codable, Equatable, Hashable { let category: String; let amount: Int }
+    struct BudgetProgress: Codable, Equatable, Hashable { let category: String; let limit: Int; let spent: Int }
+    let month: String
+    let currency: String
+    let income: Int
+    let expense: Int
+    let net: Int
+    let byCategory: [CategoryAmount]
+    let budgets: [BudgetProgress]
+    let fixedMonthly: Int
+    let lastMonthExpense: Int
+}
+
+struct KaiXGuideTransactionPayload: Encodable {
+    var kind: String
+    var amount: Int
+    var category: String
+    var occurredOn: String?
+    var note: String?
+}
+
+struct KaiXGuideTransactionsResponse: Decodable {
+    let items: [KaiXGuideTransactionDTO]
+    let total: Int?
+}
+
+struct KaiXGuideTransactionResponse: Decodable {
+    let transaction: KaiXGuideTransactionDTO
+}
+
+struct KaiXGuideFinanceCategoriesResponse: Decodable {
+    let expense: [KaiXGuideFinanceCategoryDTO]
+    let income: [KaiXGuideFinanceCategoryDTO]
+}
+
+struct KaiXGuideBudgetsResponse: Decodable {
+    let items: [KaiXGuideBudgetDTO]
+}
+
+struct KaiXGuideBudgetSetPayload: Encodable {
+    let category: String
+    let monthlyLimit: Int
+}
+
 struct KaiXGuideLifeItemDTO: Codable, Equatable, Identifiable, Hashable {
     let id: String
     let userId: String
