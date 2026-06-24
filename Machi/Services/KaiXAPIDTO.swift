@@ -2169,6 +2169,25 @@ struct KaiXGuidePostFixedPayload: Encodable {
     let month: String?
 }
 
+struct KaiXGuideDigestDTO: Decodable {
+    struct Finance: Decodable { let income: Int; let expense: Int; let net: Int; let fixedMonthly: Int; let hasData: Bool }
+    struct Bill: Decodable, Identifiable, Hashable { let id: String; let title: String; let amount: Int; let dueOn: String?; let daysLeft: Int }
+    struct Window: Decodable, Identifiable, Hashable { let id: String; let title: String; let daysLeft: Int; let open: Bool; let monthlyCost: Int }
+    struct DocExpiry: Decodable, Identifiable, Hashable { let id: String; let title: String; let expiresOn: String?; let daysLeft: Int }
+    struct BudgetAlert: Decodable, Identifiable, Hashable { var id: String { category }; let category: String; let limit: Int; let spent: Int; let over: Bool }
+    let month: String
+    let finance: Finance
+    let upcomingBills: [Bill]
+    let contractWindows: [Window]
+    let documentExpiries: [DocExpiry]
+    let budgetAlerts: [BudgetAlert]
+    let openTodos: Int
+    let hasSetup: Bool
+}
+
+struct KaiXGuideQuickSetupResponse: Decodable { let created: Int; let profile: String }
+struct KaiXGuideQuickSetupPayload: Encodable { let profile: String }
+
 struct KaiXGuideLifeItemDTO: Codable, Equatable, Identifiable, Hashable {
     let id: String
     let userId: String

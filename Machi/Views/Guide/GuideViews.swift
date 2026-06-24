@@ -69,6 +69,8 @@ struct GuideHomeView: View {
                 LazyVStack(alignment: .leading, spacing: 18) {
                     GuideTodayHeader(isGuest: currentUser.isGuest)
 
+                    GuideDigestCardView(isGuest: currentUser.isGuest)
+
                     if let message = viewModel.errorMessage, !message.isEmpty {
                         GuideInlineStatus(message: message)
                     }

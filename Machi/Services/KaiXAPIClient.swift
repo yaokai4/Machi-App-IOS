@@ -1591,6 +1591,17 @@ final class KaiXAPIClient {
         _ = try await request("DELETE", "/api/guide/transactions/\(id.encodedPathSegment)")
     }
 
+    func guideDigest(days: Int = 14) async throws -> KaiXGuideDigestDTO {
+        let data = try await request("GET", "/api/guide/digest", queryItems: [URLQueryItem(name: "days", value: String(days))])
+        return try decode(data)
+    }
+
+    @discardableResult
+    func guideQuickSetup(profile: String) async throws -> KaiXGuideQuickSetupResponse {
+        let data = try await request("POST", "/api/guide/quick-setup", body: KaiXGuideQuickSetupPayload(profile: profile))
+        return try decode(data)
+    }
+
     func guideFinanceTrend(months: Int = 6, month: String? = nil) async throws -> KaiXGuideFinanceTrendResponse {
         var query: [URLQueryItem] = [URLQueryItem(name: "months", value: String(months))]
         if let month, !month.isEmpty { query.append(URLQueryItem(name: "month", value: month)) }
