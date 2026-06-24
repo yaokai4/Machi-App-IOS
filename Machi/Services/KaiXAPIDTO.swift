@@ -1188,6 +1188,8 @@ struct KaiXPostDTO: Codable, Equatable {
     let isSaved: Bool?
     let reposted: Bool
     let isReposted: Bool?
+    let meetupGoing: Int?
+    let meetupJoined: Bool?
     let canEdit: Bool?
     let canDelete: Bool?
     let tags: [String]

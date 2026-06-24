@@ -2013,6 +2013,21 @@ final class KaiXAPIClient {
         return try decode(data) as Wrapper |> \.post
     }
 
+    /// RSVP to a 約局 (meetup / dining / event). Server enforces people_limit.
+    func setMeetupJoin(_ id: String, _ on: Bool) async throws -> KaiXPostDTO {
+        struct Wrapper: Codable { let post: KaiXPostDTO }
+        let data = try await request(on ? "POST" : "DELETE", "/api/posts/\(id.encodedPathSegment)/join")
+        return try decode(data) as Wrapper |> \.post
+    }
+
+    /// The going-list of a 約局: how many joined + their user ids.
+    func meetupParticipants(_ id: String) async throws -> (count: Int, ids: [String]) {
+        struct Wrapper: Codable { let count: Int; let participants: [KaiXUserDTO] }
+        let data = try await request("GET", "/api/posts/\(id.encodedPathSegment)/participants")
+        let w = try decode(data) as Wrapper
+        return (w.count, w.participants.map(\.id))
+    }
+
     func setRepost(_ id: String, _ on: Bool) async throws -> KaiXPostDTO {
         struct Wrapper: Codable { let post: KaiXPostDTO }
         let data = try await request(on ? "POST" : "DELETE", "/api/posts/\(id.encodedPathSegment)/repost")

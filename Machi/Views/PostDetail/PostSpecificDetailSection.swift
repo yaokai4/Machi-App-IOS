@@ -17,6 +17,11 @@ struct PostSpecificDetailSection: View {
     let post: PostEntity
     let currentUser: UserEntity?
     @State private var openingDM = false
+    // 約局 RSVP state (meetup / dining / event)
+    @State private var meetupGoing = 0
+    @State private var meetupJoined = false
+    @State private var meetupLoaded = false
+    @State private var meetupBusy = false
 
     var body: some View {
         let rows = detailRows
@@ -37,12 +42,101 @@ struct PostSpecificDetailSection: View {
                 ForEach(rows) { row in
                     DetailRow(row: row)
                 }
+                if isMeetupRSVP {
+                    meetupJoinBar
+                }
                 if showContactBar {
                     contactBar
                 }
             }
             .padding(14)
             .kxGlassSurface(radius: KXRadius.lg)
+            .task {
+                guard isMeetupRSVP, !meetupLoaded else { return }
+                meetupLoaded = true
+                if let res = try? await KaiXAPIClient.shared.meetupParticipants(post.id) {
+                    meetupGoing = res.count
+                    if let me = currentUser { meetupJoined = res.ids.contains(me.id) }
+                }
+            }
+        }
+    }
+
+    // MARK: - 約局 RSVP
+
+    private var isMeetupRSVP: Bool {
+        switch post.contentType {
+        case .meetup, .dining, .event: return true
+        default: return false
+        }
+    }
+
+    private var meetupCapacity: Int {
+        Int(attr(PostAttributeKeys.peopleLimit)) ?? Int(attr(PostAttributeKeys.capacity)) ?? 0
+    }
+
+    private var meetupJoinBar: some View {
+        let full = meetupCapacity > 0 && meetupGoing >= meetupCapacity && !meetupJoined
+        return HStack(spacing: 10) {
+            Label(
+                meetupCapacity > 0 ? "\(meetupGoing) / \(meetupCapacity) 人已报名" : "\(meetupGoing) 人已报名",
+                systemImage: "person.2.fill"
+            )
+            .font(.subheadline.weight(.bold))
+            .foregroundStyle(KXColor.accent)
+            Spacer(minLength: 0)
+            if currentUser?.id == post.authorId {
+                Text("你发起的局").font(.caption.weight(.bold)).foregroundStyle(.secondary)
+            } else {
+                Button {
+                    Task { await toggleMeetupJoin() }
+                } label: {
+                    HStack(spacing: 5) {
+                        if meetupBusy {
+                            KXSpinner(size: 14, lineWidth: 2, tint: meetupJoined ? KXColor.accent : .white)
+                        } else if meetupJoined {
+                            Image(systemName: "checkmark").font(.caption.weight(.bold))
+                        }
+                        Text(meetupJoined ? "已报名" : (full ? "名额已满" : "报名参加"))
+                            .font(.subheadline.weight(.bold))
+                    }
+                    .padding(.horizontal, 16)
+                    .frame(height: 36)
+                    .foregroundStyle(meetupJoined ? KXColor.accent : .white)
+                    .background(meetupJoined ? KXColor.accentSoft : KXColor.accent, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(meetupBusy || (full && !meetupJoined))
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(KXColor.accentSoft.opacity(0.5), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    @MainActor
+    private func toggleMeetupJoin() async {
+        guard let me = currentUser else {
+            toastManager.show(.custom(
+                title: KXListingCopy.pickText(language, "请先登录", "ログインしてください", "Please sign in"),
+                message: KXListingCopy.pickText(language, "登录后才能报名", "ログインすると参加できます", "Sign in to join"),
+                systemImage: "person.crop.circle.badge.exclamationmark", tint: KXColor.accent, technicalDetails: nil,
+            ), duration: 2.5)
+            return
+        }
+        _ = me
+        meetupBusy = true
+        defer { meetupBusy = false }
+        do {
+            let updated = try await KaiXAPIClient.shared.setMeetupJoin(post.id, !meetupJoined)
+            meetupGoing = updated.meetupGoing ?? meetupGoing
+            meetupJoined = updated.meetupJoined ?? !meetupJoined
+            GuideHaptics.success()
+        } catch {
+            toastManager.show(.requestFailed(
+                message: KXListingCopy.pickText(language, "报名失败（可能名额已满）", "参加できませんでした（満員の可能性）", "Could not join (may be full)"),
+                technicalDetails: error.localizedDescription,
+            ), duration: 2.5)
         }
     }
 
