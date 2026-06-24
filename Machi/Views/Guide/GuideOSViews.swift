@@ -562,10 +562,13 @@ struct GuideContractsView: View {
     @State private var category = "housing"
     @State private var title = ""
     @State private var provider = ""
+    // Smart defaults: a contract usually runs ~1 year, and the Japanese
+    // cancellation window is typically the 1–2 months before expiry — far more
+    // useful than four identical "today" dates.
     @State private var startDate = Date()
-    @State private var endDate = Date()
-    @State private var cancellationStart = Date()
-    @State private var cancellationEnd = Date()
+    @State private var endDate = Calendar.current.date(byAdding: .year, value: 1, to: Date()) ?? Date()
+    @State private var cancellationStart = Calendar.current.date(byAdding: .day, value: 305, to: Date()) ?? Date()
+    @State private var cancellationEnd = Calendar.current.date(byAdding: .day, value: 335, to: Date()) ?? Date()
     @State private var autoRenew = false
     @State private var monthlyCost = ""
     @State private var yearlyCost = ""
