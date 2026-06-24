@@ -594,7 +594,7 @@ struct GuideContractsView: View {
                 LazyVStack(alignment: .leading, spacing: 14) {
                     GuideOSHeaderRow(
                         title: guideOSText(language, "合同管理", "契約管理", "Contracts"),
-                        subtitle: guideOSText(language, "管理到期、续约与解约窗口，自动同步到 Todo 和日历。", "満了・更新・解約期間をTodoとカレンダーへ同期します。", "Track expiry, renewal, and cancellation windows in Tasks and Calendar.")
+                        subtitle: guideOSText(language, "只记到期、续约与解约窗口并自动提醒——不需要上传合同原件，重要文件请你自己保管。", "満了・更新・解約期間だけ記録して自動通知します。契約書のアップロードは不要、原本はご自身で保管を。", "Just the expiry / renewal / cancellation dates with reminders — no need to upload the contract itself; keep the original yourself.")
                     )
                     contractForm
                     if let message = model.message { GuideOSNotice(message: message) }
@@ -648,6 +648,13 @@ struct GuideContractsView: View {
                         .frame(minHeight: 44)
                 }
             }
+            Label(guideOSText(language, "只记关键信息，不收合同原件 · 你的隐私由你掌握", "重要情報のみ記録、契約書は預かりません", "We store only key details, never the contract file"), systemImage: "lock.shield.fill")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(minHeight: 32)
+                .background(KXColor.accentSoft.opacity(0.5), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             Picker("合同类型", selection: $category) {
                 ForEach(categories, id: \.0) { key, label in Text(label).tag(key) }
             }
