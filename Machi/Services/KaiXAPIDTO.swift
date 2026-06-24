@@ -2123,6 +2123,7 @@ struct KaiXGuideTransactionPayload: Encodable {
     var category: String
     var occurredOn: String?
     var note: String?
+    var currency: String?
 }
 
 struct KaiXGuideTransactionsResponse: Decodable {
@@ -2146,6 +2147,26 @@ struct KaiXGuideBudgetsResponse: Decodable {
 struct KaiXGuideBudgetSetPayload: Encodable {
     let category: String
     let monthlyLimit: Int
+}
+
+struct KaiXGuideFinanceTrendPoint: Codable, Equatable, Hashable, Identifiable {
+    var id: String { month }
+    let month: String
+    let income: Int
+    let expense: Int
+    let net: Int
+}
+
+struct KaiXGuideFinanceTrendResponse: Decodable {
+    let months: [KaiXGuideFinanceTrendPoint]
+}
+
+struct KaiXGuidePostFixedResponse: Decodable {
+    let posted: Int
+}
+
+struct KaiXGuidePostFixedPayload: Encodable {
+    let month: String?
 }
 
 struct KaiXGuideLifeItemDTO: Codable, Equatable, Identifiable, Hashable {

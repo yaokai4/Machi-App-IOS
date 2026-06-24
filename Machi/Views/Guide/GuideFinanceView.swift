@@ -1,5 +1,6 @@
 import Combine
 import SwiftUI
+import UIKit
 
 /// Privacy-first manual finance: log income/expense, see the month's balance,
 /// track per-category budgets. No bank links — only what the user types.
@@ -7,11 +8,18 @@ import SwiftUI
 final class GuideFinanceViewModel: ObservableObject {
     @Published var summary: KaiXGuideFinanceSummaryDTO?
     @Published var transactions: [KaiXGuideTransactionDTO] = []
+    @Published var trend: [KaiXGuideFinanceTrendPoint] = []
     @Published var expenseCats: [KaiXGuideFinanceCategoryDTO] = []
     @Published var incomeCats: [KaiXGuideFinanceCategoryDTO] = []
     @Published var isLoading = false
     @Published var message: String?
     @Published var month: String = GuideFinanceViewModel.currentMonth()
+    @Published var currency: String = UserDefaults.standard.string(forKey: "kx-finance-currency") ?? "JPY"
+
+    func setCurrency(_ code: String) {
+        currency = code
+        UserDefaults.standard.set(code, forKey: "kx-finance-currency")
+    }
 
     var isLoggedIn: Bool { KaiXBackend.token != nil }
 
@@ -45,8 +53,10 @@ final class GuideFinanceViewModel: ObservableObject {
         do {
             async let s = KaiXAPIClient.shared.guideFinanceSummary(month: month)
             async let t = KaiXAPIClient.shared.guideTransactions(month: month)
+            async let tr = KaiXAPIClient.shared.guideFinanceTrend(months: 6, month: month)
             summary = try await s
             transactions = try await t.items
+            trend = (try? await tr.months) ?? []
         } catch {
             message = "加载失败，请稍后重试。"
         }
@@ -57,12 +67,32 @@ final class GuideFinanceViewModel: ObservableObject {
         let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
         do {
             _ = try await KaiXAPIClient.shared.createGuideTransaction(
-                .init(kind: kind, amount: amount, category: category, occurredOn: f.string(from: date), note: note.isEmpty ? nil : note)
+                .init(kind: kind, amount: amount, category: category, occurredOn: f.string(from: date), note: note.isEmpty ? nil : note, currency: currency)
             )
             await load()
         } catch {
             message = "记账失败，请稍后重试。"
         }
+    }
+
+    func postFixed() async {
+        do {
+            let r = try await KaiXAPIClient.shared.postGuideFixedCosts(month: month)
+            await load()
+            message = r.posted > 0 ? "已记入 \(r.posted) 笔固定费。" : "本月固定费已全部记过了。"
+        } catch {
+            message = "操作失败，请稍后重试。"
+        }
+    }
+
+    func csvExport() -> String {
+        var lines = ["date,kind,category,amount,currency,note"]
+        for t in transactions {
+            let cat = (expenseCats + incomeCats).first { $0.code == t.category }?.zh ?? t.category
+            let safeNote = t.note.replacingOccurrences(of: ",", with: " ").replacingOccurrences(of: "\n", with: " ")
+            lines.append("\(t.occurredOn ?? ""),\(t.kind),\(cat),\(t.amount),\(t.currency),\(safeNote)")
+        }
+        return lines.joined(separator: "\n")
     }
 
     func delete(_ tx: KaiXGuideTransactionDTO) async {
@@ -89,10 +119,29 @@ final class GuideFinanceViewModel: ObservableObject {
     }
 }
 
-func guideYen(_ n: Int) -> String {
+let kxFinanceCurrencies: [(code: String, symbol: String, label: String)] = [
+    ("JPY", "¥", "日元 JPY"), ("CNY", "CN¥", "人民币 CNY"), ("USD", "$", "美元 USD"),
+    ("EUR", "€", "欧元 EUR"), ("KRW", "₩", "韩元 KRW"), ("GBP", "£", "英镑 GBP"),
+]
+
+func kxCurrencySymbol(_ code: String) -> String {
+    kxFinanceCurrencies.first { $0.code == code }?.symbol ?? "¥"
+}
+
+func guideMoney(_ n: Int, currency: String = "JPY") -> String {
     let f = NumberFormatter()
     f.numberStyle = .decimal
-    return "¥" + (f.string(from: NSNumber(value: n)) ?? String(n))
+    return kxCurrencySymbol(currency) + (f.string(from: NSNumber(value: n)) ?? String(n))
+}
+
+private struct GuideFinanceShareDoc: Identifiable { let id = UUID(); let url: URL }
+
+private struct GuideFinanceActivityView: UIViewControllerRepresentable {
+    let url: URL
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: [url], applicationActivities: nil)
+    }
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
 
 struct GuideFinanceView: View {
@@ -106,10 +155,13 @@ struct GuideFinanceView: View {
     @State private var note = ""
     @State private var budgetCategory = "rent"
     @State private var budgetLimitText = ""
+    @State private var shareDoc: GuideFinanceShareDoc?
 
     private var currentCats: [KaiXGuideFinanceCategoryDTO] {
         kind == "income" ? vm.incomeCats : vm.expenseCats
     }
+
+    private func money(_ n: Int) -> String { guideMoney(n, currency: vm.currency) }
 
     var body: some View {
         ZStack {
@@ -120,7 +172,10 @@ struct GuideFinanceView: View {
                         title: guideOSText(language, "收支与生活成本", "家計簿", "Finance"),
                         subtitle: guideOSText(language, "全部在你的账户里、只有你能看 · 我们不连接银行，只记你手动填的数。", "あなたのアカウント内だけに保存。銀行連携はせず、入力した金額だけを記録します。", "All in your account, visible only to you — no bank links, just what you enter.")
                     )
+                    controlsRow
                     summaryCards
+                    insightsRow
+                    trendChart
                     quickAdd
                     if let message = vm.message { GuideOSNotice(message: message) }
                     categoryBars
@@ -138,6 +193,118 @@ struct GuideFinanceView: View {
             if vm.requireLogin() { await vm.load() }
         }
         .refreshable { await vm.load() }
+        .sheet(item: $shareDoc) { doc in GuideFinanceActivityView(url: doc.url) }
+    }
+
+    // MARK: Controls (currency · 记入固定费 · 导出)
+
+    private var controlsRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                Menu {
+                    ForEach(kxFinanceCurrencies, id: \.code) { c in
+                        Button(c.label) { vm.setCurrency(c.code) }
+                    }
+                } label: {
+                    chipLabel(icon: "yensign.circle", text: vm.currency)
+                }
+                Button {
+                    Task { await vm.postFixed() }
+                } label: {
+                    chipLabel(icon: "arrow.triangle.2.circlepath", text: guideOSText(language, "记入本月固定费", "今月の固定費を記録", "Post fixed costs"))
+                }
+                Button {
+                    if let url = writeCsvTempFile() { shareDoc = GuideFinanceShareDoc(url: url) }
+                } label: {
+                    chipLabel(icon: "square.and.arrow.up", text: guideOSText(language, "导出 CSV", "CSV書き出し", "Export CSV"))
+                }
+            }
+        }
+    }
+
+    private func chipLabel(icon: String, text: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon).font(.caption.weight(.bold)).foregroundStyle(KXColor.accent)
+            Text(text).font(.caption.weight(.bold)).foregroundStyle(.primary)
+        }
+        .padding(.horizontal, 12).frame(height: 36)
+        .background(Color.white.opacity(0.76), in: Capsule())
+        .overlay(Capsule().stroke(KXColor.separator.opacity(0.8), lineWidth: 0.8))
+    }
+
+    private func writeCsvTempFile() -> URL? {
+        let csv = "\u{FEFF}" + vm.csvExport()
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("machi-finance-\(vm.month).csv")
+        do { try csv.write(to: url, atomically: true, encoding: .utf8); return url } catch { return nil }
+    }
+
+    // MARK: Insights
+
+    @ViewBuilder private var insightsRow: some View {
+        if let s = vm.summary, s.income > 0 || !s.byCategory.isEmpty {
+            let savingsRate = s.income > 0 ? Int((Double(s.net) / Double(s.income) * 100).rounded()) : 0
+            let fixedShare = s.income > 0 ? Int((Double(s.fixedMonthly) / Double(s.income) * 100).rounded()) : 0
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles").font(.caption.weight(.bold)).foregroundStyle(KXColor.accent)
+                if s.income > 0 {
+                    Text(guideOSText(language, "储蓄率 ", "貯蓄率 ", "Savings ")).font(.caption.weight(.semibold))
+                        + Text("\(savingsRate)%").font(.caption.weight(.bold)).foregroundColor(savingsRate >= 0 ? KXColor.accent : .red)
+                }
+                if s.income > 0 && s.fixedMonthly > 0 {
+                    Text(guideOSText(language, "· 固定费占收入 \(fixedShare)%", "· 固定費\(fixedShare)%", "· Fixed \(fixedShare)%"))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                if let top = s.byCategory.first {
+                    Text(guideOSText(language, "· 最大支出 \(vm.label(language, code: top.category))", "· 最大 \(vm.label(language, code: top.category))", "· Top \(vm.label(language, code: top.category))"))
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 10)
+            .background(KXColor.accentSoft.opacity(0.5), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+    }
+
+    // MARK: Trend
+
+    @ViewBuilder private var trendChart: some View {
+        if vm.trend.count > 1 {
+            let maxV = max(1, vm.trend.flatMap { [$0.income, $0.expense] }.max() ?? 1)
+            VStack(alignment: .leading, spacing: 12) {
+                Text(guideOSText(language, "近 6 个月趋势", "直近6か月の推移", "Last 6 months"))
+                    .font(.headline.weight(.bold))
+                HStack(alignment: .bottom, spacing: 6) {
+                    ForEach(vm.trend) { m in
+                        VStack(spacing: 5) {
+                            HStack(alignment: .bottom, spacing: 2) {
+                                Capsule().fill(KXColor.accent.opacity(0.85))
+                                    .frame(width: 9, height: max(3, CGFloat(m.income) / CGFloat(maxV) * 88))
+                                Capsule().fill(Color.red.opacity(0.7))
+                                    .frame(width: 9, height: max(3, CGFloat(m.expense) / CGFloat(maxV) * 88))
+                            }
+                            .frame(height: 88, alignment: .bottom)
+                            Text(String(m.month.suffix(2)) + guideOSText(language, "月", "月", ""))
+                                .font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+                HStack(spacing: 14) {
+                    legendDot(color: KXColor.accent.opacity(0.85), text: guideOSText(language, "收入", "収入", "Income"))
+                    legendDot(color: Color.red.opacity(0.7), text: guideOSText(language, "支出", "支出", "Spent"))
+                }
+            }
+            .padding(16)
+            .background(Color.white.opacity(0.76), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
+        }
+    }
+
+    private func legendDot(color: Color, text: String) -> some View {
+        HStack(spacing: 5) {
+            RoundedRectangle(cornerRadius: 3).fill(color).frame(width: 10, height: 10)
+            Text(text).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+        }
     }
 
     // MARK: Dashboard
@@ -148,18 +315,18 @@ struct GuideFinanceView: View {
         return HStack(spacing: 10) {
             GuideFinanceStat(
                 label: guideOSText(language, "本月收入", "今月の収入", "Income"),
-                value: guideYen(s?.income ?? 0), positive: true, icon: "arrow.up.right",
+                value: money(s?.income ?? 0), positive: true, icon: "arrow.up.right",
                 sub: nil
             )
             GuideFinanceStat(
                 label: guideOSText(language, "本月支出", "今月の支出", "Spent"),
-                value: guideYen(s?.expense ?? 0), positive: false, icon: "arrow.down.right",
-                sub: trend != 0 ? guideOSText(language, "较上月\(trend > 0 ? "多" : "少") \(guideYen(abs(trend)))", "前月比\(trend > 0 ? "+" : "-")\(guideYen(abs(trend)))", "\(trend > 0 ? "+" : "-")\(guideYen(abs(trend))) vs last") : nil
+                value: money(s?.expense ?? 0), positive: false, icon: "arrow.down.right",
+                sub: trend != 0 ? guideOSText(language, "较上月\(trend > 0 ? "多" : "少") \(money(abs(trend)))", "前月比\(trend > 0 ? "+" : "-")\(money(abs(trend)))", "\(trend > 0 ? "+" : "-")\(money(abs(trend))) vs last") : nil
             )
             GuideFinanceStat(
                 label: guideOSText(language, "本月结余", "今月の収支", "Balance"),
-                value: guideYen(s?.net ?? 0), positive: (s?.net ?? 0) >= 0, icon: "equal",
-                sub: (s?.fixedMonthly ?? 0) > 0 ? guideOSText(language, "固定支出约 \(guideYen(s?.fixedMonthly ?? 0))/月", "固定費 約\(guideYen(s?.fixedMonthly ?? 0))/月", "Fixed ~\(guideYen(s?.fixedMonthly ?? 0))/mo") : nil
+                value: money(s?.net ?? 0), positive: (s?.net ?? 0) >= 0, icon: "equal",
+                sub: (s?.fixedMonthly ?? 0) > 0 ? guideOSText(language, "固定支出约 \(money(s?.fixedMonthly ?? 0))/月", "固定費 約\(money(s?.fixedMonthly ?? 0))/月", "Fixed ~\(money(s?.fixedMonthly ?? 0))/mo") : nil
             )
         }
     }
@@ -241,7 +408,7 @@ struct GuideFinanceView: View {
                         HStack {
                             Text(vm.label(language, code: c.category)).font(.subheadline.weight(.semibold))
                             Spacer()
-                            Text(limit > 0 ? "\(guideYen(c.amount)) / \(guideYen(limit))" : guideYen(c.amount))
+                            Text(limit > 0 ? "\(money(c.amount)) / \(money(limit))" : money(c.amount))
                                 .font(.subheadline.weight(.bold))
                                 .foregroundStyle(over ? Color.red : Color.primary)
                         }
@@ -317,7 +484,7 @@ struct GuideFinanceView: View {
                         Text(t.occurredOn ?? "").font(.caption2).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Text((t.isIncome ? "+" : "-") + guideYen(t.amount))
+                    Text((t.isIncome ? "+" : "-") + money(t.amount))
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(t.isIncome ? KXColor.accent : Color.primary)
                 }
