@@ -203,6 +203,29 @@ struct GuideOSTextField: View {
     }
 }
 
+/// Unified compact date field: a small caption label ABOVE a full-width date
+/// pill, so labels never get truncated (the old inline DatePicker squeezed
+/// 开始/结束 down to 开/结) and two can sit side-by-side cleanly.
+struct GuideOSDateField: View {
+    let title: String
+    @Binding var date: Date
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.secondary)
+            DatePicker("", selection: $date, displayedComponents: .date)
+                .labelsHidden()
+                .datePickerStyle(.compact)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10)
+                .frame(height: 40)
+                .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+    }
+}
+
 struct GuideQuickTodoComposer: View {
     @Environment(\.appLanguage) private var language
     let defaultDate: String?
@@ -212,6 +235,9 @@ struct GuideQuickTodoComposer: View {
     @State private var text = ""
     @State private var selectedDate: String?
     @State private var customDate = Date()
+    @State private var showDatePicker = false
+
+    private var isPresetDate: Bool { selectedDate == shifted(0) || selectedDate == shifted(1) || selectedDate == shifted(7) }
 
     init(defaultDate: String? = nil, isSaving: Bool = false, onCreate: @escaping (_ content: String, _ plannedDate: String?) -> Void) {
         self.defaultDate = defaultDate
@@ -267,12 +293,10 @@ struct GuideQuickTodoComposer: View {
                     GuideQuickDateChip(title: guideOSText(language, "今天", "今日", "Today"), isSelected: selectedDate == shifted(0)) { selectedDate = shifted(0) }
                     GuideQuickDateChip(title: guideOSText(language, "明天", "明日", "Tomorrow"), isSelected: selectedDate == shifted(1)) { selectedDate = shifted(1) }
                     GuideQuickDateChip(title: "+7 天", isSelected: selectedDate == shifted(7)) { selectedDate = shifted(7) }
-                    DatePicker("", selection: $customDate, displayedComponents: .date)
-                        .labelsHidden()
-                        .datePickerStyle(.compact)
-                        .onChange(of: customDate) { _, newValue in
-                            selectedDate = GuideOSDate.iso(newValue)
-                        }
+                    GuideQuickDateChip(
+                        title: (selectedDate != nil && !isPresetDate) ? GuideOSDate.short(selectedDate!) : guideOSText(language, "其他日期", "他の日付", "Pick date"),
+                        isSelected: selectedDate != nil && !isPresetDate
+                    ) { showDatePicker = true }
                     if selectedDate != nil {
                         Button {
                             selectedDate = nil
@@ -293,6 +317,27 @@ struct GuideQuickTodoComposer: View {
         .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .onChange(of: defaultDate ?? "") { _, newValue in
             selectedDate = newValue.isEmpty ? nil : newValue
+        }
+        .sheet(isPresented: $showDatePicker) {
+            NavigationStack {
+                DatePicker(guideOSText(language, "选择日期", "日付を選ぶ", "Pick a date"), selection: $customDate, displayedComponents: .date)
+                    .datePickerStyle(.graphical)
+                    .padding()
+                    .navigationTitle(guideOSText(language, "选择日期", "日付", "Date"))
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button(guideOSText(language, "完成", "完了", "Done")) {
+                                selectedDate = GuideOSDate.iso(customDate)
+                                showDatePicker = false
+                            }
+                        }
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button(guideOSText(language, "取消", "キャンセル", "Cancel")) { showDatePicker = false }
+                        }
+                    }
+            }
+            .presentationDetents([.medium])
         }
     }
 }
@@ -606,17 +651,17 @@ struct GuideContractsView: View {
             .pickerStyle(.menu)
             GuideOSTextField(title: "合同名称", text: $title)
             GuideOSTextField(title: "机构 / 对方", text: $provider)
-            HStack(spacing: 10) {
-                DatePicker("开始", selection: $startDate, displayedComponents: .date)
-                DatePicker("到期", selection: $endDate, displayedComponents: .date)
+            HStack(alignment: .top, spacing: 10) {
+                GuideOSDateField(title: "开始日期", date: $startDate)
+                GuideOSDateField(title: "到期日期", date: $endDate)
             }
             VStack(alignment: .leading, spacing: 8) {
                 Text("解约窗口")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.secondary)
-                HStack(spacing: 10) {
-                    DatePicker("开始", selection: $cancellationStart, displayedComponents: .date)
-                    DatePicker("结束", selection: $cancellationEnd, displayedComponents: .date)
+                HStack(alignment: .top, spacing: 10) {
+                    GuideOSDateField(title: "可解约起", date: $cancellationStart)
+                    GuideOSDateField(title: "可解约止", date: $cancellationEnd)
                 }
             }
             Toggle("自动续约", isOn: $autoRenew)

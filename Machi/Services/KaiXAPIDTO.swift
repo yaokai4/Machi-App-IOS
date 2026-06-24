@@ -2435,6 +2435,7 @@ struct KaiXGuideLifeItemPayload: Encodable {
     var amount: Int?
     var currency: String?
     var paymentMethod: String?
+    var autoDebit: Bool?
     var dueDay: Int?
     var dueAt: String?
     var recurrence: String?

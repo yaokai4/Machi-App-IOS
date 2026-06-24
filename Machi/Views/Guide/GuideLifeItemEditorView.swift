@@ -10,6 +10,8 @@ struct GuideLifePlannerView: View {
     @State private var dueDate = Date()
     @State private var reminderDays = 3
     @State private var recurrence = "monthly"
+    @State private var paymentMethod = "auto_transfer"
+    @State private var autoDebit = true
 
     private func applyPreset(_ presetType: String) {
         guard let p = model.lifePresets.first(where: { $0.type == presetType }) else { return }
@@ -46,7 +48,21 @@ struct GuideLifePlannerView: View {
             GuideOSTextField(title: "公司 / 房东 / 机构", text: $provider)
             GuideOSTextField(title: "金额（JPY）", text: $amount)
                 .keyboardType(.numberPad)
-            DatePicker("截止日期", selection: $dueDate, displayedComponents: .date)
+            GuideOSDateField(title: guideOSText(language, "截止日期", "締切日", "Due date"), date: $dueDate)
+            Picker(guideOSText(language, "缴费方式", "支払い方法", "Payment"), selection: $paymentMethod) {
+                Text(guideOSText(language, "口座振替", "口座振替", "Auto-transfer")).tag("auto_transfer")
+                Text(guideOSText(language, "信用卡", "クレカ", "Credit card")).tag("credit_card")
+                Text(guideOSText(language, "便利店", "コンビニ", "Konbini")).tag("konbini")
+                Text(guideOSText(language, "银行转账", "銀行振込", "Bank transfer")).tag("bank_transfer")
+                Text(guideOSText(language, "收信件缴费", "請求書払い", "Invoice")).tag("invoice")
+                Text(guideOSText(language, "其他", "その他", "Other")).tag("other")
+            }
+            .pickerStyle(.menu)
+            .onChange(of: paymentMethod) { _, newValue in
+                autoDebit = (newValue == "auto_transfer" || newValue == "credit_card")
+            }
+            Toggle(guideOSText(language, "自动扣款（只提醒核对余额）", "自動引き落とし（残高確認のみ通知）", "Auto-debit (just remind to check balance)"), isOn: $autoDebit)
+                .font(.subheadline)
             Stepper("提前 \(reminderDays) 天提醒", value: $reminderDays, in: 0...90)
             GuideOSPrimaryButton(title: model.isSaving ? "添加中" : "添加生活截止日") {
                 Task {
@@ -56,6 +72,8 @@ struct GuideLifePlannerView: View {
                         provider: provider,
                         amount: Int(amount),
                         currency: "JPY",
+                        paymentMethod: paymentMethod,
+                        autoDebit: autoDebit,
                         dueAt: GuideOSDate.iso(dueDate),
                         recurrence: recurrence,
                         reminderDaysBefore: reminderDays
