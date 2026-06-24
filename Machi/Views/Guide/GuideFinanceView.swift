@@ -71,6 +71,16 @@ final class GuideFinanceViewModel: ObservableObject {
         await load()
     }
 
+    func setBudget(category: String, limit: Int) async {
+        do {
+            _ = try await KaiXAPIClient.shared.setGuideBudget(category: category, monthlyLimit: limit)
+            await load()
+            message = limit > 0 ? "预算已更新。" : "预算已取消。"
+        } catch {
+            message = "预算保存失败，请稍后重试。"
+        }
+    }
+
     func label(_ language: AppLanguage, code: String) -> String {
         if let c = (expenseCats + incomeCats).first(where: { $0.code == code }) {
             return guideOSText(language, c.zh, c.ja, c.en)
@@ -94,6 +104,8 @@ struct GuideFinanceView: View {
     @State private var category = "rent"
     @State private var occurredOn = Date()
     @State private var note = ""
+    @State private var budgetCategory = "rent"
+    @State private var budgetLimitText = ""
 
     private var currentCats: [KaiXGuideFinanceCategoryDTO] {
         kind == "income" ? vm.incomeCats : vm.expenseCats
@@ -112,6 +124,7 @@ struct GuideFinanceView: View {
                     quickAdd
                     if let message = vm.message { GuideOSNotice(message: message) }
                     categoryBars
+                    budgetEditor
                     ledger
                 }
                 .padding(KXSpacing.screen)
@@ -248,6 +261,41 @@ struct GuideFinanceView: View {
                 }
             }
         }
+    }
+
+    // MARK: Budget editor
+
+    private var budgetEditor: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(guideOSText(language, "分类预算", "カテゴリ予算", "Budgets"))
+                .font(.headline.weight(.bold))
+            Picker(guideOSText(language, "分类", "カテゴリ", "Category"), selection: $budgetCategory) {
+                ForEach(vm.expenseCats) { c in
+                    Text(guideOSText(language, c.zh, c.ja, c.en)).tag(c.code)
+                }
+            }
+            .pickerStyle(.menu)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 8) {
+                Text("¥").font(.headline.weight(.bold)).foregroundStyle(.secondary)
+                TextField(guideOSText(language, "每月上限（0=取消）", "上限（0で解除）", "Monthly limit (0 = off)"), text: $budgetLimitText)
+                    .keyboardType(.numberPad)
+                    .onChange(of: budgetLimitText) { _, v in
+                        let digits = v.filter { $0.isNumber }
+                        if digits != v { budgetLimitText = digits }
+                    }
+                Button(guideOSText(language, "保存", "保存", "Save")) {
+                    Task { await vm.setBudget(category: budgetCategory, limit: Int(budgetLimitText) ?? 0); budgetLimitText = "" }
+                }
+                .buttonStyle(.bordered)
+                .tint(KXColor.accent)
+            }
+            .padding(.horizontal, 12).frame(height: 44)
+            .background(Color.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .padding(16)
+        .background(Color.white.opacity(0.76), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
     }
 
     // MARK: Ledger
