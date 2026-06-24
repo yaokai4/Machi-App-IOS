@@ -75,6 +75,17 @@ struct GuideLifePlannerView: View {
                     ForEach(model.lifeItems) { item in
                         GuideOSLifeItemRow(
                             item: item,
+                            payments: model.lifePayments[item.id] ?? [],
+                            onLoadPayments: { Task { await model.loadLifePayments(itemId: item.id) } },
+                            onRecordPayment: { amount, paidAt, method, notes in
+                                await model.recordLifePayment(
+                                    item: item,
+                                    amount: amount,
+                                    paidAt: paidAt,
+                                    method: method,
+                                    notes: notes
+                                )
+                            },
                             onDelete: { Task { await model.deleteLifeItem(item) } },
                             onSave: { payload in await model.updateLifeItem(id: item.id, payload: payload) }
                         )
@@ -95,6 +106,7 @@ private func recurrenceLabel(_ r: String) -> String {
     switch r {
     case "monthly": return "每月"
     case "quarterly": return "每季"
+    case "semester": return "每学期"
     case "yearly": return "每年"
     case "once": return "一次性"
     case "weekly": return "每周"
@@ -106,52 +118,73 @@ private func recurrenceLabel(_ r: String) -> String {
 /// also removes its generated payment todos + reminders server-side.
 struct GuideOSLifeItemRow: View {
     let item: KaiXGuideLifeItemDTO
+    var payments: [KaiXGuideLifePaymentDTO] = []
+    var onLoadPayments: (() -> Void)? = nil
+    var onRecordPayment: ((_ amount: Int, _ paidAt: String, _ method: String, _ notes: String) async -> Bool)? = nil
     let onDelete: () -> Void
     var onSave: ((KaiXGuideLifeItemPayload) async -> Bool)? = nil
     @State private var confirming = false
     @State private var editing = false
+    @State private var showingPayment = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "yensign.circle.fill")
-                .font(.subheadline)
-                .foregroundStyle(KXColor.accent)
-                .frame(width: 30, height: 30)
-                .background(KXColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-            VStack(alignment: .leading, spacing: 5) {
-                Text(item.title).font(.subheadline.weight(.bold)).foregroundStyle(.primary).lineLimit(1)
-                if !item.provider.isEmpty {
-                    Text(item.provider).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                }
-                HStack(spacing: 6) {
-                    if item.amount > 0 { GuideOSDeleteCardChip(text: "\(item.currency.isEmpty ? "JPY" : item.currency) \(item.amount)") }
-                    if item.dueDay > 0 {
-                        GuideOSDeleteCardChip(text: "每月 \(item.dueDay) 号")
-                    } else if let d = item.dueAt, !d.isEmpty {
-                        GuideOSDeleteCardChip(text: GuideOSDate.short(d))
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "yensign.circle.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(KXColor.accent)
+                    .frame(width: 30, height: 30)
+                    .background(KXColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(item.title).font(.subheadline.weight(.bold)).foregroundStyle(.primary).lineLimit(1)
+                    if !item.provider.isEmpty {
+                        Text(item.provider).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                     }
-                    if !item.paymentMethod.isEmpty { GuideOSDeleteCardChip(text: item.paymentMethod) }
+                    HStack(spacing: 6) {
+                        if item.amount > 0 { GuideOSDeleteCardChip(text: "\(item.currency.isEmpty ? "JPY" : item.currency) \(item.amount)") }
+                        if item.dueDay > 0 {
+                            GuideOSDeleteCardChip(text: "每月 \(item.dueDay) 号")
+                        } else if let d = item.dueAt, !d.isEmpty {
+                            GuideOSDeleteCardChip(text: GuideOSDate.short(d))
+                        }
+                        if !item.paymentMethod.isEmpty { GuideOSDeleteCardChip(text: item.paymentMethod) }
+                    }
                 }
-            }
-            Spacer(minLength: 0)
-            if onSave != nil {
-                Button { editing = true } label: {
-                    Image(systemName: "pencil")
+                Spacer(minLength: 0)
+                if onRecordPayment != nil {
+                    Button {
+                        onLoadPayments?()
+                        showingPayment = true
+                    } label: {
+                        Image(systemName: "checkmark.circle")
+                            .font(.subheadline)
+                            .foregroundStyle(KXColor.accent)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .contentShape(Rectangle())
+                    .accessibilityLabel("记录 \(item.title) 已支付")
+                }
+                if onSave != nil {
+                    Button { editing = true } label: {
+                        Image(systemName: "pencil")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .contentShape(Rectangle())
+                }
+                Button(role: .destructive) { confirming = true } label: {
+                    Image(systemName: "trash")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                        .frame(width: 36, height: 36)
+                        .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
-        .contentShape(Rectangle())
+                .contentShape(Rectangle())
             }
-            Button(role: .destructive) { confirming = true } label: {
-                Image(systemName: "trash")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 36, height: 36)
-            }
-            .buttonStyle(.plain)
-        .contentShape(Rectangle())
+            GuideAttachmentSection(entityType: "guide_life_item", entityId: item.id, title: "缴费附件")
         }
         .padding(12)
         .kxGlassSurface(radius: 16)
@@ -161,6 +194,90 @@ struct GuideOSLifeItemRow: View {
         }
         .sheet(isPresented: $editing) {
             if let onSave { GuideLifeItemEditorSheet(item: item, onSave: onSave) }
+        }
+        .sheet(isPresented: $showingPayment) {
+            if let onRecordPayment {
+                GuideLifePaymentSheet(item: item, payments: payments, onSave: onRecordPayment)
+            }
+        }
+    }
+}
+
+private struct GuideLifePaymentSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let item: KaiXGuideLifeItemDTO
+    let payments: [KaiXGuideLifePaymentDTO]
+    let onSave: (Int, String, String, String) async -> Bool
+
+    @State private var amount: String
+    @State private var paidAt = Date()
+    @State private var method: String
+    @State private var notes = ""
+    @State private var saving = false
+
+    init(
+        item: KaiXGuideLifeItemDTO,
+        payments: [KaiXGuideLifePaymentDTO],
+        onSave: @escaping (Int, String, String, String) async -> Bool
+    ) {
+        self.item = item
+        self.payments = payments
+        self.onSave = onSave
+        _amount = State(initialValue: item.amount > 0 ? String(item.amount) : "")
+        _method = State(initialValue: item.paymentMethod)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("本次支付") {
+                    DatePicker("支付日期", selection: $paidAt, displayedComponents: .date)
+                    TextField("金额", text: $amount)
+                        .keyboardType(.numberPad)
+                    TextField("支付方式", text: $method)
+                    TextField("备注", text: $notes, axis: .vertical)
+                }
+                Section("支付历史") {
+                    if payments.isEmpty {
+                        Text("还没有支付记录。")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(payments) { payment in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(GuideOSDate.short(payment.paidAt))
+                                        .font(.subheadline.weight(.semibold))
+                                    Text(payment.paymentMethod.isEmpty ? "未注明方式" : payment.paymentMethod)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Text("\(payment.currency) \(payment.amount)")
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundStyle(KXColor.accent)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("记录已支付")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(saving ? "保存中" : "保存") {
+                        Task {
+                            saving = true
+                            let ok = await onSave(Int(amount) ?? 0, GuideOSDate.iso(paidAt), method, notes)
+                            saving = false
+                            if ok { dismiss() }
+                        }
+                    }
+                    .disabled(saving)
+                }
+            }
         }
     }
 }

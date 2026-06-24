@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Bottom inset for every Guide scroll view so the floating bottom tab bar never
 /// covers the last item. Uses the app-wide `chrome.bottomContentPadding` (≈98pt
@@ -63,14 +64,10 @@ struct GuideHomeView: View {
             }
         } else if viewModel.isComingSoon {
             GuideComingSoonView(empty: viewModel.home?.emptyState)
-        } else if let home = viewModel.home {
+        } else if viewModel.home != nil {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 18) {
-                    GuideHeroSection(home: home, searchText: $viewModel.searchText) { keyword in
-                        Task { await viewModel.search(country: country, keyword: keyword) }
-                    } onClear: {
-                        viewModel.clearSearch()
-                    }
+                    GuideTodayHeader(isGuest: currentUser.isGuest)
 
                     if let message = viewModel.errorMessage, !message.isEmpty {
                         GuideInlineStatus(message: message)
@@ -91,23 +88,19 @@ struct GuideHomeView: View {
                             isGuest: currentUser.isGuest,
                             onOpenPlan: { router.open(.guidePlan) },
                             onOpenCalendar: { router.open(.guideCalendar) },
+                            onOpenManage: { router.open(.guideManage) },
+                            onOpenGoals: { router.open(.guideGoals) },
                             onOpenProfile: { router.open(.guideProfile) },
                             onOpenLife: { router.open(.guideLifePlanner) },
                             onOpenApplications: { router.open(.guideApplications) },
                             onOpenServices: { router.open(.guideServices) },
+                            onOpenJourney: { key in router.open(.guideJourney(key: key)) },
                             onOpenProduct: { slug in router.open(.guideProduct(slug: slug)) },
-                            onCompleteTodo: { todo in Task { await viewModel.completeGuideTodo(todo) } }
+                            onCompleteTodo: { todo in Task { await viewModel.completeGuideTodo(todo) } },
+                            onCreateTodo: { content, plannedDate in
+                                Task { await viewModel.createQuickTodo(content: content, plannedDate: plannedDate) }
+                            }
                         )
-                        GuideCategoryGrid(categories: home.categories)
-                        // Action paths are now templates that generate Todo /
-                        // calendar plans, not the primary browsing taxonomy.
-                        GuideJourneyGrid(journeys: home.journeys ?? [], activePlan: viewModel.guideOS?.plan, suggestedKeys: viewModel.guideOS?.suggestedJourneys?.map(\.key) ?? [])
-                        GuideResourceEntriesSection(entries: home.resourceEntries ?? [])
-                        // Removed the featured / per-zone spotlight / schools /
-                        // products / companies / latest blocks below: they were
-                        // duplicate routes into content the journeys + categories
-                        // + resource entries above already cover. Keep FAQ only.
-                        GuideFAQSection(faq: home.faq)
                     }
                 }
                 .padding(.horizontal, KXSpacing.screen)
@@ -352,10 +345,14 @@ struct GuideArticleDetailView: View {
     @ObservedObject private var regionStore = RegionStore.shared
     @State private var response: KaiXGuideArticleDetailResponse?
     @State private var isLoading = true
+    @State private var isSaving = false
+    @State private var isMarkingRead = false
     @State private var errorMessage: String?
+    @State private var toastMessage: String?
 
     let slug: String
     private var country: String { (regionStore.current?.countryCode ?? "jp").lowercased() }
+    private var isSignedIn: Bool { (KaiXBackend.token?.isEmpty == false) }
 
     var body: some View {
         ZStack {
@@ -372,6 +369,7 @@ struct GuideArticleDetailView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         articleHeader(article)
+                        articleActionBar(article)
                         articleBody(article)
                         GuideNotePanel(text: guideText(language, "本内容由 \(article.authorName) 整理，仅供参考。涉及签证、入管、考试等官方流程时，请同时以官方最新公告为准。", "本コンテンツは \(article.authorName) が整理した参考情報です。ビザ、入管、試験などの公式手続きは必ず最新の公式発表も確認してください。", "This content was curated by \(article.authorName) for reference only. For visas, immigration, exams, and other official processes, always check the latest official notices."))
                         if let related = response?.related, !related.isEmpty {
@@ -391,6 +389,14 @@ struct GuideArticleDetailView: View {
         .navigationTitle(guideText(language, "指南", "ガイド", "Guide"))
         .navigationBarTitleDisplayMode(.inline)
         .task(id: "\(country):\(slug)") { await load() }
+        .alert("Machi Guide", isPresented: Binding(
+            get: { toastMessage != nil },
+            set: { if !$0 { toastMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(toastMessage ?? "")
+        }
     }
 
     private func articleHeader(_ article: KaiXGuideArticleDTO) -> some View {
@@ -431,6 +437,77 @@ struct GuideArticleDetailView: View {
         .kxGlassSurface(radius: 24)
     }
 
+    private func articleActionBar(_ article: KaiXGuideArticleDTO) -> some View {
+        let progress = max(0, min(100, article.progressPercent ?? article.readingProgress?.progressPercent ?? 0))
+        let saved = article.saved == true
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Button {
+                    Task { await toggleSave(article) }
+                } label: {
+                    Label(saved ? guideText(language, "已收藏", "保存済み", "Saved") : guideText(language, "收藏", "保存", "Save"),
+                          systemImage: saved ? "bookmark.fill" : "bookmark")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.plain)
+                .frame(minHeight: 46)
+                .padding(.horizontal, 12)
+                .background(Color.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KXColor.separator.opacity(0.55), lineWidth: 1))
+                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .disabled(isSaving)
+
+                Button {
+                    share(article)
+                } label: {
+                    Label(guideText(language, "分享", "共有", "Share"), systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.plain)
+                .frame(minHeight: 46)
+                .padding(.horizontal, 12)
+                .background(Color.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KXColor.separator.opacity(0.55), lineWidth: 1))
+                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+
+            Button {
+                Task { await markRead(article) }
+            } label: {
+                HStack {
+                    if isMarkingRead {
+                        ProgressView().tint(.white)
+                    } else {
+                        Image(systemName: progress >= 95 ? "checkmark.seal.fill" : "checkmark.circle")
+                    }
+                    Text(progress >= 95 ? guideText(language, "已读完", "読了", "Finished") : guideText(language, "标记读完", "読了にする", "Mark as read"))
+                    Spacer()
+                    Text("\(progress)%")
+                        .font(.caption.weight(.black))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .frame(minHeight: 48)
+                .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(isMarkingRead || progress >= 95)
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(KXColor.softBackground)
+                    Capsule()
+                        .fill(KXColor.accent)
+                        .frame(width: max(8, proxy.size.width * CGFloat(progress) / 100))
+                }
+            }
+            .frame(height: 7)
+        }
+        .padding(14)
+        .kxGlassSurface(radius: 20)
+    }
+
     private func articleBody(_ article: KaiXGuideArticleDTO) -> some View {
         let paragraphs = (article.body ?? article.summary)
             .components(separatedBy: "\n\n")
@@ -451,19 +528,62 @@ struct GuideArticleDetailView: View {
     }
 
     private func load() async {
+        await load(showSpinner: true)
+    }
+
+    private func load(showSpinner: Bool) async {
         guard country == "jp" else {
             isLoading = false
             response = nil
             return
         }
-        isLoading = true
+        if showSpinner { isLoading = true }
         errorMessage = nil
-        defer { isLoading = false }
+        defer { if showSpinner { isLoading = false } }
         do {
             response = try await KaiXAPIClient.shared.guideArticle(slug, country: country)
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func toggleSave(_ article: KaiXGuideArticleDTO) async {
+        guard isSignedIn else {
+            toastMessage = guideText(language, "登录后即可收藏指南。", "ログインするとガイドを保存できます。", "Sign in to save this guide.")
+            return
+        }
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            try await KaiXAPIClient.shared.setGuideSaved(itemType: "article", itemId: article.id, on: article.saved != true)
+            toastMessage = article.saved == true
+                ? guideText(language, "已取消收藏", "保存を解除しました", "Removed from saved")
+                : guideText(language, "已收藏到资料库", "資料庫に保存しました", "Saved")
+            await load(showSpinner: false)
+        } catch {
+            toastMessage = error.localizedDescription
+        }
+    }
+
+    private func markRead(_ article: KaiXGuideArticleDTO) async {
+        guard isSignedIn else {
+            toastMessage = guideText(language, "登录后即可保存阅读进度。", "ログインすると読書進捗を保存できます。", "Sign in to save reading progress.")
+            return
+        }
+        isMarkingRead = true
+        defer { isMarkingRead = false }
+        do {
+            _ = try await KaiXAPIClient.shared.updateGuideArticleProgress(article.slug, country: country, progressPercent: 100)
+            toastMessage = guideText(language, "已标记读完", "読了にしました", "Marked as read")
+            await load(showSpinner: false)
+        } catch {
+            toastMessage = error.localizedDescription
+        }
+    }
+
+    private func share(_ article: KaiXGuideArticleDTO) {
+        UIPasteboard.general.string = "https://machicity.com/guide/articles/\(article.slug)"
+        toastMessage = guideText(language, "链接已复制", "リンクをコピーしました", "Link copied")
     }
 }
 
@@ -2463,6 +2583,40 @@ private struct GuideHeroSection: View {
         .background(KXColor.livingSoft, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(KXColor.livingInk.opacity(0.06), lineWidth: 0.8))
         .shadow(color: Color.black.opacity(0.05), radius: 14, y: 7)
+    }
+}
+
+private struct GuideTodayHeader: View {
+    @Environment(\.appLanguage) private var language
+    let isGuest: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                Text("Machi Guide OS")
+            }
+            .font(.caption.weight(.black))
+            .tracking(1.2)
+            .foregroundStyle(KXColor.livingAccent)
+            Text(guideText(language, "今日", "今日", "Today"))
+                .font(.system(size: 34, weight: .bold, design: .rounded))
+                .foregroundStyle(KXColor.livingInk)
+            Text(guideText(language, "把今天最重要的事情完成。", "今日いちばん大事なことを終わらせる。", "Finish what matters today."))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(KXColor.livingMuted)
+            Text(isGuest
+                 ? guideText(language, "登录后同步 Todo、日历、申请和生活提醒。", "ログインするとTodo・カレンダー・申請・生活リマインダーを同期できます。", "Log in to sync todos, calendar, applications, and life reminders.")
+                 : guideText(language, "Todo、日历、账单、合同、申请和路径统一到这一套行动系统。", "Todo、カレンダー、支払い、契約、申請、目標を一つの行動システムにまとめます。", "Tasks, calendar, bills, contracts, applications, and goals live in one system."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(KXColor.livingSurface.opacity(0.82), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(KXColor.livingInk.opacity(0.06), lineWidth: 0.8))
+        .shadow(color: Color.black.opacity(0.035), radius: 14, y: 7)
     }
 }
 

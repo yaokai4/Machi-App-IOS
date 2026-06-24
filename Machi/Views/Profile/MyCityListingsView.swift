@@ -27,11 +27,23 @@ struct MyCityListingsView: View {
             case .error(let message):
                 ErrorStateView(message: message) { Task { await load() } }
             case .empty:
-                EmptyStateView(
-                    title: L("workbenchCityListingsEmpty", language),
-                    subtitle: L("workbenchCityListingsEmptyHelp", language),
-                    systemImage: "tray"
-                )
+                ScrollView {
+                    VStack(spacing: 16) {
+                        Spacer(minLength: 96)
+                        KXListingsEmptyActionPanel(
+                            icon: "tray.full",
+                            tint: KXColor.accent,
+                            title: L("workbenchCityListingsEmpty", language),
+                            subtitle: L("workbenchCityListingsEmptyHelp", language),
+                            actionTitle: L("workbenchPublishCity", language)
+                        ) {
+                            router.open(.createCityListing(type: "secondhand", citySlug: nil))
+                        }
+                        Spacer(minLength: 180)
+                    }
+                    .padding(KXSpacing.screen)
+                }
+                .kxReadableWidth()
             case .loaded:
                 ScrollView {
                     LazyVStack(spacing: 10) {
@@ -261,5 +273,50 @@ struct MyCityListingsView: View {
                 if actionMessage == text { actionMessage = nil }
             }
         }
+    }
+}
+
+private struct KXListingsEmptyActionPanel: View {
+    let icon: String
+    let tint: Color
+    let title: String
+    let subtitle: String
+    let actionTitle: String
+    let action: () -> Void
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Image(systemName: icon)
+                .font(.system(size: 25, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 64, height: 64)
+                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+
+            VStack(spacing: 7) {
+                Text(title)
+                    .font(.title3.weight(.black))
+                    .foregroundStyle(KXColor.livingInk)
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(3)
+            }
+
+            Button(action: action) {
+                Label(actionTitle, systemImage: "plus.circle.fill")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 18)
+                    .frame(height: 44)
+                    .background(tint, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 22)
+        .padding(.vertical, 32)
+        .kxLivingSurface(radius: 28, elevated: true)
     }
 }

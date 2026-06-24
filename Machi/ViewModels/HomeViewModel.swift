@@ -26,6 +26,7 @@ final class HomeViewModel: ObservableObject {
     // the home feed visibly repeat content: other tabs keep inserting
     // rows between windows, so window N+1 could re-serve window N's posts.
     private var pendingRemoteBundle: ServerEntityFactory.PostBundle?
+    private var pendingRemoteBundleIsCachedSnapshot = false
     // Every post id currently in `posts` — appended pages are filtered
     // against this so a shifted local window can never show a duplicate.
     private var loadedIds = Set<String>()
@@ -41,6 +42,7 @@ final class HomeViewModel: ObservableObject {
         remoteCursor = nil
         remoteHasMore = false
         pendingRemoteBundle = nil
+        pendingRemoteBundleIsCachedSnapshot = false
         loadedIds = []
         if clearExisting {
             posts = []
@@ -155,16 +157,22 @@ final class HomeViewModel: ObservableObject {
             let repository = PostRepository(context: context)
             let page: [PostEntity]
             let usedRemotePage: Bool
+            var usedCachedSnapshotPage = false
             if let bundle = pendingRemoteBundle {
                 // Server-paged path: render exactly the page the cursor
                 // returned, in server order. The local store is not used as
                 // the paginator or source of truth in production.
                 pendingRemoteBundle = nil
-                usedRemotePage = true
+                usedRemotePage = !pendingRemoteBundleIsCachedSnapshot
+                usedCachedSnapshotPage = pendingRemoteBundleIsCachedSnapshot
+                pendingRemoteBundleIsCachedSnapshot = false
                 page = bundle.orderedPosts
                 authors.merge(bundle.authors) { _, fresh in fresh }
                 mediaByPostId.merge(bundle.mediaByPostId) { _, fresh in fresh }
                 postStore.register(bundle.allPosts)
+                if usedCachedSnapshotPage {
+                    canLoadMore = false
+                }
             } else {
                 usedRemotePage = false
                 page = try await repository.fetchPage(mode: mode, currentUserId: currentUser.id, page: currentPage, pageSize: KaiXConfig.pageSize)
@@ -178,17 +186,21 @@ final class HomeViewModel: ObservableObject {
             currentPage += 1
             // Hot has no server cursor (single ranked page) — after it,
             // deterministic local windows keep deeper browsing alive.
-            canLoadMore = usedRemotePage
-                ? (remoteHasMore || mode == .hot)
-                : (page.count == KaiXConfig.pageSize || remoteHasMore)
-            try await hydrate(
-                context: context,
-                repository: repository,
-                currentUser: currentUser,
-                postStore: postStore,
-                reset: reset,
-                refreshRecommendations: reset || recommendedUsers.isEmpty
-            )
+            if canLoadMore {
+                canLoadMore = usedRemotePage
+                    ? (remoteHasMore || mode == .hot)
+                    : (page.count == KaiXConfig.pageSize || remoteHasMore)
+            }
+            if !usedCachedSnapshotPage {
+                try await hydrate(
+                    context: context,
+                    repository: repository,
+                    currentUser: currentUser,
+                    postStore: postStore,
+                    reset: reset,
+                    refreshRecommendations: reset || recommendedUsers.isEmpty
+                )
+            }
             state = posts.isEmpty ? .empty : .loaded
             return true
         } catch {
@@ -213,11 +225,10 @@ final class HomeViewModel: ObservableObject {
             case .following: apiMode = .following
             case .hot:       apiMode = .hot
             }
-            // All primary feeds stay inside the account's selected
-            // country. The `.local` tab narrows that further to the
-            // current city.
+            // 热榜 now follows the selected city from the top region chip,
+            // so the extra city/country/all row is no longer needed.
             let region = RegionStore.shared.current
-            let cityScoped = mode == .local
+            let cityScoped = mode == .local || mode == .hot
             let page = try await KaiXAPIClient.shared.feed(
                 mode: apiMode,
                 cursor: cursor,
@@ -229,12 +240,43 @@ final class HomeViewModel: ObservableObject {
             remoteCursor = page.next_cursor
             remoteHasMore = page.next_cursor != nil && !page.items.isEmpty
             pendingRemoteBundle = page.items.isEmpty ? nil : ServerEntityFactory.postBundle(from: page.items)
+            pendingRemoteBundleIsCachedSnapshot = false
+            // Snapshot the first page so a future offline cold launch can still
+            // show something instead of a blank feed. Best-effort, never blocks.
+            if cursor == nil {
+                KaiXFeedCache.save(page.items, key: feedCacheKey())
+            }
         } catch {
-            // Silent — the local fallback below still produces a usable
-            // feed. Keep the previous cursor state so a transient network
-            // error doesn't permanently stop remote pagination.
-            pendingRemoteBundle = nil
+            // Silent — the local fallback below still produces a usable feed.
+            // On a cold first page, fall back to the last good server snapshot
+            // so an offline launch is not blank.
+            if cursor == nil {
+                let cachedItems = KaiXFeedCache.load(key: feedCacheKey())
+                pendingRemoteBundle = cachedItems.isEmpty ? nil : ServerEntityFactory.postBundle(from: cachedItems)
+                pendingRemoteBundleIsCachedSnapshot = pendingRemoteBundle != nil
+            } else {
+                pendingRemoteBundle = nil
+                pendingRemoteBundleIsCachedSnapshot = false
+            }
+            // Keep the previous cursor state so a transient network error
+            // doesn't permanently stop remote pagination.
         }
+    }
+
+    private func feedCacheKey() -> String {
+        let region = RegionStore.shared.current
+        let cityScoped = mode == .local
+        let province = cityScoped ? (region?.provinceCode.isEmpty == true ? "" : region?.provinceCode ?? "") : ""
+        let city = cityScoped ? (region?.cityCode ?? "") : ""
+        let regionCode = cityScoped ? (region?.regionCode ?? "") : ""
+        return [
+            "home",
+            mode.rawValue,
+            region?.countryCode ?? "",
+            province,
+            city,
+            regionCode
+        ].joined(separator: "_")
     }
 
     private func balanceOfficialRuns(_ input: [PostEntity]) -> [PostEntity] {

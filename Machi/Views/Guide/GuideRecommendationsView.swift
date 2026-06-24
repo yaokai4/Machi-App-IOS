@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Spec §十三 GuideRecommendationsView — a full "tools to finish your tasks"
-/// screen. Server-first over `/api/guide/recommendations`; the mall is embedded
-/// as task tools (materials + services), not a standalone shop.
+/// Contextual Guide resources and services. Server-first over
+/// `/api/guide/recommendations`; recommendations are tied to the user's
+/// profile, plan, and todos instead of behaving like a standalone shop.
 struct GuideRecommendationsView: View {
     @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
@@ -21,8 +21,8 @@ struct GuideRecommendationsView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
                     GuideOSHeaderRow(
-                        title: guideOSText(language, "完成任务的工具", "タスク用ツール", "Tools to finish your tasks"),
-                        subtitle: guideOSText(language, "按你的计划与待办推荐资料和人工服务", "計画とTodoに合わせて資料と代行サービスを推薦", "Materials and services matched to your plan and todos")
+                        title: guideOSText(language, "资料与服务推荐", "資料・サービスのおすすめ", "Recommended materials & services"),
+                        subtitle: guideOSText(language, "根据你的提醒设置、计划和 Todo 推荐真正需要的资料与人工服务。", "リマインダー設定・計画・Todoに合わせて必要な資料とサービスを推薦します。", "Matched to your reminders, plan, and todos.")
                     )
                     if isLoading {
                         ProgressView().frame(maxWidth: .infinity).padding(.top, 40)
@@ -110,7 +110,7 @@ struct GuideOSRecommendationStrip: View {
             VStack(alignment: .leading, spacing: 9) {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(guideOSText(language, "完成任务的工具", "タスク用ツール", "Tools for tasks"))
+                        Text(guideOSText(language, "相关资料与服务", "関連資料・サービス", "Related materials & services"))
                             .font(.subheadline.weight(.bold))
                         Text(guideOSText(language, "按你的 Todo 自动推荐资料和服务", "Todoに合わせて資料とサービスを推薦", "Recommended from your todos"))
                             .font(.caption2)

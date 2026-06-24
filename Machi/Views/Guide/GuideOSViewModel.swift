@@ -77,6 +77,11 @@ class GuideOSViewModel: ObservableObject {
     @Published var calendarItems: [KaiXGuideCalendarItemDTO] = []
     @Published var applications: [KaiXGuideApplicationDTO] = []
     @Published var lifeItems: [KaiXGuideLifeItemDTO] = []
+    @Published var lifePayments: [String: [KaiXGuideLifePaymentDTO]] = [:]
+    @Published var contracts: [KaiXGuideContractDTO] = []
+    @Published var documents: [KaiXGuideDocumentDTO] = []
+    @Published var plans: [KaiXGuidePlanDTO] = []
+    @Published var goalJourneys: [KaiXGuideJourneyDTO] = []
     @Published var profile: KaiXGuideProfileDTO?
     @Published var isLoading = false
     @Published var isSaving = false
@@ -100,54 +105,34 @@ class GuideOSViewModel: ObservableObject {
         do {
             let fresh = try await KaiXAPIClient.shared.guideActivePlan(language: currentGuideOSLanguage())
             dashboard = fresh
-            GuideOSCache.save(fresh, key: "dashboard")
         } catch {
-            // Offline / transient failure: fall back to the last cached plan so
-            // the home isn't blank. Server stays the source of truth on reconnect.
-            if dashboard == nil, let cached = GuideOSCache.load(KaiXGuideActivePlanResponse.self, key: "dashboard") {
-                dashboard = cached
-                message = "离线模式：显示上次同步的计划，联网后自动更新。"
-            } else {
-                message = "Guide 计划暂时无法同步，请稍后下拉刷新。"
-            }
+            message = "Guide 计划暂时无法同步。当前页面不会写入本地核心状态，请联网后下拉刷新。"
         }
     }
 
-    func loadTodos(type: String? = nil, status: String = "open", limit: Int = 100) async {
+    func loadTodos(type: String? = nil, status: String = "open", planId: String? = nil, limit: Int = 100) async {
         guard isLoggedIn else { todos = []; return }
         isLoading = true
         message = nil
         defer { isLoading = false }
         do {
-            let items = try await KaiXAPIClient.shared.guideTodos(status: status, type: type, limit: limit).items
+            let items = try await KaiXAPIClient.shared.guideTodos(status: status, type: type, planId: planId, limit: limit).items
             todos = items
-            // Only the default open-todo view is cached (the offline home set).
-            if status == "open" && type == nil { GuideOSCache.save(items, key: "todos-open") }
         } catch {
-            if todos.isEmpty, status == "open", type == nil,
-               let cached = GuideOSCache.load([KaiXGuideTodoDTO].self, key: "todos-open") {
-                todos = cached
-            } else {
-                message = "任务列表加载失败，请稍后再试。"
-            }
+            message = "任务列表加载失败。Guide 核心状态仅以服务器为准，请联网后重试。"
         }
     }
 
-    func loadCalendar(days: Int = 60) async {
+    func loadCalendar(days: Int = 90, pastDays: Int = 30) async {
         guard isLoggedIn else { calendarItems = []; return }
         isLoading = true
         message = nil
         defer { isLoading = false }
         do {
-            let items = try await KaiXAPIClient.shared.guideCalendar(from: GuideOSDate.today(), to: GuideOSDate.today(offset: days)).items
+            let items = try await KaiXAPIClient.shared.guideCalendar(from: GuideOSDate.today(offset: -pastDays), to: GuideOSDate.today(offset: days)).items
             calendarItems = items
-            GuideOSCache.save(items, key: "calendar")
         } catch {
-            if calendarItems.isEmpty, let cached = GuideOSCache.load([KaiXGuideCalendarItemDTO].self, key: "calendar") {
-                calendarItems = cached
-            } else {
-                message = "日历暂时无法同步，请稍后再试。"
-            }
+            message = "日历暂时无法同步。Guide 核心状态仅以服务器为准，请联网后重试。"
         }
     }
 
@@ -159,7 +144,7 @@ class GuideOSViewModel: ObservableObject {
         do {
             profile = try await KaiXAPIClient.shared.guideProfile().profile
         } catch {
-            message = "身份信息加载失败，请稍后再试。"
+            message = "提醒设置加载失败，请稍后再试。"
         }
     }
 
@@ -168,8 +153,13 @@ class GuideOSViewModel: ObservableObject {
         isSaving = true
         defer { isSaving = false }
         do {
-            profile = try await KaiXAPIClient.shared.updateGuideProfile(payload).profile
-            message = "身份路径已更新。"
+            let response = try await KaiXAPIClient.shared.updateGuideProfile(payload)
+            profile = response.profile
+            if let count = response.generatedTodoCount, count > 0 {
+                message = "个人提醒设置已更新，已同步 \(count) 项 Todo / 日历提醒。"
+            } else {
+                message = "个人提醒设置已更新。"
+            }
         } catch {
             message = "保存失败，请检查网络后重试。"
         }
@@ -189,6 +179,201 @@ class GuideOSViewModel: ObservableObject {
         }
     }
 
+    /// MS To Do / Notion-style subtask checklist: persist a todo's new step list
+    /// and patch it back into the in-memory list so the card updates instantly.
+    func updateTodoSteps(_ todo: KaiXGuideTodoDTO, steps: [KaiXGuideTodoStep]) async {
+        guard requireLogin() else { return }
+        do {
+            let resp = try await KaiXAPIClient.shared.updateGuideTodo(id: todo.id, payload: .init(steps: steps))
+            if let updated = resp.todo {
+                patchTodo(updated)
+            }
+        } catch {
+            message = "子任务更新失败，请稍后再试。"
+        }
+    }
+
+    /// Notion-style task note: links, addresses, phone numbers, caveats and
+    /// small context belong on the todo itself, synced by the server.
+    func updateTodoNotes(_ todo: KaiXGuideTodoDTO, notes: String) async {
+        guard requireLogin() else { return }
+        do {
+            let resp = try await KaiXAPIClient.shared.updateGuideTodo(id: todo.id, payload: .init(notes: notes))
+            if let updated = resp.todo {
+                patchTodo(updated)
+                message = notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "备注已清空。" : "备注已保存。"
+            }
+        } catch {
+            message = "备注保存失败，请稍后再试。"
+        }
+    }
+
+    func updateTodo(_ todo: KaiXGuideTodoDTO, payload: KaiXGuideTodoUpdatePayload) async -> Bool {
+        guard requireLogin() else { return false }
+        do {
+            let response = try await KaiXAPIClient.shared.updateGuideTodo(id: todo.id, payload: payload)
+            if let updated = response.todo {
+                patchTodo(updated)
+            }
+            message = "Todo 已更新。"
+            await loadCalendar()
+            await loadDashboard()
+            return true
+        } catch {
+            message = "Todo 更新失败，请稍后重试。"
+            return false
+        }
+    }
+
+    func duplicateTodo(_ todo: KaiXGuideTodoDTO) async -> Bool {
+        guard requireLogin() else { return false }
+        do {
+            _ = try await KaiXAPIClient.shared.createGuideTodo(.init(
+                content: todo.title + "（副本）",
+                summary: todo.summary,
+                todoType: todo.todoType,
+                priority: todo.priority,
+                plannedDate: todo.plannedDate,
+                dueAt: todo.dueAt,
+                reminderAt: nil,
+                planId: todo.planId.isEmpty ? nil : todo.planId,
+                notes: todo.notes,
+                recurrence: todo.recurrence,
+                listName: todo.listName,
+                tags: todo.tags
+            ))
+            message = "已复制 Todo。"
+            await loadTodos(status: "open")
+            await loadCalendar()
+            return true
+        } catch {
+            message = "复制失败，请稍后重试。"
+            return false
+        }
+    }
+
+    func archiveTodo(_ todo: KaiXGuideTodoDTO) async -> Bool {
+        guard requireLogin() else { return false }
+        do {
+            _ = try await KaiXAPIClient.shared.updateGuideTodo(id: todo.id, payload: .init(status: "archived"))
+            withAnimation(.easeInOut(duration: 0.2)) {
+                todos.removeAll { $0.id == todo.id }
+                calendarItems.removeAll { $0.todoId == todo.id }
+            }
+            message = "Todo 已归档。"
+            return true
+        } catch {
+            message = "归档失败，请稍后重试。"
+            return false
+        }
+    }
+
+    func deleteTodo(_ todo: KaiXGuideTodoDTO) async -> Bool {
+        guard requireLogin() else { return false }
+        do {
+            try await KaiXAPIClient.shared.deleteGuideTodo(id: todo.id)
+            withAnimation(.easeInOut(duration: 0.2)) {
+                todos.removeAll { $0.id == todo.id }
+                calendarItems.removeAll { $0.todoId == todo.id }
+            }
+            message = "Todo 已删除。"
+            await loadDashboard()
+            return true
+        } catch {
+            message = "删除失败，请稍后重试。"
+            return false
+        }
+    }
+
+    private func patchTodo(_ updated: KaiXGuideTodoDTO) {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            if let idx = todos.firstIndex(where: { $0.id == updated.id }) {
+                todos[idx] = updated
+            }
+            if let idx = calendarItems.firstIndex(where: { $0.todoId == updated.id }) {
+                let item = calendarItems[idx]
+                calendarItems[idx] = KaiXGuideCalendarItemDTO(
+                    id: item.id,
+                    todoId: item.todoId,
+                    title: updated.title,
+                    date: item.date,
+                    startAt: item.startAt,
+                    endAt: item.endAt,
+                    type: item.type,
+                    status: updated.status,
+                    planId: item.planId,
+                    notes: item.notes,
+                    recurrence: item.recurrence,
+                    reminderAt: item.reminderAt,
+                    allDay: item.allDay,
+                    todo: updated
+                )
+            }
+        }
+    }
+
+    func createCalendarEvent(title: String, date: String, time: String?, allDay: Bool, recurrence: String, notes: String) async -> Bool {
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTitle.isEmpty, !date.isEmpty else { return false }
+        guard requireLogin("登录后可以保存日程并在 Web 与 iOS 同步。") else { return false }
+        isSaving = true
+        defer { isSaving = false }
+        let startAt = allDay || (time ?? "").isEmpty ? date : "\(date)T\(time!)"
+        do {
+            _ = try await KaiXAPIClient.shared.createGuideCalendarEvent(.init(
+                title: cleanTitle,
+                date: date,
+                startAt: startAt,
+                type: "event",
+                notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
+                recurrence: recurrence,
+                allDay: allDay
+            ))
+            message = "日程已添加。"
+            await loadCalendar()
+            GuideHaptics.success()
+            return true
+        } catch {
+            message = "日程添加失败，请稍后重试。"
+            return false
+        }
+    }
+
+    func updateCalendarEvent(_ event: KaiXGuideCalendarItemDTO, payload: KaiXGuideCalendarEventPayload) async -> Bool {
+        guard requireLogin() else { return false }
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            let response = try await KaiXAPIClient.shared.updateGuideCalendarEvent(id: event.id, payload: payload)
+            if let updated = response.event,
+               let index = calendarItems.firstIndex(where: { $0.id == updated.id }) {
+                calendarItems[index] = updated
+            } else {
+                await loadCalendar()
+            }
+            message = "日程已更新。"
+            return true
+        } catch {
+            message = "日程更新失败，请稍后重试。"
+            return false
+        }
+    }
+
+    func deleteCalendarEvent(_ event: KaiXGuideCalendarItemDTO) async -> Bool {
+        guard requireLogin() else { return false }
+        do {
+            try await KaiXAPIClient.shared.deleteGuideCalendarEvent(id: event.id)
+            withAnimation(.easeInOut(duration: 0.2)) {
+                calendarItems.removeAll { $0.id == event.id }
+            }
+            message = "日程已删除。"
+            return true
+        } catch {
+            message = "日程删除失败，请稍后重试。"
+            return false
+        }
+    }
+
     /// Spec P2 planning depth: move a todo's planned date (今天/明天/+7天/自定义).
     func reschedule(_ todo: KaiXGuideTodoDTO, to date: String) async {
         guard requireLogin() else { return }
@@ -199,6 +384,31 @@ class GuideOSViewModel: ObservableObject {
             await loadDashboard()
         } catch {
             message = "改期失败，请稍后重试。"
+        }
+    }
+
+    func createQuickTodo(content: String, plannedDate: String? = nil, planId: String? = nil) async -> Bool {
+        let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return false }
+        guard requireLogin("登录后可以保存 Todo、日历和提醒。") else { return false }
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            _ = try await KaiXAPIClient.shared.createGuideTodo(.init(
+                content: text,
+                todoType: "manual",
+                plannedDate: plannedDate,
+                planId: planId
+            ))
+            message = "Todo 已添加。"
+            await loadTodos(status: "open")
+            await loadCalendar()
+            await loadDashboard()
+            GuideHaptics.success()
+            return true
+        } catch {
+            message = "添加 Todo 失败，请稍后重试。"
+            return false
         }
     }
 
@@ -250,6 +460,43 @@ class GuideOSViewModel: ObservableObject {
             applications = try await KaiXAPIClient.shared.guideApplications().items
         } catch {
             // A list failure shouldn't blank the whole planner; keep prior state.
+        }
+    }
+
+    func loadGoals() async {
+        isLoading = true
+        message = nil
+        defer { isLoading = false }
+        do {
+            async let journeysRequest = KaiXAPIClient.shared.guideJourneys(language: currentGuideOSLanguage())
+            if isLoggedIn {
+                async let plansRequest = KaiXAPIClient.shared.guidePlans()
+                let (journeysResponse, plansResponse) = try await (journeysRequest, plansRequest)
+                goalJourneys = journeysResponse.journeys
+                plans = plansResponse.items
+            } else {
+                goalJourneys = try await journeysRequest.journeys
+                plans = []
+            }
+        } catch {
+            message = "路径加载失败，请检查网络后重试。"
+        }
+    }
+
+    func createCustomGoal(title: String, targetDate: String?) async -> Bool {
+        guard requireLogin("登录后可以创建并同步自定义目标。") else { return false }
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTitle.isEmpty else { return false }
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            _ = try await KaiXAPIClient.shared.createCustomGuidePlan(title: cleanTitle, targetDate: targetDate)
+            message = "目标已创建，可以从待办中添加下一步。"
+            await loadGoals()
+            return true
+        } catch {
+            message = "目标创建失败，请稍后重试。"
+            return false
         }
     }
 
@@ -306,6 +553,45 @@ class GuideOSViewModel: ObservableObject {
         }
     }
 
+    func loadLifePayments(itemId: String) async {
+        guard isLoggedIn else { return }
+        do {
+            lifePayments[itemId] = try await KaiXAPIClient.shared.guideLifePayments(itemId: itemId).items
+        } catch {
+            message = "支付历史加载失败，请稍后重试。"
+        }
+    }
+
+    func recordLifePayment(item: KaiXGuideLifeItemDTO, amount: Int, paidAt: String, method: String, notes: String) async -> Bool {
+        guard requireLogin() else { return false }
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            let response = try await KaiXAPIClient.shared.createGuideLifePayment(
+                itemId: item.id,
+                payload: .init(
+                    amount: max(0, amount),
+                    currency: item.currency.isEmpty ? "JPY" : item.currency,
+                    paymentMethod: method,
+                    paidAt: paidAt,
+                    notes: notes
+                )
+            )
+            if let index = lifeItems.firstIndex(where: { $0.id == item.id }) {
+                lifeItems[index] = response.item
+            }
+            await loadLifePayments(itemId: item.id)
+            await loadTodos(type: "life_payment")
+            await loadCalendar()
+            message = response.nextDueAt.map { "已记录支付，下一期 \((GuideOSDate.short($0)))。" } ?? "已记录支付。"
+            GuideHaptics.success()
+            return true
+        } catch {
+            message = "支付记录保存失败，请稍后重试。"
+            return false
+        }
+    }
+
     func createLifeItem(_ payload: KaiXGuideLifeItemPayload) async -> Bool {
         guard requireLogin("登录后可以保存房租、水电、网络、手机费等生活截止日。") else { return false }
         isSaving = true
@@ -347,6 +633,94 @@ class GuideOSViewModel: ObservableObject {
             await loadTodos(type: "life_payment")
         } catch {
             message = "删除失败，请稍后重试。"
+        }
+    }
+
+    func loadContracts() async {
+        guard isLoggedIn else { contracts = []; return }
+        do {
+            contracts = try await KaiXAPIClient.shared.guideContracts().items
+        } catch {
+            message = "合同加载失败，请检查网络后重试。"
+        }
+    }
+
+    func saveContract(id: String? = nil, payload: KaiXGuideContractPayload) async -> Bool {
+        guard requireLogin("登录后可以保存合同到期与解约提醒。") else { return false }
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            if let id {
+                _ = try await KaiXAPIClient.shared.updateGuideContract(id: id, payload: payload)
+            } else {
+                _ = try await KaiXAPIClient.shared.createGuideContract(payload)
+            }
+            message = "合同提醒已保存。"
+            await loadContracts()
+            await loadTodos(status: "open")
+            await loadCalendar()
+            GuideHaptics.success()
+            return true
+        } catch {
+            message = "合同保存失败，请稍后重试。"
+            return false
+        }
+    }
+
+    func deleteContract(_ item: KaiXGuideContractDTO) async {
+        guard requireLogin() else { return }
+        do {
+            try await KaiXAPIClient.shared.deleteGuideContract(id: item.id)
+            contracts.removeAll { $0.id == item.id }
+            message = "合同和关联提醒已删除。"
+            await loadTodos(status: "open")
+            await loadCalendar()
+        } catch {
+            message = "合同删除失败，请稍后重试。"
+        }
+    }
+
+    func loadDocuments() async {
+        guard isLoggedIn else { documents = []; return }
+        do {
+            documents = try await KaiXAPIClient.shared.guideDocuments().items
+        } catch {
+            message = "证件提醒加载失败，请检查网络后重试。"
+        }
+    }
+
+    func saveDocument(id: String? = nil, payload: KaiXGuideDocumentPayload) async -> Bool {
+        guard requireLogin("登录后可以保存证件到期提醒。") else { return false }
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            if let id {
+                _ = try await KaiXAPIClient.shared.updateGuideDocument(id: id, payload: payload)
+            } else {
+                _ = try await KaiXAPIClient.shared.createGuideDocument(payload)
+            }
+            message = "证件到期提醒已保存。"
+            await loadDocuments()
+            await loadTodos(status: "open")
+            await loadCalendar()
+            GuideHaptics.success()
+            return true
+        } catch {
+            message = "证件提醒保存失败，请稍后重试。"
+            return false
+        }
+    }
+
+    func deleteDocument(_ item: KaiXGuideDocumentDTO) async {
+        guard requireLogin() else { return }
+        do {
+            try await KaiXAPIClient.shared.deleteGuideDocument(id: item.id)
+            documents.removeAll { $0.id == item.id }
+            message = "证件提醒已删除。"
+            await loadTodos(status: "open")
+            await loadCalendar()
+        } catch {
+            message = "证件提醒删除失败，请稍后重试。"
         }
     }
 }

@@ -1051,6 +1051,8 @@ struct KaiXUploadedFileDTO: Codable, Equatable {
     let posterUrl: String?
     let contentType: String?
     let fileSize: Int?
+    let fileName: String?
+    let originalFileName: String?
     let fileType: String?
     let type: String?
     let visibility: String?
@@ -1492,8 +1494,24 @@ struct KaiXGuideArticleDTO: Codable, Equatable, Identifiable, Hashable {
     let status: String
     let viewCount: Int
     let saveCount: Int
+    let saved: Bool?
+    let progressPercent: Int?
+    let readingProgress: KaiXGuideArticleProgressDTO?
     let publishedAt: String?
     let updatedAt: String?
+}
+
+struct KaiXGuideArticleProgressDTO: Codable, Equatable, Hashable {
+    let progressPercent: Int
+    let completedAt: String?
+    let lastReadAt: String?
+}
+
+struct KaiXGuideArticleProgressResponse: Codable {
+    let status: String
+    let articleId: String
+    let slug: String
+    let progress: KaiXGuideArticleProgressDTO
 }
 
 struct KaiXGuideProductDTO: Codable, Equatable, Identifiable, Hashable {
@@ -1959,11 +1977,14 @@ struct KaiXGuideTodoDTO: Codable, Equatable, Identifiable, Hashable {
     let estimatedMinutes: Int
     let notes: String
     let recurrence: String?
+    let listName: String?
+    let tags: [String]?
     let relatedArticleSlugs: [String]
     let relatedProductSlugs: [String]
     let relatedServiceSlugs: [String]
     let createdAt: String?
     let updatedAt: String?
+    var steps: [KaiXGuideTodoStep]? = nil
 
     var isDone: Bool { status == "done" }
     var displayDate: String? { plannedDate ?? dueAt ?? reminderAt }
@@ -2007,6 +2028,10 @@ struct KaiXGuideCalendarItemDTO: Codable, Equatable, Identifiable, Hashable {
     let type: String
     let status: String
     let planId: String
+    let notes: String?
+    let recurrence: String?
+    let reminderAt: String?
+    let allDay: Bool?
     let todo: KaiXGuideTodoDTO?
 }
 
@@ -2015,6 +2040,7 @@ struct KaiXGuideApplicationDTO: Codable, Equatable, Identifiable, Hashable {
     let userId: String
     let planId: String
     let type: String
+    let careerTrack: String?
     let name: String
     let department: String
     let position: String
@@ -2022,9 +2048,29 @@ struct KaiXGuideApplicationDTO: Codable, Equatable, Identifiable, Hashable {
     let interviewAt: String?
     let resultAt: String?
     let status: String
+    let stage: String?
+    let websiteUrl: String?
+    let interviewLocation: String?
+    let meetingUrl: String?
+    let contactName: String?
+    let contactEmail: String?
+    let priority: String?
+    let favorite: Bool?
+    let tags: [String]?
+    let archivedAt: String?
+    let stages: [KaiXGuideApplicationStage]?
     let notes: String
     let createdAt: String?
     let updatedAt: String?
+}
+
+struct KaiXGuideApplicationStage: Codable, Equatable, Identifiable, Hashable {
+    let id: String
+    let applicationId: String
+    let stage: String
+    let note: String
+    let occurredAt: String?
+    let createdAt: String?
 }
 
 struct KaiXGuideLifeItemDTO: Codable, Equatable, Identifiable, Hashable {
@@ -2046,9 +2092,56 @@ struct KaiXGuideLifeItemDTO: Codable, Equatable, Identifiable, Hashable {
     let updatedAt: String?
 }
 
+struct KaiXGuideLifePaymentDTO: Codable, Equatable, Identifiable, Hashable {
+    let id: String
+    let lifeItemId: String
+    let amount: Int
+    let currency: String
+    let paymentMethod: String
+    let paidAt: String
+    let notes: String
+    let createdAt: String?
+}
+
+struct KaiXGuideContractDTO: Codable, Equatable, Identifiable, Hashable {
+    let id: String
+    let userId: String
+    let category: String
+    let title: String
+    let provider: String
+    let startDate: String?
+    let endDate: String?
+    let cancellationWindowStart: String?
+    let cancellationWindowEnd: String?
+    let autoRenew: Bool
+    let monthlyCost: Int
+    let yearlyCost: Int
+    let currency: String
+    let reminderDaysBefore: Int
+    let contactInfo: String
+    let notes: String
+    let status: String
+    let createdAt: String?
+    let updatedAt: String?
+}
+
+struct KaiXGuideDocumentDTO: Codable, Equatable, Identifiable, Hashable {
+    let id: String
+    let userId: String
+    let category: String
+    let title: String
+    let expiresAt: String?
+    let reminderDaysBefore: Int
+    let notes: String
+    let status: String
+    let createdAt: String?
+    let updatedAt: String?
+}
+
 struct KaiXGuideProfileResponse: Codable {
     let status: String
     let profile: KaiXGuideProfileDTO?
+    let generatedTodoCount: Int?
 }
 
 struct KaiXGuidePlanListResponse: Codable {
@@ -2082,6 +2175,11 @@ struct KaiXGuideCalendarResponse: Codable {
     let status: String
     let items: [KaiXGuideCalendarItemDTO]
     let total: Int
+}
+
+struct KaiXGuideCalendarEventResponse: Codable {
+    let status: String
+    let event: KaiXGuideCalendarItemDTO?
 }
 
 struct KaiXGuideActivePlanResponse: Codable {
@@ -2139,6 +2237,7 @@ struct KaiXGuideNextAction: Codable, Equatable, Identifiable, Hashable {
     let todoId: String?
     let todoType: String?
     let journeyKey: String?
+    let dueAt: String?
     var id: String { "\(kind)-\(journeyKey ?? todoId ?? title)" }
 }
 
@@ -2170,6 +2269,62 @@ struct KaiXGuideLifeItemsResponse: Codable {
     let total: Int
 }
 
+struct KaiXGuideLifePaymentsResponse: Codable {
+    let status: String
+    let items: [KaiXGuideLifePaymentDTO]
+    let total: Int
+}
+
+struct KaiXGuideLifePaymentResponse: Codable {
+    let status: String
+    let payment: KaiXGuideLifePaymentDTO
+    let item: KaiXGuideLifeItemDTO
+    let nextDueAt: String?
+}
+
+struct KaiXGuideContractResponse: Codable {
+    let status: String
+    let contract: KaiXGuideContractDTO?
+}
+
+struct KaiXGuideContractsResponse: Codable {
+    let status: String
+    let items: [KaiXGuideContractDTO]
+    let total: Int
+}
+
+struct KaiXGuideDocumentResponse: Codable {
+    let status: String
+    let document: KaiXGuideDocumentDTO?
+}
+
+struct KaiXGuideDocumentsResponse: Codable {
+    let status: String
+    let items: [KaiXGuideDocumentDTO]
+    let total: Int
+}
+
+struct KaiXGuideAttachmentsResponse: Codable {
+    let status: String
+    let items: [KaiXUploadedFileDTO]
+    let total: Int
+}
+
+struct KaiXUploadPrivateViewURLResponse: Codable {
+    struct Payload: Codable {
+        let url: String
+        let expiresIn: Int?
+    }
+    let ok: Bool?
+    let data: Payload?
+    let url: String?
+    let expiresIn: Int?
+
+    var resolvedURL: String {
+        data?.url ?? url ?? ""
+    }
+}
+
 struct KaiXGuideRecommendationsResponse: Codable {
     let status: String
     let materials: [KaiXGuideProductDTO]
@@ -2194,6 +2349,12 @@ struct KaiXGuideProfileUpdatePayload: Encodable {
     var needsServices: Bool? = nil
 }
 
+struct KaiXGuideTodoStep: Codable, Equatable, Hashable, Identifiable {
+    var id: String
+    var text: String
+    var done: Bool
+}
+
 struct KaiXGuideTodoUpdatePayload: Encodable {
     var title: String? = nil
     var summary: String? = nil
@@ -2203,6 +2364,40 @@ struct KaiXGuideTodoUpdatePayload: Encodable {
     var plannedDate: String? = nil
     var dueAt: String? = nil
     var reminderAt: String? = nil
+    var steps: [KaiXGuideTodoStep]? = nil
+    var recurrence: String? = nil
+    var listName: String? = nil
+    var tags: [String]? = nil
+}
+
+struct KaiXGuideTodoCreatePayload: Encodable {
+    var content: String
+    var title: String? = nil
+    var summary: String? = nil
+    var todoType: String? = nil
+    var priority: String? = nil
+    var plannedDate: String? = nil
+    var dueAt: String? = nil
+    var reminderAt: String? = nil
+    var planId: String? = nil
+    var notes: String? = nil
+    var recurrence: String? = nil
+    var listName: String? = nil
+    var tags: [String]? = nil
+}
+
+struct KaiXGuideCalendarEventPayload: Encodable {
+    var title: String? = nil
+    var date: String? = nil
+    var startAt: String? = nil
+    var endAt: String? = nil
+    var type: String? = nil
+    var status: String? = nil
+    var planId: String? = nil
+    var notes: String? = nil
+    var recurrence: String? = nil
+    var reminderAt: String? = nil
+    var allDay: Bool? = nil
 }
 
 struct KaiXGuideApplicationPayload: Encodable {
@@ -2218,6 +2413,17 @@ struct KaiXGuideApplicationPayload: Encodable {
     /// "shinsotsu" (新卒) | "tenshoku" (社会人转职) — picks the company milestone
     /// ladder; ignored for school. (spec iOS sync)
     var careerTrack: String?
+    var stage: String?
+    var stageNote: String?
+    var websiteUrl: String?
+    var interviewLocation: String?
+    var meetingUrl: String?
+    var contactName: String?
+    var contactEmail: String?
+    var priority: String?
+    var favorite: Bool?
+    var tags: [String]?
+    var status: String?
 }
 
 struct KaiXGuideLifeItemPayload: Encodable {
@@ -2232,6 +2438,41 @@ struct KaiXGuideLifeItemPayload: Encodable {
     var recurrence: String?
     var reminderDaysBefore: Int?
     var notes: String?
+}
+
+struct KaiXGuideLifePaymentPayload: Encodable {
+    var amount: Int
+    var currency: String
+    var paymentMethod: String?
+    var paidAt: String
+    var notes: String?
+}
+
+struct KaiXGuideContractPayload: Encodable {
+    var category: String
+    var title: String
+    var provider: String?
+    var startDate: String?
+    var endDate: String?
+    var cancellationWindowStart: String?
+    var cancellationWindowEnd: String?
+    var autoRenew: Bool?
+    var monthlyCost: Int?
+    var yearlyCost: Int?
+    var currency: String?
+    var reminderDaysBefore: Int?
+    var contactInfo: String?
+    var notes: String?
+    var status: String?
+}
+
+struct KaiXGuideDocumentPayload: Encodable {
+    var category: String
+    var title: String
+    var expiresAt: String?
+    var reminderDaysBefore: Int?
+    var notes: String?
+    var status: String?
 }
 
 struct KaiXGuideSearchScope: Codable, Equatable, Identifiable, Hashable {

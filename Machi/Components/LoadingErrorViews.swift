@@ -170,18 +170,20 @@ private struct KXSplashLogoMark: View {
         let pulse = max(0, min(1, (shimmer + 1.2) / 2.4))
 
         ZStack {
-            RoundedRectangle(cornerRadius: 42, style: .continuous)
-                .stroke(KXColor.accent.opacity(0.10 * (1 - pulse)), lineWidth: 1)
-                .frame(width: 126, height: 126)
-                .scaleEffect(1 + pulse * 0.055)
-
             RoundedRectangle(cornerRadius: 34, style: .continuous)
-                .fill(KXColor.accent.opacity(0.095))
-                .frame(width: 108, height: 108)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 34, style: .continuous)
-                        .stroke(KXColor.accent.opacity(0.12), lineWidth: 1)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            KXColor.accent.opacity(0.10),
+                            KXColor.accent.opacity(0.045)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
                 )
+                .frame(width: 108, height: 108)
+                .scaleEffect(1 + pulse * 0.025)
+                .blur(radius: 0.2)
 
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .fill(
@@ -207,11 +209,7 @@ private struct KXSplashLogoMark: View {
                         .font(.system(size: 38, weight: .black, design: .rounded))
                         .foregroundStyle(Color(red: 0.122, green: 0.541, blue: 0.424))
                 )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .stroke(Color(red: 0.122, green: 0.541, blue: 0.424).opacity(0.20), lineWidth: 1.0)
-                )
-                .shadow(color: KXColor.accent.opacity(0.20), radius: 20, y: 10)
+                .shadow(color: KXColor.accent.opacity(0.22), radius: 24, y: 12)
         }
         .accessibilityHidden(true)
     }

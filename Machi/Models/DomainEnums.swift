@@ -124,18 +124,18 @@ enum ContentType: String, CaseIterable, Identifiable, Hashable {
 
 enum TimelineMode: String, CaseIterable, Identifiable {
     case recommend
+    case hot
     case local
     case following
-    case hot
 
     var id: String { rawValue }
 
     func title(_ language: AppLanguage) -> String {
         switch self {
         case .recommend: L("forYou", language)
+        case .hot:       L("hot", language)
         case .local:     L("local", language)
         case .following: L("following", language)
-        case .hot:       L("hot", language)
         }
     }
 }

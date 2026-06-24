@@ -15,16 +15,25 @@ struct GuideApplicationPlannerView: View {
     @State private var interview = Date()
     @State private var hasInterview = false
     @State private var notes = ""
+    @State private var viewMode = "board"
+    @State private var websiteURL = ""
+    @State private var interviewLocation = ""
+    @State private var meetingURL = ""
+    @State private var contactName = ""
+    @State private var contactEmail = ""
+    @State private var priority = "normal"
+    @State private var favorite = false
+    @State private var tagsText = ""
 
     private var apiType: String {
         switch track {
-        case "school": return "school"
+        case "new_grad", "career_change": return "company"
         case "jlpt": return "jlpt"
-        default: return "company"
+        default: return track
         }
     }
-    private var careerTrack: String? { track == "shinsotsu" ? "shinsotsu" : (track == "tenshoku" ? "tenshoku" : nil) }
-    private var isSchool: Bool { track == "school" }
+    private var careerTrack: String? { track == "new_grad" ? "shinsotsu" : (track == "career_change" ? "tenshoku" : nil) }
+    private var isSchool: Bool { ["school", "vocational", "language_school", "scholarship"].contains(track) }
     private var isJlpt: Bool { track == "jlpt" }
 
     var body: some View {
@@ -34,12 +43,18 @@ struct GuideApplicationPlannerView: View {
             model: model
         ) {
             Picker(guideOSText(language, "类型", "種類", "Type"), selection: $track) {
-                Text(guideOSText(language, "学校出愿", "学校出願", "School")).tag("school")
-                Text(guideOSText(language, "新卒就活", "新卒就活", "New grad")).tag("shinsotsu")
-                Text(guideOSText(language, "社会人转职", "社会人転職", "Career change")).tag("tenshoku")
+                Text(guideOSText(language, "大学 / 大学院", "大学・大学院", "University")).tag("school")
+                Text(guideOSText(language, "专门学校", "専門学校", "Vocational")).tag("vocational")
+                Text(guideOSText(language, "语言学校", "日本語学校", "Language school")).tag("language_school")
+                Text(guideOSText(language, "新卒就活", "新卒就活", "New grad")).tag("new_grad")
+                Text(guideOSText(language, "社会人转职", "社会人転職", "Career change")).tag("career_change")
+                Text(guideOSText(language, "实习", "インターン", "Internship")).tag("internship")
+                Text(guideOSText(language, "奖学金", "奨学金", "Scholarship")).tag("scholarship")
+                Text(guideOSText(language, "签证申请", "ビザ申請", "Visa")).tag("visa")
                 Text(guideOSText(language, "JLPT 考试", "JLPT 試験", "JLPT")).tag("jlpt")
+                Text(guideOSText(language, "其他", "その他", "Other")).tag("other")
             }
-            .pickerStyle(.segmented)
+            .pickerStyle(.menu)
             if isJlpt {
                 GuideOSTextField(title: guideOSText(language, "考试名称（如 JLPT N2）", "試験名（例: JLPT N2）", "Exam name (e.g. JLPT N2)"), text: $name)
             } else {
@@ -56,6 +71,29 @@ struct GuideApplicationPlannerView: View {
                     DatePicker("面试日期", selection: $interview, displayedComponents: .date)
                 }
             }
+            Picker("优先级", selection: $priority) {
+                Text("高").tag("high")
+                Text("普通").tag("normal")
+                Text("低").tag("low")
+            }
+            .pickerStyle(.menu)
+            Toggle("重点关注", isOn: $favorite)
+            GuideOSTextField(title: "官网 / 招聘页", text: $websiteURL)
+                .textInputAutocapitalization(.never)
+                .keyboardType(.URL)
+            if !isJlpt {
+                GuideOSTextField(title: "面试地点", text: $interviewLocation)
+                GuideOSTextField(title: "线上会议链接", text: $meetingURL)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.URL)
+            }
+            HStack {
+                GuideOSTextField(title: "联系人", text: $contactName)
+                GuideOSTextField(title: "联系邮箱", text: $contactEmail)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.emailAddress)
+            }
+            GuideOSTextField(title: "标签（逗号分隔）", text: $tagsText)
             GuideOSTextField(title: "备注", text: $notes)
             GuideOSPrimaryButton(title: model.isSaving ? "添加中" : "添加申请计划") {
                 Task {
@@ -67,28 +105,67 @@ struct GuideApplicationPlannerView: View {
                         deadline: GuideOSDate.iso(deadline),
                         interviewAt: (!isJlpt && hasInterview) ? GuideOSDate.iso(interview) : nil,
                         notes: notes,
-                        careerTrack: careerTrack
+                        careerTrack: careerTrack,
+                        stage: "saved",
+                        websiteUrl: websiteURL,
+                        interviewLocation: interviewLocation,
+                        meetingUrl: meetingURL,
+                        contactName: contactName,
+                        contactEmail: contactEmail,
+                        priority: priority,
+                        favorite: favorite,
+                        tags: tagsText
+                            .split(whereSeparator: { $0 == "," || $0 == "，" })
+                            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                            .filter { !$0.isEmpty }
                     ))
                     if ok {
                         name = ""
                         department = ""
                         position = ""
                         notes = ""
+                        websiteURL = ""
+                        interviewLocation = ""
+                        meetingURL = ""
+                        contactName = ""
+                        contactEmail = ""
+                        tagsText = ""
+                        favorite = false
                     }
                 }
             }
         } savedSection: {
             if !model.applications.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(guideOSText(language, "我的申请", "マイ申請", "My applications"))
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.primary)
-                    ForEach(model.applications) { app in
-                        GuideOSApplicationRow(
-                            app: app,
-                            onDelete: { Task { await model.deleteApplication(app) } },
-                            onSave: { payload in await model.updateApplication(id: app.id, payload: payload) }
+                    HStack {
+                        Text(guideOSText(language, "我的申请", "マイ申請", "My applications"))
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        Text("\(model.applications.count)")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(KXColor.accent)
+                    }
+                    Picker(guideOSText(language, "视图", "表示", "View"), selection: $viewMode) {
+                        Text(guideOSText(language, "看板", "ボード", "Board")).tag("board")
+                        Text(guideOSText(language, "列表", "リスト", "List")).tag("list")
+                    }
+                    .pickerStyle(.segmented)
+
+                    if viewMode == "board" {
+                        GuideApplicationBoard(
+                            applications: model.applications,
+                            onDelete: { app in Task { await model.deleteApplication(app) } },
+                            onSave: { app, payload in await model.updateApplication(id: app.id, payload: payload) }
                         )
+                    } else {
+                        ForEach(model.applications) { app in
+                            GuideOSApplicationRow(
+                                app: app,
+                                onDelete: { Task { await model.deleteApplication(app) } },
+                                onSave: { payload in await model.updateApplication(id: app.id, payload: payload) }
+                            )
+                        }
                     }
                 }
             }
@@ -112,6 +189,7 @@ struct GuideOSApplicationRow: View {
     @State private var editing = false
 
     private var isSchool: Bool { app.type == "school" }
+    private var stage: String { app.stage ?? "saved" }
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -121,12 +199,20 @@ struct GuideOSApplicationRow: View {
                 .frame(width: 30, height: 30)
                 .background(KXColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             VStack(alignment: .leading, spacing: 5) {
-                Text(app.name).font(.subheadline.weight(.bold)).foregroundStyle(.primary).lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(app.name).font(.subheadline.weight(.bold)).foregroundStyle(.primary).lineLimit(1)
+                    if app.favorite == true {
+                        Image(systemName: "star.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                    }
+                }
                 let sub = isSchool ? app.department : app.position
                 if !sub.isEmpty {
                     Text(sub).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                 }
                 HStack(spacing: 6) {
+                    GuideOSDeleteCardChip(text: guideApplicationStageTitle(stage))
                     if let d = app.deadline, !d.isEmpty { GuideOSDeleteCardChip(text: (isSchool ? "出愿 " : "ES ") + GuideOSDate.short(d)) }
                     if let i = app.interviewAt, !i.isEmpty { GuideOSDeleteCardChip(text: "面试 " + GuideOSDate.short(i)) }
                     if let r = app.resultAt, !r.isEmpty { GuideOSDeleteCardChip(text: "结果 " + GuideOSDate.short(r)) }
@@ -141,7 +227,8 @@ struct GuideOSApplicationRow: View {
                         .frame(width: 36, height: 36)
                 }
                 .buttonStyle(.plain)
-        .contentShape(Rectangle())
+                .contentShape(Rectangle())
+                .accessibilityLabel("编辑 \(app.name)")
             }
             Button(role: .destructive) { confirming = true } label: {
                 Image(systemName: "trash")
@@ -150,7 +237,8 @@ struct GuideOSApplicationRow: View {
                     .frame(width: 36, height: 36)
             }
             .buttonStyle(.plain)
-        .contentShape(Rectangle())
+            .contentShape(Rectangle())
+            .accessibilityLabel("删除 \(app.name)")
         }
         .padding(12)
         .kxGlassSurface(radius: 16)
@@ -179,6 +267,14 @@ struct GuideApplicationEditorSheet: View {
     @State private var interview: Date
     @State private var hasInterview: Bool
     @State private var notes: String
+    @State private var stage: String
+    @State private var priority: String
+    @State private var websiteURL: String
+    @State private var interviewLocation: String
+    @State private var meetingURL: String
+    @State private var contactName: String
+    @State private var contactEmail: String
+    @State private var favorite: Bool
     @State private var saving = false
 
     init(app: KaiXGuideApplicationDTO, onSave: @escaping (KaiXGuideApplicationPayload) async -> Bool) {
@@ -191,6 +287,14 @@ struct GuideApplicationEditorSheet: View {
         _interview = State(initialValue: GuideOSDate.parse(app.interviewAt) ?? Date())
         _hasInterview = State(initialValue: !(app.interviewAt ?? "").isEmpty)
         _notes = State(initialValue: app.notes)
+        _stage = State(initialValue: app.stage ?? "saved")
+        _priority = State(initialValue: app.priority ?? "normal")
+        _websiteURL = State(initialValue: app.websiteUrl ?? "")
+        _interviewLocation = State(initialValue: app.interviewLocation ?? "")
+        _meetingURL = State(initialValue: app.meetingUrl ?? "")
+        _contactName = State(initialValue: app.contactName ?? "")
+        _contactEmail = State(initialValue: app.contactEmail ?? "")
+        _favorite = State(initialValue: app.favorite ?? false)
     }
 
     private var isSchool: Bool { app.type == "school" }
@@ -202,13 +306,68 @@ struct GuideApplicationEditorSheet: View {
                     GuideOSLibraryPickerField(type: app.type, text: $name)
                     TextField(isSchool ? "研究科 / 学部" : "部门 / 岗位方向", text: $detail)
                 }
+                Section("进度") {
+                    Picker("当前阶段", selection: $stage) {
+                        ForEach(guideApplicationStages, id: \.key) { item in
+                            Text(item.title).tag(item.key)
+                        }
+                    }
+                    Picker("优先级", selection: $priority) {
+                        Text("高").tag("high")
+                        Text("普通").tag("normal")
+                        Text("低").tag("low")
+                    }
+                    Toggle("重点关注", isOn: $favorite)
+                }
                 Section {
                     Toggle(isSchool ? "出愿截止" : "ES 截止", isOn: $hasDeadline)
                     if hasDeadline { DatePicker("日期", selection: $deadline, displayedComponents: .date) }
                     Toggle("面试时间", isOn: $hasInterview)
                     if hasInterview { DatePicker("日期", selection: $interview, displayedComponents: .date) }
                 }
+                Section("链接与联系人") {
+                    TextField("官网 / 招聘页", text: $websiteURL)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                    TextField("面试地点", text: $interviewLocation)
+                    TextField("线上会议链接", text: $meetingURL)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                    TextField("联系人", text: $contactName)
+                    TextField("联系邮箱", text: $contactEmail)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.emailAddress)
+                }
                 Section { TextField("备注", text: $notes, axis: .vertical) }
+                Section("附件") {
+                    GuideAttachmentSection(entityType: "guide_application", entityId: app.id, title: "申请附件")
+                }
+                if let stages = app.stages, !stages.isEmpty {
+                    Section("阶段时间线") {
+                        ForEach(stages) { item in
+                            HStack(alignment: .top, spacing: 10) {
+                                Circle()
+                                    .fill(KXColor.accent)
+                                    .frame(width: 8, height: 8)
+                                    .padding(.top, 5)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(guideApplicationStageTitle(item.stage))
+                                        .font(.subheadline.weight(.semibold))
+                                    if !item.note.isEmpty {
+                                        Text(item.note)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    if let occurredAt = item.occurredAt {
+                                        Text(GuideOSDate.short(occurredAt))
+                                            .font(.caption2)
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
             .navigationTitle("编辑申请")
             .navigationBarTitleDisplayMode(.inline)
@@ -227,7 +386,19 @@ struct GuideApplicationEditorSheet: View {
                                 deadline: hasDeadline ? GuideOSDate.iso(deadline) : "",
                                 interviewAt: hasInterview ? GuideOSDate.iso(interview) : "",
                                 resultAt: app.resultAt,
-                                notes: notes
+                                notes: notes,
+                                careerTrack: app.careerTrack,
+                                stage: stage,
+                                stageNote: stage == app.stage ? nil : "在 iOS 更新阶段",
+                                websiteUrl: websiteURL,
+                                interviewLocation: interviewLocation,
+                                meetingUrl: meetingURL,
+                                contactName: contactName,
+                                contactEmail: contactEmail,
+                                priority: priority,
+                                favorite: favorite,
+                                tags: app.tags,
+                                status: app.status
                             ))
                             saving = false
                             if ok { dismiss() }
@@ -236,6 +407,81 @@ struct GuideApplicationEditorSheet: View {
                     .disabled(saving || name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
+        }
+    }
+}
+
+private let guideApplicationStages: [(key: String, title: String)] = [
+    ("saved", "已收藏"),
+    ("preparing", "准备中"),
+    ("submitted", "已提交"),
+    ("es", "ES"),
+    ("web_test", "Web Test"),
+    ("interview_1", "一面"),
+    ("interview_2", "二面"),
+    ("final", "最终面"),
+    ("offer", "录取 / Offer"),
+    ("rejected", "未通过"),
+    ("withdrawn", "已撤回")
+]
+
+private func guideApplicationStageTitle(_ key: String) -> String {
+    guideApplicationStages.first(where: { $0.key == key })?.title ?? "已收藏"
+}
+
+private struct GuideApplicationBoard: View {
+    let applications: [KaiXGuideApplicationDTO]
+    let onDelete: (KaiXGuideApplicationDTO) -> Void
+    let onSave: (KaiXGuideApplicationDTO, KaiXGuideApplicationPayload) async -> Bool
+
+    private var visibleStages: [(key: String, title: String)] {
+        guideApplicationStages.filter { stage in
+            stage.key == "saved" ||
+            stage.key == "preparing" ||
+            stage.key == "submitted" ||
+            stage.key == "es" ||
+            stage.key == "interview_1" ||
+            stage.key == "offer" ||
+            applications.contains { ($0.stage ?? "saved") == stage.key }
+        }
+    }
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .top, spacing: 12) {
+                ForEach(visibleStages, id: \.key) { stage in
+                    let items = applications.filter { ($0.stage ?? "saved") == stage.key }
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(stage.title)
+                                .font(.caption.weight(.bold))
+                            Spacer()
+                            Text("\(items.count)")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, 2)
+
+                        if items.isEmpty {
+                            Text("暂无")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                                .frame(maxWidth: .infinity, minHeight: 72)
+                                .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        } else {
+                            ForEach(items) { app in
+                                GuideOSApplicationRow(
+                                    app: app,
+                                    onDelete: { onDelete(app) },
+                                    onSave: { payload in await onSave(app, payload) }
+                                )
+                            }
+                        }
+                    }
+                    .frame(width: 286)
+                }
+            }
+            .padding(.vertical, 2)
         }
     }
 }

@@ -20,7 +20,12 @@ enum KXRoute: Hashable {
     case guideCategory(categoryKey: String)
     case guideJourney(key: String)
     case guidePlan
+    case guideGoalPlan(planId: String, title: String)
     case guideCalendar
+    case guideManage
+    case guideGoals
+    case guideContracts
+    case guideDocuments
     case guideProfile
     case guideLifePlanner
     case guideApplications
@@ -177,7 +182,7 @@ extension KXRoute {
             return .none
         case .postDetailComment(_, let commentId):
             return commentId.map { .comment($0) } ?? .comments
-        case .profile, .topic, .city, .cityChannel, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .myInquiries, .businessDirectory, .businessProfile, .guideCategory, .guideJourney, .guidePlan, .guideCalendar, .guideProfile, .guideLifePlanner, .guideApplications, .guideServices, .guideMemberResources, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .conversation, .search:
+        case .profile, .topic, .city, .cityChannel, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .myInquiries, .businessDirectory, .businessProfile, .guideCategory, .guideJourney, .guidePlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications, .guideServices, .guideMemberResources, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .conversation, .search:
             return .none
         }
     }
@@ -186,7 +191,7 @@ extension KXRoute {
         switch self {
         case .postDetail, .postDetailComment, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .businessProfile, .guideArticle, .guideProduct, .guideJourney, .guideSchool, .guideCompany, .guideCompanyReviews, .conversation:
             true
-        case .profile, .topic, .city, .cityChannel, .myInquiries, .businessDirectory, .guideCategory, .guidePlan, .guideCalendar, .guideProfile, .guideLifePlanner, .guideApplications, .guideServices, .guideMemberResources, .guideSchools, .guideCompanies, .guideInterviewReviews, .search:
+        case .profile, .topic, .city, .cityChannel, .myInquiries, .businessDirectory, .guideCategory, .guidePlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications, .guideServices, .guideMemberResources, .guideSchools, .guideCompanies, .guideInterviewReviews, .search:
             false
         }
     }
@@ -201,7 +206,7 @@ extension KXRoute {
             L("noTopicPosts", language)
         case .city, .cityChannel, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .myInquiries, .businessDirectory, .businessProfile:
             L("emptyFeed", language)
-        case .guideCategory, .guideJourney, .guidePlan, .guideCalendar, .guideProfile, .guideLifePlanner, .guideApplications, .guideServices, .guideMemberResources, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews:
+        case .guideCategory, .guideJourney, .guidePlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications, .guideServices, .guideMemberResources, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews:
             L("guideOpenFailed", language)
         case .conversation:
             L("emptyMessages", language)
@@ -261,9 +266,19 @@ private struct KXRouteDestinations: ViewModifier {
                 case .guideJourney(let key):
                     GuideJourneyDetailView(journeyKey: key)
                 case .guidePlan:
-                    GuidePlanView()
+                    GuideTodoListView()
+                case .guideGoalPlan(let planId, let title):
+                    GuideTodoListView(planId: planId, customTitle: title)
                 case .guideCalendar:
                     GuideCalendarView()
+                case .guideManage:
+                    GuideManageView()
+                case .guideGoals:
+                    GuideGoalsView()
+                case .guideContracts:
+                    GuideContractsView()
+                case .guideDocuments:
+                    GuideDocumentsView()
                 case .guideProfile:
                     GuideProfileSetupView()
                 case .guideLifePlanner:
@@ -395,8 +410,19 @@ private extension KXRoute {
             return normalizedKey.isEmpty ? nil : .guideJourney(key: normalizedKey)
         case .guidePlan:
             return .guidePlan
+        case .guideGoalPlan(let planId, let title):
+            let cleanId = planId.trimmingCharacters(in: .whitespacesAndNewlines)
+            return cleanId.isEmpty ? nil : .guideGoalPlan(planId: cleanId, title: title)
         case .guideCalendar:
             return .guideCalendar
+        case .guideManage:
+            return .guideManage
+        case .guideGoals:
+            return .guideGoals
+        case .guideContracts:
+            return .guideContracts
+        case .guideDocuments:
+            return .guideDocuments
         case .guideProfile:
             return .guideProfile
         case .guideLifePlanner:

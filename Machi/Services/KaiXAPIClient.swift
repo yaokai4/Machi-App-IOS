@@ -46,7 +46,9 @@ final class KaiXAPIClient {
         _ path: String,
         body: Encodable? = nil,
         queryItems: [URLQueryItem] = [],
-        idempotencyKey: String? = nil
+        idempotencyKey: String? = nil,
+        timeoutInterval: TimeInterval = 25,
+        maxReplayAttempts: Int? = nil
     ) async throws -> Data {
         var components = URLComponents(url: KaiXBackend.baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
         if !queryItems.isEmpty { components.queryItems = queryItems }
@@ -56,7 +58,7 @@ final class KaiXAPIClient {
         // so a stalled mobile connection surfaces a retry/error quickly
         // instead of spinning for a full minute. Matches the Web client's
         // 20s budget. File uploads use a separate path and are unaffected.
-        req.timeoutInterval = 25
+        req.timeoutInterval = timeoutInterval
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         if let token = KaiXBackend.token {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -75,7 +77,7 @@ final class KaiXAPIClient {
         // avoid double-creating posts / messages / likes.
         let isReplaySafe = ["GET", "HEAD", "DELETE", "PUT"].contains(method)
             || (idempotencyKey?.isEmpty == false)
-        let maxAttempts = isReplaySafe ? 4 : 1
+        let maxAttempts = isReplaySafe ? (maxReplayAttempts ?? 4) : 1
         var attempt = 0
         while true {
             attempt += 1
@@ -646,7 +648,12 @@ final class KaiXAPIClient {
 
     func post(_ id: String) async throws -> KaiXPostDTO {
         struct Wrapper: Codable { let post: KaiXPostDTO }
-        let data = try await request("GET", "/api/posts/\(id.encodedPathSegment)")
+        let data = try await request(
+            "GET",
+            "/api/posts/\(id.encodedPathSegment)",
+            timeoutInterval: 10,
+            maxReplayAttempts: 2
+        )
         return try decode(data) as Wrapper |> \.post
     }
 
@@ -1370,6 +1377,21 @@ final class KaiXAPIClient {
         return try decode(data)
     }
 
+    func createCustomGuidePlan(title: String, targetDate: String? = nil) async throws -> KaiXGuidePlanStartResponse {
+        struct Body: Encodable {
+            let planType: String
+            let title: String
+            let subtitle: String
+            let targetDate: String?
+        }
+        let data = try await request(
+            "POST",
+            "/api/guide/plans/start",
+            body: Body(planType: "custom", title: title, subtitle: "自定义目标", targetDate: targetDate)
+        )
+        return try decode(data)
+    }
+
     /// Spec P0.2: generate a JLPT/日语 study plan of recurring habit todos
     /// (每日词汇 / 每周语法 / 周末模考) + registration & sprint milestones.
     @discardableResult
@@ -1401,12 +1423,13 @@ final class KaiXAPIClient {
         return try decode(data)
     }
 
-    func guideTodos(status: String? = nil, type: String? = nil, from: String? = nil, to: String? = nil, limit: Int = 50) async throws -> KaiXGuideTodoListResponse {
+    func guideTodos(status: String? = nil, type: String? = nil, from: String? = nil, to: String? = nil, planId: String? = nil, limit: Int = 50) async throws -> KaiXGuideTodoListResponse {
         var query: [URLQueryItem] = [URLQueryItem(name: "limit", value: "\(limit)")]
         if let status, !status.isEmpty { query.append(URLQueryItem(name: "status", value: status)) }
         if let type, !type.isEmpty { query.append(URLQueryItem(name: "type", value: type)) }
         if let from, !from.isEmpty { query.append(URLQueryItem(name: "from", value: from)) }
         if let to, !to.isEmpty { query.append(URLQueryItem(name: "to", value: to)) }
+        if let planId, !planId.isEmpty { query.append(URLQueryItem(name: "planId", value: planId)) }
         let data = try await request("GET", "/api/guide/todos", queryItems: query)
         return try decode(data)
     }
@@ -1418,9 +1441,19 @@ final class KaiXAPIClient {
     }
 
     @discardableResult
+    func createGuideTodo(_ payload: KaiXGuideTodoCreatePayload) async throws -> KaiXGuideTodoResponse {
+        let data = try await request("POST", "/api/guide/todos", body: payload)
+        return try decode(data)
+    }
+
+    @discardableResult
     func completeGuideTodo(id: String) async throws -> KaiXGuideTodoResponse {
         let data = try await request("POST", "/api/guide/todos/\(id.encodedPathSegment)/complete", body: [String: String]())
         return try decode(data)
+    }
+
+    func deleteGuideTodo(id: String) async throws {
+        _ = try await request("DELETE", "/api/guide/todos/\(id.encodedPathSegment)")
     }
 
     /// Set/clear a todo's reminder time; server-side reminderAt is the source of
@@ -1437,6 +1470,22 @@ final class KaiXAPIClient {
         if let to, !to.isEmpty { query.append(URLQueryItem(name: "to", value: to)) }
         let data = try await request("GET", "/api/guide/calendar", queryItems: query)
         return try decode(data)
+    }
+
+    @discardableResult
+    func createGuideCalendarEvent(_ payload: KaiXGuideCalendarEventPayload) async throws -> KaiXGuideCalendarEventResponse {
+        let data = try await request("POST", "/api/guide/calendar/events", body: payload)
+        return try decode(data)
+    }
+
+    @discardableResult
+    func updateGuideCalendarEvent(id: String, payload: KaiXGuideCalendarEventPayload) async throws -> KaiXGuideCalendarEventResponse {
+        let data = try await request("PATCH", "/api/guide/calendar/events/\(id.encodedPathSegment)", body: payload)
+        return try decode(data)
+    }
+
+    func deleteGuideCalendarEvent(id: String) async throws {
+        _ = try await request("DELETE", "/api/guide/calendar/events/\(id.encodedPathSegment)")
     }
 
     func guideApplications() async throws -> KaiXGuideApplicationsResponse {
@@ -1462,6 +1511,16 @@ final class KaiXAPIClient {
 
     func guideLifeItems() async throws -> KaiXGuideLifeItemsResponse {
         let data = try await request("GET", "/api/guide/life-items")
+        return try decode(data)
+    }
+
+    func guideLifePayments(itemId: String) async throws -> KaiXGuideLifePaymentsResponse {
+        let data = try await request("GET", "/api/guide/life-items/\(itemId.encodedPathSegment)/payments")
+        return try decode(data)
+    }
+
+    func createGuideLifePayment(itemId: String, payload: KaiXGuideLifePaymentPayload) async throws -> KaiXGuideLifePaymentResponse {
+        let data = try await request("POST", "/api/guide/life-items/\(itemId.encodedPathSegment)/payments", body: payload)
         return try decode(data)
     }
 
@@ -1498,6 +1557,56 @@ final class KaiXAPIClient {
 
     func deleteGuideLifeItem(id: String) async throws {
         _ = try await request("DELETE", "/api/guide/life-items/\(id.encodedPathSegment)")
+    }
+
+    func guideContracts() async throws -> KaiXGuideContractsResponse {
+        let data = try await request("GET", "/api/guide/contracts")
+        return try decode(data)
+    }
+
+    @discardableResult
+    func createGuideContract(_ payload: KaiXGuideContractPayload) async throws -> KaiXGuideContractResponse {
+        let data = try await request("POST", "/api/guide/contracts", body: payload)
+        return try decode(data)
+    }
+
+    @discardableResult
+    func updateGuideContract(id: String, payload: KaiXGuideContractPayload) async throws -> KaiXGuideContractResponse {
+        let data = try await request("PATCH", "/api/guide/contracts/\(id.encodedPathSegment)", body: payload)
+        return try decode(data)
+    }
+
+    func deleteGuideContract(id: String) async throws {
+        _ = try await request("DELETE", "/api/guide/contracts/\(id.encodedPathSegment)")
+    }
+
+    func guideDocuments() async throws -> KaiXGuideDocumentsResponse {
+        let data = try await request("GET", "/api/guide/documents")
+        return try decode(data)
+    }
+
+    @discardableResult
+    func createGuideDocument(_ payload: KaiXGuideDocumentPayload) async throws -> KaiXGuideDocumentResponse {
+        let data = try await request("POST", "/api/guide/documents", body: payload)
+        return try decode(data)
+    }
+
+    @discardableResult
+    func updateGuideDocument(id: String, payload: KaiXGuideDocumentPayload) async throws -> KaiXGuideDocumentResponse {
+        let data = try await request("PATCH", "/api/guide/documents/\(id.encodedPathSegment)", body: payload)
+        return try decode(data)
+    }
+
+    func deleteGuideDocument(id: String) async throws {
+        _ = try await request("DELETE", "/api/guide/documents/\(id.encodedPathSegment)")
+    }
+
+    func guideAttachments(entityType: String, entityId: String) async throws -> KaiXGuideAttachmentsResponse {
+        let data = try await request("GET", "/api/guide/attachments", queryItems: [
+            URLQueryItem(name: "entityType", value: entityType),
+            URLQueryItem(name: "entityId", value: entityId),
+        ])
+        return try decode(data)
     }
 
     func guideSavedItems() async throws -> KaiXGuideSavedResponse {
@@ -1537,6 +1646,15 @@ final class KaiXAPIClient {
     func guideArticle(_ idOrSlug: String, country: String = "jp") async throws -> KaiXGuideArticleDetailResponse {
         let data = try await request("GET", "/api/guide/articles/\(idOrSlug.encodedPathSegment)", queryItems: [
             URLQueryItem(name: "country", value: country),
+        ])
+        return try decode(data)
+    }
+
+    func updateGuideArticleProgress(_ idOrSlug: String, country: String = "jp", progressPercent: Int) async throws -> KaiXGuideArticleProgressResponse {
+        let clamped = max(0, min(100, progressPercent))
+        let data = try await request("PATCH", "/api/guide/articles/\(idOrSlug.encodedPathSegment)/progress", body: [
+            "country": country,
+            "progressPercent": String(clamped),
         ])
         return try decode(data)
     }
@@ -1918,7 +2036,9 @@ final class KaiXAPIClient {
     func comments(postId: String, sort: CommentSort = .top) async throws -> [KaiXCommentDTO] {
         struct Wrapper: Codable { let items: [KaiXCommentDTO] }
         let data = try await request("GET", "/api/posts/\(postId.encodedPathSegment)/comments",
-                                     queryItems: [URLQueryItem(name: "sort", value: sort.rawValue)])
+                                     queryItems: [URLQueryItem(name: "sort", value: sort.rawValue)],
+                                     timeoutInterval: 12,
+                                     maxReplayAttempts: 2)
         return try decode(data) as Wrapper |> \.items
     }
 
@@ -2445,6 +2565,11 @@ final class KaiXAPIClient {
 
     func deleteUploadedFile(_ fileId: String) async throws {
         _ = try await request("DELETE", "/api/uploads/\(fileId.encodedPathSegment)")
+    }
+
+    func uploadPrivateViewURL(fileId: String) async throws -> KaiXUploadPrivateViewURLResponse {
+        let data = try await request("POST", "/api/uploads/\(fileId.encodedPathSegment)/view-url", body: [String: String]())
+        return try decode(data)
     }
 
     func uploadMediaLegacy(data: Data, mime: String, width: Int = 0, height: Int = 0, duration: Double = 0) async throws -> KaiXMediaDTO {

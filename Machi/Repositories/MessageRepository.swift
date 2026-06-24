@@ -7,10 +7,24 @@ final class MessageRepository {
     private static var cachedPeersById: [String: UserEntity] = [:]
     private static var cachedMediaByConversationId: [String: [String: [MediaEntity]]] = [:]
     private static var signedAttachmentURLCache: [String: SignedAttachmentURLCacheItem] = [:]
+    /// Hard ceiling so a long messaging session that opens many distinct
+    /// attachments can't grow this in-memory cache without bound.
+    private static let signedAttachmentCacheCap = 200
 
     private struct SignedAttachmentURLCacheItem {
         let url: String
         let expiresAt: Date
+    }
+
+    /// Keep the signed-URL cache bounded: drop expired entries first, then, if
+    /// still over the cap, keep only the freshest (latest-expiring) ones.
+    private static func pruneSignedAttachmentCacheIfNeeded(now: Date) {
+        signedAttachmentURLCache = signedAttachmentURLCache.filter { $0.value.expiresAt > now }
+        guard signedAttachmentURLCache.count > signedAttachmentCacheCap else { return }
+        let freshest = signedAttachmentURLCache
+            .sorted { $0.value.expiresAt > $1.value.expiresAt }
+            .prefix(signedAttachmentCacheCap)
+        signedAttachmentURLCache = Dictionary(uniqueKeysWithValues: freshest.map { ($0.key, $0.value) })
     }
 
     init(context: ModelContext) {
@@ -384,6 +398,7 @@ final class MessageRepository {
                     url: signedURL,
                     expiresAt: now.addingTimeInterval(240)
                 )
+                Self.pruneSignedAttachmentCacheIfNeeded(now: now)
             }
         }
         return mediaItems(from: dto, signedAttachmentURLs: signedURLs)

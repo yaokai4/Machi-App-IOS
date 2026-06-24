@@ -21,8 +21,19 @@ final class PostDetailViewModel: ObservableObject {
     @Published var transientPostError: String?
 
     func load(context: ModelContext, postId: String, currentUser: UserEntity, postStore: PostStore, commentStore: CommentStore? = nil) async {
-        let hasCachedPost = post?.id == postId
-        if !hasCachedPost {
+        let cachedPost = postStore.post(id: postId)
+        let hasVisiblePost = post?.id == postId || cachedPost != nil
+        if let cachedPost, post?.id != postId {
+            post = cachedPost
+            state = .loaded
+            let cachedComments = commentStore?.commentsByPostId[postId] ?? []
+            comments = cachedComments
+            commentState = commentStore?.loadingStateByPostId[postId]
+                ?? (cachedComments.isEmpty && cachedPost.commentCount > 0
+                    ? .loading
+                    : CommentLoadState.resolved(commentCount: cachedPost.commentCount, loadedComments: cachedComments))
+        }
+        if !hasVisiblePost {
             state = .loading
             commentState = .idle
             commentStore?.setLoadingState(.loading, postId: postId)
@@ -61,7 +72,7 @@ final class PostDetailViewModel: ObservableObject {
             do {
                 media = try await postRepository.fetchMedia(postId: canonicalPostId)
             } catch {
-                if !hasCachedPost {
+                if !hasVisiblePost {
                     media = []
                 }
             }
@@ -91,7 +102,7 @@ final class PostDetailViewModel: ObservableObject {
                 commentStore?.setLoadingState(commentState, postId: canonicalPostId)
             }
         } catch {
-            if hasCachedPost {
+            if hasVisiblePost {
                 transientPostError = error.kaixUserMessage
                 state = .loaded
             } else {

@@ -67,12 +67,6 @@ struct GuidePlanView: View {
                             .frame(height: 44)
                             .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     }
-                    GuideOSRecommendationStrip(
-                        products: model.dashboard?.recommendedProducts ?? [],
-                        services: model.dashboard?.recommendedServices ?? [],
-                        onOpenProduct: { router.open(.guideProduct(slug: $0)) },
-                        onOpenServices: { router.open(.guideServices) }
-                    )
                     if model.todos.isEmpty && !model.isLoading {
                         GuideOSEmptyPanel(title: guideOSText(language, "还没有待办任务", "未完了タスクはありません", "No open todos"), subtitle: guideOSText(language, "从任意行动路径生成计划，或添加出愿、ES、面试、生活缴费日期。", "アクションパスから計画を作成するか、申請・面接・生活支払い日を追加してください。", "Create a plan from a journey, or add applications, interviews, and life bills."))
                     } else {
@@ -81,7 +75,9 @@ struct GuidePlanView: View {
                                 todo: todo,
                                 onComplete: { Task { await model.complete(todo) } },
                                 onSetReminder: { at in await model.setReminder(todoId: todo.id, reminderAt: at) },
-                                onReschedule: { date in Task { await model.reschedule(todo, to: date) } }
+                                onReschedule: { date in Task { await model.reschedule(todo, to: date) } },
+                                onUpdateSteps: { steps in Task { await model.updateTodoSteps(todo, steps: steps) } },
+                                onUpdateNotes: { notes in Task { await model.updateTodoNotes(todo, notes: notes) } }
                             )
                         }
                         NavigationLink {
@@ -94,16 +90,6 @@ struct GuidePlanView: View {
                                 .frame(height: 44)
                                 .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                         }
-                    }
-                    NavigationLink {
-                        GuideRecommendationsView()
-                    } label: {
-                        Label(guideOSText(language, "完成任务的资料与服务", "タスク用の資料・サービス", "Materials & services for your tasks"), systemImage: "bag.fill")
-                            .font(.subheadline.weight(.bold))
-                            .foregroundStyle(KXColor.accent)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 44)
-                            .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     }
                 }
                 .padding(KXSpacing.screen)
@@ -135,7 +121,7 @@ private struct GuideSuggestedJourneyStrip: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(identityType?.isEmpty == false
-                 ? guideOSText(language, "根据你的身份推荐", "あなたに合わせた提案", "Recommended for you")
+                 ? guideOSText(language, "根据你的提醒设置推荐", "設定に合わせた提案", "Recommended for you")
                  : guideOSText(language, "选择一个目标开始", "目標を選んで開始", "Pick a goal to start"))
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(.primary)
@@ -196,10 +182,10 @@ struct GuideOSPlanCard: View {
                 }
                 .frame(width: 58, height: 58)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(plan?.title ?? (isGuest ? guideOSText(language, "登录生成你的日本计划", "ログインして計画を作成", "Log in to create your plan") : guideOSText(language, "选择一个目标开始", "目標を選んで開始", "Pick a goal to begin")))
+                    Text(plan?.title ?? (isGuest ? guideOSText(language, "登录同步你的 Todo 与日历", "ログインしてTodoとカレンダーを同期", "Log in to sync Tasks and Calendar") : guideOSText(language, "选择一个目标开始", "目標を選んで開始", "Pick a goal to begin")))
                         .font(.headline.weight(.bold))
                         .foregroundStyle(.primary)
-                    Text(plan?.nextTodo?.title ?? guideOSText(language, "从下方行动路径、出愿/ES 或生活缴费开始添加 Todo。", "下のアクションパス、申請/ES、生活支払いからTodoを追加できます。", "Start from a journey, application, or life deadline."))
+                    Text(plan?.nextTodo?.title ?? guideOSText(language, "从待办、日历、管理或路径安排下一步。", "Todo・カレンダー・管理・目標から次の一歩を決められます。", "Plan the next step from Tasks, Calendar, Manage, or Goals."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -208,7 +194,7 @@ struct GuideOSPlanCard: View {
             }
             HStack(spacing: 10) {
                 Button(action: isGuest ? { GuestGate.shared.requireLogin("登录后可以生成和同步 Guide 计划。") } : onOpenPlan) {
-                    Text(isLoading ? guideOSText(language, "同步中", "同期中", "Syncing") : guideOSText(language, "进入计划", "計画へ", "Open plan"))
+                    Text(isLoading ? guideOSText(language, "同步中", "同期中", "Syncing") : guideOSText(language, "进入待办", "Todoへ", "Open tasks"))
                         .font(.caption.weight(.bold))
                         .frame(maxWidth: .infinity)
                         .frame(height: 38)
@@ -217,8 +203,8 @@ struct GuideOSPlanCard: View {
         .contentShape(Rectangle())
                 .foregroundStyle(.white)
                 .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                Button(action: isGuest ? { GuestGate.shared.requireLogin("登录后可以设置身份路径。") } : onOpenProfile) {
-                    Text(guideOSText(language, "身份设置", "属性設定", "Profile"))
+                Button(action: isGuest ? { GuestGate.shared.requireLogin("登录后可以设置个人提醒。") } : onOpenProfile) {
+                    Text(guideOSText(language, "提醒设置", "リマインダー", "Reminders"))
                         .font(.caption.weight(.bold))
                         .frame(maxWidth: .infinity)
                         .frame(height: 38)

@@ -28,11 +28,23 @@ struct MyReservationsView: View {
         case .error(let message):
             ErrorStateView(message: message) { Task { await load() } }
         case .empty:
-            EmptyStateView(
-                title: KXListingCopy.pickText(language, "还没有预约", "予約はまだありません", "No reservations yet"),
-                subtitle: KXListingCopy.pickText(language, "在房源、餐厅或服务详情里选择时段即可预约。", "物件・飲食店・サービスの詳細で枠を選んで予約できます。", "Pick a slot on a listing to book."),
-                systemImage: "calendar"
-            )
+            ScrollView {
+                VStack(spacing: 16) {
+                    Spacer(minLength: 96)
+                    KXEmptyActionPanel(
+                        icon: "calendar.badge.clock",
+                        tint: KXColor.accent,
+                        title: KXListingCopy.pickText(language, "还没有预约", "予約はまだありません", "No reservations yet"),
+                        subtitle: KXListingCopy.pickText(language, "看房、到店和服务预约会按时间排在这里，方便你确认下一次要去哪里。", "内見・来店・サービス予約が時間順にここへ表示されます。", "Viewing, visit, and service bookings appear here in time order."),
+                        actionTitle: KXListingCopy.pickText(language, "去发现可预约服务", "予約できるサービスを見る", "Find bookable services")
+                    ) {
+                        router.open(.search(initialQuery: KXListingCopy.pickText(language, "预约", "予約", "booking")), in: .search)
+                    }
+                    Spacer(minLength: 180)
+                }
+                .padding(KXSpacing.screen)
+            }
+            .kxReadableWidth()
         case .loaded:
             ScrollView {
                 LazyVStack(spacing: 12) {
@@ -161,4 +173,49 @@ struct MyReservationsView: View {
     private func dayNumber(_ date: Date?) -> String { guard let date else { return "—" }; return formatter("d").string(from: date) }
     private func monthLabel(_ date: Date?) -> String { guard let date else { return "" }; return formatter("MMM").string(from: date) }
     private func fullDateTime(_ date: Date?) -> String { guard let date else { return "" }; return formatter("EEEMMMdHm").string(from: date) }
+}
+
+private struct KXEmptyActionPanel: View {
+    let icon: String
+    let tint: Color
+    let title: String
+    let subtitle: String
+    let actionTitle: String
+    let action: () -> Void
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Image(systemName: icon)
+                .font(.system(size: 25, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 64, height: 64)
+                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+
+            VStack(spacing: 7) {
+                Text(title)
+                    .font(.title3.weight(.black))
+                    .foregroundStyle(KXColor.livingInk)
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(3)
+            }
+
+            Button(action: action) {
+                Label(actionTitle, systemImage: "arrow.up.right")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 18)
+                    .frame(height: 44)
+                    .background(tint, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 22)
+        .padding(.vertical, 32)
+        .kxLivingSurface(radius: 28, elevated: true)
+    }
 }

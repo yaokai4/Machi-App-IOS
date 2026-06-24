@@ -85,6 +85,31 @@ final class GuideViewModel: ObservableObject {
     }
 
     @discardableResult
+    func createQuickTodo(content: String, plannedDate: String? = nil) async -> Bool {
+        let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return false }
+        guard KaiXBackend.token != nil else {
+            GuestGate.shared.requireLogin("登录后可以保存 Todo、日历和提醒。")
+            return false
+        }
+        isGuideOSLoading = true
+        guideOSMessage = nil
+        defer { isGuideOSLoading = false }
+        do {
+            _ = try await KaiXAPIClient.shared.createGuideTodo(.init(
+                content: text,
+                todoType: "manual",
+                plannedDate: plannedDate
+            ))
+            await loadGuideOS(force: true)
+            return true
+        } catch {
+            guideOSMessage = "Todo 添加失败，请稍后再试。"
+            return false
+        }
+    }
+
+    @discardableResult
     func startPlan(journeyKey: String, planType: String = "guide") async -> Bool {
         guard KaiXBackend.token != nil else {
             GuestGate.shared.requireLogin("登录后可以把指南生成可执行计划。")
@@ -341,6 +366,9 @@ private enum GuideFallbackContent {
             status: "published",
             viewCount: 0,
             saveCount: 0,
+            saved: nil,
+            progressPercent: nil,
+            readingProgress: nil,
             publishedAt: nil,
             updatedAt: nil
         )

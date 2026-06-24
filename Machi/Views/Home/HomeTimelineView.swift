@@ -13,7 +13,6 @@ struct HomeTimelineView: View {
     @ObservedObject private var languageManager = LanguageManager.shared
     @State private var isShowingSettings = false
     @State private var isShowingRegionPicker = false
-    @State private var hotScope: HotScope = .city
 
     let currentUser: UserEntity
     @Binding var selectedTab: AppTab
@@ -131,22 +130,6 @@ struct HomeTimelineView: View {
         }
     }
 
-    /// Scope chip shown above the "热榜" tab. Lets the user pivot
-    /// the hot-list between current city / country / global without
-    /// losing position. The actual filtering hooks into the existing
-    /// HomeViewModel via `viewModel.mode == .hot` plus this state.
-    private enum HotScope: String, CaseIterable, Identifiable {
-        case city, country, all
-        var id: String { rawValue }
-        func title(_ language: AppLanguage) -> String {
-            switch self {
-            case .all:     return L("hotScopeAll", language)
-            case .country: return L("hotScopeCountry", language)
-            case .city:    return L("hotScopeCity", language)
-            }
-        }
-    }
-
     private var header: some View {
         HomeHeaderView(
             currentUser: currentUser,
@@ -215,13 +198,10 @@ struct HomeTimelineView: View {
         let feedPosts = visibleFeedPosts
         return ScrollView {
             LazyVStack(spacing: 8) {
-                if viewModel.mode == .hot {
-                    hotScopePicker
-                }
                 if feedPosts.isEmpty {
                     EmptyStateView(
                         title: KXListingCopy.pickText(language, "这里还没有热榜内容", "まだ急上昇コンテンツがありません", "No hot posts here yet"),
-                        subtitle: KXListingCopy.pickText(language, "换一个范围，或稍后回来看看新的本地动态。", "範囲を切り替えるか、あとでもう一度確認してください。", "Try another scope or check back later for local activity."),
+                        subtitle: KXListingCopy.pickText(language, "稍后回来看看新的本地动态。", "あとでもう一度確認してください。", "Check back later for fresh local activity."),
                         systemImage: "flame"
                     )
                     .frame(maxWidth: .infinity, minHeight: 260)
@@ -276,51 +256,7 @@ struct HomeTimelineView: View {
     }
 
     private var visibleFeedPosts: [PostEntity] {
-        guard viewModel.mode == .hot, let region = regionStore.current else {
-            return viewModel.posts
-        }
-        switch hotScope {
-        case .all:
-            return viewModel.posts
-        case .country:
-            return viewModel.posts.filter { $0.country == region.countryCode }
-        case .city:
-            return viewModel.posts.filter { postMatches($0, region: region) }
-        }
-    }
-
-    private func postMatches(_ post: PostEntity, region: KaiXRegionDirectory.Region) -> Bool {
-        let regionCodes = KaiXRegionDirectory.regionCodesForMetro(region: region)
-        let cityCodes = KaiXRegionDirectory.cityCodesForMetro(region: region)
-        return regionCodes.contains(post.regionCode)
-            || (post.country == region.countryCode && cityCodes.contains(post.city))
-            || (post.regionCode.isEmpty && post.country.isEmpty && post.city.isEmpty)
-    }
-
-    /// Pivot chip row that lets the user switch the hot-list between
-    /// city / country / global. Posts that don't match the chosen
-    /// scope are filtered in-memory so the existing repository call
-    /// stays untouched.
-    private var hotScopePicker: some View {
-        HStack(spacing: 8) {
-            ForEach(HotScope.allCases) { scope in
-                Button {
-                    withAnimation(.snappy(duration: 0.18)) {
-                        hotScope = scope
-                    }
-                } label: {
-                    Text(scope.title(language))
-                        .font(.caption.weight(.bold))
-                        .padding(.horizontal, 12)
-                        .frame(height: 30)
-                        .kxGlassCapsule(isSelected: hotScope == scope)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(hotScope == scope ? KXColor.accent : .primary)
-            }
-            Spacer()
-        }
-        .padding(.vertical, 4)
+        viewModel.posts
     }
 
     private var followingEmptyState: some View {

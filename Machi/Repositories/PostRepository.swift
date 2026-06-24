@@ -64,12 +64,13 @@ final class PostRepository {
             case .hot: apiMode = .hot
             }
             let region = await MainActor.run { RegionStore.shared.current }
+            let cityScoped = mode == .local || mode == .hot
             let response = try await KaiXAPIClient.shared.feed(
                 mode: apiMode,
-                regionCode: mode == .local ? region?.regionCode : nil,
+                regionCode: cityScoped ? region?.regionCode : nil,
                 country: region?.countryCode,
-                province: mode == .local ? (region?.provinceCode.isEmpty == true ? nil : region?.provinceCode) : nil,
-                city: mode == .local ? region?.cityCode : nil
+                province: cityScoped ? (region?.provinceCode.isEmpty == true ? nil : region?.provinceCode) : nil,
+                city: cityScoped ? region?.cityCode : nil
             )
             return ServerEntityFactory.postBundle(from: response.items).orderedPosts
         }
