@@ -39,13 +39,15 @@ struct GuideOSDashboardSection: View {
 
             GuideOSPlanCard(plan: data?.plan, isGuest: isGuest, isLoading: isLoading, onOpenPlan: onOpenPlan, onOpenProfile: onOpenProfile)
 
-            if let actions = data?.recommendedNextActions, !actions.isEmpty {
-                GuideOSNextActionsStrip(
-                    actions: Array(actions.prefix(4)),
-                    onOpenPlan: onOpenPlan,
-                    onOpenJourney: onOpenJourney
-                )
-            }
+            // Primary entries (待办 / 日历 / 管理 / 路径) sit right under the plan
+            // card — a clear, formal action bar instead of an opaque "recommended
+            // next step" list whose ranking wasn't obvious to users.
+            GuideOSQuickRow(items: [
+                .init(title: guideOSText(language, "待办", "Todo", "Tasks"), icon: "checklist", action: onOpenPlan),
+                .init(title: guideOSText(language, "日历", "カレンダー", "Calendar"), icon: "calendar", action: onOpenCalendar),
+                .init(title: guideOSText(language, "管理", "管理", "Manage"), icon: "folder.fill.badge.gearshape", action: onOpenManage),
+                .init(title: guideOSText(language, "路径", "目標", "Goals"), icon: "point.topleft.down.curvedto.point.bottomright.up", action: onOpenGoals)
+            ])
 
             GuideQuickTodoComposer(isSaving: isLoading, onCreate: onCreateTodo)
 
@@ -56,84 +58,9 @@ struct GuideOSDashboardSection: View {
             if let upcoming = data?.upcomingTodos, !upcoming.isEmpty {
                 GuideOSTodoStrip(title: guideOSText(language, "即将到期", "まもなく期限", "Upcoming"), todos: Array(upcoming.prefix(6)), onComplete: onCompleteTodo)
             }
-
-            GuideOSQuickRow(items: [
-                .init(title: guideOSText(language, "待办", "Todo", "Tasks"), icon: "checklist", action: onOpenPlan),
-                .init(title: guideOSText(language, "日历", "カレンダー", "Calendar"), icon: "calendar", action: onOpenCalendar),
-                .init(title: guideOSText(language, "管理", "管理", "Manage"), icon: "folder.fill.badge.gearshape", action: onOpenManage),
-                .init(title: guideOSText(language, "路径", "目標", "Goals"), icon: "point.topleft.down.curvedto.point.bottomright.up", action: onOpenGoals)
-            ])
-
         }
         .padding(15)
         .kxGlassSurface(radius: 24, elevated: true)
-    }
-}
-
-private struct GuideOSNextActionsStrip: View {
-    @Environment(\.appLanguage) private var language
-    let actions: [KaiXGuideNextAction]
-    let onOpenPlan: () -> Void
-    let onOpenJourney: (String) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(guideOSText(language, "为你推荐的下一步", "おすすめの次の一歩", "Recommended next steps"))
-                        .font(.subheadline.weight(.bold))
-                    Text(guideOSText(language, "临近截止优先，其次是适合你提醒设置的路径", "期限が近いものを優先し、その次に設定に合うルートを表示", "Deadlines first, then reminder-fit paths"))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-            }
-            ForEach(actions) { action in
-                Button {
-                    if action.kind == "journey", let key = action.journeyKey, !key.isEmpty {
-                        onOpenJourney(key)
-                    } else {
-                        onOpenPlan()
-                    }
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: action.kind == "todo" ? "calendar.badge.exclamationmark" : "sparkles")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(action.kind == "todo" ? Color.orange : KXColor.accent)
-                            .frame(width: 34, height: 34)
-                            .background((action.kind == "todo" ? Color.orange : KXColor.accent).opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(action.title)
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.primary)
-                                .lineLimit(2)
-                            Text(action.kind == "todo" ? nextActionTodoSubtitle(action) : (action.subtitle ?? guideOSText(language, "生成 Todo 和日历计划", "Todoとカレンダー計画を生成", "Generate todos and calendar plan")))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.tertiary)
-                    }
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .contentShape(Rectangle())
-            }
-        }
-        .padding(12)
-        .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-    }
-
-    private func nextActionTodoSubtitle(_ action: KaiXGuideNextAction) -> String {
-        if let dueAt = action.dueAt, !dueAt.isEmpty {
-            return guideOSText(language, "截止 ", "期限 ", "Due ") + GuideOSDate.short(dueAt)
-        }
-        return guideOSText(language, "来自你的 Todo，优先处理", "Todoから優先表示", "From your todos, prioritized")
     }
 }
 

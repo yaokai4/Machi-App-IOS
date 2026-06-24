@@ -4,13 +4,25 @@ struct GuideOSTodoStrip: View {
     let title: String
     let todos: [KaiXGuideTodoDTO]
     let onComplete: (KaiXGuideTodoDTO) -> Void
+    /// Locally hide a todo the moment it's checked, so it disappears instantly
+    /// (the server reload then drops it from the payload for good).
+    @State private var hidden: Set<String> = []
+
+    private var visible: [KaiXGuideTodoDTO] {
+        Array(todos.filter { !hidden.contains($0.id) }.prefix(4))
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.subheadline.weight(.bold))
-            ForEach(todos.prefix(4)) { todo in
-                GuideOSTodoCard(todo: todo) { onComplete(todo) }
+        if !visible.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title)
+                    .font(.subheadline.weight(.bold))
+                ForEach(visible) { todo in
+                    GuideOSTodoCard(todo: todo) {
+                        withAnimation(.easeInOut(duration: 0.2)) { _ = hidden.insert(todo.id) }
+                        onComplete(todo)
+                    }
+                }
             }
         }
     }
