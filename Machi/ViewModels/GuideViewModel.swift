@@ -272,7 +272,8 @@ private enum GuideFallbackContent {
         category("career_japan", title: "日本就职", subtitle: "就活、履历书、面试、签证支持", icon: "briefcase", color: "#14B8A6", order: 2),
         category("study_japan", title: "日本升学", subtitle: "大学院、研究计划书、出愿", icon: "graduation", color: "#6366F1", order: 3),
         category("study_abroad_japan", title: "语言学校", subtitle: "择校、费用、入境与打工", icon: "plane", color: "#F97316", order: 4),
-        category("jlpt", title: "日语考级", subtitle: "JLPT、EJU、学习计划", icon: "language", color: "#EC4899", order: 5)
+        category("jlpt", title: "日语考级", subtitle: "JLPT、EJU、学习计划", icon: "language", color: "#EC4899", order: 5),
+        category("guide_services", title: "资料与服务", subtitle: "资料包、模板、课程、咨询与申请服务", icon: "package", color: "#D97706", order: 6)
     ]
 
     private static let resources: [KaiXGuideResourceEntryDTO] = [

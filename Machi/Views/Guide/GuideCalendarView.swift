@@ -123,14 +123,22 @@ struct GuideCalendarView: View {
 
                     switch mode {
                     case .month:
-                        GuideCalendarMonthGrid(grouped: groupedMap, selectedDate: $selectedDate)
+                        GuideCalendarMonthGrid(
+                            grouped: groupedMap,
+                            selectedDate: $selectedDate,
+                            onMove: { id, date in Task { await model.moveCalendarItem(id: id, to: date) } }
+                        )
                         GuideQuickTodoComposer(defaultDate: selectedDate, isSaving: model.isSaving) { content, plannedDate in
                             Task { await model.createQuickTodo(content: content, plannedDate: plannedDate ?? selectedDate) }
                         }
                         GuideCalendarSelectedDay(date: selectedDate, items: selectedItems, model: model)
                         GuideCalendarCountdownStrip(items: countdowns)
                     case .week:
-                        GuideCalendarWeekBoard(grouped: groupedMap, selectedDate: $selectedDate)
+                        GuideCalendarWeekBoard(
+                            grouped: groupedMap,
+                            selectedDate: $selectedDate,
+                            onMove: { id, date in Task { await model.moveCalendarItem(id: id, to: date) } }
+                        )
                         GuideQuickTodoComposer(defaultDate: selectedDate, isSaving: model.isSaving) { content, plannedDate in
                             Task { await model.createQuickTodo(content: content, plannedDate: plannedDate ?? selectedDate) }
                         }
@@ -160,6 +168,7 @@ struct GuideCalendarView: View {
 private struct GuideCalendarMonthGrid: View {
     let grouped: [String: [KaiXGuideCalendarItemDTO]]
     @Binding var selectedDate: String
+    let onMove: (_ id: String, _ date: String) -> Void
     @State private var cursor = Date()
 
     private let weekdays = ["日", "一", "二", "三", "四", "五", "六"]
@@ -254,12 +263,19 @@ private struct GuideCalendarMonthGrid: View {
         .contentShape(Rectangle())
         .foregroundStyle(isSelected ? .white : (inMonth ? Color.primary : Color.secondary.opacity(0.45)))
         .background(isSelected ? KXColor.accent : (isToday ? KXColor.accentSoft : Color.white.opacity(0.55)), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .dropDestination(for: String.self) { ids, _ in
+            guard let id = ids.first else { return false }
+            selectedDate = iso
+            onMove(id, iso)
+            return true
+        }
     }
 }
 
 private struct GuideCalendarWeekBoard: View {
     let grouped: [String: [KaiXGuideCalendarItemDTO]]
     @Binding var selectedDate: String
+    let onMove: (_ id: String, _ date: String) -> Void
     @State private var cursor = Date()
 
     private let weekdays = ["日", "一", "二", "三", "四", "五", "六"]
@@ -364,6 +380,7 @@ private struct GuideCalendarWeekBoard: View {
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 6)
                                 .background(item.status == "done" ? KXColor.softBackground : KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                .draggable(item.id)
                         }
                         if items.count > 4 {
                             Text("+\(items.count - 4) 项")
@@ -378,6 +395,12 @@ private struct GuideCalendarWeekBoard: View {
         }
         .buttonStyle(.plain)
         .contentShape(Rectangle())
+        .dropDestination(for: String.self) { ids, _ in
+            guard let id = ids.first else { return false }
+            selectedDate = iso
+            onMove(id, iso)
+            return true
+        }
     }
 }
 
@@ -413,8 +436,10 @@ private struct GuideCalendarSelectedDay: View {
                             onArchive: { await model.archiveTodo(todo) },
                             onDelete: { await model.deleteTodo(todo) }
                         )
+                        .draggable(item.id)
                     } else {
                         GuideCalendarEventRow(event: item, model: model)
+                            .draggable(item.id)
                     }
                 }
             }
@@ -468,8 +493,10 @@ private struct GuideCalendarAgendaList: View {
                         onArchive: { await model.archiveTodo(todo) },
                         onDelete: { await model.deleteTodo(todo) }
                     )
+                    .draggable(item.id)
                 } else {
                     GuideCalendarEventRow(event: item, model: model)
+                        .draggable(item.id)
                 }
             }
         }

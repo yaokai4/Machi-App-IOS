@@ -537,6 +537,8 @@ private struct GuideTodoDetailSheet: View {
     @State private var tagsText: String
     @State private var saving = false
     @State private var confirmingDelete = false
+    @State private var restoredDraft: Bool
+    @State private var shouldPreserveDraft = true
 
     init(
         todo: KaiXGuideTodoDTO,
@@ -552,22 +554,44 @@ private struct GuideTodoDetailSheet: View {
         self.onDuplicate = onDuplicate
         self.onArchive = onArchive
         self.onDelete = onDelete
-        _title = State(initialValue: todo.title)
-        _summary = State(initialValue: todo.summary)
-        _notes = State(initialValue: todo.notes)
-        _priority = State(initialValue: todo.priority.isEmpty ? "normal" : todo.priority)
-        _recurrence = State(initialValue: todo.recurrence ?? "")
-        _plannedDate = State(initialValue: GuideOSDate.parse(todo.plannedDate) ?? Date())
-        _dueDate = State(initialValue: GuideOSDate.parse(todo.dueAt) ?? Date())
-        _hasPlannedDate = State(initialValue: !(todo.plannedDate ?? "").isEmpty)
-        _hasDueDate = State(initialValue: !(todo.dueAt ?? "").isEmpty)
-        _listName = State(initialValue: todo.listName ?? "")
-        _tagsText = State(initialValue: (todo.tags ?? []).joined(separator: ", "))
+        let draft = GuideTodoDraftCache.draft(for: todo.id)
+        _title = State(initialValue: draft?.title ?? todo.title)
+        _summary = State(initialValue: draft?.summary ?? todo.summary)
+        _notes = State(initialValue: draft?.notes ?? todo.notes)
+        _priority = State(initialValue: draft?.priority ?? (todo.priority.isEmpty ? "normal" : todo.priority))
+        _recurrence = State(initialValue: draft?.recurrence ?? (todo.recurrence ?? ""))
+        _plannedDate = State(initialValue: draft?.plannedDate ?? GuideOSDate.parse(todo.plannedDate) ?? Date())
+        _dueDate = State(initialValue: draft?.dueDate ?? GuideOSDate.parse(todo.dueAt) ?? Date())
+        _hasPlannedDate = State(initialValue: draft?.hasPlannedDate ?? !(todo.plannedDate ?? "").isEmpty)
+        _hasDueDate = State(initialValue: draft?.hasDueDate ?? !(todo.dueAt ?? "").isEmpty)
+        _listName = State(initialValue: draft?.listName ?? (todo.listName ?? ""))
+        _tagsText = State(initialValue: draft?.tagsText ?? (todo.tags ?? []).joined(separator: ", "))
+        _restoredDraft = State(initialValue: draft != nil)
     }
 
     var body: some View {
         NavigationStack {
             Form {
+                if restoredDraft {
+                    Section {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: "arrow.counterclockwise.circle.fill")
+                                .foregroundStyle(KXColor.accent)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("已恢复未保存草稿")
+                                    .font(.subheadline.weight(.bold))
+                                Text("关闭详情后再次打开，刚才的编辑仍会保留。")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 8)
+                            Button("清除") {
+                                resetToSavedTodo()
+                            }
+                            .font(.caption.weight(.bold))
+                        }
+                    }
+                }
                 Section("任务") {
                     TextField("Todo 标题", text: $title, axis: .vertical)
                     TextField("说明", text: $summary, axis: .vertical)
@@ -615,6 +639,7 @@ private struct GuideTodoDetailSheet: View {
                 Section {
                     if !todo.isDone {
                         Button {
+                            clearDraft()
                             onComplete()
                             dismiss()
                         } label: {
@@ -625,7 +650,10 @@ private struct GuideTodoDetailSheet: View {
                     if let onDuplicate {
                         Button {
                             Task {
-                                if await onDuplicate() { dismiss() }
+                                if await onDuplicate() {
+                                    clearDraft()
+                                    dismiss()
+                                }
                             }
                         } label: {
                             Label("复制 Todo", systemImage: "doc.on.doc")
@@ -635,7 +663,10 @@ private struct GuideTodoDetailSheet: View {
                     if let onArchive {
                         Button {
                             Task {
-                                if await onArchive() { dismiss() }
+                                if await onArchive() {
+                                    clearDraft()
+                                    dismiss()
+                                }
                             }
                         } label: {
                             Label("归档", systemImage: "archivebox")
@@ -677,7 +708,10 @@ private struct GuideTodoDetailSheet: View {
                                     .filter { !$0.isEmpty }
                             ))
                             saving = false
-                            if ok { dismiss() }
+                            if ok {
+                                clearDraft()
+                                dismiss()
+                            }
                         }
                     }
                     .disabled(saving || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -687,14 +721,110 @@ private struct GuideTodoDetailSheet: View {
                 Button("删除", role: .destructive) {
                     guard let onDelete else { return }
                     Task {
-                        if await onDelete() { dismiss() }
+                        if await onDelete() {
+                            clearDraft()
+                            dismiss()
+                        }
                     }
                 }
                 Button("取消", role: .cancel) {}
             } message: {
                 Text("删除后无法恢复；如果只是暂时不需要，可以选择归档。")
             }
+            .onDisappear {
+                if shouldPreserveDraft, hasUnsavedChanges {
+                    GuideTodoDraftCache.save(currentDraft, for: todo.id)
+                }
+            }
         }
+    }
+
+    private var currentDraft: GuideTodoDraft {
+        GuideTodoDraft(
+            title: title,
+            summary: summary,
+            notes: notes,
+            priority: priority,
+            recurrence: recurrence,
+            plannedDate: plannedDate,
+            dueDate: dueDate,
+            hasPlannedDate: hasPlannedDate,
+            hasDueDate: hasDueDate,
+            listName: listName,
+            tagsText: tagsText
+        )
+    }
+
+    private var hasUnsavedChanges: Bool {
+        title != todo.title
+            || summary != todo.summary
+            || notes != todo.notes
+            || priority != (todo.priority.isEmpty ? "normal" : todo.priority)
+            || recurrence != (todo.recurrence ?? "")
+            || (hasPlannedDate ? GuideOSDate.iso(plannedDate) : "") != (todo.plannedDate ?? "")
+            || (hasDueDate ? GuideOSDate.iso(dueDate) : "") != (todo.dueAt ?? "")
+            || listName != (todo.listName ?? "")
+            || normalizedTags(tagsText) != (todo.tags ?? [])
+    }
+
+    private func normalizedTags(_ value: String) -> [String] {
+        value
+            .split(whereSeparator: { $0 == "," || $0 == "，" })
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private func clearDraft() {
+        shouldPreserveDraft = false
+        restoredDraft = false
+        GuideTodoDraftCache.clear(todo.id)
+    }
+
+    private func resetToSavedTodo() {
+        title = todo.title
+        summary = todo.summary
+        notes = todo.notes
+        priority = todo.priority.isEmpty ? "normal" : todo.priority
+        recurrence = todo.recurrence ?? ""
+        plannedDate = GuideOSDate.parse(todo.plannedDate) ?? Date()
+        dueDate = GuideOSDate.parse(todo.dueAt) ?? Date()
+        hasPlannedDate = !(todo.plannedDate ?? "").isEmpty
+        hasDueDate = !(todo.dueAt ?? "").isEmpty
+        listName = todo.listName ?? ""
+        tagsText = (todo.tags ?? []).joined(separator: ", ")
+        restoredDraft = false
+        GuideTodoDraftCache.clear(todo.id)
+    }
+}
+
+private struct GuideTodoDraft {
+    let title: String
+    let summary: String
+    let notes: String
+    let priority: String
+    let recurrence: String
+    let plannedDate: Date
+    let dueDate: Date
+    let hasPlannedDate: Bool
+    let hasDueDate: Bool
+    let listName: String
+    let tagsText: String
+}
+
+@MainActor
+private enum GuideTodoDraftCache {
+    private static var drafts: [String: GuideTodoDraft] = [:]
+
+    static func draft(for id: String) -> GuideTodoDraft? {
+        drafts[id]
+    }
+
+    static func save(_ draft: GuideTodoDraft, for id: String) {
+        drafts[id] = draft
+    }
+
+    static func clear(_ id: String) {
+        drafts.removeValue(forKey: id)
     }
 }
 

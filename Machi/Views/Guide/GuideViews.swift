@@ -64,7 +64,7 @@ struct GuideHomeView: View {
             }
         } else if viewModel.isComingSoon {
             GuideComingSoonView(empty: viewModel.home?.emptyState)
-        } else if viewModel.home != nil {
+        } else if let home = viewModel.home {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 18) {
                     GuideTodayHeader(isGuest: currentUser.isGuest)
@@ -101,6 +101,9 @@ struct GuideHomeView: View {
                                 Task { await viewModel.createQuickTodo(content: content, plannedDate: plannedDate) }
                             }
                         )
+
+                        GuideCategoryGrid(categories: GuideSupportCatalog.orderedCategories(from: home.categories))
+                        GuideResourceEntriesSection(entries: home.resourceEntries ?? [])
                     }
                 }
                 .padding(.horizontal, KXSpacing.screen)
@@ -2680,7 +2683,17 @@ private struct GuideCategoryGrid: View {
 
     var body: some View {
         if !categories.isEmpty {
-            GuideSectionHeader(title: guideText(language, "核心分类", "主要カテゴリ", "Core categories"), subtitle: guideText(language, "升学、就职、留学、日语、生活与核心资料库", "進学、就職、留学、日本語、生活、主要データベース", "Study, careers, study abroad, Japanese, life, and core libraries"))
+            Divider()
+                .padding(.top, 4)
+            GuideSectionHeader(
+                title: guideText(language, "六大指南与资料", "6つのガイド・資料", "Six guides and resources"),
+                subtitle: guideText(
+                    language,
+                    "上面推进 Todo、日历和截止日；需要查方法、学校、就职信息或服务时，从这里进入。",
+                    "上ではTodo・カレンダー・期限を進め、調べ物や学校・就職情報、サービスはここから。",
+                    "Act on todos, calendar, and deadlines above; find guidance, schools, careers, and services here."
+                )
+            )
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                 ForEach(categories) { category in
                     GuideCategoryCard(category: category)
@@ -2697,7 +2710,15 @@ private struct GuideResourceEntriesSection: View {
 
     var body: some View {
         if !entries.isEmpty {
-            GuideSectionHeader(title: guideText(language, "核心资料库", "主要データベース", "Core libraries"), subtitle: guideText(language, "学校与就职公司信息以官方来源和后台审核为准", "学校と企業情報は公式ソースと運営審査を重視", "School and company info is based on official sources and admin review"))
+            GuideSectionHeader(
+                title: guideText(language, "学校与公司资料库", "学校・企業データベース", "School and company libraries"),
+                subtitle: guideText(
+                    language,
+                    "查询大学、大学院、专门学校、语言学校和适合外国人就职的日本公司",
+                    "大学・大学院・専門学校・語学学校、外国人向け企業を検索",
+                    "Search universities, graduate schools, vocational and language schools, and foreigner-friendly employers"
+                )
+            )
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                 ForEach(entries) { entry in
                     Button {
@@ -2752,6 +2773,22 @@ private struct GuideResourceEntriesSection: View {
                 router.open(.guideCompanies)
             }
         }
+    }
+}
+
+private enum GuideSupportCatalog {
+    private static let keys = [
+        "study_japan",
+        "career_japan",
+        "study_abroad_japan",
+        "jlpt",
+        "life_japan",
+        "guide_services"
+    ]
+
+    static func orderedCategories(from categories: [KaiXGuideCategoryDTO]) -> [KaiXGuideCategoryDTO] {
+        let topLevel = categories.filter { $0.parentKey.isEmpty }
+        return keys.compactMap { key in topLevel.first { $0.key == key } }
     }
 }
 

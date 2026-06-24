@@ -381,10 +381,37 @@ class GuideOSViewModel: ObservableObject {
             _ = try await KaiXAPIClient.shared.updateGuideTodo(id: todo.id, payload: .init(plannedDate: date))
             message = "已改期。"
             await loadTodos()
+            await loadCalendar()
             await loadDashboard()
         } catch {
             message = "改期失败，请稍后重试。"
         }
+    }
+
+    func moveCalendarItem(id: String, to date: String) async {
+        guard let item = calendarItems.first(where: { $0.id == id }) else {
+            message = "没有找到要改期的事项，请刷新后重试。"
+            return
+        }
+        if let todo = item.todo {
+            await reschedule(todo, to: date)
+            return
+        }
+
+        let startAt = replacingCalendarDate(item.startAt, with: date)
+        let endAt = replacingCalendarDate(item.endAt, with: date)
+        _ = await updateCalendarEvent(
+            item,
+            payload: .init(date: date, startAt: startAt, endAt: endAt)
+        )
+    }
+
+    private func replacingCalendarDate(_ raw: String?, with date: String) -> String? {
+        guard let raw, !raw.isEmpty else { return date }
+        if let marker = raw.firstIndex(of: "T") {
+            return date + raw[marker...]
+        }
+        return date
     }
 
     func createQuickTodo(content: String, plannedDate: String? = nil, planId: String? = nil) async -> Bool {
