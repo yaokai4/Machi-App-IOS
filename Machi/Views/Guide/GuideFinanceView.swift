@@ -399,6 +399,7 @@ struct GuideFinanceView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(guideOSText(language, "本月分类支出", "今月のカテゴリ別支出", "By category"))
                     .font(.headline.weight(.bold))
+                GuideCategoryDonut(segments: s.byCategory, total: s.expense, money: money) { vm.label(language, code: $0) }
                 ForEach(s.byCategory, id: \.category) { c in
                     let budget = s.budgets.first { $0.category == c.category }
                     let limit = budget?.limit ?? 0
@@ -497,6 +498,75 @@ struct GuideFinanceView: View {
                 }
             }
         }
+    }
+}
+
+private let kxCategoryColors: [Color] = [
+    Color(red: 0.08, green: 0.44, blue: 0.40), Color(red: 0.91, green: 0.54, blue: 0.23),
+    Color(red: 0.36, green: 0.56, blue: 0.94), Color(red: 0.85, green: 0.33, blue: 0.31),
+    Color(red: 0.61, green: 0.35, blue: 0.71), Color(red: 0.23, green: 0.63, blue: 0.49),
+    Color(red: 0.88, green: 0.69, blue: 0.13), Color(red: 0.48, green: 0.54, blue: 0.63),
+]
+
+private struct GuideCategoryDonut: View {
+    let segments: [KaiXGuideFinanceSummaryDTO.CategoryAmount]
+    let total: Int
+    let money: (Int) -> String
+    let label: (String) -> String
+
+    private var capped: [(label: String, amount: Int, color: Color)] {
+        guard total > 0 else { return [] }
+        let top = Array(segments.prefix(8))
+        var out: [(String, Int, Color)] = []
+        for (i, s) in top.enumerated() { out.append((label(s.category), s.amount, kxCategoryColors[i % kxCategoryColors.count])) }
+        let rest = segments.dropFirst(8).reduce(0) { $0 + $1.amount }
+        if rest > 0 { out.append(("其他", rest, Color.gray.opacity(0.5))) }
+        return out
+    }
+
+    var body: some View {
+        if total > 0 {
+            HStack(spacing: 16) {
+                ZStack {
+                    ForEach(Array(donutStops().enumerated()), id: \.offset) { _, seg in
+                        Circle()
+                            .trim(from: seg.from, to: seg.to)
+                            .stroke(seg.color, style: StrokeStyle(lineWidth: 16, lineCap: .butt))
+                            .rotationEffect(.degrees(-90))
+                    }
+                    VStack(spacing: 1) {
+                        Text(guideMoney(total, currency: "JPY")).font(.system(size: 13, weight: .black)).minimumScaleFactor(0.5).lineLimit(1)
+                        Text("本月支出").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
+                    }
+                }
+                .frame(width: 108, height: 108)
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(Array(capped.enumerated()), id: \.offset) { _, seg in
+                        HStack(spacing: 6) {
+                            RoundedRectangle(cornerRadius: 2).fill(seg.color).frame(width: 9, height: 9)
+                            Text(seg.label).font(.caption2.weight(.semibold)).lineLimit(1)
+                            Spacer(minLength: 4)
+                            Text("\(Int((Double(seg.amount) / Double(total) * 100).rounded()))%").font(.caption2.weight(.bold)).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.white.opacity(0.76), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(KXColor.separator.opacity(0.7), lineWidth: 0.7))
+        }
+    }
+
+    private func donutStops() -> [(from: CGFloat, to: CGFloat, color: Color)] {
+        var acc = 0.0
+        var out: [(CGFloat, CGFloat, Color)] = []
+        for seg in capped {
+            let from = acc / Double(total)
+            acc += Double(seg.amount)
+            out.append((CGFloat(from), CGFloat(acc / Double(total)), seg.color))
+        }
+        return out
     }
 }
 
