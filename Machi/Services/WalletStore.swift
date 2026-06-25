@@ -118,7 +118,9 @@ final class WalletStore: ObservableObject {
     // MARK: - private
 
     private static let knownPackProductIDs: Set<String> = [
-        "machi_points_600", "machi_points_1500", "machi_points_3200", "machi_points_6800",
+        "machi_points_600", "machi_points_1800", "machi_points_3000", "machi_points_6800",
+        "machi_points_9800", "machi_points_12800", "machi_points_19800", "machi_points_32800",
+        "machi_points_64800",
     ]
 
     nonisolated private func transaction(from verification: VerificationResult<Transaction>) -> Transaction {
