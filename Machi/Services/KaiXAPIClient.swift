@@ -50,9 +50,17 @@ final class KaiXAPIClient {
         timeoutInterval: TimeInterval = 25,
         maxReplayAttempts: Int? = nil
     ) async throws -> Data {
-        var components = URLComponents(url: KaiXBackend.baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
+        // Build the URL defensively. `request` is the hot path for every API
+        // call; a malformed path/query must surface as a catchable error (which
+        // callers already handle) rather than force-unwrap into a crash.
+        guard var components = URLComponents(url: KaiXBackend.baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false) else {
+            throw URLError(.badURL)
+        }
         if !queryItems.isEmpty { components.queryItems = queryItems }
-        var req = URLRequest(url: components.url!)
+        guard let url = components.url else {
+            throw URLError(.badURL)
+        }
+        var req = URLRequest(url: url)
         req.httpMethod = method
         // JSON API calls are small; cap the wait at 25s (vs the 60s default)
         // so a stalled mobile connection surfaces a retry/error quickly
@@ -94,7 +102,15 @@ final class KaiXAPIClient {
                 // keep replaying a dead bearer, and notify the app so it can
                 // route to login. Centralizing this avoids the "stuck on a
                 // blank screen" symptom. Never retried.
-                if http.statusCode == 401 {
+                //
+                // Guard on having had a token: a guest (no token) hitting an
+                // auth-only endpoint gets a 401 *by design*. Treating that as a
+                // session invalidation fired `kaiXSessionInvalidated` →
+                // ContentView.logout() → AppChromeState.reset(), which yanked
+                // the guest off whatever authed-only tab they opened (Profile)
+                // straight back to Home — the "tap 我的 but stay on 首页" bug.
+                // Guests have no session to invalidate, so skip the logout flow.
+                if http.statusCode == 401, KaiXBackend.token != nil {
                     KaiXBackend.token = nil
                     NotificationCenter.default.post(name: .kaiXSessionInvalidated, object: nil)
                 }

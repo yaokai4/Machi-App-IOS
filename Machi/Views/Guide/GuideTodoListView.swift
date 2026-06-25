@@ -435,7 +435,7 @@ struct GuideTodoListView: View {
                         subtitle: guideOSText(language, "像 Microsoft To Do 一样，把今天、计划中、重要和已完成放进同一个系统。", "今日・予定・重要・完了を一つにまとめます。", "My Day, Planned, Important, and Done in one system.")
                     )
                     GuideQuickTodoComposer(isSaving: model.isSaving) { content, plannedDate in
-                        Task { await model.createQuickTodo(content: content, plannedDate: plannedDate, planId: planId) }
+                        await model.createQuickTodo(content: content, plannedDate: plannedDate, planId: planId)
                     }
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {

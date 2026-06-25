@@ -50,9 +50,23 @@ actor ImageCacheService {
         return downsampleImage(source: source, maxPixelSize: maxPixelSize)
     }
 
+    /// Dedicated session for image downloads. URLSession.shared defaults to a
+    /// 60s request timeout, so on a weak network (e.g. 国内弱网) a tile would
+    /// shimmer for a full minute before the retry placeholder appears — which
+    /// reads as "stuck forever". A bounded 18s request / 30s resource timeout
+    /// surfaces the tappable retry state quickly instead. waitsForConnectivity
+    /// is off so an offline tap fails fast rather than hanging.
+    private static let downloadSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 18
+        config.timeoutIntervalForResource = 30
+        config.waitsForConnectivity = false
+        return URLSession(configuration: config)
+    }()
+
     private static func downsampleRemoteImage(at url: URL, maxPixelSize: CGFloat) async -> UIImage? {
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
+            let (data, response) = try await downloadSession.data(from: url)
             if let httpResponse = response as? HTTPURLResponse,
                !(200..<300).contains(httpResponse.statusCode) {
                 return nil

@@ -18,7 +18,22 @@ enum KaiXDatabaseContainer {
             logger.info("local persistence disabled: in-memory container backed by production data")
             return try makeEphemeralContainer(schema: schema)
         } catch {
-            fatalError("Unable to create in-memory SwiftData container: \(error.localizedDescription)")
+            // An in-memory store starts empty every launch, so there is nothing
+            // to migrate. If the migration-plan path somehow fails, retry once
+            // without it before giving up — this keeps a single bad migration
+            // step from bricking app launch on a user's device.
+            logger.error("ephemeral container with migration plan failed (\(error.localizedDescription, privacy: .public)); retrying without migration plan")
+            do {
+                let fallback = ModelConfiguration(
+                    "KaiXInMemoryFallback",
+                    schema: schema,
+                    isStoredInMemoryOnly: true,
+                    cloudKitDatabase: .none
+                )
+                return try ModelContainer(for: schema, configurations: [fallback])
+            } catch {
+                fatalError("Unable to create in-memory SwiftData container: \(error.localizedDescription)")
+            }
         }
     }()
 

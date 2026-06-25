@@ -22,12 +22,15 @@ struct GuideOSDashboardSection: View {
     let onOpenJourney: (String) -> Void
     let onOpenProduct: (String) -> Void
     let onCompleteTodo: (KaiXGuideTodoDTO) -> Void
-    let onCreateTodo: (_ content: String, _ plannedDate: String?) -> Void
+    let onCreateTodo: (_ content: String, _ plannedDate: String?) async -> Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             GuideOSHeaderRow(
-                title: guideOSText(language, "今日", "今日", "Today"),
+                // The hero card above already says "今日 / Today"; name this
+                // section by its function so the two headers don't read as a
+                // duplicated "今日 / 今日" stack.
+                title: guideOSText(language, "今日计划", "今日のプラン", "Today's plan"),
                 subtitle: isGuest
                     ? guideOSText(language, "登录后同步 Todo、日历和截止日", "ログインするとTodo・カレンダー・期限を同期できます", "Log in to sync todos, calendar, and deadlines")
                     : guideOSText(language, "这里放今天要做的事，主题和路径在下方继续浏览", "今日やることをここに表示します", "Your actual todos and deadlines live here")
@@ -231,7 +234,10 @@ struct GuideQuickTodoComposer: View {
     @Environment(\.appLanguage) private var language
     let defaultDate: String?
     let isSaving: Bool
-    let onCreate: (_ content: String, _ plannedDate: String?) -> Void
+    /// Returns `true` only when the todo was actually persisted. A guest tap or
+    /// an expired token returns `false` (after prompting login) so the composer
+    /// can keep the draft instead of silently discarding it.
+    let onCreate: (_ content: String, _ plannedDate: String?) async -> Bool
 
     @State private var text = ""
     @State private var selectedDate: String?
@@ -240,7 +246,7 @@ struct GuideQuickTodoComposer: View {
 
     private var isPresetDate: Bool { selectedDate == shifted(0) || selectedDate == shifted(1) || selectedDate == shifted(7) }
 
-    init(defaultDate: String? = nil, isSaving: Bool = false, onCreate: @escaping (_ content: String, _ plannedDate: String?) -> Void) {
+    init(defaultDate: String? = nil, isSaving: Bool = false, onCreate: @escaping (_ content: String, _ plannedDate: String?) async -> Bool) {
         self.defaultDate = defaultDate
         self.isSaving = isSaving
         self.onCreate = onCreate
@@ -254,8 +260,14 @@ struct GuideQuickTodoComposer: View {
     private func submit() {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isSaving else { return }
-        onCreate(trimmed, selectedDate)
-        text = ""
+        // Keep the draft until the save actually succeeds. For a guest or an
+        // expired token onCreate returns false (after prompting login), so the
+        // user's text survives the login round-trip instead of vanishing.
+        Task { @MainActor in
+            if await onCreate(trimmed, selectedDate) {
+                text = ""
+            }
+        }
     }
 
     var body: some View {

@@ -175,7 +175,7 @@ struct ContentView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .kaiXSessionInvalidated)) { _ in
-            logout()
+            handleSessionExpired()
         }
     }
 
@@ -326,6 +326,25 @@ struct ContentView: View {
         // 立即套用游客的默认/上次浏览城市，首页 feed 不留空白等待。
         RegionStore.shared.applyUserRegion(guest)
         appState.state = .loaded
+    }
+
+    /// Runtime session expiry / revocation (a 401 on a real, token-backed
+    /// session). Rather than yanking the user to a full login wall — which is
+    /// jarring and drops their context — fall back to guest browsing and show a
+    /// gentle toast. They can re-login from the profile tab or any gated action.
+    /// Matches the documented "session 失效退游客" behavior and the
+    /// "登录失效时温和提示，不要突然跳走" requirement.
+    private func handleSessionExpired() {
+        guard let user = appState.currentUser, !user.isGuest else { return }
+        logout()
+        enterAsGuest()
+        toastManager.show(.custom(
+            title: L("sessionExpiredTitle", language),
+            message: L("sessionExpiredMessage", language),
+            systemImage: "person.crop.circle.badge.clock",
+            tint: KXColor.accent,
+            technicalDetails: nil
+        ), duration: 4)
     }
 
     private func logout() {

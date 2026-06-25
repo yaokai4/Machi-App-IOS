@@ -100,7 +100,7 @@ struct GuideHomeView: View {
                             onOpenProduct: { slug in router.open(.guideProduct(slug: slug)) },
                             onCompleteTodo: { todo in Task { await viewModel.completeGuideTodo(todo) } },
                             onCreateTodo: { content, plannedDate in
-                                Task { await viewModel.createQuickTodo(content: content, plannedDate: plannedDate) }
+                                await viewModel.createQuickTodo(content: content, plannedDate: plannedDate)
                             }
                         )
 

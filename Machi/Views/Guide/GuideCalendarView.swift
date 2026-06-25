@@ -129,7 +129,7 @@ struct GuideCalendarView: View {
                             onMove: { id, date in Task { await model.moveCalendarItem(id: id, to: date) } }
                         )
                         GuideQuickTodoComposer(defaultDate: selectedDate, isSaving: model.isSaving) { content, plannedDate in
-                            Task { await model.createQuickTodo(content: content, plannedDate: plannedDate ?? selectedDate) }
+                            await model.createQuickTodo(content: content, plannedDate: plannedDate ?? selectedDate)
                         }
                         GuideCalendarSelectedDay(date: selectedDate, items: selectedItems, model: model)
                         GuideCalendarCountdownStrip(items: countdowns)
@@ -140,12 +140,12 @@ struct GuideCalendarView: View {
                             onMove: { id, date in Task { await model.moveCalendarItem(id: id, to: date) } }
                         )
                         GuideQuickTodoComposer(defaultDate: selectedDate, isSaving: model.isSaving) { content, plannedDate in
-                            Task { await model.createQuickTodo(content: content, plannedDate: plannedDate ?? selectedDate) }
+                            await model.createQuickTodo(content: content, plannedDate: plannedDate ?? selectedDate)
                         }
                         GuideCalendarSelectedDay(date: selectedDate, items: selectedItems, model: model)
                     case .agenda:
                         GuideQuickTodoComposer(defaultDate: selectedDate, isSaving: model.isSaving) { content, plannedDate in
-                            Task { await model.createQuickTodo(content: content, plannedDate: plannedDate ?? selectedDate) }
+                            await model.createQuickTodo(content: content, plannedDate: plannedDate ?? selectedDate)
                         }
                         GuideCalendarAgendaList(grouped: grouped, model: model)
                     }

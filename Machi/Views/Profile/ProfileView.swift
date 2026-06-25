@@ -229,6 +229,10 @@ struct ProfileView: View {
     }
 
     private func loadProfileAndContent(showLoading: Bool = true) async {
+        // A guest viewing their OWN profile only sees the login CTA, so the
+        // authed fetch here is pointless (it would 401). Skip it — viewing
+        // *other* users' public profiles as a guest still loads normally.
+        if isCurrentUser && currentUser.isGuest { return }
         if isRefreshingProfile, !showLoading { return }
         isRefreshingProfile = true
         defer { isRefreshingProfile = false }
