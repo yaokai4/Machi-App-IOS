@@ -72,7 +72,11 @@ struct LoadingView: View {
                 .font(KXTypography.meta)
                 .foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity, minHeight: 140)
+        // Expand to fill the available area (centering the spinner) when given a
+        // bounded region, e.g. as the sole content of a state switch. Under a
+        // ScrollView's unbounded proposal `maxHeight: .infinity` collapses back
+        // to the content height, so inline "loading" rows stay compact.
+        .frame(maxWidth: .infinity, minHeight: 140, maxHeight: .infinity)
     }
 }
 
@@ -278,7 +282,10 @@ struct ErrorStateView: View {
             .buttonStyle(KXPressableStyle())
         }
         .padding()
-        .frame(maxWidth: .infinity, minHeight: 170)
+        // Fill a bounded state region (centering the message) so a header above
+        // it stays pinned at the top instead of drifting to mid-screen; stays
+        // compact inside a ScrollView (unbounded proposal → content height).
+        .frame(maxWidth: .infinity, minHeight: 170, maxHeight: .infinity)
     }
 }
 
@@ -337,7 +344,10 @@ struct EmptyStateView: View {
                 .multilineTextAlignment(.center)
         }
         .padding()
-        .frame(maxWidth: .infinity, minHeight: 170)
+        // Fill a bounded state region (centering the content) so a header/picker
+        // above it stays pinned at the top instead of the whole block drifting to
+        // mid-screen; stays compact inside a ScrollView (unbounded → content).
+        .frame(maxWidth: .infinity, minHeight: 170, maxHeight: .infinity)
     }
 }
 
