@@ -840,6 +840,7 @@ struct GuideProductDetailView: View {
     @State private var isSubmitting = false
     @State private var errorMessage: String?
     @State private var toastMessage: String?
+    @State private var showTopupSheet = false
 
     let slug: String
     private var country: String { (regionStore.current?.countryCode ?? "jp").lowercased() }
@@ -885,6 +886,9 @@ struct GuideProductDetailView: View {
         } message: {
             Text(toastMessage ?? "")
         }
+        .sheet(isPresented: $showTopupSheet, onDismiss: { Task { await load() } }) {
+            NavigationStack { WalletView() }
+        }
     }
 
     private func productHero(_ product: KaiXGuideProductDTO) -> some View {
@@ -926,7 +930,61 @@ struct GuideProductDetailView: View {
         .contentShape(Rectangle())
                     .disabled(!GuideCopy.productActionEnabled(product, busy: isSubmitting))
                 }
+                if product.canBuyWithPoints == true && product.access?.canAccess != true {
+                    Button {
+                        Task { await productPointsAction(product) }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "circle.hexagongrid.fill").foregroundStyle(.orange)
+                            Text(pointsCTALabel(product))
+                                .font(.subheadline.weight(.bold))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 42)
+                        .background(KXColor.accentSoft, in: Capsule())
+                        .foregroundStyle(KXColor.accent)
+                    }
+                    .buttonStyle(.fullArea)
+                    .contentShape(Rectangle())
+                    .disabled(isSubmitting)
+                    if let ctx = product.pointsContext, ctx.sufficient == false {
+                        Text(guideText(language,
+                            "当前余额 \(ctx.currentBalance ?? 0) 点，充值后可用点数购买。",
+                            "残高 \(ctx.currentBalance ?? 0) 点。チャージ後にポイントで購入できます。",
+                            "Balance: \(ctx.currentBalance ?? 0) pts — top up to buy with points."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
+        }
+    }
+
+    private func pointsCTALabel(_ product: KaiXGuideProductDTO) -> String {
+        let pts = product.pointsContext?.requiredPoints ?? product.walletPricePoints ?? 0
+        return guideText(language, "用 \(pts) 点购买", "\(pts) ポイントで購入", "Buy with \(pts) pts")
+    }
+
+    private func productPointsAction(_ product: KaiXGuideProductDTO) async {
+        guard !isSubmitting else { return }
+        if KaiXBackend.token == nil {
+            toastMessage = guideText(language, "请登录后购买。", "ログインして購入してください。", "Please log in to purchase.")
+            return
+        }
+        // Not enough points → open the top-up sheet instead of charging.
+        if let ctx = product.pointsContext, ctx.sufficient == false {
+            showTopupSheet = true
+            return
+        }
+        isSubmitting = true
+        defer { isSubmitting = false }
+        do {
+            let resp = try await KaiXAPIClient.shared.purchaseGuideProductWithWallet(product.slug)
+            toastMessage = resp.message ?? guideText(language, "购买成功。", "購入が完了しました。", "Purchase complete.")
+            await load()
+        } catch {
+            // Most likely insufficient balance (402) — send the user to top up.
+            showTopupSheet = true
         }
     }
 

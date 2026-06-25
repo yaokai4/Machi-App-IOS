@@ -132,6 +132,15 @@ struct SettingsView: View {
                 MembershipView(currentUser: currentUser)
             }
             SettingsDivider()
+            SettingsRowLink(
+                icon: "circle.hexagongrid.fill",
+                tint: .orange,
+                title: walletRowTitle,
+                subtitle: walletRowSubtitle
+            ) {
+                WalletView(currentUser: currentUser)
+            }
+            SettingsDivider()
             SettingsRowLink(icon: "doc.plaintext.fill", tint: .green, title: L("ordersTitle", language), subtitle: L("ordersSubtitle", language)) {
                 MyOrdersView()
             }
@@ -147,6 +156,22 @@ struct SettingsView: View {
             SettingsRowLink(icon: "hand.raised.fill", tint: .indigo, title: L("privacySettings", language), value: L("public", language), subtitle: L("privacySettingsSubtitle", language)) {
                 PrivacySettingsView()
             }
+        }
+    }
+
+    private var walletRowTitle: String {
+        switch language {
+        case .en: return "Points Wallet"
+        case .ja: return "ポイント"
+        default: return "点数钱包"
+        }
+    }
+
+    private var walletRowSubtitle: String {
+        switch language {
+        case .en: return "Machi Points balance, top-up and history"
+        case .ja: return "Machi ポイントの残高・チャージ・履歴"
+        default: return "Machi 点数余额、充值与记录"
         }
     }
 

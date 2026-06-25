@@ -986,6 +986,103 @@ struct KaiXAppleVerifyResponse: Codable {
     let status: String?
 }
 
+// MARK: - Machi Points wallet
+// Points are internal scrip — bought via App Store IAP on iOS, spent only on
+// Machi digital goods. Never cash: no withdrawal/transfer/expiry. The balance
+// is authoritative on the server; iOS only reads it and routes IAP purchases.
+
+struct KaiXWalletDTO: Codable, Equatable {
+    let balancePoints: Int
+    let status: String?
+    let lifetimePurchasedPoints: Int?
+    let lifetimeBonusPoints: Int?
+    let lifetimeSpentPoints: Int?
+    let pointsName: String?
+    let displayBalance: String?
+    let disclaimer: String?
+}
+
+struct KaiXWalletLedgerEntryDTO: Codable, Equatable, Identifiable {
+    let id: String
+    let entryType: String
+    let pointsDelta: Int
+    let balanceAfter: Int
+    let sourceType: String?
+    let productId: String?
+    let createdAt: String?
+    let displayDelta: String?
+}
+
+struct KaiXWalletTopupProductDTO: Codable, Equatable, Identifiable {
+    let id: String
+    let packKey: String
+    let title: String
+    let subtitle: String?
+    let points: Int
+    let bonusPoints: Int
+    let totalPoints: Int
+    let amountCents: Int
+    let currency: String
+    let priceLabel: String?
+    let displayPoints: String?
+    let appleProductId: String?
+    let iosIapProductId: String?
+    let googleProductId: String?
+    let purchasable: Bool?
+    let disabledReason: String?
+
+    /// The StoreKit product id iOS should buy for this pack.
+    var resolvedAppleProductID: String {
+        if let pid = appleProductId, !pid.isEmpty { return pid }
+        if let pid = iosIapProductId, !pid.isEmpty { return pid }
+        return packKey
+    }
+}
+
+struct KaiXWalletMeResponse: Codable {
+    let wallet: KaiXWalletDTO
+    let topupProducts: [KaiXWalletTopupProductDTO]
+    let recentEntries: [KaiXWalletLedgerEntryDTO]
+    let pointsName: String?
+    let disclaimer: String?
+}
+
+struct KaiXWalletLedgerResponse: Codable {
+    let wallet: KaiXWalletDTO
+    let entries: [KaiXWalletLedgerEntryDTO]
+    let page: Int?
+    let pageSize: Int?
+    let hasMore: Bool?
+}
+
+struct KaiXWalletTopupProductsResponse: Codable {
+    let topupProducts: [KaiXWalletTopupProductDTO]
+    let pointsName: String?
+    let disclaimer: String?
+}
+
+struct KaiXWalletTopupVerifyResponse: Codable {
+    let wallet: KaiXWalletDTO
+    let grantedPoints: Int?
+}
+
+struct KaiXWalletPurchaseResponse: Codable {
+    let status: String
+    let orderId: String?
+    let orderNo: String?
+    let message: String?
+    let wallet: KaiXWalletDTO?
+    let alreadyOwned: Bool?
+}
+
+struct KaiXWalletPointsContextDTO: Codable, Equatable, Hashable {
+    let eligible: Bool?
+    let requiredPoints: Int?
+    let currentBalance: Int?
+    let sufficient: Bool?
+    let owned: Bool?
+}
+
 struct KaiXMembershipInsightsTotals: Codable, Equatable {
     let post_count: Int
     let total_views: Int
@@ -1582,6 +1679,17 @@ struct KaiXGuideProductDTO: Codable, Equatable, Identifiable, Hashable {
     let purchaseContent: String?
     let fileUrl: String?
     let access: KaiXGuideProductAccess?
+    // Machi Points purchasing (prices server-side only).
+    let walletEligible: Bool?
+    let walletPricePoints: Int?
+    let memberWalletPricePoints: Int?
+    let pointsPriceLabel: String?
+    let memberPointsPriceLabel: String?
+    let canBuyWithPoints: Bool?
+    let fulfillmentType: String?
+    let entitlementType: String?
+    let platformPolicy: String?
+    let pointsContext: KaiXWalletPointsContextDTO?
 }
 
 struct KaiXGuideProductAccess: Codable, Equatable, Hashable {

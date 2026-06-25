@@ -54,6 +54,9 @@ final class MembershipStore: ObservableObject {
             updatesTask = Task.detached { [weak self] in
                 guard let self else { return }
                 for await result in Transaction.updates {
+                    // Machi Points consumables are settled by WalletStore against
+                    // a different endpoint — never verify/finish them here.
+                    if await self.transaction(from: result).productID.hasPrefix("machi_points_") { continue }
                     await self.handle(result)
                 }
             }

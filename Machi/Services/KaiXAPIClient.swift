@@ -440,6 +440,60 @@ final class KaiXAPIClient {
         return try decode(data)
     }
 
+    // MARK: - Machi Points wallet
+
+    /// Wallet overview: balance + iOS-buyable top-up packs + recent ledger.
+    func walletMe() async throws -> KaiXWalletMeResponse {
+        let data = try await request("GET", "/api/wallet/me",
+                                     queryItems: [URLQueryItem(name: "platform", value: "ios")])
+        return try decode(data)
+    }
+
+    func walletLedger(page: Int = 1, pageSize: Int = 20) async throws -> KaiXWalletLedgerResponse {
+        let data = try await request("GET", "/api/wallet/ledger", queryItems: [
+            URLQueryItem(name: "page", value: String(page)),
+            URLQueryItem(name: "pageSize", value: String(pageSize)),
+        ])
+        return try decode(data)
+    }
+
+    func walletTopupProducts() async throws -> KaiXWalletTopupProductsResponse {
+        let data = try await request("GET", "/api/wallet/topup-products",
+                                     queryItems: [URLQueryItem(name: "platform", value: "ios")])
+        return try decode(data)
+    }
+
+    /// Verify a StoreKit2 consumable points top-up server-side. The server is
+    /// the only place points are credited; it is idempotent on the transaction
+    /// id. NEVER hits the membership verify endpoint.
+    @discardableResult
+    func verifyAppleWalletTopup(productId: String,
+                                transactionId: String,
+                                originalTransactionId: String,
+                                signedTransaction: String,
+                                environment: String) async throws -> KaiXWalletTopupVerifyResponse {
+        let body: [String: String] = [
+            "productId": productId,
+            "transactionId": transactionId,
+            "originalTransactionId": originalTransactionId,
+            "signedTransaction": signedTransaction,
+            "environment": environment,
+        ]
+        let data = try await request("POST", "/api/wallet/topups/apple/verify", body: body)
+        return try decode(data)
+    }
+
+    /// Buy a guide product with Machi Points. Throws on insufficient balance
+    /// (server returns 402) — callers should pre-check the product's
+    /// pointsContext and route the user to top up.
+    func purchaseGuideProductWithWallet(_ idOrSlug: String, idempotencyKey: String? = nil) async throws -> KaiXWalletPurchaseResponse {
+        var body: [String: String] = ["paymentMethod": "wallet"]
+        if let idempotencyKey, !idempotencyKey.isEmpty { body["idempotencyKey"] = idempotencyKey }
+        let data = try await request("POST", "/api/guide/products/\(idOrSlug.encodedPathSegment)/purchase",
+                                     body: body, idempotencyKey: idempotencyKey)
+        return try decode(data)
+    }
+
     // MARK: - regions
 
     func countries() async throws -> [KaiXCountryDTO] {

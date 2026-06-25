@@ -44,7 +44,88 @@
       "type" : "NonRenewingSubscription"
     }
   ],
-  "products" : [],
+  "products" : [
+    {
+      "displayPrice" : "6.00",
+      "familyShareable" : false,
+      "internalID" : "21490101",
+      "localizations" : [
+        {
+          "description" : "600 Machi 点数，用于购买 Machi 内的数字资料与平台服务。点数不可提现、不可转让、不会过期。",
+          "displayName" : "600 Machi 点数",
+          "locale" : "zh_CN"
+        },
+        {
+          "description" : "600 Machi Points for digital materials and platform services. Non-transferable, never expires.",
+          "displayName" : "600 Machi Points",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "machi_points_600",
+      "referenceName" : "Machi点数600",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "15.00",
+      "familyShareable" : false,
+      "internalID" : "21490102",
+      "localizations" : [
+        {
+          "description" : "1500 Machi 点数（多送 80），用于购买 Machi 内数字资料与平台服务。点数不可提现、不会过期。",
+          "displayName" : "1500 Machi 点数",
+          "locale" : "zh_CN"
+        },
+        {
+          "description" : "1500 Machi Points (+80 bonus) for Machi digital materials and services. Never expires.",
+          "displayName" : "1500 Machi Points",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "machi_points_1500",
+      "referenceName" : "Machi点数1500",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "30.00",
+      "familyShareable" : false,
+      "internalID" : "21490103",
+      "localizations" : [
+        {
+          "description" : "3200 Machi 点数（多送 260），用于购买 Machi 内数字资料、组合包与异步服务。点数不可提现、不会过期。",
+          "displayName" : "3200 Machi 点数",
+          "locale" : "zh_CN"
+        },
+        {
+          "description" : "3200 Machi Points (+260 bonus) for Machi materials, bundles and async services. Never expires.",
+          "displayName" : "3200 Machi Points",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "machi_points_3200",
+      "referenceName" : "Machi点数3200",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "60.00",
+      "familyShareable" : false,
+      "internalID" : "21490104",
+      "localizations" : [
+        {
+          "description" : "6800 Machi 点数（多送 800），适合深度资料与多次购买。点数不可提现、不会过期。",
+          "displayName" : "6800 Machi 点数",
+          "locale" : "zh_CN"
+        },
+        {
+          "description" : "6800 Machi Points (+800 bonus) for deep material libraries and frequent purchases. Never expires.",
+          "displayName" : "6800 Machi Points",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "machi_points_6800",
+      "referenceName" : "Machi点数6800",
+      "type" : "Consumable"
+    }
+  ],
   "settings" : {
     "_applicationInternalID" : "machicity",
     "_developerTeamID" : "",
