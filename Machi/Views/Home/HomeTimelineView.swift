@@ -76,7 +76,9 @@ struct HomeTimelineView: View {
         .kxPageBackground()
         .toolbar(.hidden, for: .navigationBar)
         .task {
-            await viewModel.loadInitial(context: modelContext, currentUser: currentUser, postStore: postStore)
+            await KXPerf.measure("feed.loadInitial") {
+                await viewModel.loadInitial(context: modelContext, currentUser: currentUser, postStore: postStore)
+            }
         }
         .onChange(of: viewModel.mode) { _, _ in
             Task { await viewModel.loadInitial(context: modelContext, currentUser: currentUser, postStore: postStore, clearExisting: true) }

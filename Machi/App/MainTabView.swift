@@ -62,16 +62,24 @@ struct MainTabView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .bottom) {
             if !chrome.isTabBarHidden {
+                // Pin the floating tab bar to the real screen bottom. Without
+                // this, SwiftUI's keyboard avoidance shrinks the bottom safe
+                // area and shoves the bar up ABOVE the keyboard — where it
+                // overlaps content, stays tappable (accidental tab switches),
+                // and blocks dismissing the keyboard.
+                //
+                // The fix lives entirely inside this overlay layer (it never
+                // touches the tab content's own keyboard avoidance, so chat /
+                // compose input bars still rise normally): a full-bleed,
+                // bottom-aligned container that ignores the keyboard safe area
+                // anchors the bar to the true screen bottom. Applying
+                // `.ignoresSafeArea` to the bar alone wasn't enough — the
+                // overlay's anchor still rode the shrinking safe area up.
                 BottomTabBarView(selection: selectedTab, currentUser: currentUser)
                     .padding(.bottom, 8)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    // Pin the floating tab bar to the real screen bottom. Without
-                    // this, SwiftUI's keyboard avoidance shrinks the bottom safe
-                    // area and shoves the bar up ABOVE the keyboard — where it
-                    // overlaps content, stays tappable (accidental tab switches),
-                    // and blocks dismissing the keyboard. Ignoring the keyboard
-                    // safe area keeps it at the bottom, covered by the keyboard.
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                     .ignoresSafeArea(.keyboard, edges: .bottom)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .animation(.snappy(duration: 0.22), value: chrome.isTabBarHidden)

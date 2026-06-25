@@ -43,8 +43,10 @@ struct GuideHomeView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .task(id: country) {
-            await viewModel.load(country: country)
-            await viewModel.loadGuideOS()
+            await KXPerf.measure("guide.loadInitial") {
+                await viewModel.load(country: country)
+                await viewModel.loadGuideOS()
+            }
         }
         .refreshable {
             await viewModel.load(country: country, force: true)

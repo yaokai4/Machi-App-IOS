@@ -93,7 +93,9 @@ struct ContentView: View {
             .environment(\.appLanguage, language)
         }
         .task(id: currentUserID) {
-            await appState.bootstrap(context: modelContext, currentUserId: currentUserID)
+            await KXPerf.measure("app.bootstrap") {
+                await appState.bootstrap(context: modelContext, currentUserId: currentUserID)
+            }
             #if DEBUG
             if appState.currentUser == nil,
                ProcessInfo.processInfo.arguments.contains("-KXAutoGuest") {
