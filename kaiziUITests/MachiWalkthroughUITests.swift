@@ -323,6 +323,34 @@ final class MachiWalkthroughUITests: XCTestCase {
     /// Tap via frame-center coordinate — bypasses `isHittable`, which is
     /// false for buttons under `glassEffect` overlays (tab bar, glass
     /// circles) even though real taps land fine.
+    /// Regression test for the "buttons only work when you tap the text" bug:
+    /// taps the BLANK right-edge (Spacer region) of a Guide quick-grid button.
+    /// With the old ordering (`.contentShape`/`.background` applied after
+    /// `.buttonStyle`) that area did not hit-test, so this tap did nothing. With
+    /// `FullAreaButtonStyle` the whole label is tappable, so it must navigate
+    /// away from the home grid.
+    @MainActor
+    func testGuideGridButtonFullAreaTappable() throws {
+        let app = XCUIApplication()
+        app.launch()
+        tapTab(app, "tabbar.guide")
+
+        let goals = app.buttons["路径"]
+        XCTAssertTrue(goals.waitForExistence(timeout: 25), "Guide home quick-grid should load")
+        snap("hitarea_before")
+
+        let calendar = app.buttons["日历"]
+        XCTAssertTrue(calendar.waitForExistence(timeout: 5), "日历 grid button should exist")
+        // Far-right of the button = blank Spacer area, NOT the text/icon.
+        calendar.coordinate(withNormalizedOffset: CGVector(dx: 0.88, dy: 0.5)).tap()
+
+        // Navigating away from the home means the grid (路径 button) disappears.
+        let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: goals)
+        wait(for: [gone], timeout: 8)
+        snap("hitarea_after")
+        XCTAssertFalse(goals.exists, "Tapping the 日历 button's blank area must navigate — proves full-area hit testing")
+    }
+
     private func forceTap(_ element: XCUIElement) {
         element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
