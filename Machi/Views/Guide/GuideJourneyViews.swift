@@ -158,7 +158,7 @@ struct GuideJourneyCard: View {
             .padding(13)
             .kxGlassSurface(radius: 20)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.fullArea)
         .contentShape(Rectangle())
     }
 }
@@ -332,7 +332,7 @@ struct GuideJourneyDetailView: View {
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 44)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.fullArea)
         .contentShape(Rectangle())
                         .foregroundStyle(.white)
                         .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -344,7 +344,7 @@ struct GuideJourneyDetailView: View {
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 44)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.fullArea)
         .contentShape(Rectangle())
                         .foregroundStyle(KXColor.accent)
                         .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -483,7 +483,7 @@ private struct GuideJourneyStepRow: View {
                         .scaleEffect(isDone ? 1.08 : 1)
                         .frame(width: 38, height: 38)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.fullArea)
         .contentShape(Rectangle())
                 .sensoryFeedback(.success, trigger: isDone)
                 VStack(alignment: .leading, spacing: 4) {
@@ -536,7 +536,7 @@ private struct GuideJourneyStepRow: View {
                             .frame(height: 38)
                             .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 11))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.fullArea)
         .contentShape(Rectangle())
                     }
                 }
@@ -560,7 +560,7 @@ private struct GuideJourneyStepRow: View {
                         .frame(height: 38)
                         .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 11))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.fullArea)
         .contentShape(Rectangle())
                 }
             }
@@ -594,7 +594,7 @@ private struct GuideJourneyStepRow: View {
                     }
                     .foregroundStyle(KXColor.accent)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.fullArea)
         .contentShape(Rectangle())
             }
         }
@@ -639,7 +639,7 @@ private struct GuideScheduleChip: View {
                 .background(KXColor.accentSoft, in: Capsule())
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.fullArea)
         .contentShape(Rectangle())
     }
 }
@@ -690,7 +690,7 @@ struct GuideJourneyNextStepCard: View {
                 .padding(15)
                 .kxGlassSurface(radius: 20)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.fullArea)
         .contentShape(Rectangle())
         }
     }

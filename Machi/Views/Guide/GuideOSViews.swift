@@ -145,11 +145,12 @@ struct GuideOSActionTile: View {
                     .lineLimit(1)
                 Spacer(minLength: 0)
             }
+            .frame(maxWidth: .infinity)
             .padding(10)
             .background(Color.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .contentShape(Rectangle())
+        .buttonStyle(.fullArea)
     }
 }
 
@@ -179,11 +180,11 @@ struct GuideOSQuickRow: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 56)
                     .padding(.horizontal, 12)
+                    .foregroundStyle(KXColor.accent)
+                    .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .contentShape(Rectangle())
-                .foregroundStyle(KXColor.accent)
-                .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+                .buttonStyle(.fullArea)
             }
         }
     }
@@ -281,7 +282,7 @@ struct GuideQuickTodoComposer: View {
                         .font(.subheadline.weight(.bold))
                         .frame(width: 62, height: 46)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.fullArea)
                 .contentShape(Rectangle())
                 .foregroundStyle(.white)
                 .background(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? KXColor.accent.opacity(0.42) : KXColor.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -306,7 +307,7 @@ struct GuideQuickTodoComposer: View {
                                 .padding(.horizontal, 10)
                                 .frame(height: 30)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.fullArea)
                         .contentShape(Rectangle())
                         .foregroundStyle(.secondary)
                     }
@@ -355,7 +356,7 @@ private struct GuideQuickDateChip: View {
                 .frame(height: 30)
                 .frame(minWidth: 50)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.fullArea)
         .contentShape(Rectangle())
         .foregroundStyle(isSelected ? .white : .secondary)
         .background(isSelected ? KXColor.accent : Color.white.opacity(0.82), in: Capsule())
@@ -385,7 +386,7 @@ struct GuideOSPrimaryButton: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 48)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.fullArea)
         .contentShape(Rectangle())
         .foregroundStyle(.white)
         .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
@@ -546,7 +547,7 @@ struct GuideManageView: View {
                                 .background(Color.white.opacity(0.76), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                                 .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.fullArea)
                             .contentShape(Rectangle())
                         }
                     }
@@ -988,13 +989,13 @@ private struct GuideDocumentRow: View {
                     Image(systemName: "pencil")
                         .frame(width: 44, height: 44)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.fullArea)
                 .contentShape(Rectangle())
                 Button(role: .destructive) { confirmingDelete = true } label: {
                     Image(systemName: "trash")
                         .frame(width: 44, height: 44)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.fullArea)
                 .contentShape(Rectangle())
             }
             GuideAttachmentSection(entityType: "guide_document", entityId: item.id, title: "可选附件")
@@ -1040,7 +1041,7 @@ struct GuideGoalsView: View {
                             .font(.subheadline.weight(.bold))
                             .frame(maxWidth: .infinity, minHeight: 44)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.fullArea)
                     .contentShape(Rectangle())
                     .foregroundStyle(.white)
                     .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -1135,7 +1136,7 @@ struct GuideGoalsView: View {
                                         }
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                     }
-                                    .buttonStyle(.plain)
+                                    .buttonStyle(.fullArea)
                                     .contentShape(Rectangle())
                                     GuideAttachmentSection(entityType: "guide_goal", entityId: plan.id, title: "目标附件")
                                 }
@@ -1227,7 +1228,7 @@ struct GuideAttachmentSection: View {
                         .background(Capsule().fill(KXColor.accent))
                         .foregroundStyle(.white)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.fullArea)
                 .disabled(isUploading)
                 .contentShape(Rectangle())
             }
@@ -1266,7 +1267,7 @@ struct GuideAttachmentSection: View {
                                 }
                                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.fullArea)
                             .contentShape(Rectangle())
                             Button(role: .destructive) {
                                 deleteTarget = file
@@ -1274,7 +1275,7 @@ struct GuideAttachmentSection: View {
                                 Image(systemName: "trash")
                                     .frame(width: 44, height: 44)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.fullArea)
                             .contentShape(Rectangle())
                         }
                         .padding(.horizontal, 10)

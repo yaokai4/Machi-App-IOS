@@ -102,7 +102,7 @@ struct GuideCalendarView: View {
                                         .padding(.horizontal, 13)
                                         .frame(minHeight: 44)
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(.fullArea)
                                 .contentShape(Rectangle())
                                 .foregroundStyle(scope == item ? Color.white : Color.secondary)
                                 .background(scope == item ? KXColor.accent : Color.white.opacity(0.78), in: Capsule())
@@ -205,7 +205,7 @@ private struct GuideCalendarMonthGrid: View {
                             .frame(minHeight: 44)
                             .padding(.horizontal, 14)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.fullArea)
                     .contentShape(Rectangle())
                     .background(Color.white.opacity(0.78), in: Capsule())
                     monthButton("chevron.right") {
@@ -235,7 +235,7 @@ private struct GuideCalendarMonthGrid: View {
                 .font(.caption.weight(.bold))
                 .frame(width: 44, height: 44)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.fullArea)
         .contentShape(Rectangle())
         .background(Color.white.opacity(0.78), in: Circle())
     }
@@ -259,7 +259,7 @@ private struct GuideCalendarMonthGrid: View {
             .frame(maxWidth: .infinity)
             .frame(height: 44)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.fullArea)
         .contentShape(Rectangle())
         .foregroundStyle(isSelected ? .white : (inMonth ? Color.primary : Color.secondary.opacity(0.45)))
         .background(isSelected ? KXColor.accent : (isToday ? KXColor.accentSoft : Color.white.opacity(0.55)), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -309,7 +309,7 @@ private struct GuideCalendarWeekBoard: View {
                             .frame(minHeight: 44)
                             .padding(.horizontal, 14)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.fullArea)
                     .contentShape(Rectangle())
                     .background(Color.white.opacity(0.78), in: Capsule())
                     weekButton("chevron.right") { shiftWeek(1) }
@@ -338,7 +338,7 @@ private struct GuideCalendarWeekBoard: View {
                 .font(.caption.weight(.bold))
                 .frame(width: 44, height: 44)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.fullArea)
         .contentShape(Rectangle())
         .background(Color.white.opacity(0.78), in: Circle())
     }
@@ -393,7 +393,7 @@ private struct GuideCalendarWeekBoard: View {
             }
             .frame(width: 118, alignment: .topLeading)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.fullArea)
         .contentShape(Rectangle())
         .dropDestination(for: String.self) { ids, _ in
             guard let id = ids.first else { return false }
@@ -550,7 +550,7 @@ private struct GuideCalendarEventComposer: View {
                 .frame(minHeight: 48)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.fullArea)
 
             if isExpanded {
                 Divider().opacity(0.55)
@@ -607,7 +607,7 @@ private struct GuideCalendarEventComposer: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: 46)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.fullArea)
                 .foregroundStyle(.white)
                 .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .disabled(model.isSaving || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -670,7 +670,7 @@ private struct GuideCalendarEventRow: View {
             .contentShape(Rectangle())
             .background(Color.indigo.opacity(0.07), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.fullArea)
         .sheet(isPresented: $showEditor) {
             GuideCalendarEventEditor(event: event, model: model)
         }
@@ -744,7 +744,7 @@ private struct GuideCalendarEventEditor: View {
                                 .font(.subheadline.weight(.bold))
                                 .frame(maxWidth: .infinity, minHeight: 46)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.fullArea)
                         .foregroundStyle(.red)
                         .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     }

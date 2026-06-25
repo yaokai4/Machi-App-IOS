@@ -226,7 +226,7 @@ struct GuideOSApplicationRow: View {
                         .foregroundStyle(.secondary)
                         .frame(width: 36, height: 36)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.fullArea)
                 .contentShape(Rectangle())
                 .accessibilityLabel("编辑 \(app.name)")
             }
@@ -236,7 +236,7 @@ struct GuideOSApplicationRow: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 36, height: 36)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.fullArea)
             .contentShape(Rectangle())
             .accessibilityLabel("删除 \(app.name)")
         }
@@ -538,7 +538,7 @@ struct GuideOSLibraryPickerField: View {
                             .foregroundStyle(.tertiary)
                             .frame(width: 30, height: 30)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.fullArea)
         .contentShape(Rectangle())
                 }
             }
@@ -576,7 +576,7 @@ struct GuideOSLibraryPickerField: View {
                             .padding(.vertical, 10)
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.fullArea)
         .contentShape(Rectangle())
                         if index < suggestions.count - 1 {
                             Divider().padding(.leading, 32)

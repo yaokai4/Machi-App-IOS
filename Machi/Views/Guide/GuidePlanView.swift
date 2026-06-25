@@ -153,7 +153,7 @@ private struct GuideSuggestedJourneyStrip: View {
                             .stroke(index == 0 ? KXColor.accent.opacity(0.4) : Color.clear, lineWidth: 1)
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.fullArea)
             }
         }
     }
@@ -199,7 +199,7 @@ struct GuideOSPlanCard: View {
                         .frame(maxWidth: .infinity)
                         .frame(height: 38)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.fullArea)
         .contentShape(Rectangle())
                 .foregroundStyle(.white)
                 .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -209,7 +209,7 @@ struct GuideOSPlanCard: View {
                         .frame(maxWidth: .infinity)
                         .frame(height: 38)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.fullArea)
         .contentShape(Rectangle())
                 .foregroundStyle(KXColor.accent)
                 .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))

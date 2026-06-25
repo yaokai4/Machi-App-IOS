@@ -179,7 +179,7 @@ struct GuideOSLifeItemRow: View {
                             .foregroundStyle(KXColor.accent)
                             .frame(width: 44, height: 44)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.fullArea)
                     .contentShape(Rectangle())
                     .accessibilityLabel("记录 \(item.title) 已支付")
                 }
@@ -190,7 +190,7 @@ struct GuideOSLifeItemRow: View {
                             .foregroundStyle(.secondary)
                             .frame(width: 44, height: 44)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.fullArea)
                     .contentShape(Rectangle())
                 }
                 Button(role: .destructive) { confirming = true } label: {
@@ -199,7 +199,7 @@ struct GuideOSLifeItemRow: View {
                         .foregroundStyle(.secondary)
                         .frame(width: 44, height: 44)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.fullArea)
                 .contentShape(Rectangle())
             }
             GuideAttachmentSection(entityType: "guide_life_item", entityId: item.id, title: "缴费附件")

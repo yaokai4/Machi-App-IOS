@@ -115,7 +115,7 @@ struct GuideOSTodoCard: View {
                                 .font(.system(size: 16, weight: .semibold))
                                 .foregroundStyle(step.done ? KXColor.accent : Color.secondary.opacity(0.6))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.fullArea)
                         .disabled(onUpdateSteps == nil)
                         Text(step.text)
                             .font(.caption)
@@ -126,7 +126,7 @@ struct GuideOSTodoCard: View {
                             Button { removeStep(step) } label: {
                                 Image(systemName: "xmark").font(.caption2).foregroundStyle(.tertiary)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.fullArea)
                         }
                     }
                 }
@@ -165,7 +165,7 @@ struct GuideOSTodoCard: View {
                                 .padding(.horizontal, 12)
                                 .frame(height: 30)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.fullArea)
                         .contentShape(Rectangle())
                         .foregroundStyle(.white)
                         .background(KXColor.accent, in: Capsule())
@@ -177,7 +177,7 @@ struct GuideOSTodoCard: View {
                                 .font(.caption.weight(.bold))
                                 .frame(height: 30)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.fullArea)
                         .contentShape(Rectangle())
                         .foregroundStyle(.secondary)
                     }
@@ -194,7 +194,7 @@ struct GuideOSTodoCard: View {
                         .padding(10)
                         .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.fullArea)
                 .contentShape(Rectangle())
                 .padding(.top, 4)
             } else if !todo.isDone {
@@ -204,7 +204,7 @@ struct GuideOSTodoCard: View {
                         .foregroundStyle(.secondary)
                         .frame(height: 30)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.fullArea)
                 .contentShape(Rectangle())
                 .padding(.top, 2)
             }
@@ -228,7 +228,7 @@ struct GuideOSTodoCard: View {
                     .foregroundStyle(todo.isDone ? KXColor.accent : tint.opacity(0.65))
                     .frame(width: 36, height: 36)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.fullArea)
         .contentShape(Rectangle())
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
@@ -266,7 +266,7 @@ struct GuideOSTodoCard: View {
                                 .foregroundStyle(tint)
                                 .frame(width: 32, height: 32)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.fullArea)
         .contentShape(Rectangle())
                     }
                 }
@@ -463,7 +463,7 @@ struct GuideTodoListView: View {
                                             .padding(.horizontal, 13)
                                             .frame(minHeight: 44)
                                     }
-                                    .buttonStyle(.plain)
+                                    .buttonStyle(.fullArea)
                                     .contentShape(Rectangle())
                                     .foregroundStyle(listFilter == list ? Color.white : Color.secondary)
                                     .background(listFilter == list ? KXColor.accent : Color.white.opacity(0.78), in: Capsule())
@@ -478,7 +478,7 @@ struct GuideTodoListView: View {
                                             .padding(.horizontal, 13)
                                             .frame(minHeight: 44)
                                     }
-                                    .buttonStyle(.plain)
+                                    .buttonStyle(.fullArea)
                                     .contentShape(Rectangle())
                                     .foregroundStyle(tagFilter == tag ? Color.white : Color.secondary)
                                     .background(tagFilter == tag ? KXColor.accent : Color.white.opacity(0.78), in: Capsule())
@@ -854,7 +854,7 @@ private struct GuideTodoFilterChip: View {
                 .padding(.horizontal, 13)
                 .frame(minWidth: 64, minHeight: 44)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.fullArea)
         .contentShape(Rectangle())
         .foregroundStyle(selection == value ? Color.white : Color.secondary)
         .background(

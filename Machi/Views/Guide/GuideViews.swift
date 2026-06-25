@@ -454,7 +454,7 @@ struct GuideArticleDetailView: View {
                           systemImage: saved ? "bookmark.fill" : "bookmark")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.fullArea)
                 .frame(minHeight: 46)
                 .padding(.horizontal, 12)
                 .background(Color.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -468,7 +468,7 @@ struct GuideArticleDetailView: View {
                     Label(guideText(language, "分享", "共有", "Share"), systemImage: "square.and.arrow.up")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.fullArea)
                 .frame(minHeight: 46)
                 .padding(.horizontal, 12)
                 .background(Color.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -496,7 +496,7 @@ struct GuideArticleDetailView: View {
                 .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
                 .contentShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.fullArea)
             .disabled(isMarkingRead || progress >= 95)
 
             GeometryReader { proxy in
@@ -920,7 +920,7 @@ struct GuideProductDetailView: View {
                             .background(GuideCopy.productActionEnabled(product, busy: isSubmitting) ? KXColor.accent : Color.secondary.opacity(0.20), in: Capsule())
                             .foregroundStyle(GuideCopy.productActionEnabled(product, busy: isSubmitting) ? Color.white : Color.secondary)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.fullArea)
         .contentShape(Rectangle())
                     .disabled(!GuideCopy.productActionEnabled(product, busy: isSubmitting))
                 }
@@ -1179,7 +1179,7 @@ struct GuideSchoolListView: View {
                     .padding(.vertical, 7)
                     .background(activeFilterCount > 0 ? KXColor.accent : KXColor.accentSoft, in: Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.fullArea)
         .contentShape(Rectangle())
             }
         }
@@ -1573,7 +1573,7 @@ struct GuideSchoolDetailView: View {
                         .background(KXColor.accent, in: Capsule())
                         .foregroundStyle(.white)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.fullArea)
         .contentShape(Rectangle())
                 .disabled(isSubmitting)
 
@@ -1785,7 +1785,7 @@ struct GuideCompanyDetailView: View {
                                     .background(KXColor.accent, in: Capsule())
                                     .foregroundStyle(.white)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.fullArea)
         .contentShape(Rectangle())
                         }
                         if let related = response.relatedArticles, !related.isEmpty {
@@ -1905,7 +1905,7 @@ struct GuideCompanyDetailView: View {
                         .background(KXColor.accent, in: Capsule())
                         .foregroundStyle(.white)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.fullArea)
         .contentShape(Rectangle())
                 .disabled(isSubmitting)
 
@@ -2106,7 +2106,7 @@ struct GuideCompanyReviewsView: View {
                                 .background(KXColor.accent, in: Capsule())
                                 .foregroundStyle(.white)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.fullArea)
         .contentShape(Rectangle())
 
                         if selectedTab == .interview {
@@ -2438,7 +2438,7 @@ struct GuideComingSoonView: View {
                     .background(KXColor.accent, in: Capsule())
                     .foregroundStyle(.white)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.fullArea)
         .contentShape(Rectangle())
             Spacer(minLength: 80)
         }
@@ -2554,7 +2554,7 @@ private struct GuideHeroSection: View {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.fullArea)
         .contentShape(Rectangle())
                 }
             }
@@ -2579,7 +2579,7 @@ private struct GuideHeroSection: View {
                             .padding(.vertical, 7)
                             .background(KXColor.livingSurface.opacity(0.82), in: Capsule())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.fullArea)
         .contentShape(Rectangle())
                 }
             }
@@ -2755,7 +2755,7 @@ private struct GuideResourceEntriesSection: View {
                         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
                         .shadow(color: Color.black.opacity(0.035), radius: 10, y: 5)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.fullArea)
         .contentShape(Rectangle())
                 }
             }
@@ -2821,7 +2821,7 @@ private struct GuideGoalsSection: View {
                             .background(KXColor.cardBackground, in: Capsule())
                             .overlay(Capsule().stroke(KXColor.separator, lineWidth: 0.8))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.fullArea)
         .contentShape(Rectangle())
                     }
                 }
@@ -2969,7 +2969,7 @@ private struct GuideDualEntrySection: View {
             .kxGlassSurface(radius: 20)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.fullArea)
         .contentShape(Rectangle())
     }
 }
@@ -3034,7 +3034,7 @@ private struct GuideCompaniesSection: View {
                     .background(KXColor.accentSoft, in: Capsule())
                     .foregroundStyle(KXColor.accent)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.fullArea)
         .contentShape(Rectangle())
             if let disclaimer, !disclaimer.isEmpty {
                 Text(disclaimer)
@@ -3121,7 +3121,7 @@ private struct GuideCategoryCard: View {
             .padding(13)
             .kxLivingSurface(radius: 22)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.fullArea)
         .contentShape(Rectangle())
     }
 }
@@ -3174,7 +3174,7 @@ private struct GuideArticleCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .kxLivingSurface(radius: 20)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.fullArea)
         .contentShape(Rectangle())
     }
 }
@@ -3222,7 +3222,7 @@ private struct GuideProductCard: View {
             .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.fullArea)
         .contentShape(Rectangle())
     }
 }
@@ -3282,7 +3282,7 @@ private struct GuideSchoolCard: View {
             .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.fullArea)
         .contentShape(Rectangle())
     }
 }
@@ -3344,7 +3344,7 @@ private struct GuideCompanyCard: View {
             .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.fullArea)
         .contentShape(Rectangle())
     }
 }
@@ -3528,7 +3528,7 @@ private struct GuidePillButton: View {
                 .background(isSelected ? KXColor.accent : KXColor.cardBackground, in: Capsule())
                 .overlay(Capsule().stroke(isSelected ? Color.clear : KXColor.separator, lineWidth: 0.8))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.fullArea)
         .contentShape(Rectangle())
     }
 }

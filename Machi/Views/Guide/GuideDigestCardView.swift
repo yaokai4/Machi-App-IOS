@@ -81,7 +81,7 @@ struct GuideDigestCardView: View {
                             .padding(.vertical, 8).padding(.horizontal, 8)
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.fullArea)
                     }
                 }
             }

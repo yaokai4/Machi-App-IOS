@@ -53,7 +53,7 @@ struct GuideProfileSetupView: View {
                                     .frame(maxWidth: .infinity)
                                     .frame(height: 38)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.fullArea)
                             .contentShape(Rectangle())
                             .foregroundStyle(KXColor.accent)
                             .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
@@ -107,7 +107,7 @@ struct GuideProfileSetupView: View {
                                         .frame(maxWidth: .infinity)
                                         .frame(height: 44)
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(.fullArea)
                                 .foregroundStyle(KXColor.accent)
                                 .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                             }
@@ -120,7 +120,7 @@ struct GuideProfileSetupView: View {
                                         .frame(maxWidth: .infinity)
                                         .frame(height: 44)
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(.fullArea)
                                 .foregroundStyle(.white)
                                 .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                             }
@@ -150,7 +150,7 @@ struct GuideProfileSetupView: View {
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 48)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.fullArea)
                         .contentShape(Rectangle())
                         .foregroundStyle(.white)
                         .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
@@ -224,7 +224,7 @@ private struct GuideProfileStepTabs: View {
                         .frame(maxWidth: .infinity)
                         .frame(height: 34)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.fullArea)
                 .contentShape(Rectangle())
                 .foregroundStyle(step == index ? KXColor.accent : .secondary)
                 .background(step == index ? Color.white.opacity(0.9) : Color.clear, in: Capsule())

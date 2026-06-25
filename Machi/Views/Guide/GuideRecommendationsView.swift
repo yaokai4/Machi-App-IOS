@@ -72,7 +72,7 @@ struct GuideRecommendationsView: View {
                         .padding(12)
                         .kxGlassSurface(radius: 16)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.fullArea)
         .contentShape(Rectangle())
                 }
             }
@@ -121,7 +121,7 @@ struct GuideOSRecommendationStrip: View {
                         Text(guideOSText(language, "全部", "すべて", "All"))
                             .font(.caption.weight(.bold))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.fullArea)
         .contentShape(Rectangle())
                     .foregroundStyle(KXColor.accent)
                 }
@@ -162,7 +162,7 @@ struct GuideOSRecommendationStrip: View {
                                         .stroke(Color.black.opacity(0.05), lineWidth: 0.8)
                                 )
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.fullArea)
         .contentShape(Rectangle())
                         }
                     }
