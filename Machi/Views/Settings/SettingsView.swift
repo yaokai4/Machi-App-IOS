@@ -163,15 +163,15 @@ struct SettingsView: View {
         switch language {
         case .en: return "Points Wallet"
         case .ja: return "ポイント"
-        default: return "点数钱包"
+        default: return "Machi 币钱包"
         }
     }
 
     private var walletRowSubtitle: String {
         switch language {
-        case .en: return "Machi Points balance, top-up and history"
+        case .en: return "Machi Coins balance, top-up and history"
         case .ja: return "Machi ポイントの残高・チャージ・履歴"
-        default: return "Machi 点数余额、充值与记录"
+        default: return "Machi 币余额、充值与记录"
         }
     }
 

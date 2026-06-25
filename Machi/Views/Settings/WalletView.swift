@@ -33,7 +33,7 @@ struct WalletView: View {
             .kxTabBarSafeBottomPadding()
         }
         .kxPageBackground()
-        .navigationTitle(wl("点数钱包", "Wallet", "ポイント"))
+        .navigationTitle(wl("Machi 币钱包", "Wallet", "Machi コイン"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
@@ -67,7 +67,7 @@ struct WalletView: View {
 
     private var topupSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(wl("充值点数", "Top up", "チャージ")).font(.headline)
+            Text(wl("充值 Machi 币", "Top up", "チャージ")).font(.headline)
             if store.topupProducts.isEmpty {
                 Text(wl("加载中…", "Loading…", "読み込み中…")).font(.caption).foregroundStyle(.secondary)
             } else {
@@ -90,7 +90,7 @@ struct WalletView: View {
             Task { await store.purchaseTopup(pack) }
         } label: {
             VStack(alignment: .leading, spacing: 6) {
-                Text(pack.displayPoints ?? "\(pack.totalPoints) 点").font(.title3.weight(.heavy))
+                Text(pack.displayPoints ?? "\(pack.totalPoints) 币").font(.title3.weight(.heavy))
                 if let sub = pack.subtitle, !sub.isEmpty {
                     Text(sub).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 }
@@ -113,9 +113,9 @@ struct WalletView: View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "checkmark.shield").foregroundStyle(KXColor.accent)
             Text(store.disclaimer.isEmpty
-                 ? wl("Machi 点数仅可用于 Machi 内的数字资料与平台服务，不可提现、不可转让、不可兑换现金，且不会过期。iOS 端点数充值通过 App Store 完成。",
-                       "Machi Points are for Machi digital materials and platform services only — non-refundable as cash, non-transferable, and never expire. On iOS, top-ups go through the App Store.",
-                       "Machi ポイントは Machi 内のデジタル資料とサービス専用です。現金化・譲渡不可、有効期限なし。iOS ではチャージは App Store 経由です。")
+                 ? wl("Machi 币仅可用于 Machi 内的数字资料与平台服务，不可提现、不可转让、不可兑换现金，且不会过期。iOS 端充值通过 App Store 完成。",
+                       "Machi Coins are for Machi digital materials and platform services only — non-refundable as cash, non-transferable, and never expire. On iOS, top-ups go through the App Store.",
+                       "Machi コインは Machi 内のデジタル資料とサービス専用です。現金化・譲渡不可、有効期限なし。iOS ではチャージは App Store 経由です。")
                  : store.disclaimer)
                 .font(.caption).foregroundStyle(.secondary)
         }
@@ -156,7 +156,7 @@ struct WalletView: View {
         case "spend": return wl("购买资料", "Purchase", "購入")
         case "refund_credit": return wl("退款返还", "Refund", "返金")
         case "admin_adjustment": return wl("客服调整", "Adjustment", "調整")
-        case "membership_bonus": return wl("会员赠点", "Member bonus", "会員ボーナス")
+        case "membership_bonus": return wl("会员赠币", "Member bonus", "会員ボーナス")
         default: return entryType
         }
     }

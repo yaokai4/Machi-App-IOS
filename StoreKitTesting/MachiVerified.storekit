@@ -51,13 +51,13 @@
       "internalID" : "21490101",
       "localizations" : [
         {
-          "description" : "600 Machi 点数，用于购买 Machi 内的数字资料与平台服务。点数不可提现、不可转让、不会过期。",
-          "displayName" : "600 Machi 点数",
+          "description" : "600 Machi 币，用于购买 Machi 内的数字资料与平台服务。不可提现、不可转让、不会过期。",
+          "displayName" : "600 Machi 币",
           "locale" : "zh_CN"
         },
         {
-          "description" : "600 Machi Points for digital materials and platform services. Non-transferable, never expires.",
-          "displayName" : "600 Machi Points",
+          "description" : "600 Machi Coins for digital materials and platform services. Non-transferable, never expires.",
+          "displayName" : "600 Machi Coins",
           "locale" : "en_US"
         }
       ],
@@ -70,8 +70,8 @@
       "familyShareable" : false,
       "internalID" : "21490102",
       "localizations" : [
-        { "description" : "1800 Machi 点数（多送 100），用于购买 Machi 内数字资料与平台服务。点数不可提现、不会过期。", "displayName" : "1800 Machi 点数", "locale" : "zh_CN" },
-        { "description" : "1800 Machi Points (+100 bonus) for Machi digital materials and services. Never expires.", "displayName" : "1800 Machi Points", "locale" : "en_US" }
+        { "description" : "1800 Machi 币（多送 100），用于购买 Machi 内数字资料与平台服务。不可提现、不会过期。", "displayName" : "1800 Machi 币", "locale" : "zh_CN" },
+        { "description" : "1800 Machi Coins (+100 bonus) for Machi digital materials and services. Never expires.", "displayName" : "1800 Machi Coins", "locale" : "en_US" }
       ],
       "productID" : "machi_points_1800",
       "referenceName" : "Machi点数1800",
@@ -82,8 +82,8 @@
       "familyShareable" : false,
       "internalID" : "21490103",
       "localizations" : [
-        { "description" : "3000 Machi 点数（多送 200），用于购买 Machi 内数字资料与组合包。点数不可提现、不会过期。", "displayName" : "3000 Machi 点数", "locale" : "zh_CN" },
-        { "description" : "3000 Machi Points (+200 bonus) for Machi materials and bundles. Never expires.", "displayName" : "3000 Machi Points", "locale" : "en_US" }
+        { "description" : "3000 Machi 币（多送 200），用于购买 Machi 内数字资料与组合包。不可提现、不会过期。", "displayName" : "3000 Machi 币", "locale" : "zh_CN" },
+        { "description" : "3000 Machi Coins (+200 bonus) for Machi materials and bundles. Never expires.", "displayName" : "3000 Machi Coins", "locale" : "en_US" }
       ],
       "productID" : "machi_points_3000",
       "referenceName" : "Machi点数3000",
@@ -94,8 +94,8 @@
       "familyShareable" : false,
       "internalID" : "21490104",
       "localizations" : [
-        { "description" : "6800 Machi 点数（多送 600），适合深度资料与多次购买。点数不可提现、不会过期。", "displayName" : "6800 Machi 点数", "locale" : "zh_CN" },
-        { "description" : "6800 Machi Points (+600 bonus) for deep material libraries and frequent purchases. Never expires.", "displayName" : "6800 Machi Points", "locale" : "en_US" }
+        { "description" : "6800 Machi 币（多送 600），适合深度资料与多次购买。不可提现、不会过期。", "displayName" : "6800 Machi 币", "locale" : "zh_CN" },
+        { "description" : "6800 Machi Coins (+600 bonus) for deep material libraries and frequent purchases. Never expires.", "displayName" : "6800 Machi Coins", "locale" : "en_US" }
       ],
       "productID" : "machi_points_6800",
       "referenceName" : "Machi点数6800",
@@ -106,8 +106,8 @@
       "familyShareable" : false,
       "internalID" : "21490105",
       "localizations" : [
-        { "description" : "9800 Machi 点数（多送 1000），适合多次购买。点数不可提现、不会过期。", "displayName" : "9800 Machi 点数", "locale" : "zh_CN" },
-        { "description" : "9800 Machi Points (+1000 bonus) for frequent purchases. Never expires.", "displayName" : "9800 Machi Points", "locale" : "en_US" }
+        { "description" : "9800 Machi 币（多送 1000），适合多次购买。不可提现、不会过期。", "displayName" : "9800 Machi 币", "locale" : "zh_CN" },
+        { "description" : "9800 Machi Coins (+1000 bonus) for frequent purchases. Never expires.", "displayName" : "9800 Machi Coins", "locale" : "en_US" }
       ],
       "productID" : "machi_points_9800",
       "referenceName" : "Machi点数9800",
@@ -118,8 +118,8 @@
       "familyShareable" : false,
       "internalID" : "21490106",
       "localizations" : [
-        { "description" : "12800 Machi 点数（多送 1600），学习季囤点。点数不可提现、不会过期。", "displayName" : "12800 Machi 点数", "locale" : "zh_CN" },
-        { "description" : "12800 Machi Points (+1600 bonus). Never expires.", "displayName" : "12800 Machi Points", "locale" : "en_US" }
+        { "description" : "12800 Machi 币（多送 1600），学习季囤币。不可提现、不会过期。", "displayName" : "12800 Machi 币", "locale" : "zh_CN" },
+        { "description" : "12800 Machi Coins (+1600 bonus). Never expires.", "displayName" : "12800 Machi Coins", "locale" : "en_US" }
       ],
       "productID" : "machi_points_12800",
       "referenceName" : "Machi点数12800",
@@ -130,8 +130,8 @@
       "familyShareable" : false,
       "internalID" : "21490107",
       "localizations" : [
-        { "description" : "19800 Machi 点数（多送 3000），适合重度使用。点数不可提现、不会过期。", "displayName" : "19800 Machi 点数", "locale" : "zh_CN" },
-        { "description" : "19800 Machi Points (+3000 bonus). Never expires.", "displayName" : "19800 Machi Points", "locale" : "en_US" }
+        { "description" : "19800 Machi 币（多送 3000），适合重度使用。不可提现、不会过期。", "displayName" : "19800 Machi 币", "locale" : "zh_CN" },
+        { "description" : "19800 Machi Coins (+3000 bonus). Never expires.", "displayName" : "19800 Machi Coins", "locale" : "en_US" }
       ],
       "productID" : "machi_points_19800",
       "referenceName" : "Machi点数19800",
@@ -142,8 +142,8 @@
       "familyShareable" : false,
       "internalID" : "21490108",
       "localizations" : [
-        { "description" : "32800 Machi 点数（多送 5800），超值大包。点数不可提现、不会过期。", "displayName" : "32800 Machi 点数", "locale" : "zh_CN" },
-        { "description" : "32800 Machi Points (+5800 bonus). Never expires.", "displayName" : "32800 Machi Points", "locale" : "en_US" }
+        { "description" : "32800 Machi 币（多送 5800），超值大包。不可提现、不会过期。", "displayName" : "32800 Machi 币", "locale" : "zh_CN" },
+        { "description" : "32800 Machi Coins (+5800 bonus). Never expires.", "displayName" : "32800 Machi Coins", "locale" : "en_US" }
       ],
       "productID" : "machi_points_32800",
       "referenceName" : "Machi点数32800",
@@ -154,8 +154,8 @@
       "familyShareable" : false,
       "internalID" : "21490109",
       "localizations" : [
-        { "description" : "64800 Machi 点数（多送 13000），顶配大包。点数不可提现、不会过期。", "displayName" : "64800 Machi 点数", "locale" : "zh_CN" },
-        { "description" : "64800 Machi Points (+13000 bonus). Never expires.", "displayName" : "64800 Machi Points", "locale" : "en_US" }
+        { "description" : "64800 Machi 币（多送 13000），顶配大包。不可提现、不会过期。", "displayName" : "64800 Machi 币", "locale" : "zh_CN" },
+        { "description" : "64800 Machi Coins (+13000 bonus). Never expires.", "displayName" : "64800 Machi Coins", "locale" : "en_US" }
       ],
       "productID" : "machi_points_64800",
       "referenceName" : "Machi点数64800",

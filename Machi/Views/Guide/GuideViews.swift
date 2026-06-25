@@ -949,9 +949,9 @@ struct GuideProductDetailView: View {
                     .disabled(isSubmitting)
                     if let ctx = product.pointsContext, ctx.sufficient == false {
                         Text(guideText(language,
-                            "当前余额 \(ctx.currentBalance ?? 0) 点，充值后可用点数购买。",
-                            "残高 \(ctx.currentBalance ?? 0) 点。チャージ後にポイントで購入できます。",
-                            "Balance: \(ctx.currentBalance ?? 0) pts — top up to buy with points."))
+                            "当前余额 \(ctx.currentBalance ?? 0) 币，充值后可用 Machi 币购买。",
+                            "残高 \(ctx.currentBalance ?? 0) コイン。チャージ後に Machi コインで購入できます。",
+                            "Balance: \(ctx.currentBalance ?? 0) coins — top up to buy with Machi Coins."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -962,7 +962,7 @@ struct GuideProductDetailView: View {
 
     private func pointsCTALabel(_ product: KaiXGuideProductDTO) -> String {
         let pts = product.pointsContext?.requiredPoints ?? product.walletPricePoints ?? 0
-        return guideText(language, "用 \(pts) 点购买", "\(pts) ポイントで購入", "Buy with \(pts) pts")
+        return guideText(language, "用 \(pts) 币购买", "\(pts) コインで購入", "Buy with \(pts) coins")
     }
 
     private func productPointsAction(_ product: KaiXGuideProductDTO) async {

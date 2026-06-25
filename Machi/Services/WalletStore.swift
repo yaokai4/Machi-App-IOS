@@ -30,7 +30,7 @@ final class WalletStore: ObservableObject {
     private var appAccountToken: UUID?
 
     var balancePoints: Int { wallet?.balancePoints ?? 0 }
-    var displayBalance: String { wallet?.displayBalance ?? "\(balancePoints) 点" }
+    var displayBalance: String { wallet?.displayBalance ?? "\(balancePoints) 币" }
     var disclaimer: String { wallet?.disclaimer ?? "" }
 
     /// Identifies a points consumable so the membership listener can ignore it.
