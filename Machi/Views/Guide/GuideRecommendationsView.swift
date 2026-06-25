@@ -156,7 +156,7 @@ struct GuideOSRecommendationStrip: View {
                                 }
                                 .frame(width: 176, alignment: .leading)
                                 .padding(12)
-                                .background(Color.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                                         .stroke(Color.black.opacity(0.05), lineWidth: 0.8)

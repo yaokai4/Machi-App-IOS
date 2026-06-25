@@ -153,7 +153,7 @@ struct GuideOSTodoCard: View {
                         .scrollContentBackground(.hidden)
                         .frame(minHeight: 72)
                         .padding(8)
-                        .background(Color.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                        .background(KXColor.livingSurface.opacity(0.82), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                         .overlay(
                             RoundedRectangle(cornerRadius: 13, style: .continuous)
                                 .stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8)
@@ -292,7 +292,7 @@ struct GuideOSTodoCard: View {
             }
         }
         .padding(12)
-        .background(Color.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(Color.black.opacity(0.05), lineWidth: 0.8)
@@ -466,7 +466,7 @@ struct GuideTodoListView: View {
                                     .buttonStyle(.fullArea)
                                     .contentShape(Rectangle())
                                     .foregroundStyle(listFilter == list ? Color.white : Color.secondary)
-                                    .background(listFilter == list ? KXColor.accent : Color.white.opacity(0.78), in: Capsule())
+                                    .background(listFilter == list ? KXColor.accent : KXColor.livingSurface.opacity(0.78), in: Capsule())
                                 }
                                 ForEach(tags, id: \.self) { tag in
                                     Button {
@@ -481,7 +481,7 @@ struct GuideTodoListView: View {
                                     .buttonStyle(.fullArea)
                                     .contentShape(Rectangle())
                                     .foregroundStyle(tagFilter == tag ? Color.white : Color.secondary)
-                                    .background(tagFilter == tag ? KXColor.accent : Color.white.opacity(0.78), in: Capsule())
+                                    .background(tagFilter == tag ? KXColor.accent : KXColor.livingSurface.opacity(0.78), in: Capsule())
                                 }
                             }
                         }
@@ -858,7 +858,7 @@ private struct GuideTodoFilterChip: View {
         .contentShape(Rectangle())
         .foregroundStyle(selection == value ? Color.white : Color.secondary)
         .background(
-            selection == value ? KXColor.accent : Color.white.opacity(0.78),
+            selection == value ? KXColor.accent : KXColor.livingSurface.opacity(0.78),
             in: Capsule()
         )
         .accessibilityAddTraits(selection == value ? .isSelected : [])

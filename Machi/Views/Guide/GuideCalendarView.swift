@@ -105,7 +105,7 @@ struct GuideCalendarView: View {
                                 .buttonStyle(.fullArea)
                                 .contentShape(Rectangle())
                                 .foregroundStyle(scope == item ? Color.white : Color.secondary)
-                                .background(scope == item ? KXColor.accent : Color.white.opacity(0.78), in: Capsule())
+                                .background(scope == item ? KXColor.accent : KXColor.livingSurface.opacity(0.78), in: Capsule())
                                 .accessibilityAddTraits(scope == item ? .isSelected : [])
                             }
                         }
@@ -118,7 +118,7 @@ struct GuideCalendarView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 10)
-                            .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .background(KXColor.livingSurface.opacity(0.68), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     }
 
                     switch mode {
@@ -207,7 +207,7 @@ private struct GuideCalendarMonthGrid: View {
                     }
                     .buttonStyle(.fullArea)
                     .contentShape(Rectangle())
-                    .background(Color.white.opacity(0.78), in: Capsule())
+                    .background(KXColor.livingSurface.opacity(0.78), in: Capsule())
                     monthButton("chevron.right") {
                         cursor = Calendar.current.date(byAdding: .month, value: 1, to: cursor) ?? cursor
                     }
@@ -237,7 +237,7 @@ private struct GuideCalendarMonthGrid: View {
         }
         .buttonStyle(.fullArea)
         .contentShape(Rectangle())
-        .background(Color.white.opacity(0.78), in: Circle())
+        .background(KXColor.livingSurface.opacity(0.78), in: Circle())
     }
 
     private func dayCell(_ date: Date) -> some View {
@@ -262,7 +262,7 @@ private struct GuideCalendarMonthGrid: View {
         .buttonStyle(.fullArea)
         .contentShape(Rectangle())
         .foregroundStyle(isSelected ? .white : (inMonth ? Color.primary : Color.secondary.opacity(0.45)))
-        .background(isSelected ? KXColor.accent : (isToday ? KXColor.accentSoft : Color.white.opacity(0.55)), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(isSelected ? KXColor.accent : (isToday ? KXColor.accentSoft : KXColor.livingSurface.opacity(0.55)), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .dropDestination(for: String.self) { ids, _ in
             guard let id = ids.first else { return false }
             selectedDate = iso
@@ -311,7 +311,7 @@ private struct GuideCalendarWeekBoard: View {
                     }
                     .buttonStyle(.fullArea)
                     .contentShape(Rectangle())
-                    .background(Color.white.opacity(0.78), in: Capsule())
+                    .background(KXColor.livingSurface.opacity(0.78), in: Capsule())
                     weekButton("chevron.right") { shiftWeek(1) }
                 }
             }
@@ -340,7 +340,7 @@ private struct GuideCalendarWeekBoard: View {
         }
         .buttonStyle(.fullArea)
         .contentShape(Rectangle())
-        .background(Color.white.opacity(0.78), in: Circle())
+        .background(KXColor.livingSurface.opacity(0.78), in: Circle())
     }
 
     private func dayColumn(_ date: Date) -> some View {
@@ -363,7 +363,7 @@ private struct GuideCalendarWeekBoard: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(10)
-                .background(isSelected ? KXColor.accent : (isToday ? KXColor.accentSoft : Color.white.opacity(0.72)), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                .background(isSelected ? KXColor.accent : (isToday ? KXColor.accentSoft : KXColor.livingSurface.opacity(0.72)), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 6) {
                     if items.isEmpty {
@@ -710,7 +710,7 @@ private struct GuideCalendarEventEditor: View {
                             .font(.title3.weight(.bold))
                             .padding(.horizontal, 14)
                             .frame(minHeight: 52)
-                            .background(Color.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .background(KXColor.livingSurface.opacity(0.82), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                         VStack(spacing: 4) {
                             DatePicker("日期", selection: $date, displayedComponents: .date)
                             Toggle("全天", isOn: $allDay)
@@ -727,7 +727,7 @@ private struct GuideCalendarEventEditor: View {
                         }
                         .font(.subheadline.weight(.semibold))
                         .padding(14)
-                        .background(Color.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .background(KXColor.livingSurface.opacity(0.82), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                         VStack(alignment: .leading, spacing: 8) {
                             Text("备注")
                                 .font(.caption.weight(.bold))
@@ -736,7 +736,7 @@ private struct GuideCalendarEventEditor: View {
                                 .lineLimit(4...10)
                         }
                         .padding(14)
-                        .background(Color.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .background(KXColor.livingSurface.opacity(0.82), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                         Button(role: .destructive) {
                             confirmDelete = true
                         } label: {

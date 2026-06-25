@@ -87,7 +87,7 @@ struct GuideDigestCardView: View {
             }
         }
         .padding(16)
-        .background(Color.white.opacity(0.8), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(KXColor.livingSurface.opacity(0.8), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(KXColor.separator.opacity(0.8), lineWidth: 0.8))
     }
 

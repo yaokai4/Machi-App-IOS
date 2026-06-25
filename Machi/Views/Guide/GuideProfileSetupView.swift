@@ -227,7 +227,7 @@ private struct GuideProfileStepTabs: View {
                 .buttonStyle(.fullArea)
                 .contentShape(Rectangle())
                 .foregroundStyle(step == index ? KXColor.accent : .secondary)
-                .background(step == index ? Color.white.opacity(0.9) : Color.clear, in: Capsule())
+                .background(step == index ? KXColor.livingSurface.opacity(0.9) : Color.clear, in: Capsule())
             }
         }
         .padding(4)

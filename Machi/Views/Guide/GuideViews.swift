@@ -459,7 +459,7 @@ struct GuideArticleDetailView: View {
                 .buttonStyle(.fullArea)
                 .frame(minHeight: 46)
                 .padding(.horizontal, 12)
-                .background(Color.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KXColor.separator.opacity(0.55), lineWidth: 1))
                 .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .disabled(isSaving)
@@ -473,7 +473,7 @@ struct GuideArticleDetailView: View {
                 .buttonStyle(.fullArea)
                 .frame(minHeight: 46)
                 .padding(.horizontal, 12)
-                .background(Color.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KXColor.separator.opacity(0.55), lineWidth: 1))
                 .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
@@ -3527,9 +3527,12 @@ private struct GuideWorkReviewCard: View {
 
 struct GuideBackground: View {
     var body: some View {
+        // Both stops are dark-adaptive: a warm cream→page gradient in light
+        // mode, a dark gradient in dark mode. (The top stop used to be a fixed
+        // cream literal, leaving a bright band across the top in dark mode.)
         LinearGradient(
             colors: [
-                Color(red: 0.985, green: 0.975, blue: 0.955),
+                KXColor.livingBackground,
                 KXColor.pageBackground,
             ],
             startPoint: .top,

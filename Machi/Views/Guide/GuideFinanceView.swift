@@ -228,7 +228,7 @@ struct GuideFinanceView: View {
             Text(text).font(.caption.weight(.bold)).foregroundStyle(.primary)
         }
         .padding(.horizontal, 12).frame(height: 36)
-        .background(Color.white.opacity(0.76), in: Capsule())
+        .background(KXColor.livingSurface.opacity(0.76), in: Capsule())
         .overlay(Capsule().stroke(KXColor.separator.opacity(0.8), lineWidth: 0.8))
     }
 
@@ -295,7 +295,7 @@ struct GuideFinanceView: View {
                 }
             }
             .padding(16)
-            .background(Color.white.opacity(0.76), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
         }
     }
@@ -370,7 +370,7 @@ struct GuideFinanceView: View {
             GuideOSDateField(title: guideOSText(language, "日期", "日付", "Date"), date: $occurredOn)
             TextField(guideOSText(language, "备注（可选）", "メモ（任意）", "Note (optional)"), text: $note)
                 .padding(.horizontal, 12).frame(height: 40)
-                .background(Color.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(KXColor.livingSurface.opacity(0.7), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
             Button {
                 let amount = Int(amountText) ?? 0
@@ -388,7 +388,7 @@ struct GuideFinanceView: View {
             .disabled((Int(amountText) ?? 0) <= 0)
         }
         .padding(16)
-        .background(Color.white.opacity(0.76), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
     }
 
@@ -425,7 +425,7 @@ struct GuideFinanceView: View {
                         }
                     }
                     .padding(12)
-                    .background(Color.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .background(KXColor.livingSurface.opacity(0.7), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
             }
         }
@@ -459,10 +459,10 @@ struct GuideFinanceView: View {
                 .tint(KXColor.accent)
             }
             .padding(.horizontal, 12).frame(height: 44)
-            .background(Color.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(KXColor.livingSurface.opacity(0.7), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .padding(16)
-        .background(Color.white.opacity(0.76), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
     }
 
@@ -490,7 +490,7 @@ struct GuideFinanceView: View {
                         .foregroundStyle(t.isIncome ? KXColor.accent : Color.primary)
                 }
                 .padding(12)
-                .background(Color.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(KXColor.livingSurface.opacity(0.7), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .swipeActions(edge: .trailing) {
                     Button(role: .destructive) { Task { await vm.delete(t) } } label: {
                         Label(guideOSText(language, "删除", "削除", "Delete"), systemImage: "trash")
@@ -553,7 +553,7 @@ private struct GuideCategoryDonut: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.white.opacity(0.76), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(KXColor.separator.opacity(0.7), lineWidth: 0.7))
         }
     }
@@ -589,7 +589,7 @@ private struct GuideFinanceStat: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(Color.white.opacity(0.76), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KXColor.separator.opacity(0.7), lineWidth: 0.7))
     }
 }

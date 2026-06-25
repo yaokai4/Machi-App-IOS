@@ -1208,7 +1208,7 @@ private struct ListingInquirySuccessSheet: View {
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .background(KXColor.softBackground.opacity(0.82), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .stroke(KXColor.separator.opacity(0.5), lineWidth: 0.7)

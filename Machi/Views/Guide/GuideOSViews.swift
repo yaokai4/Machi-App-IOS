@@ -150,7 +150,7 @@ struct GuideOSActionTile: View {
             }
             .frame(maxWidth: .infinity)
             .padding(10)
-            .background(Color.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.fullArea)
@@ -283,7 +283,7 @@ struct GuideQuickTodoComposer: View {
                 }
                 .padding(.horizontal, 12)
                 .frame(height: 46)
-                .background(Color.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(KXColor.livingSurface.opacity(0.82), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8)
@@ -371,7 +371,7 @@ private struct GuideQuickDateChip: View {
         .buttonStyle(.fullArea)
         .contentShape(Rectangle())
         .foregroundStyle(isSelected ? .white : .secondary)
-        .background(isSelected ? KXColor.accent : Color.white.opacity(0.82), in: Capsule())
+        .background(isSelected ? KXColor.accent : KXColor.livingSurface.opacity(0.82), in: Capsule())
     }
 }
 
@@ -556,7 +556,7 @@ struct GuideManageView: View {
                                 }
                                 .frame(maxWidth: .infinity, minHeight: 166, alignment: .topLeading)
                                 .padding(14)
-                                .background(Color.white.opacity(0.76), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                                .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                                 .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
                             }
                             .buttonStyle(.fullArea)
