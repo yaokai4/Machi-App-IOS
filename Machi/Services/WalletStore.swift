@@ -18,12 +18,25 @@ final class WalletStore: ObservableObject {
         case failed(String)
     }
 
+    /// How a StoreKit product query resolved, so the UI never shows an
+    /// indefinite "loading…" when the App Store can't fulfil it.
+    enum StoreStatus: Equatable { case ok, unavailable, noProducts }
+
     @Published private(set) var wallet: KaiXWalletDTO?
     @Published private(set) var topupProducts: [KaiXWalletTopupProductDTO] = []
     @Published private(set) var recentEntries: [KaiXWalletLedgerEntryDTO] = []
     @Published private(set) var state: PurchaseState = .idle
     /// StoreKit-localized prices keyed by Apple product id (e.g. "¥6.00").
     @Published private(set) var displayPrices: [String: String] = [:]
+    /// True once a load attempt has finished (success OR failure) — lets the UI
+    /// stop showing a spinner that would otherwise hang forever.
+    @Published private(set) var hasLoaded = false
+    /// The backend has no wallet routes (404): a version mismatch, not an error.
+    @Published private(set) var walletUnavailable = false
+    /// A non-404 wallet load failed and there's no cached balance to fall back on.
+    @Published private(set) var walletLoadFailed = false
+    /// Whether StoreKit returned usable products.
+    @Published private(set) var storeStatus: StoreStatus = .ok
 
     private var productsByID: [String: Product] = [:]
     private var updatesTask: Task<Void, Never>?
@@ -61,22 +74,67 @@ final class WalletStore: ObservableObject {
 
     func setAppAccountToken(_ token: UUID?) { appAccountToken = token }
 
+    /// Re-run a full load (for a user-tapped "retry").
+    func reload() async {
+        state = .loading
+        await loadWalletAndProducts()
+    }
+
     func loadWalletAndProducts() async {
         state = state == .idle ? .loading : state
-        if let me = try? await KaiXAPIClient.shared.walletMe() {
+        walletLoadFailed = false
+        do {
+            let me = try await KaiXAPIClient.shared.walletMe()
             wallet = me.wallet
             topupProducts = me.topupProducts
             recentEntries = me.recentEntries
+            walletUnavailable = false
+        } catch {
+            // A 404 means the backend predates the wallet (version mismatch) —
+            // surface "not available", not an error. Any other failure with no
+            // cached balance is a transient error the user can retry.
+            if Self.isNotFound(error) {
+                walletUnavailable = true
+            } else if wallet == nil {
+                walletLoadFailed = true
+            }
         }
         let ids = Set(topupProducts.map { $0.resolvedAppleProductID }.filter { !$0.isEmpty })
             .union(WalletStore.knownPackProductIDs)
-        if !ids.isEmpty {
-            if let products = try? await Product.products(for: Array(ids)) {
+        if walletUnavailable {
+            storeStatus = .ok  // don't probe the store for a wallet we can't credit
+        } else if !ids.isEmpty {
+            do {
+                let products = try await Self.productsWithTimeout(ids: Array(ids), seconds: 12)
                 productsByID = Dictionary(uniqueKeysWithValues: products.map { ($0.id, $0) })
                 displayPrices = Dictionary(uniqueKeysWithValues: products.map { ($0.id, $0.displayPrice) })
+                storeStatus = products.isEmpty ? .noProducts : .ok
+            } catch {
+                // Network/timeout/StoreKit unavailable — show a retryable notice
+                // instead of an indefinite "loading…".
+                storeStatus = .unavailable
             }
         }
+        hasLoaded = true
         if state == .loading { state = .idle }
+    }
+
+    private static func isNotFound(_ error: Error) -> Bool {
+        (error as? KaiXAPIError)?.error.code == "http_404"
+    }
+
+    /// Race a StoreKit product query against a timeout so a hung App Store
+    /// connection can't leave the top-up section spinning forever.
+    private static func productsWithTimeout(ids: [String], seconds: Double) async throws -> [Product] {
+        try await withThrowingTaskGroup(of: [Product].self) { group in
+            group.addTask { try await Product.products(for: ids) }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw CancellationError()
+            }
+            defer { group.cancelAll() }
+            return try await group.next() ?? []
+        }
     }
 
     /// Refresh just the balance + ledger (after a purchase settles).

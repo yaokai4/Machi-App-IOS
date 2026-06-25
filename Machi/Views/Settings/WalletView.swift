@@ -23,10 +23,16 @@ struct WalletView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                balanceCard
-                topupSection
-                disclaimerCard
-                ledgerSection
+                if store.walletUnavailable {
+                    unsupportedCard
+                } else if store.walletLoadFailed {
+                    errorCard
+                } else {
+                    balanceCard
+                    topupSection
+                    disclaimerCard
+                    ledgerSection
+                }
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
             .padding(.top, KaiXTheme.horizontalPadding)
@@ -43,6 +49,44 @@ struct WalletView: View {
         .task {
             store.start(appAccountToken: currentUser.flatMap { MembershipStore.appAccountToken(for: $0) })
         }
+        .onDisappear { store.stop() }
+    }
+
+    // MARK: - unsupported / error states
+
+    private var unsupportedCard: some View {
+        stateCard(
+            icon: "exclamationmark.triangle",
+            title: wl("当前版本暂未开放 Machi 币钱包", "Wallet isn't available yet", "ウォレットは未対応です"),
+            message: wl("请稍后再试，或更新到最新版本。", "Please try again later or update the app.", "後ほど、またはアプリを更新してお試しください。")
+        )
+    }
+
+    private var errorCard: some View {
+        stateCard(
+            icon: "wifi.exclamationmark",
+            title: wl("钱包加载失败", "Couldn't load your wallet", "ウォレットを読み込めません"),
+            message: wl("网络或服务暂时不可用，请重试。", "Network or service is temporarily unavailable.", "ネットワークまたはサービスが一時的に利用できません。")
+        )
+    }
+
+    private func stateCard(icon: String, title: String, message: String) -> some View {
+        VStack(spacing: 10) {
+            Image(systemName: icon).font(.system(size: 30)).foregroundStyle(.secondary)
+            Text(title).font(.headline).multilineTextAlignment(.center)
+            Text(message).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            Button {
+                Task { await store.reload() }
+            } label: {
+                Label(wl("重试", "Retry", "再試行"), systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(store.state == .loading)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(20)
+        .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.cardBackground))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(KXColor.separator, lineWidth: 0.8))
     }
 
     // MARK: - balance
@@ -68,12 +112,25 @@ struct WalletView: View {
     private var topupSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(wl("充值 Machi 币", "Top up", "チャージ")).font(.headline)
-            if store.topupProducts.isEmpty {
-                Text(wl("加载中…", "Loading…", "読み込み中…")).font(.caption).foregroundStyle(.secondary)
+            if !store.hasLoaded {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text(wl("加载中…", "Loading…", "読み込み中…")).font(.caption).foregroundStyle(.secondary)
+                }
+            } else if store.topupProducts.isEmpty {
+                Text(wl("暂无可充值套餐，请稍后再试。", "No top-up packs available right now.", "現在チャージできるパックはありません。"))
+                    .font(.caption).foregroundStyle(.secondary)
             } else {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                     ForEach(store.topupProducts) { pack in
                         topupCard(pack)
+                    }
+                }
+                if let notice = storeStatusNotice {
+                    HStack(spacing: 6) {
+                        Text(notice).font(.caption).foregroundStyle(.secondary)
+                        Button(wl("重试", "Retry", "再試行")) { Task { await store.reload() } }
+                            .font(.caption).disabled(store.state == .loading)
                     }
                 }
             }
@@ -81,6 +138,16 @@ struct WalletView: View {
                 Text(wl("操作失败，请稍后再试。", "Something went wrong, try again.", "失敗しました。もう一度お試しください。"))
                     .font(.caption).foregroundStyle(.red)
             }
+        }
+    }
+
+    /// A retryable notice when StoreKit couldn't price the packs (so prices
+    /// fall back to the server label) — never an indefinite spinner.
+    private var storeStatusNotice: String? {
+        switch store.storeStatus {
+        case .ok: return nil
+        case .unavailable: return wl("App Store 暂不可用，价格可能不准确。", "App Store is unavailable; prices may be approximate.", "App Store が利用できません。価格は概算です。")
+        case .noProducts: return wl("充值套餐尚未在 App Store 上架。", "Top-up packs aren't on the App Store yet.", "チャージパックはまだ App Store に登録されていません。")
         }
     }
 
