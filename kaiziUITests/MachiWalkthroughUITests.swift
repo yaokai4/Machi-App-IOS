@@ -385,6 +385,25 @@ final class MachiWalkthroughUITests: XCTestCase {
                              "tab bar must stay at the bottom behind the keyboard (bar midY \(barFrame.midY) vs keyboard top \(kbFrame.minY); resting maxY \(restingMaxY))")
     }
 
+    /// Core-navigation regression guard: visit every tab and assert the app
+    /// stays alive (no crash/hang) and the tab bar persists. Cheap, resilient,
+    /// and catches the class of "a whole tab is broken" regressions that
+    /// screenshot-only walkthroughs miss.
+    @MainActor
+    func testCoreTabsSmoke() throws {
+        let app = XCUIApplication()
+        app.launch()
+        let bar = app.otherElements["main.bottomTabBar"]
+        XCTAssertTrue(bar.waitForExistence(timeout: 25), "tab bar should appear on launch")
+        for tab in ["tabbar.home", "tabbar.search", "tabbar.guide", "tabbar.messages", "tabbar.profile"] {
+            tapTab(app, tab)
+            pause(2)
+            XCTAssertEqual(app.state, .runningForeground, "app must stay foregrounded after opening \(tab)")
+            XCTAssertTrue(bar.exists, "tab bar must persist on \(tab)")
+            snap("smoke_\(tab)")
+        }
+    }
+
     private func forceTap(_ element: XCUIElement) {
         element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
