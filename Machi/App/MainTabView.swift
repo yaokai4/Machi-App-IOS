@@ -65,6 +65,13 @@ struct MainTabView: View {
                 BottomTabBarView(selection: selectedTab, currentUser: currentUser)
                     .padding(.bottom, 8)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
+                    // Pin the floating tab bar to the real screen bottom. Without
+                    // this, SwiftUI's keyboard avoidance shrinks the bottom safe
+                    // area and shoves the bar up ABOVE the keyboard — where it
+                    // overlaps content, stays tappable (accidental tab switches),
+                    // and blocks dismissing the keyboard. Ignoring the keyboard
+                    // safe area keeps it at the bottom, covered by the keyboard.
+                    .ignoresSafeArea(.keyboard, edges: .bottom)
             }
         }
         .animation(.snappy(duration: 0.22), value: chrome.isTabBarHidden)

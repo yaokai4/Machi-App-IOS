@@ -351,6 +351,40 @@ final class MachiWalkthroughUITests: XCTestCase {
         XCTAssertFalse(goals.exists, "Tapping the 日历 button's blank area must navigate — proves full-area hit testing")
     }
 
+    /// Regression test for "the tab bar jumps up onto the keyboard". Focuses the
+    /// Guide quick-add field and asserts the floating tab bar stays pinned at the
+    /// bottom (its maxY is unchanged) instead of being shoved up above the
+    /// keyboard. With the bug, maxY would drop by ~the keyboard height.
+    @MainActor
+    func testTabBarStaysPinnedWhenKeyboardShows() throws {
+        let app = XCUIApplication()
+        app.launch()
+        tapTab(app, "tabbar.guide")
+
+        let bar = app.otherElements["main.bottomTabBar"]
+        XCTAssertTrue(bar.waitForExistence(timeout: 25), "tab bar should exist on Guide")
+        let restingMaxY = bar.frame.maxY
+
+        let composer = app.textFields.firstMatch
+        XCTAssertTrue(composer.waitForExistence(timeout: 5), "Guide quick-add field should exist")
+        composer.tap()
+        let kb = app.keyboards.firstMatch
+        XCTAssertTrue(kb.waitForExistence(timeout: 6), "software keyboard should attach")
+        pause(1)
+        snap("kbd_tabbar")
+
+        // Non-vacuous: require a genuinely-sized software keyboard.
+        let kbFrame = kb.frame
+        XCTAssertGreaterThan(kbFrame.height, 150,
+                             "software keyboard must be genuinely visible (height \(kbFrame.height)) — disable Connect Hardware Keyboard")
+        let barFrame = bar.frame
+        // FIXED: bar stays pinned at the bottom, inside the keyboard's vertical band
+        //        (its midY is below the keyboard's top edge — i.e. behind it).
+        // BUGGY: bar gets shoved entirely above the keyboard (midY < keyboard top).
+        XCTAssertGreaterThan(barFrame.midY, kbFrame.minY,
+                             "tab bar must stay at the bottom behind the keyboard (bar midY \(barFrame.midY) vs keyboard top \(kbFrame.minY); resting maxY \(restingMaxY))")
+    }
+
     private func forceTap(_ element: XCUIElement) {
         element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
