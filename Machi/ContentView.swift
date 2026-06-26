@@ -79,8 +79,16 @@ struct ContentView: View {
         .environmentObject(composeStore)
         .environmentObject(toastManager)
         .preferredColorScheme(AppAppearance.from(appAppearance).colorScheme)
+        // Honour Dynamic Type up to a generous accessibility size — body text,
+        // post content and titles now scale (see kxScaledFont / KXTypography) —
+        // while capping the two most extreme categories that would shatter the
+        // dense feed/tab-bar layouts. A pragmatic balance for a content app.
+        .dynamicTypeSize(...DynamicTypeSize.accessibility3)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .kxPageBackground()
+        // DEBUG-only frame/hitch monitor (no-op in release) — the runtime half
+        // of the 120 Hz regression guardrail.
+        .kxFrameRateMonitored()
         .toastHost(toastManager)
         // Login prompt for guests: any gated action calls
         // GuestGate.shared.requireLogin(); we present the auth flow here and
@@ -178,6 +186,37 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .kaiXSessionInvalidated)) { _ in
             handleSessionExpired()
+        }
+        .onOpenURL { url in
+            handleDeepLink(url)
+        }
+    }
+
+    /// Route an inbound `machi://` deep link (the scheme the "copy link" actions
+    /// produce). Mirrors the system-notification tap routing. The Google OAuth
+    /// callback (`machi://auth/...`) never reaches here — it is intercepted by
+    /// the in-flight `ASWebAuthenticationSession` — but we ignore it defensively.
+    private func handleDeepLink(_ url: URL) {
+        guard url.scheme == "machi", appState.currentUser != nil else { return }
+        let identifier = url.pathComponents.first(where: { $0 != "/" }) ?? ""
+        switch url.host {
+        case "post":
+            guard !identifier.isEmpty else { return }
+            appChrome.select(.home)
+            appRouter.setActiveTab(.home)
+            appRouter.open(.postDetail(postId: identifier), in: .home)
+        case "user", "profile":
+            guard !identifier.isEmpty else { return }
+            appChrome.select(.home)
+            appRouter.setActiveTab(.home)
+            appRouter.open(.profile(userId: identifier), in: .home)
+        case "topic":
+            guard !identifier.isEmpty else { return }
+            appChrome.select(.home)
+            appRouter.setActiveTab(.home)
+            appRouter.open(.topic(tag: identifier), in: .home)
+        default:
+            break
         }
     }
 

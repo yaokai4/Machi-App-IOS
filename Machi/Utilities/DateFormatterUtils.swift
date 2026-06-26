@@ -55,20 +55,50 @@ enum DateFormatterUtils {
         date.formatted(date: .abbreviated, time: .shortened)
     }
 
+    /// Cached template formatters. `DateFormatter` is expensive to build —
+    /// `setLocalizedDateFormatFromTemplate` runs an ICU pattern lookup each
+    /// time — and the conversation list / chat date dividers below format one
+    /// per row on every render. Keying by locale+template means we resolve each
+    /// pattern once and reuse the formatter for the life of the process. Only
+    /// touched from the main actor (project default isolation), so the plain
+    /// dictionary needs no extra locking.
+    private static var templateFormatters: [String: DateFormatter] = [:]
+
+    static func localizedTemplateString(_ template: String, localeID: String, calendar: Calendar = .current, date: Date) -> String {
+        let key = "\(localeID)|\(template)"
+        let formatter: DateFormatter
+        if let cached = templateFormatters[key] {
+            formatter = cached
+        } else {
+            let made = DateFormatter()
+            made.locale = Locale(identifier: localeID)
+            made.calendar = calendar
+            made.setLocalizedDateFormatFromTemplate(template)
+            templateFormatters[key] = made
+            formatter = made
+        }
+        return formatter.string(from: date)
+    }
+
+    static func localeID(for language: AppLanguage) -> String {
+        switch language {
+        case .ja: return "ja_JP"
+        case .en: return "en_US"
+        case .system, .zh: return "zh_Hans"
+        }
+    }
+
     /// Conversation-list timestamp: today → HH:mm, yesterday → 昨天/Yesterday,
     /// within a week → weekday (周一 / Mon), older → date. Mirrors the common
     /// inbox convention and is distinct from the relative "X 分钟前" used in
     /// chat bubbles.
     static func conversationTimestamp(_ date: Date, language: AppLanguage, reference: Date = .now, calendar: Calendar = .current) -> String {
-        func formatter(_ pattern: String) -> DateFormatter {
-            let f = DateFormatter()
-            f.locale = Locale(identifier: language == .ja ? "ja_JP" : language == .en ? "en_US" : "zh_Hans")
-            f.calendar = calendar
-            f.setLocalizedDateFormatFromTemplate(pattern)
-            return f
+        let localeID = localeID(for: language)
+        func formatted(_ pattern: String) -> String {
+            localizedTemplateString(pattern, localeID: localeID, calendar: calendar, date: date)
         }
         if calendar.isDateInToday(date) {
-            return formatter("Hmm").string(from: date)
+            return formatted("Hmm")
         }
         if calendar.isDateInYesterday(date) {
             switch language {
@@ -81,9 +111,9 @@ enum DateFormatterUtils {
         let startDate = calendar.startOfDay(for: date)
         let days = calendar.dateComponents([.day], from: startDate, to: startToday).day ?? 0
         if days >= 2 && days < 7 {
-            return formatter("EEE").string(from: date)   // 周一 / Mon / 月
+            return formatted("EEE")   // 周一 / Mon / 月
         }
         let sameYear = calendar.component(.year, from: date) == calendar.component(.year, from: reference)
-        return formatter(sameYear ? "Md" : "yMd").string(from: date)
+        return formatted(sameYear ? "Md" : "yMd")
     }
 }

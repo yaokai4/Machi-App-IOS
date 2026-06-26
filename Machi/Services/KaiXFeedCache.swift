@@ -29,11 +29,20 @@ enum KaiXFeedCache {
     }
 
     /// Persist the latest page for a feed. No-op on empty input or any failure.
+    ///
+    /// The blocking disk write is handed to a background task so it never
+    /// stalls the main actor: under the project's main-actor-by-default
+    /// isolation this static call runs on the main thread, and `save` fires on
+    /// every successful first-page load (cold start, pull-to-refresh, region /
+    /// language change). Encoding stays inline (cheap, ~40 small DTOs); only the
+    /// `Data` + `URL` (both Sendable) cross into the detached writer.
     static func save(_ items: [KaiXPostDTO], key: String) {
         guard !items.isEmpty, let url = fileURL(for: key) else { return }
         let snapshot = Snapshot(savedAt: .now, items: Array(items.prefix(maxItems)))
         guard let data = try? JSONEncoder().encode(snapshot) else { return }
-        try? data.write(to: url, options: .atomic)
+        Task.detached(priority: .utility) {
+            try? data.write(to: url, options: .atomic)
+        }
     }
 
     /// Load the cached page if present and not older than `maxAge`. Returns an

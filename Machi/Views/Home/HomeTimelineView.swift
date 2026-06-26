@@ -94,16 +94,13 @@ struct HomeTimelineView: View {
                 initialCountry: regionStore.current?.countryCode ?? (currentUser.country.isEmpty ? "jp" : currentUser.country),
                 allowsAnyCountry: false
             ) { region in
+                // Only set + persist here. The feed reload is driven by the
+                // `onChange(of: regionStore.current?.regionCode)` observer
+                // below — calling loadInitial here too fired two concurrent
+                // clear-and-reload passes (a doubled network fetch + a feed
+                // flash) for every city switch.
                 regionStore.setCurrent(region)
-                Task {
-                    await persistCurrentRegion(region)
-                    await viewModel.loadInitial(
-                        context: modelContext,
-                        currentUser: currentUser,
-                        postStore: postStore,
-                        clearExisting: true,
-                    )
-                }
+                Task { await persistCurrentRegion(region) }
             }
         }
         .onChange(of: regionStore.current?.regionCode) { _, _ in
@@ -156,14 +153,10 @@ struct HomeTimelineView: View {
         currentUser.currentRegionCode = region.regionCode
         currentUser.recentRegionCodes = regionStore.recent.map(\.regionCode)
         try? modelContext.save()
-
-        guard KaiXBackend.token != nil else { return }
-        _ = try? await KaiXAPIClient.shared.updateRegionLanguage([
-            "country": region.countryCode,
-            "province": region.provinceCode,
-            "city": region.cityCode,
-            "current_region_code": region.regionCode,
-        ])
+        // The browse region is pushed to the backend by
+        // RegionStore.setCurrent → syncBrowseRegionToBackend, so we don't
+        // repeat updateRegionLanguage here — that was a second identical
+        // network write on every city switch.
     }
 
     /// Empty-state for the same-city tab when the user hasn't picked
@@ -328,7 +321,7 @@ private struct HomeHeaderView: View {
                 .buttonStyle(.plain)
 
                 Text(L("appName", language))
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .kxScaledFont(34, relativeTo: .largeTitle, weight: .bold, design: .rounded)
                     .lineLimit(1)
 
                 Spacer()

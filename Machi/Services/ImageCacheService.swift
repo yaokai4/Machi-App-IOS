@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import ImageIO
 import UIKit
@@ -7,6 +8,8 @@ actor ImageCacheService {
 
     private let cache = NSCache<NSString, UIImage>()
     private var inFlight: [NSString: Task<UIImage?, Never>] = [:]
+    /// Disk trim runs once per process, lazily on first access.
+    private var didScheduleDiskTrim = false
 
     private init() {
         cache.countLimit = 220
@@ -22,11 +25,27 @@ actor ImageCacheService {
             return await task.value
         }
 
-        let task = Task(priority: .utility) {
-            if url.isFileURL {
-                return Self.downsampleImage(at: url, maxPixelSize: targetPixelSize)
+        scheduleDiskTrimIfNeeded()
+
+        let diskKey = Self.diskKey(url: url, targetPixelSize: targetPixelSize)
+        let task = Task(priority: .utility) { () -> UIImage? in
+            // Disk read-through: a downsampled copy survives memory eviction and
+            // cold launches, so a covered feed/avatar paints from local storage
+            // instead of re-hitting the network. Runs off the actor (static,
+            // nonisolated) so a slow read never serializes other lookups.
+            if let onDisk = Self.loadFromDisk(diskKey) {
+                return onDisk
             }
-            return await Self.downsampleRemoteImage(at: url, maxPixelSize: targetPixelSize)
+            let decoded: UIImage?
+            if url.isFileURL {
+                decoded = Self.downsampleImage(at: url, maxPixelSize: targetPixelSize)
+            } else {
+                decoded = await Self.downsampleRemoteImage(at: url, maxPixelSize: targetPixelSize)
+            }
+            if let decoded {
+                Self.saveToDisk(decoded, diskKey: diskKey)
+            }
+            return decoded
         }
         inFlight[key] = task
         let image = await task.value
@@ -42,6 +61,13 @@ actor ImageCacheService {
     func clear() {
         cache.removeAllObjects()
         inFlight.removeAll()
+        Task.detached(priority: .utility) { Self.clearDisk() }
+    }
+
+    private func scheduleDiskTrimIfNeeded() {
+        guard !didScheduleDiskTrim else { return }
+        didScheduleDiskTrim = true
+        Task.detached(priority: .background) { Self.trimDisk() }
     }
 
     private static func downsampleImage(at url: URL, maxPixelSize: CGFloat) -> UIImage? {
@@ -92,5 +118,98 @@ actor ImageCacheService {
         ] as CFDictionary
         guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, downsampleOptions) else { return nil }
         return UIImage(cgImage: cgImage)
+    }
+
+    // MARK: - Disk cache
+
+    /// Downsampled images persist here so a memory eviction or cold launch
+    /// repaints from local storage. This is **not** authoritative data — it's a
+    /// purgeable Caches-directory copy, age- and size-capped, that silently
+    /// misses (callers fall back to the network) on any problem.
+    private static let maxDiskAge: TimeInterval = 60 * 60 * 24 * 7   // 7 days
+    private static let maxDiskBytes = 200 * 1024 * 1024              // 200 MB
+
+    private static let diskDirectory: URL? = {
+        guard let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return nil }
+        let folder = caches.appendingPathComponent("KaiXImageCache", isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        return folder
+    }()
+
+    private static func diskKey(url: URL, targetPixelSize: CGFloat) -> String {
+        let raw = "\(url.absoluteString)|\(Int(targetPixelSize.rounded()))"
+        let digest = SHA256.hash(data: Data(raw.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func diskFileURL(_ diskKey: String) -> URL? {
+        diskDirectory?.appendingPathComponent("\(diskKey).img")
+    }
+
+    private static func loadFromDisk(_ diskKey: String) -> UIImage? {
+        guard let url = diskFileURL(diskKey),
+              let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let modified = attrs[.modificationDate] as? Date else { return nil }
+        guard Date().timeIntervalSince(modified) < maxDiskAge else {
+            try? FileManager.default.removeItem(at: url)
+            return nil
+        }
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return UIImage(data: data)
+    }
+
+    private static func saveToDisk(_ image: UIImage, diskKey: String) {
+        guard let url = diskFileURL(diskKey) else { return }
+        // Preserve transparency (logos / stickers) with PNG; everything else
+        // (the overwhelming majority — photos) goes JPEG for a fraction of the
+        // bytes. The image is already downsampled, so this is small either way.
+        let hasAlpha: Bool = {
+            guard let alpha = image.cgImage?.alphaInfo else { return false }
+            switch alpha {
+            case .first, .last, .premultipliedFirst, .premultipliedLast: return true
+            default: return false
+            }
+        }()
+        let data = hasAlpha ? image.pngData() : image.jpegData(compressionQuality: 0.82)
+        guard let data else { return }
+        try? data.write(to: url, options: .atomic)
+    }
+
+    private static func clearDisk() {
+        guard let dir = diskDirectory else { return }
+        try? FileManager.default.removeItem(at: dir)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    }
+
+    /// Drop expired files, then evict oldest-first until under the byte budget.
+    /// Runs once per launch on a background task.
+    private static func trimDisk() {
+        guard let dir = diskDirectory else { return }
+        let keys: [URLResourceKey] = [.contentModificationDateKey, .fileAllocatedSizeKey]
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: dir,
+            includingPropertiesForKeys: keys,
+            options: [.skipsHiddenFiles]
+        ) else { return }
+
+        let now = Date()
+        var living: [(url: URL, date: Date, size: Int)] = []
+        for file in files {
+            let values = try? file.resourceValues(forKeys: Set(keys))
+            let date = values?.contentModificationDate ?? .distantPast
+            if now.timeIntervalSince(date) >= maxDiskAge {
+                try? FileManager.default.removeItem(at: file)
+                continue
+            }
+            living.append((file, date, values?.fileAllocatedSize ?? 0))
+        }
+
+        var total = living.reduce(0) { $0 + $1.size }
+        guard total > maxDiskBytes else { return }
+        for file in living.sorted(by: { $0.date < $1.date }) {
+            try? FileManager.default.removeItem(at: file.url)
+            total -= file.size
+            if total <= maxDiskBytes { break }
+        }
     }
 }

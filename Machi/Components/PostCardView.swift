@@ -188,7 +188,7 @@ struct PostCardView: View, Equatable {
                     if !contentPost.previewText.isEmpty {
                         Button(action: onOpen) {
                             Text(contentPost.previewText)
-                                .font(.system(size: 15, weight: .regular))
+                                .kxScaledFont(15, relativeTo: .body, weight: .regular)
                                 .foregroundStyle(.primary)
                                 .lineSpacing(2)
                                 .lineLimit(isTextExpanded ? nil : 4)

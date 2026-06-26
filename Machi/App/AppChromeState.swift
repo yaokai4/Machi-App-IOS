@@ -26,6 +26,9 @@ final class AppChromeState: ObservableObject {
     }
 
     func select(_ tab: AppTab) {
+        // Signpost the switch so a janky tab transition is visible on the
+        // Instruments Points-of-Interest track (120 Hz regression guardrail).
+        KXPerf.event("tab.switch")
         selectedTab = tab
         restoreTopLevelChrome()
     }

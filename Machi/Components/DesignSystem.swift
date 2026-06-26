@@ -32,6 +32,42 @@ enum KXTypography {
     static let tiny = Font.caption2
 }
 
+/// A fixed point-size font that *scales with Dynamic Type*. Plain
+/// `Font.system(size:)` never scales, so any text built that way is frozen for
+/// users who enlarge text for accessibility. This modifier keeps the exact same
+/// size at the default content-size category (so the design is pixel-identical
+/// today) but lets `@ScaledMetric` grow it relative to `textStyle` when the user
+/// turns text up — the drop-in replacement for `.font(.system(size:weight:))` on
+/// real reading text (post bodies, titles). Decorative glyphs/badges keep the
+/// plain fixed font on purpose.
+private struct KXScaledFont: ViewModifier {
+    @ScaledMetric private var size: CGFloat
+    private let weight: Font.Weight
+    private let design: Font.Design
+
+    init(size: CGFloat, relativeTo textStyle: Font.TextStyle, weight: Font.Weight, design: Font.Design) {
+        _size = ScaledMetric(wrappedValue: size, relativeTo: textStyle)
+        self.weight = weight
+        self.design = design
+    }
+
+    func body(content: Content) -> some View {
+        content.font(.system(size: size, weight: weight, design: design))
+    }
+}
+
+extension View {
+    /// Dynamic-Type-aware replacement for `.font(.system(size:weight:design:))`.
+    func kxScaledFont(
+        _ size: CGFloat,
+        relativeTo textStyle: Font.TextStyle = .body,
+        weight: Font.Weight = .regular,
+        design: Font.Design = .default
+    ) -> some View {
+        modifier(KXScaledFont(size: size, relativeTo: textStyle, weight: weight, design: design))
+    }
+}
+
 enum KXColor {
     static let pageBackground = Color(UIColor { traits in
         if traits.userInterfaceStyle == .dark {

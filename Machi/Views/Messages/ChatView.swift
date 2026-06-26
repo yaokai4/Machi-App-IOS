@@ -1014,12 +1014,13 @@ private struct ChatDaySeparator: View {
         if calendar.isDateInYesterday(date) {
             return language == .ja ? "昨日" : language == .en ? "Yesterday" : "昨天"
         }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: language == .ja ? "ja_JP" : language == .en ? "en_US" : "zh_CN")
         let sameYear = calendar.isDate(date, equalTo: .now, toGranularity: .year)
         let template = language == .en ? (sameYear ? "MMMd" : "yMMMd") : (sameYear ? "Md" : "yMd")
-        formatter.setLocalizedDateFormatFromTemplate(template)
-        return formatter.string(from: date)
+        return DateFormatterUtils.localizedTemplateString(
+            template,
+            localeID: DateFormatterUtils.localeID(for: language),
+            date: date
+        )
     }
 }
 

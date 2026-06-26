@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Base Info.plist. Lives at the project root (outside the Machi/ folder-
+	  synchronized group) so it is NOT auto-added to Copy Bundle Resources.
+	  GENERATE_INFOPLIST_FILE stays YES, so Xcode merges the keys it derives
+	  from the INFOPLIST_KEY_* build settings on top of this file. Only keys
+	  that have no INFOPLIST_KEY_ equivalent need to live here.
+
+	  CFBundleURLTypes registers the "machi" custom scheme so the in-app
+	  "copy link" deep links (machi://post/<id>, machi://user/<id>) can open
+	  the app and route to the target (handled by .onOpenURL in ContentView).
+	  Google OAuth uses ASWebAuthenticationSession and does not depend on this.
+	-->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.yaokai.kaizi.deeplink</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>machi</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
