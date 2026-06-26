@@ -16,7 +16,12 @@ struct FullAreaButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .contentShape(Rectangle())
-            .opacity(configuration.isPressed ? 0.6 : 1)
+            // Tactile press feedback: dim + a subtle spring scale, mirroring the
+            // Web buttons' `active:scale-[0.97]`. Snappy spring so it feels
+            // responsive, not floaty. Whole-label hit area is preserved above.
+            .opacity(configuration.isPressed ? 0.62 : 1)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.spring(response: 0.28, dampingFraction: 0.72), value: configuration.isPressed)
     }
 }
 

@@ -60,6 +60,16 @@ final class AppState: ObservableObject {
                     }
                     user = existingUser
                 }
+                // Pin the test user to Tokyo / Japan so region-gated surfaces
+                // render deterministically. Without this the Guide tab lands on
+                // its "指南目前只开放日本地区" coming-soon screen (it only opens for
+                // country == "jp"), so the quick-grid / quick-add field the UI
+                // tests look for never mount — the root cause of their flakiness.
+                user.country = "jp"
+                user.province = "tokyo"
+                user.city = "tokyo"
+                user.currentRegionCode = "jp.tokyo.tokyo"
+                RegionStore.shared.setCurrent(country: "jp", province: "tokyo", city: "tokyo")
                 AuthService.shared.persistSession(user: user)
                 currentUser = user
                 state = .loaded

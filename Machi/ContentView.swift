@@ -27,6 +27,16 @@ struct ContentView: View {
         AppLanguage.resolved(from: appLanguageCode)
     }
 
+    /// Emit the `home.firstRender` launch signpost exactly once. `onAppear` can
+    /// fire again on later account switches; only the cold-launch marker is
+    /// interesting for hitch profiling, so guard it behind a one-shot flag.
+    private static var didEmitFirstHomeRender = false
+    private static func markFirstHomeRender() {
+        guard !didEmitFirstHomeRender else { return }
+        didEmitFirstHomeRender = true
+        KXPerf.event("home.firstRender")
+    }
+
     /// A coarse, Equatable launch phase so the splash → main / auth swap can
     /// cross-fade-and-settle instead of hard-cutting. Changes only on bootstrap
     /// completion, login, and logout — exactly the moments we want animated.
@@ -59,6 +69,10 @@ struct ContentView: View {
                         // The app "arrives": content fades up from a hair under
                         // 1.0 as the splash fades out — a calm, premium settle.
                         .transition(.opacity.combined(with: .scale(scale: 1.015)))
+                        // Launch-profiling marker: the home/main UI is now on
+                        // screen. Pairs with `app.launch` / `database.ready` /
+                        // `app.bootstrap` to bracket cold launch in Instruments.
+                        .onAppear { Self.markFirstHomeRender() }
                 } else {
                     AuthView(onAuthenticated: completeLogin, onBrowseAsGuest: enterAsGuest)
                         .transition(.opacity)

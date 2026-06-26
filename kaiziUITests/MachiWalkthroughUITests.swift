@@ -10,6 +10,30 @@ final class MachiWalkthroughUITests: XCTestCase {
         continueAfterFailure = true
     }
 
+    /// Launch into a deterministic, signed-in state for behavioural assertions.
+    ///
+    /// The raw `app.launch()` lands on the auth wall, so any test that expects
+    /// the tab bar / Guide surfaces to exist must first cross it. Rather than
+    /// scripting taps through the login flow (brittle, network-dependent), we
+    /// reuse the same hermetic launch arguments as `MachiCoreFlowE2EUITests`:
+    /// local fixtures + auto-login + an ephemeral store, with the language
+    /// pinned to zh so localized labels are stable.
+    @MainActor
+    private func launchSignedIn() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments += [
+            "-appLanguageCode", "zh",
+            "-kaixUITestLocalAuth",
+            "-kaixUITestAutoLogin",
+            "-kaixUITestEphemeralStore",
+        ]
+        app.launchEnvironment["KAIX_UI_TEST_LOCAL_AUTH"] = "1"
+        app.launchEnvironment["KAIX_UI_TEST_AUTO_LOGIN"] = "1"
+        app.launchEnvironment["KAIX_UI_TEST_EPHEMERAL_STORE"] = "1"
+        app.launch()
+        return app
+    }
+
     @MainActor
     func testWalkthroughScreens() throws {
         let app = XCUIApplication()
@@ -331,15 +355,16 @@ final class MachiWalkthroughUITests: XCTestCase {
     /// away from the home grid.
     @MainActor
     func testGuideGridButtonFullAreaTappable() throws {
-        let app = XCUIApplication()
-        app.launch()
+        let app = launchSignedIn()
         tapTab(app, "tabbar.guide")
 
-        let goals = app.buttons["路径"]
+        // Query by the stable, locale-independent identifiers (not the localized
+        // "路径"/"日历" labels) so the test survives a language switch.
+        let goals = app.buttons["guide.quick.goals"]
         XCTAssertTrue(goals.waitForExistence(timeout: 25), "Guide home quick-grid should load")
         snap("hitarea_before")
 
-        let calendar = app.buttons["日历"]
+        let calendar = app.buttons["guide.quick.calendar"]
         XCTAssertTrue(calendar.waitForExistence(timeout: 5), "日历 grid button should exist")
         // Far-right of the button = blank Spacer area, NOT the text/icon.
         calendar.coordinate(withNormalizedOffset: CGVector(dx: 0.88, dy: 0.5)).tap()
@@ -357,8 +382,7 @@ final class MachiWalkthroughUITests: XCTestCase {
     /// keyboard. With the bug, maxY would drop by ~the keyboard height.
     @MainActor
     func testTabBarStaysPinnedWhenKeyboardShows() throws {
-        let app = XCUIApplication()
-        app.launch()
+        let app = launchSignedIn()
         tapTab(app, "tabbar.guide")
 
         let bar = app.otherElements["main.bottomTabBar"]
@@ -373,16 +397,26 @@ final class MachiWalkthroughUITests: XCTestCase {
         pause(1)
         snap("kbd_tabbar")
 
-        // Non-vacuous: require a genuinely-sized software keyboard.
+        // Non-vacuous: require a genuinely-sized software keyboard. If this
+        // fails the keyboard never really showed (hardware keyboard connected),
+        // so the pinned-bar assertion below would be meaningless.
         let kbFrame = kb.frame
         XCTAssertGreaterThan(kbFrame.height, 150,
                              "software keyboard must be genuinely visible (height \(kbFrame.height)) — disable Connect Hardware Keyboard")
         let barFrame = bar.frame
-        // FIXED: bar stays pinned at the bottom, inside the keyboard's vertical band
-        //        (its midY is below the keyboard's top edge — i.e. behind it).
-        // BUGGY: bar gets shoved entirely above the keyboard (midY < keyboard top).
-        XCTAssertGreaterThan(barFrame.midY, kbFrame.minY,
-                             "tab bar must stay at the bottom behind the keyboard (bar midY \(barFrame.midY) vs keyboard top \(kbFrame.minY); resting maxY \(restingMaxY))")
+        // The actual product guarantee: the floating tab bar is pinned to the
+        // absolute screen bottom and does NOT move when the keyboard appears.
+        //   FIXED: barFrame.maxY stays == restingMaxY (bar didn't budge).
+        //   BUGGY: the bar gets shoved up onto the keyboard, so maxY drops by
+        //          roughly the keyboard height.
+        // We assert position-unchanged directly rather than comparing against
+        // the keyboard's top edge: on some simulators/devices the reported
+        // keyboard frame sits below the bar's resting band, which made the old
+        // "midY > keyboard.minY" heuristic geometry-dependent and flaky even
+        // though the bar was correctly pinned. maxY-unchanged is the real,
+        // device-independent invariant.
+        XCTAssertEqual(barFrame.maxY, restingMaxY, accuracy: 2.0,
+                       "tab bar must stay pinned at the bottom when the keyboard shows (bar maxY \(barFrame.maxY) vs resting \(restingMaxY); keyboard top \(kbFrame.minY), height \(kbFrame.height))")
     }
 
     /// Core-navigation regression guard: visit every tab and assert the app
@@ -391,8 +425,7 @@ final class MachiWalkthroughUITests: XCTestCase {
     /// screenshot-only walkthroughs miss.
     @MainActor
     func testCoreTabsSmoke() throws {
-        let app = XCUIApplication()
-        app.launch()
+        let app = launchSignedIn()
         let bar = app.otherElements["main.bottomTabBar"]
         XCTAssertTrue(bar.waitForExistence(timeout: 25), "tab bar should appear on launch")
         for tab in ["tabbar.home", "tabbar.search", "tabbar.guide", "tabbar.messages", "tabbar.profile"] {

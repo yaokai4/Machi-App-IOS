@@ -46,10 +46,10 @@ struct GuideOSDashboardSection: View {
             // card — a clear, formal action bar instead of an opaque "recommended
             // next step" list whose ranking wasn't obvious to users.
             GuideOSQuickRow(items: [
-                .init(title: guideOSText(language, "待办", "Todo", "Tasks"), icon: "checklist", action: onOpenPlan),
-                .init(title: guideOSText(language, "日历", "カレンダー", "Calendar"), icon: "calendar", action: onOpenCalendar),
-                .init(title: guideOSText(language, "管理", "管理", "Manage"), icon: "folder.fill.badge.gearshape", action: onOpenManage),
-                .init(title: guideOSText(language, "路径", "目標", "Goals"), icon: "point.topleft.down.curvedto.point.bottomright.up", action: onOpenGoals)
+                .init(title: guideOSText(language, "待办", "Todo", "Tasks"), icon: "checklist", accessibilityId: "guide.quick.todo", action: onOpenPlan),
+                .init(title: guideOSText(language, "日历", "カレンダー", "Calendar"), icon: "calendar", accessibilityId: "guide.quick.calendar", action: onOpenCalendar),
+                .init(title: guideOSText(language, "管理", "管理", "Manage"), icon: "folder.fill.badge.gearshape", accessibilityId: "guide.quick.manage", action: onOpenManage),
+                .init(title: guideOSText(language, "路径", "目標", "Goals"), icon: "point.topleft.down.curvedto.point.bottomright.up", accessibilityId: "guide.quick.goals", action: onOpenGoals)
             ])
 
             GuideQuickTodoComposer(isSaving: isLoading, onCreate: onCreateTodo)
@@ -162,6 +162,10 @@ struct GuideOSQuickRow: View {
         let id = UUID()
         let title: String
         let icon: String
+        /// Stable, locale-independent accessibility identifier so UI tests can
+        /// find the button by id (e.g. `guide.quick.calendar`) instead of the
+        /// localized label, which shifts between zh/ja/en.
+        var accessibilityId: String? = nil
         let action: () -> Void
     }
     let items: [Item]
@@ -188,6 +192,7 @@ struct GuideOSQuickRow: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.fullArea)
+                .accessibilityIdentifier(item.accessibilityId ?? "")
             }
         }
     }

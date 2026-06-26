@@ -12,11 +12,18 @@ enum KaiXDatabaseContainer {
     /// "数据库恢复模式 / 本地数据库需要恢复" state can never occur. Any recovery notice
     /// left behind by older builds is cleared on launch.
     static let shared: ModelContainer = {
+        // Building the in-memory ModelContainer is the first heavy synchronous
+        // step of cold launch (schema realize + migration-plan setup). Measure
+        // it under the `database.ready` signpost so the launch hitch can be
+        // attributed in Instruments / Console without guessing.
+        KXPerf.event("app.launch")
         let schema = Schema(KaiXSchemaV5.models)
         DatabaseRecoveryNoticeStore.clear()
         do {
             logger.info("local persistence disabled: in-memory container backed by production data")
-            return try makeEphemeralContainer(schema: schema)
+            return try KXPerf.measureSync("database.ready") {
+                try makeEphemeralContainer(schema: schema)
+            }
         } catch {
             // An in-memory store starts empty every launch, so there is nothing
             // to migrate. If the migration-plan path somehow fails, retry once

@@ -35,6 +35,21 @@ final class GuideViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
+        #if DEBUG
+        // UI tests run hermetically (local auth + ephemeral store). Hitting the
+        // production `/api/guide/home` made Guide-screen UI tests flaky: under
+        // back-to-back launches the endpoint rate-limits, the client retries
+        // with backoff, and `home` stays nil past the test's wait — so the
+        // dashboard (quick-grid / quick-add field) never mounts. In that mode
+        // load the built-in fallback content immediately so the Guide UI is
+        // deterministic and network-independent.
+        if KaiXRuntimeFlags.allowLocalStoreFallback, normalizedCountry.isEmpty || normalizedCountry == "jp" {
+            home = GuideFallbackContent.home(language: language)
+            loadedCountry = normalizedCountry
+            loadedLanguage = language
+            return
+        }
+        #endif
         do {
             home = try await KaiXAPIClient.shared.guideHome(country: normalizedCountry.isEmpty ? "jp" : normalizedCountry, language: language)
             loadedCountry = normalizedCountry
