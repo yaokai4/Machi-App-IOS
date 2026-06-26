@@ -14,15 +14,12 @@ struct GuideOSDashboardSection: View {
     let onOpenPlan: () -> Void
     let onOpenCalendar: () -> Void
     let onOpenManage: () -> Void
-    let onOpenGoals: () -> Void
-    let onOpenProfile: () -> Void
-    let onOpenLife: () -> Void
-    let onOpenApplications: () -> Void
-    let onOpenServices: () -> Void
-    let onOpenJourney: (String) -> Void
-    let onOpenProduct: (String) -> Void
     let onCompleteTodo: (KaiXGuideTodoDTO) -> Void
     let onCreateTodo: (_ content: String, _ plannedDate: String?) async -> Bool
+
+    private var todayTodos: [KaiXGuideTodoDTO] { data?.todayTodos ?? [] }
+    private var upcomingTodos: [KaiXGuideTodoDTO] { data?.upcomingTodos ?? [] }
+    private var hasAnyTodos: Bool { !todayTodos.isEmpty || !upcomingTodos.isEmpty }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -30,37 +27,55 @@ struct GuideOSDashboardSection: View {
                 // The hero card above already says "今日 / Today"; name this
                 // section by its function so the two headers don't read as a
                 // duplicated "今日 / 今日" stack.
-                title: guideOSText(language, "今日计划", "今日のプラン", "Today's plan"),
+                title: guideOSText(language, "今日", "今日", "Today"),
                 subtitle: isGuest
                     ? guideOSText(language, "登录后同步 Todo、日历和截止日", "ログインするとTodo・カレンダー・期限を同期できます", "Log in to sync todos, calendar, and deadlines")
-                    : guideOSText(language, "这里放今天要做的事，主题和路径在下方继续浏览", "今日やることをここに表示します", "Your actual todos and deadlines live here")
+                    : guideOSText(language, "今天要做的事和即将到期的截止日", "今日やることと近づく期限", "What's due today and coming up")
             )
 
             if let message, !message.isEmpty {
                 GuideOSNotice(message: message)
             }
 
-            GuideOSPlanCard(plan: data?.plan, isGuest: isGuest, isLoading: isLoading, onOpenPlan: onOpenPlan, onOpenProfile: onOpenProfile)
+            // Only surface the goal card when there is a genuinely in-progress
+            // plan (<100%). A finished or absent plan no longer takes the hero
+            // slot — that was the source of the stale "刚到日本 7 天 100%" card.
+            if let plan = data?.plan, plan.progressPercent < 100 {
+                GuideOSPlanCard(plan: plan, isGuest: isGuest, isLoading: isLoading, onOpenPlan: onOpenPlan)
+            }
 
-            // Primary entries (待办 / 日历 / 管理 / 路径) sit right under the plan
-            // card — a clear, formal action bar instead of an opaque "recommended
-            // next step" list whose ranking wasn't obvious to users.
-            GuideOSQuickRow(items: [
-                .init(title: guideOSText(language, "待办", "Todo", "Tasks"), icon: "checklist", accessibilityId: "guide.quick.todo", action: onOpenPlan),
-                .init(title: guideOSText(language, "日历", "カレンダー", "Calendar"), icon: "calendar", accessibilityId: "guide.quick.calendar", action: onOpenCalendar),
-                .init(title: guideOSText(language, "管理", "管理", "Manage"), icon: "folder.fill.badge.gearshape", accessibilityId: "guide.quick.manage", action: onOpenManage),
-                .init(title: guideOSText(language, "路径", "目標", "Goals"), icon: "point.topleft.down.curvedto.point.bottomright.up", accessibilityId: "guide.quick.goals", action: onOpenGoals)
-            ])
-
+            // ONE place to add a task. The full list (我的一天/重要/计划中/已完成)
+            // is one "全部待办" tap away, so there are no duplicated 待办 buttons.
             GuideQuickTodoComposer(isSaving: isLoading, onCreate: onCreateTodo)
 
-            if let todos = data?.todayTodos, !todos.isEmpty {
-                GuideOSTodoStrip(title: guideOSText(language, "今天要做", "今日やること", "Today"), todos: todos, onComplete: onCompleteTodo)
+            if !todayTodos.isEmpty {
+                GuideOSTodoStrip(title: guideOSText(language, "今天要做", "今日やること", "Today"), todos: todayTodos, onComplete: onCompleteTodo)
             }
 
-            if let upcoming = data?.upcomingTodos, !upcoming.isEmpty {
-                GuideOSTodoStrip(title: guideOSText(language, "即将到期", "まもなく期限", "Upcoming"), todos: Array(upcoming.prefix(6)), onComplete: onCompleteTodo)
+            if !upcomingTodos.isEmpty {
+                GuideOSTodoStrip(title: guideOSText(language, "即将到期", "まもなく期限", "Upcoming"), todos: Array(upcomingTodos.prefix(6)), onComplete: onCompleteTodo)
             }
+
+            if !isGuest, hasAnyTodos {
+                Button(action: onOpenPlan) {
+                    Label(guideOSText(language, "全部待办", "すべてのTodo", "All tasks"), systemImage: "list.bullet")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(KXColor.accent)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(.fullArea)
+                .contentShape(Rectangle())
+                .accessibilityIdentifier("guide.quick.todo")
+            }
+
+            // Two distinct destinations only: 待办 lives above, so the row keeps
+            // just 日历 and 管理 (路径 is now an optional template inside 管理).
+            GuideOSQuickRow(items: [
+                .init(title: guideOSText(language, "日历", "カレンダー", "Calendar"), icon: "calendar", accessibilityId: "guide.quick.calendar", action: onOpenCalendar),
+                .init(title: guideOSText(language, "管理", "管理", "Manage"), icon: "folder.fill.badge.gearshape", accessibilityId: "guide.quick.manage", action: onOpenManage)
+            ])
         }
         .padding(15)
         .kxGlassSurface(radius: 24, elevated: true)
@@ -478,6 +493,15 @@ struct GuideManageView: View {
 
     private var items: [GuideManageItem] {
         [
+            .init(
+                // Journeys are now an *optional* template library here rather than
+                // a top-level home tab:套用后会生成一组可删的待办，用户想要才用。
+                title: guideOSText(language, "目标 / 路径", "目標 / パス", "Goals / paths"),
+                subtitle: guideOSText(language, "可选模板：就职、升学、JLPT、租房等，套用后生成一组可删的待办", "任意テンプレート：就職・進学・JLPT・賃貸など。適用するとTodoを生成", "Optional templates: jobs, study, JLPT, housing — apply to seed deletable todos"),
+                icon: "point.topleft.down.curvedto.point.bottomright.up",
+                tint: .blue,
+                action: { router.open(.guideGoals) }
+            ),
             .init(
                 title: guideOSText(language, "收支记账", "家計簿", "Finance"),
                 subtitle: guideOSText(language, "记一笔收支、看本月结余、设分类预算；不连银行，只记你填的数", "収入・支出を記録、今月の収支、カテゴリ予算。銀行連携なし", "Log income/expense, monthly balance, budgets. No bank link."),

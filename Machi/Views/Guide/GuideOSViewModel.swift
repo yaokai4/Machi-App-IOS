@@ -758,7 +758,7 @@ class GuideOSViewModel: ObservableObject {
 
 /// Drives the Guide OS home dashboard + the consolidated todo list.
 @MainActor final class GuideHomeViewModel: GuideOSViewModel {}
-/// Drives `GuidePlanView` (active plan + progress + next-step todos).
+/// Drives `GuideGoalsView` (active plans + progress + journey templates).
 @MainActor final class GuidePlanViewModel: GuideOSViewModel {}
 /// Drives todo-centric planners (applications, life bills) and `GuideTodoListView`.
 @MainActor final class GuideTodoViewModel: GuideOSViewModel {}

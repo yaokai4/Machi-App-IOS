@@ -22,141 +22,118 @@ struct GuideProfileSetupView: View {
     @State private var weeklyMinutes = 360
     @State private var needsMaterials = true
     @State private var needsServices = false
-    @State private var step = 0
 
-    private var schoolPath: Bool { ["student", "language_school_student", "applicant"].contains(identityType) }
-    private var careerPath: Bool { ["worker", "career_change"].contains(identityType) }
+    private let identityOptions: [(value: String, label: (String, String, String))] = [
+        ("student", ("大学生", "大学生", "University")),
+        ("language_school_student", ("语言学校", "語学学校", "Language school")),
+        ("worker", ("社会人", "社会人", "Working")),
+        ("career_change", ("转职", "転職", "Career change")),
+        ("applicant", ("升学", "進学", "Applicant")),
+    ]
 
     var body: some View {
         ZStack {
             GuideBackground()
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    GuideOSHeaderRow(title: guideOSText(language, "个人提醒设置", "個人リマインダー設定", "Personal reminders"), subtitle: guideOSText(language, "不需要上传在留卡或护照。只填写你希望被提醒的日期，Machi 会生成 Todo、倒数日和日历提醒。", "在留カードやパスポートのアップロードは不要です。通知してほしい日付だけ入力すると、Todo・カウントダウン・カレンダーを作成します。", "No residence card or passport upload is needed. Add reminder dates and Machi creates todos, countdowns, and calendar alerts."))
-                    VStack(spacing: 12) {
-                        GuideProfileStepTabs(step: $step)
-                        if step == 0 {
-                            Picker(guideOSText(language, "当前状态", "現在の状況", "Current status"), selection: $identityType) {
-                                Text(guideOSText(language, "大学生", "大学生", "University")).tag("student")
-                                Text(guideOSText(language, "语言学校", "語学学校", "Language school")).tag("language_school_student")
-                                Text(guideOSText(language, "社会人", "社会人", "Working")).tag("worker")
-                                Text(guideOSText(language, "转职", "転職", "Career change")).tag("career_change")
-                                Text(guideOSText(language, "升学", "進学", "Applicant")).tag("applicant")
-                            }
-                            .pickerStyle(.segmented)
-                            GuideOSTextField(title: "城市", text: $city)
-                            Button {
-                                locator.request()
-                            } label: {
-                                Label(locator.isLocating ? "获取当前位置中" : "使用当前位置", systemImage: "location.fill")
-                                    .font(.caption.weight(.bold))
-                                    .frame(maxWidth: .infinity)
-                                    .frame(height: 38)
-                            }
-                            .buttonStyle(.fullArea)
-                            .contentShape(Rectangle())
-                            .foregroundStyle(KXColor.accent)
-                            .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                            Toggle("目前在日本", isOn: $isInJapan)
-                            GuideOSTextField(title: "签证 / 在留状态", text: $visaStatus)
-                            Toggle("记录在留期限", isOn: $hasVisaExpiry)
-                            if hasVisaExpiry {
-                                DatePicker("在留期限", selection: $visaExpiry, displayedComponents: .date)
-                            }
-                            GuidePermanentResidencyHint(visaExpiry: hasVisaExpiry ? visaExpiry : nil)
-                        } else if step == 1 {
-                            HStack {
-                                GuideOSTextField(title: "当前日语", text: $japaneseLevel)
-                                GuideOSTextField(title: "目标日语", text: $targetJapaneseLevel)
-                            }
-                            if schoolPath {
-                                Toggle("记录毕业 / 修了预计", isOn: $hasGraduationDate)
-                                if hasGraduationDate {
-                                    DatePicker("毕业 / 修了预计", selection: $graduationDate, displayedComponents: .date)
-                                }
-                                GuideOSTextField(title: "目标入学期", text: $targetEntryTerm)
-                                GuideOSTextField(title: "目标学校类型", text: $targetSchoolType)
-                                GuideOSTextField(title: "研究方向 / 专攻", text: $targetIndustry)
-                            } else if careerPath {
-                                GuideOSTextField(title: "目标入社期", text: $targetEntryTerm)
-                                GuideOSTextField(title: "目标行业 / 职种", text: $targetIndustry)
-                            } else {
-                                GuideOSTextField(title: "目标入学期 / 入社期", text: $targetEntryTerm)
-                                GuideOSTextField(title: "目标行业", text: $targetIndustry)
-                            }
-                            Stepper("每周可投入 \(weeklyMinutes) 分钟", value: $weeklyMinutes, in: 60...2400, step: 60)
-                        } else {
-                            Toggle("需要资料包", isOn: $needsMaterials)
-                            Toggle("需要咨询/代办服务", isOn: $needsServices)
-                            GuideProfileGeneratedPreview(
-                                hasVisaExpiry: hasVisaExpiry,
-                                visaExpiry: visaExpiry,
-                                hasGraduationDate: hasGraduationDate,
-                                graduationDate: graduationDate,
-                                needsMaterials: needsMaterials,
-                                needsServices: needsServices
-                            )
-                        }
-                        HStack(spacing: 10) {
-                            if step > 0 {
-                                Button {
-                                    step -= 1
-                                } label: {
-                                    Text("上一步")
-                                        .font(.subheadline.weight(.bold))
-                                        .frame(maxWidth: .infinity)
-                                        .frame(height: 44)
-                                }
-                                .buttonStyle(.fullArea)
-                                .foregroundStyle(KXColor.accent)
-                                .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                            }
-                            if step < 2 {
-                                Button {
-                                    step += 1
-                                } label: {
-                                    Text("下一步")
-                                        .font(.subheadline.weight(.bold))
-                                        .frame(maxWidth: .infinity)
-                                        .frame(height: 44)
-                                }
-                                .buttonStyle(.fullArea)
-                                .foregroundStyle(.white)
-                                .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    GuideOSHeaderRow(title: guideOSText(language, "个人提醒设置", "個人リマインダー設定", "Personal reminders"), subtitle: guideOSText(language, "不需要上传在留卡或护照，全部可选。填一个你希望被提醒的日期，Machi 就会生成 Todo、倒数日和日历提醒。", "在留カードやパスポートのアップロードは不要、すべて任意です。通知してほしい日付を一つ入れると、Todo・カウントダウン・カレンダーを作成します。", "No residence card or passport upload — everything is optional. Add one date you want to be reminded of and Machi creates a todo, countdown, and calendar alert."))
+
+                    // Concrete reminder cards. Each states its payoff up front, so
+                    // users know exactly what filling it in does — no abstract
+                    // identity wizard to puzzle over.
+                    GuideReminderDateCard(
+                        icon: "person.text.rectangle.fill",
+                        tint: .cyan,
+                        title: guideOSText(language, "在留卡 / 签证到期", "在留カード / ビザ期限", "Residence card / visa expiry"),
+                        payoff: guideOSText(language, "填了之后：在到期前自动生成续签倒排 Todo 和日历提醒", "入力すると：期限前に更新の逆算Todoとカレンダー通知を自動生成", "Once added: a renewal countdown todo and calendar alert before it expires"),
+                        toggleTitle: guideOSText(language, "记录到期日", "期限を記録", "Track expiry"),
+                        isOn: $hasVisaExpiry,
+                        date: $visaExpiry
+                    )
+                    GuideReminderDateCard(
+                        icon: "graduationcap.fill",
+                        tint: KXColor.accent,
+                        title: guideOSText(language, "毕业 / 入社日", "卒業 / 入社日", "Graduation / start date"),
+                        payoff: guideOSText(language, "填了之后：自动生成升学或就活的时间线提醒", "入力すると：進学・就活のタイムライン通知を自動生成", "Once added: a study or job-hunting timeline reminder"),
+                        toggleTitle: guideOSText(language, "记录日期", "日付を記録", "Track date"),
+                        isOn: $hasGraduationDate,
+                        date: $graduationDate
+                    )
+
+                    GuidePermanentResidencyHint(visaExpiry: hasVisaExpiry ? visaExpiry : nil)
+
+                    // Identity is now a single optional control whose only job — and
+                    // we say so — is ordering the most relevant guides first.
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(guideOSText(language, "你的身份（可选）", "あなたの状況（任意）", "Your status (optional)"))
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(.primary)
+                        Picker(guideOSText(language, "身份", "状況", "Status"), selection: $identityType) {
+                            ForEach(identityOptions, id: \.value) { option in
+                                Text(guideOSText(language, option.label.0, option.label.1, option.label.2)).tag(option.value)
                             }
                         }
-                        Button {
-                            Task {
-                                await model.saveProfile(.init(
-                                    identityType: identityType,
-                                    city: city,
-                                    isInJapan: isInJapan,
-                                    visaStatus: visaStatus,
-                                    visaExpiresAt: hasVisaExpiry ? GuideOSDate.iso(visaExpiry) : nil,
-                                    japaneseLevel: japaneseLevel,
-                                    targetJapaneseLevel: targetJapaneseLevel,
-                                    graduationDate: hasGraduationDate ? GuideOSDate.iso(graduationDate) : nil,
-                                    targetEntryTerm: targetEntryTerm,
-                                    targetIndustry: targetIndustry,
-                                    targetSchoolType: targetSchoolType,
-                                    weeklyAvailableMinutes: weeklyMinutes,
-                                    needsMaterials: needsMaterials,
-                                    needsServices: needsServices
-                                ))
-                            }
-                        } label: {
-                            Text(model.isSaving ? "保存中" : "保存提醒设置")
-                                .font(.headline.weight(.bold))
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 48)
-                        }
-                        .buttonStyle(.fullArea)
-                        .contentShape(Rectangle())
-                        .foregroundStyle(.white)
-                        .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                        .pickerStyle(.segmented)
+                        Text(guideOSText(language, "仅用于把最相关的指南排在前面，可以不选。", "最も関連するガイドを上位に並べるためだけに使います。未選択でもOK。", "Only used to surface the most relevant guides first. Optional."))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                     }
                     .padding(15)
                     .kxGlassSurface(radius: 22)
+
+                    // City stays available but de-emphasised under "更多（可选）".
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(guideOSText(language, "城市（可选）", "都市（任意）", "City (optional)"))
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(.primary)
+                        GuideOSTextField(title: guideOSText(language, "城市", "都市", "City"), text: $city)
+                        Button {
+                            locator.request()
+                        } label: {
+                            Label(locator.isLocating ? guideOSText(language, "获取当前位置中", "現在地を取得中", "Locating") : guideOSText(language, "使用当前位置", "現在地を使う", "Use current location"), systemImage: "location.fill")
+                                .font(.caption.weight(.bold))
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 38)
+                        }
+                        .buttonStyle(.fullArea)
+                        .contentShape(Rectangle())
+                        .foregroundStyle(KXColor.accent)
+                        .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                        Toggle(guideOSText(language, "目前在日本", "現在日本にいる", "Currently in Japan"), isOn: $isInJapan)
+                    }
+                    .padding(15)
+                    .kxGlassSurface(radius: 22)
+
+                    Button {
+                        Task {
+                            await model.saveProfile(.init(
+                                identityType: identityType,
+                                city: city,
+                                isInJapan: isInJapan,
+                                visaStatus: visaStatus,
+                                visaExpiresAt: hasVisaExpiry ? GuideOSDate.iso(visaExpiry) : nil,
+                                japaneseLevel: japaneseLevel,
+                                targetJapaneseLevel: targetJapaneseLevel,
+                                graduationDate: hasGraduationDate ? GuideOSDate.iso(graduationDate) : nil,
+                                targetEntryTerm: targetEntryTerm,
+                                targetIndustry: targetIndustry,
+                                targetSchoolType: targetSchoolType,
+                                weeklyAvailableMinutes: weeklyMinutes,
+                                needsMaterials: needsMaterials,
+                                needsServices: needsServices
+                            ))
+                        }
+                    } label: {
+                        Text(model.isSaving ? guideOSText(language, "保存中", "保存中", "Saving") : guideOSText(language, "保存提醒设置", "リマインダーを保存", "Save reminders"))
+                            .font(.headline.weight(.bold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 48)
+                    }
+                    .buttonStyle(.fullArea)
+                    .contentShape(Rectangle())
+                    .foregroundStyle(.white)
+                    .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+
                     if let message = model.message { GuideOSNotice(message: message) }
                     if let message = locator.message { GuideOSNotice(message: message) }
                 }
@@ -202,89 +179,48 @@ struct GuideProfileSetupView: View {
     }
 }
 
-private struct GuideProfileStepTabs: View {
-    @Environment(\.appLanguage) private var language
-    @Binding var step: Int
-    private var labels: [String] {
-        [
-            guideOSText(language, "状态", "状況", "Status"),
-            guideOSText(language, "目标", "目標", "Goal"),
-            guideOSText(language, "生成", "生成", "Output")
-        ]
-    }
+/// A single optional reminder: a titled card that explains its payoff, a toggle
+/// to opt in, and (when on) a date picker. Replaces the old 3-step identity
+/// wizard — users see exactly what each field does before filling it.
+private struct GuideReminderDateCard: View {
+    let icon: String
+    let tint: Color
+    let title: String
+    let payoff: String
+    let toggleTitle: String
+    @Binding var isOn: Bool
+    @Binding var date: Date
 
     var body: some View {
-        HStack(spacing: 6) {
-            ForEach(Array(labels.enumerated()), id: \.offset) { index, label in
-                Button {
-                    step = index
-                } label: {
-                    Text("\(index + 1). \(label)")
-                        .font(.caption.weight(.bold))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 34)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 11) {
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 40, height: 40)
+                    .background(tint, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.primary)
+                    Text(payoff)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .buttonStyle(.fullArea)
-                .contentShape(Rectangle())
-                .foregroundStyle(step == index ? KXColor.accent : .secondary)
-                .background(step == index ? KXColor.livingSurface.opacity(0.9) : Color.clear, in: Capsule())
+                Spacer(minLength: 0)
+            }
+            Toggle(toggleTitle, isOn: $isOn.animation(.easeInOut(duration: 0.2)))
+                .font(.subheadline.weight(.semibold))
+            if isOn {
+                DatePicker(title, selection: $date, displayedComponents: .date)
+                    .labelsHidden()
+                    .datePickerStyle(.compact)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(4)
-        .background(KXColor.softBackground, in: Capsule())
-    }
-}
-
-private struct GuideProfileGeneratedPreview: View {
-    @Environment(\.appLanguage) private var language
-    let hasVisaExpiry: Bool
-    let visaExpiry: Date
-    let hasGraduationDate: Bool
-    let graduationDate: Date
-    let needsMaterials: Bool
-    let needsServices: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Text(guideOSText(language, "保存后会同步", "保存後に同期", "Generated after saving"))
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.secondary)
-            previewRow(
-                active: hasVisaExpiry,
-                title: guideOSText(language, "在留更新倒排", "在留更新の逆算", "Visa renewal countdown"),
-                body: hasVisaExpiry ? GuideOSDate.iso(visaExpiry) : guideOSText(language, "填写在留期限后生成 Todo 与提醒", "在留期限を入れるとTodoと通知を作成", "Add expiry to create todo and reminder")
-            )
-            previewRow(
-                active: hasGraduationDate,
-                title: guideOSText(language, "毕业 / 入社时间线", "卒業 / 入社タイムライン", "Graduation / start timeline"),
-                body: hasGraduationDate ? GuideOSDate.iso(graduationDate) : guideOSText(language, "填写日期后生成升学或就活倒排", "日付を入れると進学/就活の逆算を作成", "Add date to create study/job timeline")
-            )
-            previewRow(
-                active: needsMaterials || needsServices,
-                title: guideOSText(language, "资料 / 服务推荐", "資料 / サービス推薦", "Resources / services"),
-                body: guideOSText(language, "会跟随 Todo 出现在任务上下文里", "Todoの文脈に合わせて表示", "Shown in the context of each todo")
-            )
-        }
-        .padding(12)
-        .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-    private func previewRow(active: Bool, title: String, body: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: active ? "checkmark.circle.fill" : "circle")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(active ? KXColor.accent : .secondary)
-                .frame(width: 18, height: 18)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.primary)
-                Text(body)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
+        .padding(15)
+        .kxGlassSurface(radius: 22)
     }
 }
 

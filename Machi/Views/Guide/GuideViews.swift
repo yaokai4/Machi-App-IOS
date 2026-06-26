@@ -85,6 +85,11 @@ struct GuideHomeView: View {
                             companies: viewModel.companyResults
                         )
                     } else {
+                        // Lead with the six guides + libraries so a first-time or
+                        // guest user immediately sees what Guide is *for* — the
+                        // personal action surface (今日/待办) follows underneath.
+                        GuideCategoryGrid(categories: GuideSupportCatalog.orderedCategories(from: home.categories))
+
                         GuideOSDashboardSection(
                             data: viewModel.guideOS,
                             isLoading: viewModel.isGuideOSLoading,
@@ -93,20 +98,12 @@ struct GuideHomeView: View {
                             onOpenPlan: { router.open(.guidePlan) },
                             onOpenCalendar: { router.open(.guideCalendar) },
                             onOpenManage: { router.open(.guideManage) },
-                            onOpenGoals: { router.open(.guideGoals) },
-                            onOpenProfile: { router.open(.guideProfile) },
-                            onOpenLife: { router.open(.guideLifePlanner) },
-                            onOpenApplications: { router.open(.guideApplications) },
-                            onOpenServices: { router.open(.guideServices) },
-                            onOpenJourney: { key in router.open(.guideJourney(key: key)) },
-                            onOpenProduct: { slug in router.open(.guideProduct(slug: slug)) },
                             onCompleteTodo: { todo in Task { await viewModel.completeGuideTodo(todo) } },
                             onCreateTodo: { content, plannedDate in
                                 await viewModel.createQuickTodo(content: content, plannedDate: plannedDate)
                             }
                         )
 
-                        GuideCategoryGrid(categories: GuideSupportCatalog.orderedCategories(from: home.categories))
                         GuideResourceEntriesSection(entries: home.resourceEntries ?? [])
                     }
                 }

@@ -1,171 +1,18 @@
 import SwiftUI
 
-/// Self-contained hex → Color for the suggested-journey strip (the other Guide
-/// hex helpers are file-private to their own files).
-private func guidePlanHexColor(_ hex: String) -> Color {
-    var value = hex.trimmingCharacters(in: .whitespacesAndNewlines)
-    if value.hasPrefix("#") { value.removeFirst() }
-    guard value.count == 6, let rgb = UInt64(value, radix: 16) else { return KXColor.accent }
-    return Color(
-        red: Double((rgb >> 16) & 0xFF) / 255.0,
-        green: Double((rgb >> 8) & 0xFF) / 255.0,
-        blue: Double(rgb & 0xFF) / 255.0
-    )
-}
-
-struct GuidePlanView: View {
-    @Environment(\.appLanguage) private var language
-    @EnvironmentObject private var router: AppRouter
-    @StateObject private var model = GuidePlanViewModel()
-
-    var body: some View {
-        ZStack {
-            GuideBackground()
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 14) {
-                    GuideOSHeaderRow(title: guideOSText(language, "我的 Guide 计划", "マイ Guide 計画", "My Guide plan"), subtitle: guideOSText(language, "所有手续、学习、申请、面试和生活截止日都在这里推进", "手続き・学習・申請・面接・生活期限をここで進めます", "Move every task and deadline from here"))
-                    GuideOSPlanCard(plan: model.dashboard?.plan, isGuest: !model.isLoggedIn, isLoading: model.isLoading, onOpenPlan: {}, onOpenProfile: { router.open(.guideProfile) })
-                    // Lightweight retention (spec P1): 本周已完成 + 连续打卡.
-                    if let r = model.dashboard?.retention, r.weekDone > 0 || r.streakDays > 0 {
-                        HStack(spacing: 8) {
-                            Label("本周已完成 \(r.weekDone)", systemImage: "flame.fill")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(KXColor.accent)
-                                .padding(.horizontal, 10).padding(.vertical, 6)
-                                .background(KXColor.accentSoft, in: Capsule())
-                            if r.streakDays > 0 {
-                                Label("连续打卡 \(r.streakDays) 天", systemImage: "calendar.badge.checkmark")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                    .padding(.horizontal, 10).padding(.vertical, 6)
-                                    .background(KXColor.softBackground, in: Capsule())
-                            }
-                            Spacer(minLength: 0)
-                        }
-                    }
-                    // Identity-driven: surface the journeys ordered for this user
-                    // when they have no active plan yet (spec P0.1).
-                    if model.dashboard?.plan == nil, let suggested = model.dashboard?.suggestedJourneys, !suggested.isEmpty {
-                        GuideSuggestedJourneyStrip(
-                            journeys: Array(suggested.prefix(6)),
-                            identityType: model.dashboard?.identityType,
-                            onOpen: { router.open(.guideJourney(key: $0)) }
-                        )
-                    }
-                    GuideOSQuickRow(items: [
-                        .init(title: guideOSText(language, "日历", "カレンダー", "Calendar"), icon: "calendar", action: { router.open(.guideCalendar) }),
-                        .init(title: guideOSText(language, "添加生活截止", "生活期限を追加", "Life deadline"), icon: "yensign.circle", action: { router.open(.guideLifePlanner) }),
-                        .init(title: guideOSText(language, "添加申请", "申請を追加", "Application"), icon: "doc.badge.plus", action: { router.open(.guideApplications) })
-                    ])
-                    NavigationLink {
-                        GuideStudyPlanView()
-                    } label: {
-                        Label(guideOSText(language, "JLPT 学习计划（每日词汇 / 周末模考）", "JLPT 学習計画", "JLPT study plan"), systemImage: "character.book.closed.fill")
-                            .font(.subheadline.weight(.bold))
-                            .foregroundStyle(KXColor.accent)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 44)
-                            .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    }
-                    if model.todos.isEmpty && !model.isLoading {
-                        GuideOSEmptyPanel(title: guideOSText(language, "还没有待办任务", "未完了タスクはありません", "No open todos"), subtitle: guideOSText(language, "从任意行动路径生成计划，或添加出愿、ES、面试、生活缴费日期。", "アクションパスから計画を作成するか、申請・面接・生活支払い日を追加してください。", "Create a plan from a journey, or add applications, interviews, and life bills."))
-                    } else {
-                        ForEach(model.todos.prefix(12)) { todo in
-                            GuideOSTodoCard(
-                                todo: todo,
-                                onComplete: { Task { await model.complete(todo) } },
-                                onSetReminder: { at in await model.setReminder(todoId: todo.id, reminderAt: at) },
-                                onReschedule: { date in Task { await model.reschedule(todo, to: date) } },
-                                onUpdateSteps: { steps in Task { await model.updateTodoSteps(todo, steps: steps) } },
-                                onUpdateNotes: { notes in Task { await model.updateTodoNotes(todo, notes: notes) } }
-                            )
-                        }
-                        NavigationLink {
-                            GuideTodoListView()
-                        } label: {
-                            Label(guideOSText(language, "查看全部待办", "すべてのタスク", "All todos"), systemImage: "list.bullet")
-                                .font(.subheadline.weight(.bold))
-                                .foregroundStyle(KXColor.accent)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 44)
-                                .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        }
-                    }
-                }
-                .padding(KXSpacing.screen)
-                .guideBottomInset()
-                .kxReadableWidth()
-            }
-        }
-        .navigationTitle(guideOSText(language, "我的计划", "マイ計画", "My plan"))
-        .navigationBarTitleDisplayMode(.inline)
-        .task {
-            if !model.requireLogin() { return }
-            await model.loadDashboard()
-            await model.loadTodos()
-        }
-        .refreshable {
-            await model.loadDashboard()
-            await model.loadTodos()
-        }
-    }
-}
-
-/// Spec P0.1: journeys ordered for the user's identity, "为你推荐" highlighted.
-private struct GuideSuggestedJourneyStrip: View {
-    @Environment(\.appLanguage) private var language
-    let journeys: [KaiXGuideSuggestedJourney]
-    let identityType: String?
-    let onOpen: (String) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(identityType?.isEmpty == false
-                 ? guideOSText(language, "根据你的提醒设置推荐", "設定に合わせた提案", "Recommended for you")
-                 : guideOSText(language, "选择一个目标开始", "目標を選んで開始", "Pick a goal to start"))
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(.primary)
-            ForEach(Array(journeys.enumerated()), id: \.element.id) { index, journey in
-                Button { onOpen(journey.key) } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "sparkles")
-                            .font(.subheadline)
-                            .foregroundStyle(.white)
-                            .frame(width: 32, height: 32)
-                            .background(guidePlanHexColor(journey.color), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 6) {
-                                Text(journey.title).font(.subheadline.weight(.bold)).foregroundStyle(.primary).lineLimit(1)
-                                if index == 0 {
-                                    Text(guideOSText(language, "为你推荐", "おすすめ", "Top pick"))
-                                        .font(.caption2.weight(.bold)).foregroundStyle(KXColor.accent)
-                                }
-                            }
-                            Text(journey.subtitle).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
-                    }
-                    .padding(12)
-                    .kxGlassSurface(radius: 16)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(index == 0 ? KXColor.accent.opacity(0.4) : Color.clear, lineWidth: 1)
-                    )
-                }
-                .buttonStyle(.fullArea)
-            }
-        }
-    }
-}
-
+/// Compact in-progress goal card shown on the Guide home (今日) dashboard.
+///
+/// It is rendered ONLY when there is a real, unfinished plan (<100%) — the
+/// dashboard gates on `plan.progressPercent < 100` — so a finished or absent
+/// plan never takes the hero slot. There is a single "继续" action that opens
+/// the full task list; reminders moved to 管理 → 个人提醒设置, so this card no
+/// longer competes with the dashboard's own "全部待办" link.
 struct GuideOSPlanCard: View {
     @Environment(\.appLanguage) private var language
     let plan: KaiXGuidePlanDTO?
     let isGuest: Bool
     let isLoading: Bool
     let onOpenPlan: () -> Void
-    let onOpenProfile: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -182,38 +29,26 @@ struct GuideOSPlanCard: View {
                 }
                 .frame(width: 58, height: 58)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(plan?.title ?? (isGuest ? guideOSText(language, "登录同步你的 Todo 与日历", "ログインしてTodoとカレンダーを同期", "Log in to sync Tasks and Calendar") : guideOSText(language, "选择一个目标开始", "目標を選んで開始", "Pick a goal to begin")))
+                    Text(plan?.title ?? guideOSText(language, "进行中的目标", "進行中の目標", "Active goal"))
                         .font(.headline.weight(.bold))
                         .foregroundStyle(.primary)
-                    Text(plan?.nextTodo?.title ?? guideOSText(language, "从待办、日历、管理或路径安排下一步。", "Todo・カレンダー・管理・目標から次の一歩を決められます。", "Plan the next step from Tasks, Calendar, Manage, or Goals."))
+                    Text(plan?.nextTodo?.title ?? guideOSText(language, "继续推进下一步。", "次の一歩を進めましょう。", "Keep going with the next step."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
             }
-            HStack(spacing: 10) {
-                Button(action: isGuest ? { GuestGate.shared.requireLogin("登录后可以生成和同步 Guide 计划。") } : onOpenPlan) {
-                    Text(isLoading ? guideOSText(language, "同步中", "同期中", "Syncing") : guideOSText(language, "进入待办", "Todoへ", "Open tasks"))
-                        .font(.caption.weight(.bold))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 38)
-                }
-                .buttonStyle(.fullArea)
-        .contentShape(Rectangle())
-                .foregroundStyle(.white)
-                .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                Button(action: isGuest ? { GuestGate.shared.requireLogin("登录后可以设置个人提醒。") } : onOpenProfile) {
-                    Text(guideOSText(language, "提醒设置", "リマインダー", "Reminders"))
-                        .font(.caption.weight(.bold))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 38)
-                }
-                .buttonStyle(.fullArea)
-        .contentShape(Rectangle())
-                .foregroundStyle(KXColor.accent)
-                .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            Button(action: isGuest ? { GuestGate.shared.requireLogin("登录后可以生成和同步 Guide 计划。") } : onOpenPlan) {
+                Text(isLoading ? guideOSText(language, "同步中", "同期中", "Syncing") : guideOSText(language, "继续这个目标", "この目標を続ける", "Continue goal"))
+                    .font(.caption.weight(.bold))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 38)
             }
+            .buttonStyle(.fullArea)
+            .contentShape(Rectangle())
+            .foregroundStyle(.white)
+            .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .padding(15)
         .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))

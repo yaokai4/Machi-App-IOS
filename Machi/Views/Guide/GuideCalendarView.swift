@@ -38,12 +38,27 @@ struct GuideCalendarView: View {
     @State private var selectedDate = GuideOSDate.today()
     @State private var mode: GuideCalendarMode = .month
     @State private var scope: GuideCalendarScope = .all
+    // Auto-generated journey steps (套用「目标/路径」模板时批量生成) used to flood
+    // the calendar with items the user never typed — the "数据很脏" complaint.
+    // They are hidden by default; the toggle below brings them back when wanted.
+    @State private var showJourneySteps = false
+
+    /// A todo created from a journey template (todoType == "guide_step"), as
+    /// opposed to something the user added themselves.
+    private func isJourneyStep(_ item: KaiXGuideCalendarItemDTO) -> Bool {
+        item.todo?.todoType == "guide_step"
+    }
+
+    private var hasJourneySteps: Bool {
+        model.calendarItems.contains { isJourneyStep($0) }
+    }
 
     private var scopedItems: [KaiXGuideCalendarItemDTO] {
         let today = GuideOSDate.today()
         let end7 = GuideOSDate.today(offset: 7)
         let end30 = GuideOSDate.today(offset: 30)
         return model.calendarItems.filter { item in
+            if !showJourneySteps, isJourneyStep(item) { return false }
             let date = String((item.date ?? "").prefix(10))
             guard !date.isEmpty else { return scope == .all }
             switch scope {
@@ -109,6 +124,31 @@ struct GuideCalendarView: View {
                                 .accessibilityAddTraits(scope == item ? .isSelected : [])
                             }
                         }
+                    }
+                    if hasJourneySteps {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) { showJourneySteps.toggle() }
+                        } label: {
+                            HStack(spacing: 9) {
+                                Image(systemName: showJourneySteps ? "eye.fill" : "eye.slash")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(KXColor.accent)
+                                Text(showJourneySteps
+                                     ? guideOSText(language, "正在显示路径自动生成的步骤", "パスの自動ステップを表示中", "Showing journey steps")
+                                     : guideOSText(language, "已隐藏路径自动生成的步骤", "パスの自動ステップは非表示", "Journey steps hidden"))
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                Spacer(minLength: 0)
+                                Text(showJourneySteps ? guideOSText(language, "隐藏", "非表示", "Hide") : guideOSText(language, "显示", "表示", "Show"))
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(KXColor.accent)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 40)
+                            .padding(.horizontal, 12)
+                            .background(KXColor.livingSurface.opacity(0.68), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.fullArea)
                     }
                     GuideCalendarEventComposer(model: model, defaultDate: selectedDate)
                     if let message = model.message, !message.isEmpty {
