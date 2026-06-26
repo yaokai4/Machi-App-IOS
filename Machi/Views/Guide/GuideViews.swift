@@ -85,10 +85,12 @@ struct GuideHomeView: View {
                             companies: viewModel.companyResults
                         )
                     } else {
-                        // Lead with the six guides + libraries so a first-time or
-                        // guest user immediately sees what Guide is *for* — the
-                        // personal action surface (今日/待办) follows underneath.
+                        // Keep the two content blocks together — 六大指南 and the
+                        // school/company library are one "what can I do here"
+                        // cluster; the personal action surface follows underneath.
                         GuideCategoryGrid(categories: GuideSupportCatalog.orderedCategories(from: home.categories))
+
+                        GuideResourceEntriesSection(entries: home.resourceEntries ?? [])
 
                         GuideOSDashboardSection(
                             data: viewModel.guideOS,
@@ -103,8 +105,6 @@ struct GuideHomeView: View {
                                 await viewModel.createQuickTodo(content: content, plannedDate: plannedDate)
                             }
                         )
-
-                        GuideResourceEntriesSection(entries: home.resourceEntries ?? [])
                     }
                 }
                 .padding(.horizontal, KXSpacing.screen)
