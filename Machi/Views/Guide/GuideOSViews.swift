@@ -550,6 +550,13 @@ struct GuideManageView: View {
                 icon: "bag.fill",
                 tint: .purple,
                 action: { router.open(.guideServices) }
+            ),
+            .init(
+                title: guideOSText(language, "我的资料库", "マイ資料庫", "My library"),
+                subtitle: guideOSText(language, "已购买和会员解锁的资料、我的服务申请、订单记录都收在这里", "購入・会員解放した資料、サービス申請、注文履歴をここに保存", "Purchased and member-unlocked resources, your service requests, and order history"),
+                icon: "books.vertical.fill",
+                tint: KXColor.accent,
+                action: { router.open(.guideMyLibrary) }
             )
         ]
     }

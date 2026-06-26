@@ -695,4 +695,13 @@ extension KaiXAPIClient {
         let data = try await request("POST", "/api/guide/products/\(idOrSlug.encodedPathSegment)/purchase", body: [String: String]())
         return try decode(data)
     }
+
+    /// Purchased + member-unlocked materials, the user's service requests, and a
+    /// merged order history. Read-only aggregation; requires a logged-in user.
+    func guideMyLibrary(language: String = "zh-CN") async throws -> KaiXGuideLibraryResponse {
+        let data = try await request("GET", "/api/guide/my-library", queryItems: [
+            URLQueryItem(name: "language", value: language)
+        ])
+        return try decode(data)
+    }
 }

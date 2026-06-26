@@ -1455,3 +1455,59 @@ struct KaiXBootstrapResponse: Codable {
     let server_time: String
 }
 
+// MARK: - My Library (purchased + member-unlocked resources, services, orders)
+// Mirrors GET /api/guide/my-library. Optional fields stay lenient so a single
+// odd row never breaks the whole page.
+
+struct KaiXGuideLibraryResponse: Codable, Equatable {
+    let status: String?
+    let isMember: Bool?
+    let materials: [KaiXGuideLibraryMaterial]
+    let services: [KaiXGuideLibraryService]
+    let orders: [KaiXGuideLibraryOrder]
+}
+
+struct KaiXGuideLibraryMaterial: Codable, Equatable, Identifiable, Hashable {
+    let id: String
+    let title: String
+    let subtitle: String?
+    let slug: String?
+    let categoryKey: String?
+    let productType: String?
+    let coverImage: String?
+    let entitlementSource: String?   // "own" | "member"
+    let grantedAt: String?
+    let hasFile: Bool?
+
+    var isMemberUnlocked: Bool { (entitlementSource ?? "own") == "member" }
+}
+
+struct KaiXGuideLibraryService: Codable, Equatable, Identifiable, Hashable {
+    let id: String
+    let productId: String?
+    let productSlug: String?
+    let productTitle: String?
+    let serviceType: String?
+    let status: String?
+    let adminNote: String?
+    let createdAt: String?
+    let updatedAt: String?
+}
+
+struct KaiXGuideLibraryOrder: Codable, Equatable, Identifiable, Hashable {
+    let kind: String?                // "purchase" | "topup"
+    let orderNo: String?
+    let title: String?
+    let productSlug: String?
+    let status: String?
+    let provider: String?
+    let paymentMethod: String?
+    let amount: Int?
+    let currency: String?
+    let pricePoints: Int?
+    let createdAt: String?
+
+    var id: String { "\(kind ?? "")-\(orderNo ?? "")-\(createdAt ?? "")" }
+    var isTopUp: Bool { (kind ?? "") == "topup" }
+}
+
