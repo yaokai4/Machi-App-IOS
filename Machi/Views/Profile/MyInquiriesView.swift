@@ -14,6 +14,8 @@ struct MyInquiriesView: View {
     var bucket: String = "consultation"
     /// Optional nav title override (defaults to 我的咨询).
     var navTitle: String? = nil
+    /// When embedded in a hub (e.g. 我的预约), suppress the standalone nav title.
+    var embedded: Bool = false
 
     private enum Role: String, CaseIterable, Identifiable {
         case received, sent
@@ -41,7 +43,7 @@ struct MyInquiriesView: View {
 
             content
         }
-        .navigationTitle(navTitle ?? L("inquiriesTitle", language))
+        .navigationTitle(embedded ? "" : (navTitle ?? L("inquiriesTitle", language)))
         .navigationBarTitleDisplayMode(.inline)
         .kxPageBackground()
         .task(id: role) { await load() }

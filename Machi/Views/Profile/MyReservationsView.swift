@@ -7,6 +7,8 @@ import SwiftUI
 struct MyReservationsView: View {
     @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
+    /// When embedded in the 我的预约 hub, suppress the standalone nav title.
+    var embedded: Bool = false
 
     @State private var items: [KaiXBookingDTO] = []
     @State private var state: ScreenState = .idle
@@ -14,7 +16,7 @@ struct MyReservationsView: View {
 
     var body: some View {
         content
-            .navigationTitle(KXListingCopy.pickText(language, "我的预约", "予約", "My reservations"))
+            .navigationTitle(embedded ? "" : KXListingCopy.pickText(language, "我的预约", "予約", "My reservations"))
             .navigationBarTitleDisplayMode(.inline)
             .kxPageBackground()
             .task { await load() }
@@ -173,6 +175,158 @@ struct MyReservationsView: View {
     private func dayNumber(_ date: Date?) -> String { guard let date else { return "—" }; return formatter("d").string(from: date) }
     private func monthLabel(_ date: Date?) -> String { guard let date else { return "" }; return formatter("MMM").string(from: date) }
     private func fullDateTime(_ date: Date?) -> String { guard let date else { return "" }; return formatter("EEEMMMdHm").string(from: date) }
+}
+
+/// "我的预约" hub — one place for every booking I made, regardless of mechanism:
+/// • 已约时段 = confirmed slot bookings (time-slot calendar)
+/// • 预约请求 = intake-form reservations (看房 / 订座 / 服务预约) with their status
+/// Keeps all reservations together instead of scattering them across 咨询/预约.
+struct MyReservationsHubView: View {
+    @Environment(\.appLanguage) private var language
+    let currentUser: UserEntity
+
+    private enum Tab: String, CaseIterable, Identifiable {
+        case slots, requests
+        var id: String { rawValue }
+        func title(_ language: AppLanguage) -> String {
+            switch self {
+            case .slots: KXListingCopy.pickText(language, "已约时段", "予約済み枠", "Booked slots")
+            case .requests: KXListingCopy.pickText(language, "预约请求", "予約リクエスト", "Requests")
+            }
+        }
+    }
+
+    @State private var tab: Tab = .slots
+
+    var body: some View {
+        VStack(spacing: 0) {
+            KXSegmentedControl(Tab.allCases, selection: $tab) { item in
+                Text(item.title(language))
+            }
+            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.vertical, 10)
+
+            switch tab {
+            case .slots:
+                MyReservationsView(embedded: true)
+            case .requests:
+                MyInquiriesView(currentUser: currentUser, bucket: "reservation", embedded: true)
+            }
+        }
+        .navigationTitle(KXListingCopy.pickText(language, "我的预约", "予約", "My reservations"))
+        .navigationBarTitleDisplayMode(.inline)
+        .kxPageBackground()
+    }
+}
+
+/// "时段预约" — host-side slot management entry. Lists the listings that accept
+/// online bookings (租房 / 本地服务) so the owner can jump in and set or edit
+/// their bookable time slots (the per-listing slot editor lives on the detail
+/// page). Makes slot configuration discoverable instead of buried.
+struct MySlotManagerListView: View {
+    @Environment(\.appLanguage) private var language
+    @EnvironmentObject private var router: AppRouter
+
+    let currentUser: UserEntity
+
+    @State private var listings: [KaiXCityListingDTO] = []
+    @State private var state: ScreenState = .idle
+
+    private static let bookableTypes = ["rental", "local_service"]
+
+    var body: some View {
+        Group {
+            switch state {
+            case .idle, .loading:
+                KXInlineLoader().frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .error(let message):
+                ErrorStateView(message: message) { Task { await load() } }
+            case .empty:
+                ScrollView {
+                    VStack(spacing: 16) {
+                        Spacer(minLength: 96)
+                        KXEmptyActionPanel(
+                            icon: "calendar.badge.plus",
+                            tint: KXColor.accent,
+                            title: KXListingCopy.pickText(language, "暂无可约时段的发布", "予約枠を設定できる投稿がありません", "No bookable listings yet"),
+                            subtitle: KXListingCopy.pickText(language, "发布租房或本地服务后,就能在详情页设置可预约时段,让对方在线选时间。", "賃貸やローカルサービスを投稿すると、詳細ページで予約枠を設定できます。", "Publish a rental or local service, then set bookable slots on its detail page."),
+                            actionTitle: KXListingCopy.pickText(language, "去发布服务", "サービスを投稿", "Publish a service")
+                        ) {
+                            router.open(.createCityListing(type: "local_service", citySlug: nil))
+                        }
+                        Spacer(minLength: 180)
+                    }
+                    .padding(KXSpacing.screen)
+                }
+                .kxReadableWidth()
+            case .loaded:
+                ScrollView {
+                    LazyVStack(spacing: 10) {
+                        Text(KXListingCopy.pickText(language, "选择一条发布,进入详情即可添加 / 删除可预约时段。", "投稿を選ぶと、詳細で予約枠を追加・削除できます。", "Pick a listing to add or remove its bookable slots on the detail page."))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 4)
+                            .padding(.bottom, 2)
+                        ForEach(listings) { listing in
+                            Button {
+                                router.open(.cityListingDetail(listingId: listing.id))
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: listing.type == "rental" ? "house.fill" : "storefront.fill")
+                                        .font(.subheadline.weight(.bold))
+                                        .foregroundStyle(KXColor.accent)
+                                        .frame(width: 38, height: 38)
+                                        .background(KXColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(listing.title).font(.subheadline.weight(.semibold)).foregroundStyle(.primary).lineLimit(1)
+                                        Text(KXListingCopy.pickText(language, "管理可预约时段", "予約枠を管理", "Manage slots"))
+                                            .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                                    }
+                                    Spacer(minLength: 0)
+                                    Image(systemName: "calendar.badge.clock").font(.subheadline).foregroundStyle(.tertiary)
+                                }
+                                .padding(14)
+                                .kxGlassSurface(radius: KXRadius.lg)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, KaiXTheme.horizontalPadding)
+                    .padding(.top, 10)
+                    .kxTabBarSafeBottomPadding()
+                }
+                .refreshable { await load() }
+            }
+        }
+        .navigationTitle(KXListingCopy.pickText(language, "时段预约", "予約枠管理", "Booking slots"))
+        .navigationBarTitleDisplayMode(.inline)
+        .kxPageBackground()
+        .task { await load() }
+    }
+
+    private func load() async {
+        if listings.isEmpty { state = .loading }
+        guard KaiXBackend.token != nil else { state = .empty; return }
+        do {
+            let results = try await withThrowingTaskGroup(of: [KaiXCityListingDTO].self) { group in
+                for type in Self.bookableTypes {
+                    group.addTask { try await KaiXAPIClient.shared.myListings(type: type) }
+                }
+                var merged: [KaiXCityListingDTO] = []
+                for try await page in group { merged.append(contentsOf: page) }
+                return merged
+            }
+            var seen = Set<String>()
+            listings = results
+                .filter { ($0.status ?? "") != "sold" && seen.insert($0.id).inserted }
+                .sorted { ($0.updated_at ?? $0.updatedAt ?? "") > ($1.updated_at ?? $1.updatedAt ?? "") }
+            state = listings.isEmpty ? .empty : .loaded
+        } catch {
+            state = listings.isEmpty ? .error(error.kaixUserMessage) : .loaded
+        }
+    }
 }
 
 private struct KXEmptyActionPanel: View {

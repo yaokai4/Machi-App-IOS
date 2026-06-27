@@ -177,18 +177,23 @@ struct MyWorkbenchView: View {
                 MyInquiriesView(currentUser: currentUser, bucket: "consultation")
             }
             SettingsDivider()
-            // 我的预约 = scheduled bookings (看房 / 订座 / 到店服务) — these carry a
-            // date/time/place, so they live here, not mixed into 我的咨询.
+            // 我的预约 = every booking I made: 已约时段(slot bookings) + 预约请求
+            // (看房/订座/服务 intake). Carries date/time/place, so not in 我的咨询.
             SettingsRowLink(
                 icon: "calendar.badge.clock", tint: KXColor.accent,
                 title: KXListingCopy.pickText(language, "我的预约", "予約", "My reservations"),
                 subtitle: KXListingCopy.pickText(language, "看房、订座与到店服务预约", "内見・予約・来店サービス", "Viewings, bookings & visits")
             ) {
-                MyInquiriesView(
-                    currentUser: currentUser,
-                    bucket: "reservation",
-                    navTitle: KXListingCopy.pickText(language, "我的预约", "予約", "My reservations")
-                )
+                MyReservationsHubView(currentUser: currentUser)
+            }
+            SettingsDivider()
+            // 时段预约 = host-side. Configure bookable time slots on your listings.
+            SettingsRowLink(
+                icon: "clock.badge.checkmark", tint: .teal,
+                title: KXListingCopy.pickText(language, "时段预约", "予約枠管理", "Booking slots"),
+                subtitle: KXListingCopy.pickText(language, "为房源/服务设置可预约时段", "物件・サービスの予約枠を設定", "Set bookable times for your listings")
+            ) {
+                MySlotManagerListView(currentUser: currentUser)
             }
             SettingsDivider()
             // 我的申请 = real applications (招聘报名). Previously had no iOS entry.
