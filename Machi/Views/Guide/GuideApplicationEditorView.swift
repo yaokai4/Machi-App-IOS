@@ -61,41 +61,41 @@ struct GuideApplicationPlannerView: View {
                 GuideOSLibraryPickerField(type: apiType, text: $name)
             }
             if !isJlpt {
-                GuideOSTextField(title: isSchool ? "研究科 / 学部" : "部门 / 岗位方向", text: $department)
-                GuideOSTextField(title: "职位 / 教授 / 备注对象", text: $position)
+                GuideOSTextField(title: isSchool ? guideOSText(language, "研究科 / 学部", "研究科・学部", "Faculty / graduate school") : guideOSText(language, "部门 / 岗位方向", "部署・職種", "Department / role"), text: $department)
+                GuideOSTextField(title: guideOSText(language, "职位 / 教授 / 备注对象", "職位・教授・対象", "Position / professor / contact"), text: $position)
             }
-            DatePicker(isSchool ? "出愿截止" : (isJlpt ? "考试日期" : "ES 截止"), selection: $deadline, displayedComponents: .date)
+            DatePicker(isSchool ? guideOSText(language, "出愿截止", "出願締切", "Application deadline") : (isJlpt ? guideOSText(language, "考试日期", "試験日", "Exam date") : guideOSText(language, "ES 截止", "ES締切", "ES deadline")), selection: $deadline, displayedComponents: .date)
             if !isJlpt {
-                Toggle("已有面试时间", isOn: $hasInterview)
+                Toggle(guideOSText(language, "已有面试时间", "面接日が決定済み", "Interview scheduled"), isOn: $hasInterview)
                 if hasInterview {
-                    DatePicker("面试日期", selection: $interview, displayedComponents: .date)
+                    DatePicker(guideOSText(language, "面试日期", "面接日", "Interview date"), selection: $interview, displayedComponents: .date)
                 }
             }
-            Picker("优先级", selection: $priority) {
-                Text("高").tag("high")
-                Text("普通").tag("normal")
-                Text("低").tag("low")
+            Picker(guideOSText(language, "优先级", "優先度", "Priority"), selection: $priority) {
+                Text(guideOSText(language, "高", "高", "High")).tag("high")
+                Text(guideOSText(language, "普通", "普通", "Normal")).tag("normal")
+                Text(guideOSText(language, "低", "低", "Low")).tag("low")
             }
             .pickerStyle(.menu)
-            Toggle("重点关注", isOn: $favorite)
-            GuideOSTextField(title: "官网 / 招聘页", text: $websiteURL)
+            Toggle(guideOSText(language, "重点关注", "重点フォロー", "Highlight"), isOn: $favorite)
+            GuideOSTextField(title: guideOSText(language, "官网 / 招聘页", "公式サイト・採用ページ", "Website / careers page"), text: $websiteURL)
                 .textInputAutocapitalization(.never)
                 .keyboardType(.URL)
             if !isJlpt {
-                GuideOSTextField(title: "面试地点", text: $interviewLocation)
-                GuideOSTextField(title: "线上会议链接", text: $meetingURL)
+                GuideOSTextField(title: guideOSText(language, "面试地点", "面接場所", "Interview location"), text: $interviewLocation)
+                GuideOSTextField(title: guideOSText(language, "线上会议链接", "オンライン会議リンク", "Online meeting link"), text: $meetingURL)
                     .textInputAutocapitalization(.never)
                     .keyboardType(.URL)
             }
             HStack {
-                GuideOSTextField(title: "联系人", text: $contactName)
-                GuideOSTextField(title: "联系邮箱", text: $contactEmail)
+                GuideOSTextField(title: guideOSText(language, "联系人", "担当者", "Contact"), text: $contactName)
+                GuideOSTextField(title: guideOSText(language, "联系邮箱", "連絡先メール", "Contact email"), text: $contactEmail)
                     .textInputAutocapitalization(.never)
                     .keyboardType(.emailAddress)
             }
-            GuideOSTextField(title: "标签（逗号分隔）", text: $tagsText)
-            GuideOSTextField(title: "备注", text: $notes)
-            GuideOSPrimaryButton(title: model.isSaving ? "添加中" : "添加申请计划") {
+            GuideOSTextField(title: guideOSText(language, "标签（逗号分隔）", "タグ（カンマ区切り）", "Tags (comma-separated)"), text: $tagsText)
+            GuideOSTextField(title: guideOSText(language, "备注", "メモ", "Notes"), text: $notes)
+            GuideOSPrimaryButton(title: model.isSaving ? guideOSText(language, "添加中", "追加中", "Adding") : guideOSText(language, "添加申请计划", "申請計画を追加", "Add application plan")) {
                 Task {
                     let ok = await model.createApplication(.init(
                         type: apiType,
@@ -182,6 +182,7 @@ struct GuideApplicationPlannerView: View {
 /// application also clears its generated reverse-countdown todos + reminders
 /// server-side. A confirmation dialog guards against accidental loss.
 struct GuideOSApplicationRow: View {
+    @Environment(\.appLanguage) private var language
     let app: KaiXGuideApplicationDTO
     let onDelete: () -> Void
     var onSave: ((KaiXGuideApplicationPayload) async -> Bool)? = nil
@@ -212,10 +213,10 @@ struct GuideOSApplicationRow: View {
                     Text(sub).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                 }
                 HStack(spacing: 6) {
-                    GuideOSDeleteCardChip(text: guideApplicationStageTitle(stage))
-                    if let d = app.deadline, !d.isEmpty { GuideOSDeleteCardChip(text: (isSchool ? "出愿 " : "ES ") + GuideOSDate.short(d)) }
-                    if let i = app.interviewAt, !i.isEmpty { GuideOSDeleteCardChip(text: "面试 " + GuideOSDate.short(i)) }
-                    if let r = app.resultAt, !r.isEmpty { GuideOSDeleteCardChip(text: "结果 " + GuideOSDate.short(r)) }
+                    GuideOSDeleteCardChip(text: guideApplicationStageTitle(stage, language))
+                    if let d = app.deadline, !d.isEmpty { GuideOSDeleteCardChip(text: (isSchool ? guideOSText(language, "出愿 ", "出願 ", "Apply ") : guideOSText(language, "ES ", "ES ", "ES ")) + GuideOSDate.short(d)) }
+                    if let i = app.interviewAt, !i.isEmpty { GuideOSDeleteCardChip(text: guideOSText(language, "面试 ", "面接 ", "Interview ") + GuideOSDate.short(i)) }
+                    if let r = app.resultAt, !r.isEmpty { GuideOSDeleteCardChip(text: guideOSText(language, "结果 ", "結果 ", "Result ") + GuideOSDate.short(r)) }
                 }
             }
             Spacer(minLength: 0)
@@ -228,7 +229,7 @@ struct GuideOSApplicationRow: View {
                 }
                 .buttonStyle(.fullArea)
                 .contentShape(Rectangle())
-                .accessibilityLabel("编辑 \(app.name)")
+                .accessibilityLabel(guideOSText(language, "编辑 \(app.name)", "\(app.name)を編集", "Edit \(app.name)"))
             }
             Button(role: .destructive) { confirming = true } label: {
                 Image(systemName: "trash")
@@ -238,13 +239,13 @@ struct GuideOSApplicationRow: View {
             }
             .buttonStyle(.fullArea)
             .contentShape(Rectangle())
-            .accessibilityLabel("删除 \(app.name)")
+            .accessibilityLabel(guideOSText(language, "删除 \(app.name)", "\(app.name)を削除", "Delete \(app.name)"))
         }
         .padding(12)
         .kxGlassSurface(radius: 16)
-        .confirmationDialog("删除该申请？", isPresented: $confirming, titleVisibility: .visible) {
-            Button("删除（含倒排待办）", role: .destructive, action: onDelete)
-            Button("取消", role: .cancel) {}
+        .confirmationDialog(guideOSText(language, "删除该申请？", "この申請を削除しますか？", "Delete this application?"), isPresented: $confirming, titleVisibility: .visible) {
+            Button(guideOSText(language, "删除（含倒排待办）", "削除（逆算ToDoも含む）", "Delete (incl. countdown todos)"), role: .destructive, action: onDelete)
+            Button(guideOSText(language, "取消", "キャンセル", "Cancel"), role: .cancel) {}
         }
         .sheet(isPresented: $editing) {
             if let onSave { GuideApplicationEditorSheet(app: app, onSave: onSave) }
@@ -257,6 +258,7 @@ struct GuideOSApplicationRow: View {
 /// reloads from the server.
 struct GuideApplicationEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appLanguage) private var language
     let app: KaiXGuideApplicationDTO
     let onSave: (KaiXGuideApplicationPayload) async -> Bool
 
@@ -304,46 +306,46 @@ struct GuideApplicationEditorSheet: View {
             Form {
                 Section {
                     GuideOSLibraryPickerField(type: app.type, text: $name)
-                    TextField(isSchool ? "研究科 / 学部" : "部门 / 岗位方向", text: $detail)
+                    TextField(isSchool ? guideOSText(language, "研究科 / 学部", "研究科・学部", "Faculty / graduate school") : guideOSText(language, "部门 / 岗位方向", "部署・職種", "Department / role"), text: $detail)
                 }
-                Section("进度") {
-                    Picker("当前阶段", selection: $stage) {
+                Section(guideOSText(language, "进度", "進捗", "Progress")) {
+                    Picker(guideOSText(language, "当前阶段", "現在のステージ", "Current stage"), selection: $stage) {
                         ForEach(guideApplicationStages, id: \.key) { item in
-                            Text(item.title).tag(item.key)
+                            Text(guideApplicationStageTitle(item.key, language)).tag(item.key)
                         }
                     }
-                    Picker("优先级", selection: $priority) {
-                        Text("高").tag("high")
-                        Text("普通").tag("normal")
-                        Text("低").tag("low")
+                    Picker(guideOSText(language, "优先级", "優先度", "Priority"), selection: $priority) {
+                        Text(guideOSText(language, "高", "高", "High")).tag("high")
+                        Text(guideOSText(language, "普通", "普通", "Normal")).tag("normal")
+                        Text(guideOSText(language, "低", "低", "Low")).tag("low")
                     }
-                    Toggle("重点关注", isOn: $favorite)
+                    Toggle(guideOSText(language, "重点关注", "重点フォロー", "Highlight"), isOn: $favorite)
                 }
                 Section {
-                    Toggle(isSchool ? "出愿截止" : "ES 截止", isOn: $hasDeadline)
-                    if hasDeadline { DatePicker("日期", selection: $deadline, displayedComponents: .date) }
-                    Toggle("面试时间", isOn: $hasInterview)
-                    if hasInterview { DatePicker("日期", selection: $interview, displayedComponents: .date) }
+                    Toggle(isSchool ? guideOSText(language, "出愿截止", "出願締切", "Application deadline") : guideOSText(language, "ES 截止", "ES締切", "ES deadline"), isOn: $hasDeadline)
+                    if hasDeadline { DatePicker(guideOSText(language, "日期", "日付", "Date"), selection: $deadline, displayedComponents: .date) }
+                    Toggle(guideOSText(language, "面试时间", "面接日時", "Interview date"), isOn: $hasInterview)
+                    if hasInterview { DatePicker(guideOSText(language, "日期", "日付", "Date"), selection: $interview, displayedComponents: .date) }
                 }
-                Section("链接与联系人") {
-                    TextField("官网 / 招聘页", text: $websiteURL)
+                Section(guideOSText(language, "链接与联系人", "リンクと連絡先", "Links & contact")) {
+                    TextField(guideOSText(language, "官网 / 招聘页", "公式サイト・採用ページ", "Website / careers page"), text: $websiteURL)
                         .textInputAutocapitalization(.never)
                         .keyboardType(.URL)
-                    TextField("面试地点", text: $interviewLocation)
-                    TextField("线上会议链接", text: $meetingURL)
+                    TextField(guideOSText(language, "面试地点", "面接場所", "Interview location"), text: $interviewLocation)
+                    TextField(guideOSText(language, "线上会议链接", "オンライン会議リンク", "Online meeting link"), text: $meetingURL)
                         .textInputAutocapitalization(.never)
                         .keyboardType(.URL)
-                    TextField("联系人", text: $contactName)
-                    TextField("联系邮箱", text: $contactEmail)
+                    TextField(guideOSText(language, "联系人", "担当者", "Contact"), text: $contactName)
+                    TextField(guideOSText(language, "联系邮箱", "連絡先メール", "Contact email"), text: $contactEmail)
                         .textInputAutocapitalization(.never)
                         .keyboardType(.emailAddress)
                 }
-                Section { TextField("备注", text: $notes, axis: .vertical) }
-                Section("附件") {
-                    GuideAttachmentSection(entityType: "guide_application", entityId: app.id, title: "申请附件")
+                Section { TextField(guideOSText(language, "备注", "メモ", "Notes"), text: $notes, axis: .vertical) }
+                Section(guideOSText(language, "附件", "添付ファイル", "Attachments")) {
+                    GuideAttachmentSection(entityType: "guide_application", entityId: app.id, title: guideOSText(language, "申请附件", "申請の添付", "Application attachments"))
                 }
                 if let stages = app.stages, !stages.isEmpty {
-                    Section("阶段时间线") {
+                    Section(guideOSText(language, "阶段时间线", "ステージのタイムライン", "Stage timeline")) {
                         ForEach(stages) { item in
                             HStack(alignment: .top, spacing: 10) {
                                 Circle()
@@ -351,7 +353,7 @@ struct GuideApplicationEditorSheet: View {
                                     .frame(width: 8, height: 8)
                                     .padding(.top, 5)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(guideApplicationStageTitle(item.stage))
+                                    Text(guideApplicationStageTitle(item.stage, language))
                                         .font(.subheadline.weight(.semibold))
                                     if !item.note.isEmpty {
                                         Text(item.note)
@@ -369,12 +371,12 @@ struct GuideApplicationEditorSheet: View {
                     }
                 }
             }
-            .navigationTitle("编辑申请")
+            .navigationTitle(guideOSText(language, "编辑申请", "申請を編集", "Edit application"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(guideOSText(language, "取消", "キャンセル", "Cancel")) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(saving ? "保存中" : "保存") {
+                    Button(saving ? guideOSText(language, "保存中", "保存中", "Saving") : guideOSText(language, "保存", "保存", "Save")) {
                         Task {
                             saving = true
                             let ok = await onSave(.init(
@@ -389,7 +391,7 @@ struct GuideApplicationEditorSheet: View {
                                 notes: notes,
                                 careerTrack: app.careerTrack,
                                 stage: stage,
-                                stageNote: stage == app.stage ? nil : "在 iOS 更新阶段",
+                                stageNote: stage == app.stage ? nil : guideOSText(language, "在 iOS 更新阶段", "iOSでステージを更新", "Stage updated on iOS"),
                                 websiteUrl: websiteURL,
                                 interviewLocation: interviewLocation,
                                 meetingUrl: meetingURL,
@@ -425,11 +427,25 @@ private let guideApplicationStages: [(key: String, title: String)] = [
     ("withdrawn", "已撤回")
 ]
 
-private func guideApplicationStageTitle(_ key: String) -> String {
-    guideApplicationStages.first(where: { $0.key == key })?.title ?? "已收藏"
+private func guideApplicationStageTitle(_ key: String, _ language: AppLanguage) -> String {
+    switch key {
+    case "saved": return guideOSText(language, "已收藏", "保存済み", "Saved")
+    case "preparing": return guideOSText(language, "准备中", "準備中", "Preparing")
+    case "submitted": return guideOSText(language, "已提交", "提出済み", "Submitted")
+    case "es": return "ES"
+    case "web_test": return "Web Test"
+    case "interview_1": return guideOSText(language, "一面", "一次面接", "1st interview")
+    case "interview_2": return guideOSText(language, "二面", "二次面接", "2nd interview")
+    case "final": return guideOSText(language, "最终面", "最終面接", "Final interview")
+    case "offer": return guideOSText(language, "录取 / Offer", "内定・Offer", "Offer")
+    case "rejected": return guideOSText(language, "未通过", "不合格", "Rejected")
+    case "withdrawn": return guideOSText(language, "已撤回", "辞退", "Withdrawn")
+    default: return guideOSText(language, "已收藏", "保存済み", "Saved")
+    }
 }
 
 private struct GuideApplicationBoard: View {
+    @Environment(\.appLanguage) private var language
     let applications: [KaiXGuideApplicationDTO]
     let onDelete: (KaiXGuideApplicationDTO) -> Void
     let onSave: (KaiXGuideApplicationDTO, KaiXGuideApplicationPayload) async -> Bool
@@ -453,7 +469,7 @@ private struct GuideApplicationBoard: View {
                     let items = applications.filter { ($0.stage ?? "saved") == stage.key }
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text(stage.title)
+                            Text(guideApplicationStageTitle(stage.key, language))
                                 .font(.caption.weight(.bold))
                             Spacer()
                             Text("\(items.count)")
@@ -463,7 +479,7 @@ private struct GuideApplicationBoard: View {
                         .padding(.horizontal, 2)
 
                         if items.isEmpty {
-                            Text("暂无")
+                            Text(guideOSText(language, "暂无", "なし", "None"))
                                 .font(.caption)
                                 .foregroundStyle(.tertiary)
                                 .frame(maxWidth: .infinity, minHeight: 72)

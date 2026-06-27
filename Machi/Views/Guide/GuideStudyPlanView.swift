@@ -63,6 +63,7 @@ struct GuideStudyPlanView: View {
 }
 
 private struct GuideStudyTodoRow: View {
+    @Environment(\.appLanguage) private var language
     let todo: KaiXGuideTodoDTO
 
     var body: some View {
@@ -76,14 +77,14 @@ private struct GuideStudyTodoRow: View {
                 Text(todo.title).font(.subheadline.weight(.bold)).foregroundStyle(.primary).lineLimit(2)
                 HStack(spacing: 6) {
                     if let r = todo.recurrenceLabel {
-                        Text(r + "循环").font(.caption2.weight(.bold)).foregroundStyle(KXColor.accent)
+                        Text(guideOSText(language, r + "循环", r + "（繰り返し）", r + " · repeating")).font(.caption2.weight(.bold)).foregroundStyle(KXColor.accent)
                             .padding(.horizontal, 7).padding(.vertical, 2)
                             .background(KXColor.accent.opacity(0.12), in: Capsule())
                     } else if let d = todo.displayDate, !d.isEmpty {
                         Text(GuideOSDate.short(d)).font(.caption2).foregroundStyle(.secondary)
                     }
                     if todo.estimatedMinutes > 0 {
-                        Text("\(todo.estimatedMinutes) 分").font(.caption2).foregroundStyle(.secondary)
+                        Text(guideOSText(language, "\(todo.estimatedMinutes) 分", "\(todo.estimatedMinutes) 分", "\(todo.estimatedMinutes) min")).font(.caption2).foregroundStyle(.secondary)
                     }
                 }
             }

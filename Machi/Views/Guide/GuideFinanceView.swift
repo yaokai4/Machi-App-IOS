@@ -15,6 +15,7 @@ final class GuideFinanceViewModel: ObservableObject {
     @Published var message: String?
     @Published var month: String = GuideFinanceViewModel.currentMonth()
     @Published var currency: String = UserDefaults.standard.string(forKey: "kx-finance-currency") ?? "JPY"
+    var language: AppLanguage = .zh
 
     func setCurrency(_ code: String) {
         currency = code
@@ -31,7 +32,7 @@ final class GuideFinanceViewModel: ObservableObject {
 
     func requireLogin() -> Bool {
         guard isLoggedIn else {
-            GuestGate.shared.requireLogin("登录后可以记账、查看本月收支和预算。")
+            GuestGate.shared.requireLogin(guideOSText(language, "登录后可以记账、查看本月收支和预算。", "ログインすると、家計簿の記録や今月の収支・予算を確認できます。", "Sign in to log entries and see your monthly balance and budgets."))
             return false
         }
         return true
@@ -58,7 +59,7 @@ final class GuideFinanceViewModel: ObservableObject {
             transactions = try await t.items
             trend = (try? await tr.months) ?? []
         } catch {
-            message = "加载失败，请稍后重试。"
+            message = guideOSText(language, "加载失败，请稍后重试。", "読み込みに失敗しました。しばらくしてからお試しください。", "Couldn't load. Please try again later.")
         }
     }
 
@@ -71,7 +72,7 @@ final class GuideFinanceViewModel: ObservableObject {
             )
             await load()
         } catch {
-            message = "记账失败，请稍后重试。"
+            message = guideOSText(language, "记账失败，请稍后重试。", "記録に失敗しました。しばらくしてからお試しください。", "Couldn't save the entry. Please try again later.")
         }
     }
 
@@ -79,16 +80,18 @@ final class GuideFinanceViewModel: ObservableObject {
         do {
             let r = try await KaiXAPIClient.shared.postGuideFixedCosts(month: month)
             await load()
-            message = r.posted > 0 ? "已记入 \(r.posted) 笔固定费。" : "本月固定费已全部记过了。"
+            message = r.posted > 0
+                ? guideOSText(language, "已记入 \(r.posted) 笔固定费。", "固定費を\(r.posted)件記録しました。", "Posted \(r.posted) fixed cost\(r.posted == 1 ? "" : "s").")
+                : guideOSText(language, "本月固定费已全部记过了。", "今月の固定費はすべて記録済みです。", "All fixed costs for this month are already posted.")
         } catch {
-            message = "操作失败，请稍后重试。"
+            message = guideOSText(language, "操作失败，请稍后重试。", "操作に失敗しました。しばらくしてからお試しください。", "Something went wrong. Please try again later.")
         }
     }
 
     func csvExport() -> String {
         var lines = ["date,kind,category,amount,currency,note"]
         for t in transactions {
-            let cat = (expenseCats + incomeCats).first { $0.code == t.category }?.zh ?? t.category
+            let cat = label(language, code: t.category)
             let safeNote = t.note.replacingOccurrences(of: ",", with: " ").replacingOccurrences(of: "\n", with: " ")
             lines.append("\(t.occurredOn ?? ""),\(t.kind),\(cat),\(t.amount),\(t.currency),\(safeNote)")
         }
@@ -105,9 +108,11 @@ final class GuideFinanceViewModel: ObservableObject {
         do {
             _ = try await KaiXAPIClient.shared.setGuideBudget(category: category, monthlyLimit: limit)
             await load()
-            message = limit > 0 ? "预算已更新。" : "预算已取消。"
+            message = limit > 0
+                ? guideOSText(language, "预算已更新。", "予算を更新しました。", "Budget updated.")
+                : guideOSText(language, "预算已取消。", "予算を解除しました。", "Budget removed.")
         } catch {
-            message = "预算保存失败，请稍后重试。"
+            message = guideOSText(language, "预算保存失败，请稍后重试。", "予算の保存に失敗しました。しばらくしてからお試しください。", "Couldn't save the budget. Please try again later.")
         }
     }
 
@@ -126,6 +131,18 @@ let kxFinanceCurrencies: [(code: String, symbol: String, label: String)] = [
 
 func kxCurrencySymbol(_ code: String) -> String {
     kxFinanceCurrencies.first { $0.code == code }?.symbol ?? "¥"
+}
+
+func kxCurrencyLabel(_ language: AppLanguage, _ code: String) -> String {
+    switch code {
+    case "JPY": return guideOSText(language, "日元 JPY", "日本円 JPY", "Japanese yen JPY")
+    case "CNY": return guideOSText(language, "人民币 CNY", "人民元 CNY", "Chinese yuan CNY")
+    case "USD": return guideOSText(language, "美元 USD", "米ドル USD", "US dollar USD")
+    case "EUR": return guideOSText(language, "欧元 EUR", "ユーロ EUR", "Euro EUR")
+    case "KRW": return guideOSText(language, "韩元 KRW", "韓国ウォン KRW", "Korean won KRW")
+    case "GBP": return guideOSText(language, "英镑 GBP", "英ポンド GBP", "British pound GBP")
+    default: return code
+    }
 }
 
 func guideMoney(_ n: Int, currency: String = "JPY") -> String {
@@ -190,9 +207,10 @@ struct GuideFinanceView: View {
         .navigationTitle(guideOSText(language, "收支记账", "家計簿", "Finance"))
         .navigationBarTitleDisplayMode(.inline)
         .task {
+            vm.language = language
             if vm.requireLogin() { await vm.load() }
         }
-        .refreshable { await vm.load() }
+        .refreshable { vm.language = language; await vm.load() }
         .sheet(item: $shareDoc) { doc in GuideFinanceActivityView(url: doc.url) }
     }
 
@@ -203,7 +221,7 @@ struct GuideFinanceView: View {
             HStack(spacing: 8) {
                 Menu {
                     ForEach(kxFinanceCurrencies, id: \.code) { c in
-                        Button(c.label) { vm.setCurrency(c.code) }
+                        Button(kxCurrencyLabel(language, c.code)) { vm.setCurrency(c.code) }
                     }
                 } label: {
                     chipLabel(icon: "yensign.circle", text: vm.currency)
@@ -509,6 +527,7 @@ private let kxCategoryColors: [Color] = [
 ]
 
 private struct GuideCategoryDonut: View {
+    @Environment(\.appLanguage) private var language
     let segments: [KaiXGuideFinanceSummaryDTO.CategoryAmount]
     let total: Int
     let money: (Int) -> String
@@ -520,7 +539,7 @@ private struct GuideCategoryDonut: View {
         var out: [(String, Int, Color)] = []
         for (i, s) in top.enumerated() { out.append((label(s.category), s.amount, kxCategoryColors[i % kxCategoryColors.count])) }
         let rest = segments.dropFirst(8).reduce(0) { $0 + $1.amount }
-        if rest > 0 { out.append(("其他", rest, Color.gray.opacity(0.5))) }
+        if rest > 0 { out.append((guideOSText(language, "其他", "その他", "Other"), rest, Color.gray.opacity(0.5))) }
         return out
     }
 
@@ -536,7 +555,7 @@ private struct GuideCategoryDonut: View {
                     }
                     VStack(spacing: 1) {
                         Text(guideMoney(total, currency: "JPY")).font(.system(size: 13, weight: .black)).minimumScaleFactor(0.5).lineLimit(1)
-                        Text("本月支出").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
+                        Text(guideOSText(language, "本月支出", "今月の支出", "Spent")).font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
                     }
                 }
                 .frame(width: 108, height: 108)

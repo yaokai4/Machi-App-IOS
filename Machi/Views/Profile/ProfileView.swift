@@ -110,6 +110,20 @@ struct ProfileView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 28)
+            Label {
+                Text(KXListingCopy.pickText(
+                    language,
+                    "登录后即可使用「我的工作台」管理 Todo、日历、申请、账单和证件期限。",
+                    "ログインすると「マイワークベンチ」でTodo・カレンダー・申請・支払い・証明書を管理できます。",
+                    "Log in to use My Workbench: tasks, calendar, applications, bills, and document expiries."
+                ))
+            } icon: {
+                Image(systemName: "square.grid.2x2.fill").foregroundStyle(KXColor.accent)
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.leading)
+            .padding(.horizontal, 32)
             Button {
                 GuestGate.shared.requireLogin()
             } label: {
@@ -213,6 +227,9 @@ struct ProfileView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: KXSpacing.md) {
                     profileHeader
+                    if isCurrentUser {
+                        personalWorkbenchEntry
+                    }
                     PersonalProfileTabPicker(tabs: availableTabs, selection: $profileTab)
                         .padding(.horizontal, 2)
                     stateContent
@@ -226,6 +243,52 @@ struct ProfileView: View {
                 await loadProfileAndContent(showLoading: false)
             }
         }
+    }
+
+    /// Strong entry into the personal 我的工作台 (Todo / 日历 / 申请 / 账单 / 合同 /
+    /// 证件). Shown only on the current user's own profile, directly under the
+    /// header. Distinct from the publish/商家 "经营工作台" reached via the top-bar
+    /// grid icon.
+    private var personalWorkbenchEntry: some View {
+        Button {
+            router.open(.personalWorkbench)
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "square.grid.2x2.fill")
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 50, height: 50)
+                    .background(
+                        LinearGradient(colors: [KXColor.accent, KXColor.accent.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                        in: RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    )
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(KXListingCopy.pickText(language, "我的工作台", "マイワークベンチ", "My Workbench"))
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(.primary)
+                    Text(KXListingCopy.pickText(
+                        language,
+                        "Todo、日历、申请、账单、合同和证件期限",
+                        "Todo・カレンダー・申請・支払い・契約・証明書の期限",
+                        "Tasks, calendar, applications, bills, contracts & document expiries"
+                    ))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(16)
+            .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator.opacity(0.6), lineWidth: 0.8))
+        }
+        .buttonStyle(.fullArea)
+        .contentShape(Rectangle())
+        .accessibilityIdentifier("profile.personalWorkbench")
     }
 
     private func loadProfileAndContent(showLoading: Bool = true) async {
@@ -355,7 +418,19 @@ struct ProfileView: View {
                         menuMessage = L("profileCopied", language)
                     }
                     Button(L("reportUser", language), role: .destructive) {
-                        menuMessage = L("reportRecorded", language)
+                        // C3: file a real report instead of only toasting.
+                        if currentUser.isGuest { GuestGate.shared.requireLogin() }
+                        else {
+                            let targetId = profileUserId
+                            Task {
+                                do {
+                                    try await KaiXAPIClient.shared.reportUser(targetId, reason: "other")
+                                    menuMessage = L("reportRecorded", language)
+                                } catch {
+                                    menuMessage = error.kaixUserMessage
+                                }
+                            }
+                        }
                     }
                     if isBlocked {
                         Button(L("unblockUser", language)) {

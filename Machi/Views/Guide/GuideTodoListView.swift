@@ -46,6 +46,7 @@ struct GuideOSTodoCard: View {
     var onDuplicate: (() async -> Bool)? = nil
     var onArchive: (() async -> Bool)? = nil
     var onDelete: (() async -> Bool)? = nil
+    @Environment(\.appLanguage) private var language
     @State private var showReminder = false
     @State private var showDatePicker = false
     @State private var pickedDate = Date()
@@ -133,7 +134,7 @@ struct GuideOSTodoCard: View {
                 if onUpdateSteps != nil && !todo.isDone {
                     HStack(spacing: 6) {
                         Image(systemName: "plus").font(.caption2).foregroundStyle(.secondary)
-                        TextField("添加步骤…", text: $newStep)
+                        TextField(guideOSText(language, "添加步骤…", "ステップを追加…", "Add a step…"), text: $newStep)
                             .font(.caption)
                             .textInputAutocapitalization(.never)
                             .onSubmit(addStep)
@@ -160,7 +161,7 @@ struct GuideOSTodoCard: View {
                         )
                     HStack(spacing: 10) {
                         Button(action: saveNote) {
-                            Text("保存备注")
+                            Text(guideOSText(language, "保存备注", "メモを保存", "Save note"))
                                 .font(.caption.weight(.bold))
                                 .padding(.horizontal, 12)
                                 .frame(height: 30)
@@ -173,7 +174,7 @@ struct GuideOSTodoCard: View {
                             noteDraft = todo.notes
                             noteOpen = false
                         } label: {
-                            Text("取消")
+                            Text(guideOSText(language, "取消", "キャンセル", "Cancel"))
                                 .font(.caption.weight(.bold))
                                 .frame(height: 30)
                         }
@@ -199,7 +200,7 @@ struct GuideOSTodoCard: View {
                 .padding(.top, 4)
             } else if !todo.isDone {
                 Button(action: openNote) {
-                    Label("备注", systemImage: "note.text")
+                    Label(guideOSText(language, "备注", "メモ", "Note"), systemImage: "note.text")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.secondary)
                         .frame(height: 30)
@@ -247,10 +248,10 @@ struct GuideOSTodoCard: View {
                     }
                     if let onReschedule, !todo.isDone {
                         Menu {
-                            Button("今天") { onReschedule(shifted(0)) }
-                            Button("明天") { onReschedule(shifted(1)) }
-                            Button("+7 天") { onReschedule(shifted(7)) }
-                            Button("自定义日期…") { showDatePicker = true }
+                            Button(guideOSText(language, "今天", "今日", "Today")) { onReschedule(shifted(0)) }
+                            Button(guideOSText(language, "明天", "明日", "Tomorrow")) { onReschedule(shifted(1)) }
+                            Button(guideOSText(language, "+7 天", "+7 日", "+7 days")) { onReschedule(shifted(7)) }
+                            Button(guideOSText(language, "自定义日期…", "日付を指定…", "Custom date…")) { showDatePicker = true }
                         } label: {
                             Image(systemName: "calendar.badge.clock")
                                 .font(.caption)
@@ -281,13 +282,13 @@ struct GuideOSTodoCard: View {
                 HStack(spacing: 6) {
                     GuideOSMiniBadge(text: todo.todoType.replacingOccurrences(of: "_", with: " "))
                     if let r = todo.recurrenceLabel {
-                        Label(r + "循环", systemImage: "repeat")
+                        Label(guideOSText(language, r + "循环", r + "繰り返し", r + " repeat"), systemImage: "repeat")
                             .font(.caption2.weight(.bold))
                             .foregroundStyle(KXColor.accent)
                             .padding(.horizontal, 7).padding(.vertical, 2)
                             .background(KXColor.accent.opacity(0.12), in: Capsule())
                     }
-                    if todo.estimatedMinutes > 0 { GuideOSMiniBadge(text: "\(todo.estimatedMinutes) 分") }
+                    if todo.estimatedMinutes > 0 { GuideOSMiniBadge(text: guideOSText(language, "\(todo.estimatedMinutes) 分", "\(todo.estimatedMinutes) 分", "\(todo.estimatedMinutes) min")) }
                 }
             }
         }
@@ -303,7 +304,7 @@ struct GuideOSTodoCard: View {
                 showDetail = true
             }
         }
-        .accessibilityHint(onUpdate == nil ? "" : "打开 Todo 详情")
+        .accessibilityHint(onUpdate == nil ? "" : guideOSText(language, "打开 Todo 详情", "Todo の詳細を開く", "Open todo detail"))
         .sheet(isPresented: $showReminder) {
             if let onSetReminder {
                 GuideReminderSheet(todo: todo, onSave: onSetReminder)
@@ -311,17 +312,17 @@ struct GuideOSTodoCard: View {
         }
         .sheet(isPresented: $showDatePicker) {
             NavigationStack {
-                DatePicker("改到", selection: $pickedDate, displayedComponents: .date)
+                DatePicker(guideOSText(language, "改到", "変更先", "Move to"), selection: $pickedDate, displayedComponents: .date)
                     .datePickerStyle(.graphical)
                     .padding()
-                    .navigationTitle("改期")
+                    .navigationTitle(guideOSText(language, "改期", "日付を変更", "Reschedule"))
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .confirmationAction) {
-                            Button("确定") { onReschedule?(GuideOSDate.iso(pickedDate)); showDatePicker = false }
+                            Button(guideOSText(language, "确定", "確定", "Done")) { onReschedule?(GuideOSDate.iso(pickedDate)); showDatePicker = false }
                         }
                         ToolbarItem(placement: .cancellationAction) {
-                            Button("取消") { showDatePicker = false }
+                            Button(guideOSText(language, "取消", "キャンセル", "Cancel")) { showDatePicker = false }
                         }
                     }
             }
@@ -449,7 +450,7 @@ struct GuideTodoListView: View {
                     if !customLists.isEmpty || !tags.isEmpty {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 8) {
-                                GuideTodoFilterChip(title: "全部清单", value: "", selection: Binding(
+                                GuideTodoFilterChip(title: guideOSText(language, "全部清单", "すべてのリスト", "All lists"), value: "", selection: Binding(
                                     get: { listFilter.isEmpty && tagFilter.isEmpty ? "" : "__none__" },
                                     set: { _ in listFilter = ""; tagFilter = "" }
                                 ))
@@ -529,6 +530,7 @@ struct GuideTodoListView: View {
 
 private struct GuideTodoDetailSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appLanguage) private var language
     let todo: KaiXGuideTodoDTO
     let onComplete: () -> Void
     let onUpdate: (KaiXGuideTodoUpdatePayload) async -> Bool
@@ -590,61 +592,61 @@ private struct GuideTodoDetailSheet: View {
                             Image(systemName: "arrow.counterclockwise.circle.fill")
                                 .foregroundStyle(KXColor.accent)
                             VStack(alignment: .leading, spacing: 3) {
-                                Text("已恢复未保存草稿")
+                                Text(guideOSText(language, "已恢复未保存草稿", "未保存の下書きを復元しました", "Restored unsaved draft"))
                                     .font(.subheadline.weight(.bold))
-                                Text("关闭详情后再次打开，刚才的编辑仍会保留。")
+                                Text(guideOSText(language, "关闭详情后再次打开，刚才的编辑仍会保留。", "詳細を閉じても、再度開けば先ほどの編集が残ります。", "Your edits stay even after you close and reopen the detail."))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
                             Spacer(minLength: 8)
-                            Button("清除") {
+                            Button(guideOSText(language, "清除", "クリア", "Clear")) {
                                 resetToSavedTodo()
                             }
                             .font(.caption.weight(.bold))
                         }
                     }
                 }
-                Section("任务") {
-                    TextField("Todo 标题", text: $title, axis: .vertical)
-                    TextField("说明", text: $summary, axis: .vertical)
-                    Picker("优先级", selection: $priority) {
-                        Text("高").tag("high")
-                        Text("普通").tag("normal")
-                        Text("低").tag("low")
+                Section(guideOSText(language, "任务", "タスク", "Task")) {
+                    TextField(guideOSText(language, "Todo 标题", "Todo のタイトル", "Todo title"), text: $title, axis: .vertical)
+                    TextField(guideOSText(language, "说明", "説明", "Description"), text: $summary, axis: .vertical)
+                    Picker(guideOSText(language, "优先级", "優先度", "Priority"), selection: $priority) {
+                        Text(guideOSText(language, "高", "高", "High")).tag("high")
+                        Text(guideOSText(language, "普通", "普通", "Normal")).tag("normal")
+                        Text(guideOSText(language, "低", "低", "Low")).tag("low")
                     }
                 }
-                Section("安排") {
-                    Toggle("计划日期", isOn: $hasPlannedDate)
+                Section(guideOSText(language, "安排", "スケジュール", "Schedule")) {
+                    Toggle(guideOSText(language, "计划日期", "予定日", "Planned date"), isOn: $hasPlannedDate)
                     if hasPlannedDate {
-                        DatePicker("开始", selection: $plannedDate, displayedComponents: .date)
+                        DatePicker(guideOSText(language, "开始", "開始", "Start"), selection: $plannedDate, displayedComponents: .date)
                     }
-                    Toggle("截止日期", isOn: $hasDueDate)
+                    Toggle(guideOSText(language, "截止日期", "締め切り", "Due date"), isOn: $hasDueDate)
                     if hasDueDate {
-                        DatePicker("截止", selection: $dueDate, displayedComponents: .date)
+                        DatePicker(guideOSText(language, "截止", "締め切り", "Due"), selection: $dueDate, displayedComponents: .date)
                     }
-                    Picker("重复", selection: $recurrence) {
-                        Text("不重复").tag("")
-                        Text("每天").tag("daily")
-                        Text("每周").tag("weekly")
-                        Text("每月").tag("monthly")
+                    Picker(guideOSText(language, "重复", "繰り返し", "Repeat"), selection: $recurrence) {
+                        Text(guideOSText(language, "不重复", "繰り返さない", "None")).tag("")
+                        Text(guideOSText(language, "每天", "毎日", "Daily")).tag("daily")
+                        Text(guideOSText(language, "每周", "毎週", "Weekly")).tag("weekly")
+                        Text(guideOSText(language, "每月", "毎月", "Monthly")).tag("monthly")
                     }
                 }
-                Section("备注") {
+                Section(guideOSText(language, "备注", "メモ", "Notes")) {
                     TextEditor(text: $notes)
                         .frame(minHeight: 110)
                 }
-                Section("附件") {
-                    GuideAttachmentSection(entityType: "guide_task", entityId: todo.id, title: "任务附件")
+                Section(guideOSText(language, "附件", "添付ファイル", "Attachments")) {
+                    GuideAttachmentSection(entityType: "guide_task", entityId: todo.id, title: guideOSText(language, "任务附件", "タスクの添付ファイル", "Task attachments"))
                 }
-                Section("整理") {
-                    TextField("自定义清单", text: $listName)
-                    TextField("标签（逗号分隔）", text: $tagsText)
+                Section(guideOSText(language, "整理", "整理", "Organize")) {
+                    TextField(guideOSText(language, "自定义清单", "カスタムリスト", "Custom list"), text: $listName)
+                    TextField(guideOSText(language, "标签（逗号分隔）", "タグ（カンマ区切り）", "Tags (comma-separated)"), text: $tagsText)
                 }
                 if !todo.sourceType.isEmpty {
-                    Section("来源") {
-                        LabeledContent("类型", value: todo.sourceType.replacingOccurrences(of: "_", with: " "))
+                    Section(guideOSText(language, "来源", "出所", "Source")) {
+                        LabeledContent(guideOSText(language, "类型", "種類", "Type"), value: todo.sourceType.replacingOccurrences(of: "_", with: " "))
                         if !todo.journeyKey.isEmpty {
-                            LabeledContent("关联路径", value: todo.journeyKey)
+                            LabeledContent(guideOSText(language, "关联路径", "関連パス", "Linked journey"), value: todo.journeyKey)
                         }
                     }
                 }
@@ -655,7 +657,7 @@ private struct GuideTodoDetailSheet: View {
                             onComplete()
                             dismiss()
                         } label: {
-                            Label("标记完成", systemImage: "checkmark.circle")
+                            Label(guideOSText(language, "标记完成", "完了にする", "Mark done"), systemImage: "checkmark.circle")
                                 .frame(maxWidth: .infinity, minHeight: 44)
                         }
                     }
@@ -668,7 +670,7 @@ private struct GuideTodoDetailSheet: View {
                                 }
                             }
                         } label: {
-                            Label("复制 Todo", systemImage: "doc.on.doc")
+                            Label(guideOSText(language, "复制 Todo", "Todo を複製", "Duplicate todo"), systemImage: "doc.on.doc")
                                 .frame(maxWidth: .infinity, minHeight: 44)
                         }
                     }
@@ -681,7 +683,7 @@ private struct GuideTodoDetailSheet: View {
                                 }
                             }
                         } label: {
-                            Label("归档", systemImage: "archivebox")
+                            Label(guideOSText(language, "归档", "アーカイブ", "Archive"), systemImage: "archivebox")
                                 .frame(maxWidth: .infinity, minHeight: 44)
                         }
                     }
@@ -689,20 +691,20 @@ private struct GuideTodoDetailSheet: View {
                         Button(role: .destructive) {
                             confirmingDelete = true
                         } label: {
-                            Label("删除", systemImage: "trash")
+                            Label(guideOSText(language, "删除", "削除", "Delete"), systemImage: "trash")
                                 .frame(maxWidth: .infinity, minHeight: 44)
                         }
                     }
                 }
             }
-            .navigationTitle("Todo 详情")
+            .navigationTitle(guideOSText(language, "Todo 详情", "Todo の詳細", "Todo detail"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button(guideOSText(language, "取消", "キャンセル", "Cancel")) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(saving ? "保存中" : "保存") {
+                    Button(saving ? guideOSText(language, "保存中", "保存中", "Saving") : guideOSText(language, "保存", "保存", "Save")) {
                         Task {
                             saving = true
                             let ok = await onUpdate(.init(
@@ -729,8 +731,8 @@ private struct GuideTodoDetailSheet: View {
                     .disabled(saving || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            .confirmationDialog("删除这个 Todo？", isPresented: $confirmingDelete, titleVisibility: .visible) {
-                Button("删除", role: .destructive) {
+            .confirmationDialog(guideOSText(language, "删除这个 Todo？", "この Todo を削除しますか？", "Delete this todo?"), isPresented: $confirmingDelete, titleVisibility: .visible) {
+                Button(guideOSText(language, "删除", "削除", "Delete"), role: .destructive) {
                     guard let onDelete else { return }
                     Task {
                         if await onDelete() {
@@ -739,9 +741,9 @@ private struct GuideTodoDetailSheet: View {
                         }
                     }
                 }
-                Button("取消", role: .cancel) {}
+                Button(guideOSText(language, "取消", "キャンセル", "Cancel"), role: .cancel) {}
             } message: {
-                Text("删除后无法恢复；如果只是暂时不需要，可以选择归档。")
+                Text(guideOSText(language, "删除后无法恢复；如果只是暂时不需要，可以选择归档。", "削除すると元に戻せません。一時的に不要なだけならアーカイブできます。", "This can't be undone. If you only need it gone for now, archive it instead."))
             }
             .onDisappear {
                 if shouldPreserveDraft, hasUnsavedChanges {

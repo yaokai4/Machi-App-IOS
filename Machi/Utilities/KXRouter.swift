@@ -34,6 +34,10 @@ enum KXRoute: Hashable {
     case guideServices
     case guideMemberResources
     case guideMyLibrary
+    /// Personal "我的工作台" hub (Todo / 日历 / 申请 / 家计簿 / 合同 / 证件) — the
+    /// action-management surface, split out of the Guide tab so 指南 stays a
+    /// reference library and personal admin lives under 我的.
+    case personalWorkbench
     case guideArticle(slug: String)
     case guideProduct(slug: String)
     case guideSchools
@@ -185,16 +189,20 @@ extension KXRoute {
             return .none
         case .postDetailComment(_, let commentId):
             return commentId.map { .comment($0) } ?? .comments
-        case .profile, .topic, .city, .cityChannel, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .myInquiries, .myReservations, .businessDirectory, .businessProfile, .guideCategory, .guideJourney, .guidePlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideFinance, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications, .guideServices, .guideMemberResources, .guideMyLibrary, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .conversation, .search:
+        case .profile, .topic, .city, .cityChannel, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .myInquiries, .myReservations, .businessDirectory, .businessProfile, .guideCategory, .guideJourney, .guidePlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideFinance, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications, .guideServices, .guideMemberResources, .guideMyLibrary, .personalWorkbench, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .conversation, .search:
             return .none
         }
     }
 
     var requiresHiddenTabBar: Bool {
         switch self {
-        case .postDetail, .postDetailComment, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .businessProfile, .guideArticle, .guideProduct, .guideJourney, .guideSchool, .guideCompany, .guideCompanyReviews, .conversation:
+        // Deep personal-management pages hide the floating tab bar so it never
+        // occludes the calendar / list footers (the bar covered the Calendar's
+        // bottom rows). They keep their own nav bar + edge-swipe back, so users
+        // are never stranded. The 我的工作台 hub itself keeps the tab bar.
+        case .postDetail, .postDetailComment, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .businessProfile, .guideArticle, .guideProduct, .guideJourney, .guideSchool, .guideCompany, .guideCompanyReviews, .conversation, .guidePlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideFinance, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications:
             true
-        case .profile, .topic, .city, .cityChannel, .myInquiries, .myReservations, .businessDirectory, .guideCategory, .guidePlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideFinance, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications, .guideServices, .guideMemberResources, .guideMyLibrary, .guideSchools, .guideCompanies, .guideInterviewReviews, .search:
+        case .profile, .topic, .city, .cityChannel, .myInquiries, .myReservations, .businessDirectory, .guideCategory, .guideServices, .guideMemberResources, .guideMyLibrary, .personalWorkbench, .guideSchools, .guideCompanies, .guideInterviewReviews, .search:
             false
         }
     }
@@ -209,7 +217,7 @@ extension KXRoute {
             L("noTopicPosts", language)
         case .city, .cityChannel, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .myInquiries, .myReservations, .businessDirectory, .businessProfile:
             L("emptyFeed", language)
-        case .guideCategory, .guideJourney, .guidePlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideFinance, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications, .guideServices, .guideMemberResources, .guideMyLibrary, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews:
+        case .guideCategory, .guideJourney, .guidePlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideFinance, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications, .guideServices, .guideMemberResources, .guideMyLibrary, .personalWorkbench, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews:
             L("guideOpenFailed", language)
         case .conversation:
             L("emptyMessages", language)
@@ -298,6 +306,8 @@ private struct KXRouteDestinations: ViewModifier {
                     GuideMemberResourcesView()
                 case .guideMyLibrary:
                     GuideMyLibraryView()
+                case .personalWorkbench:
+                    PersonalWorkbenchView(currentUser: currentUser)
                 case .guideArticle(let slug):
                     GuideArticleDetailView(slug: slug)
                 case .guideProduct(let slug):
@@ -448,6 +458,8 @@ private extension KXRoute {
             return .guideMemberResources
         case .guideMyLibrary:
             return .guideMyLibrary
+        case .personalWorkbench:
+            return .personalWorkbench
         case .guideArticle(let slug):
             let id = slug.trimmingCharacters(in: .whitespacesAndNewlines)
             return id.isEmpty ? nil : .guideArticle(slug: id)

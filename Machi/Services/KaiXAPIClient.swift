@@ -621,6 +621,11 @@ final class KaiXAPIClient {
         _ = try await request("POST", "/api/users/\(userId.encodedPathSegment)/report", body: ["reason": reason, "note": note ?? ""])
     }
 
+    func reportComment(_ id: String, reason: String, note: String? = nil) async throws {
+        let commentId = try requirePathIdentifier(id)
+        _ = try await request("POST", "/api/comments/\(commentId.encodedPathSegment)/report", body: ["reason": reason, "note": note ?? ""])
+    }
+
     func user(_ id: String) async throws -> KaiXUserDTO {
         struct Wrapper: Codable { let user: KaiXUserDTO }
         let userId = try requirePathIdentifier(id)

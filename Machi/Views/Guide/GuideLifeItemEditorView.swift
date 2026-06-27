@@ -40,13 +40,13 @@ struct GuideLifePlannerView: View {
             }
             .pickerStyle(.menu)
             .onChange(of: type) { _, newValue in applyPreset(newValue) }
-            Text(guideOSText(language, "默认周期：\(recurrenceLabel(recurrence)) · 提前 \(reminderDays) 天提醒", "周期：\(recurrenceLabel(recurrence)) · \(reminderDays)日前に通知", "\(recurrenceLabel(recurrence)) · remind \(reminderDays)d before"))
+            Text(guideOSText(language, "默认周期：\(recurrenceLabel(language, recurrence)) · 提前 \(reminderDays) 天提醒", "周期：\(recurrenceLabel(language, recurrence)) · \(reminderDays)日前に通知", "\(recurrenceLabel(language, recurrence)) · remind \(reminderDays)d before"))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            GuideOSTextField(title: "标题", text: $title)
-            GuideOSTextField(title: "公司 / 房东 / 机构", text: $provider)
-            GuideOSTextField(title: "金额（JPY）", text: $amount)
+            GuideOSTextField(title: guideOSText(language, "标题", "タイトル", "Title"), text: $title)
+            GuideOSTextField(title: guideOSText(language, "公司 / 房东 / 机构", "会社 / 大家 / 機関", "Company / landlord / institution"), text: $provider)
+            GuideOSTextField(title: guideOSText(language, "金额（JPY）", "金額（円）", "Amount (JPY)"), text: $amount)
                 .keyboardType(.numberPad)
             GuideOSDateField(title: guideOSText(language, "截止日期", "締切日", "Due date"), date: $dueDate)
             Picker(guideOSText(language, "缴费方式", "支払い方法", "Payment"), selection: $paymentMethod) {
@@ -63,8 +63,8 @@ struct GuideLifePlannerView: View {
             }
             Toggle(guideOSText(language, "自动扣款（只提醒核对余额）", "自動引き落とし（残高確認のみ通知）", "Auto-debit (just remind to check balance)"), isOn: $autoDebit)
                 .font(.subheadline)
-            Stepper("提前 \(reminderDays) 天提醒", value: $reminderDays, in: 0...90)
-            GuideOSPrimaryButton(title: model.isSaving ? "添加中" : "添加生活截止日") {
+            Stepper(guideOSText(language, "提前 \(reminderDays) 天提醒", "\(reminderDays)日前に通知", "Remind \(reminderDays)d before"), value: $reminderDays, in: 0...90)
+            GuideOSPrimaryButton(title: model.isSaving ? guideOSText(language, "添加中", "追加中", "Adding") : guideOSText(language, "添加生活截止日", "生活の締切を追加", "Add life deadline")) {
                 Task {
                     let ok = await model.createLifeItem(.init(
                         type: type,
@@ -120,14 +120,14 @@ struct GuideLifePlannerView: View {
     }
 }
 
-private func recurrenceLabel(_ r: String) -> String {
+private func recurrenceLabel(_ language: AppLanguage, _ r: String) -> String {
     switch r {
-    case "monthly": return "每月"
-    case "quarterly": return "每季"
-    case "semester": return "每学期"
-    case "yearly": return "每年"
-    case "once": return "一次性"
-    case "weekly": return "每周"
+    case "monthly": return guideOSText(language, "每月", "毎月", "Monthly")
+    case "quarterly": return guideOSText(language, "每季", "四半期ごと", "Quarterly")
+    case "semester": return guideOSText(language, "每学期", "学期ごと", "Per semester")
+    case "yearly": return guideOSText(language, "每年", "毎年", "Yearly")
+    case "once": return guideOSText(language, "一次性", "一回のみ", "One-time")
+    case "weekly": return guideOSText(language, "每周", "毎週", "Weekly")
     default: return r
     }
 }
@@ -141,6 +141,7 @@ struct GuideOSLifeItemRow: View {
     var onRecordPayment: ((_ amount: Int, _ paidAt: String, _ method: String, _ notes: String) async -> Bool)? = nil
     let onDelete: () -> Void
     var onSave: ((KaiXGuideLifeItemPayload) async -> Bool)? = nil
+    @Environment(\.appLanguage) private var language
     @State private var confirming = false
     @State private var editing = false
     @State private var showingPayment = false
@@ -161,7 +162,7 @@ struct GuideOSLifeItemRow: View {
                     HStack(spacing: 6) {
                         if item.amount > 0 { GuideOSDeleteCardChip(text: "\(item.currency.isEmpty ? "JPY" : item.currency) \(item.amount)") }
                         if item.dueDay > 0 {
-                            GuideOSDeleteCardChip(text: "每月 \(item.dueDay) 号")
+                            GuideOSDeleteCardChip(text: guideOSText(language, "每月 \(item.dueDay) 号", "毎月\(item.dueDay)日", "Day \(item.dueDay) monthly"))
                         } else if let d = item.dueAt, !d.isEmpty {
                             GuideOSDeleteCardChip(text: GuideOSDate.short(d))
                         }
@@ -181,7 +182,7 @@ struct GuideOSLifeItemRow: View {
                     }
                     .buttonStyle(.fullArea)
                     .contentShape(Rectangle())
-                    .accessibilityLabel("记录 \(item.title) 已支付")
+                    .accessibilityLabel(guideOSText(language, "记录 \(item.title) 已支付", "\(item.title)の支払いを記録", "Mark \(item.title) as paid"))
                 }
                 if onSave != nil {
                     Button { editing = true } label: {
@@ -202,13 +203,13 @@ struct GuideOSLifeItemRow: View {
                 .buttonStyle(.fullArea)
                 .contentShape(Rectangle())
             }
-            GuideAttachmentSection(entityType: "guide_life_item", entityId: item.id, title: "缴费附件")
+            GuideAttachmentSection(entityType: "guide_life_item", entityId: item.id, title: guideOSText(language, "缴费附件", "支払い添付", "Payment attachments"))
         }
         .padding(12)
         .kxGlassSurface(radius: 16)
-        .confirmationDialog("删除该生活事项？", isPresented: $confirming, titleVisibility: .visible) {
-            Button("删除（含待办）", role: .destructive, action: onDelete)
-            Button("取消", role: .cancel) {}
+        .confirmationDialog(guideOSText(language, "删除该生活事项？", "この生活項目を削除しますか？", "Delete this life item?"), isPresented: $confirming, titleVisibility: .visible) {
+            Button(guideOSText(language, "删除（含待办）", "削除（タスクも含む）", "Delete (incl. todos)"), role: .destructive, action: onDelete)
+            Button(guideOSText(language, "取消", "キャンセル", "Cancel"), role: .cancel) {}
         }
         .sheet(isPresented: $editing) {
             if let onSave { GuideLifeItemEditorSheet(item: item, onSave: onSave) }
@@ -223,6 +224,7 @@ struct GuideOSLifeItemRow: View {
 
 private struct GuideLifePaymentSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appLanguage) private var language
     let item: KaiXGuideLifeItemDTO
     let payments: [KaiXGuideLifePaymentDTO]
     let onSave: (Int, String, String, String) async -> Bool
@@ -248,16 +250,16 @@ private struct GuideLifePaymentSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("本次支付") {
-                    DatePicker("支付日期", selection: $paidAt, displayedComponents: .date)
-                    TextField("金额", text: $amount)
+                Section(guideOSText(language, "本次支付", "今回の支払い", "This payment")) {
+                    DatePicker(guideOSText(language, "支付日期", "支払日", "Payment date"), selection: $paidAt, displayedComponents: .date)
+                    TextField(guideOSText(language, "金额", "金額", "Amount"), text: $amount)
                         .keyboardType(.numberPad)
-                    TextField("支付方式", text: $method)
-                    TextField("备注", text: $notes, axis: .vertical)
+                    TextField(guideOSText(language, "支付方式", "支払い方法", "Payment method"), text: $method)
+                    TextField(guideOSText(language, "备注", "メモ", "Notes"), text: $notes, axis: .vertical)
                 }
-                Section("支付历史") {
+                Section(guideOSText(language, "支付历史", "支払い履歴", "Payment history")) {
                     if payments.isEmpty {
-                        Text("还没有支付记录。")
+                        Text(guideOSText(language, "还没有支付记录。", "まだ支払い記録がありません。", "No payment records yet."))
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(payments) { payment in
@@ -265,7 +267,7 @@ private struct GuideLifePaymentSheet: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(GuideOSDate.short(payment.paidAt))
                                         .font(.subheadline.weight(.semibold))
-                                    Text(payment.paymentMethod.isEmpty ? "未注明方式" : payment.paymentMethod)
+                                    Text(payment.paymentMethod.isEmpty ? guideOSText(language, "未注明方式", "方法未記入", "Method not specified") : payment.paymentMethod)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
@@ -278,14 +280,14 @@ private struct GuideLifePaymentSheet: View {
                     }
                 }
             }
-            .navigationTitle("记录已支付")
+            .navigationTitle(guideOSText(language, "记录已支付", "支払いを記録", "Record payment"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button(guideOSText(language, "取消", "キャンセル", "Cancel")) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(saving ? "保存中" : "保存") {
+                    Button(saving ? guideOSText(language, "保存中", "保存中", "Saving") : guideOSText(language, "保存", "保存", "Save")) {
                         Task {
                             saving = true
                             let ok = await onSave(Int(amount) ?? 0, GuideOSDate.iso(paidAt), method, notes)
@@ -303,6 +305,7 @@ private struct GuideLifePaymentSheet: View {
 /// In-place editor for a saved life item (spec §十三 GuideLifeItemEditorView).
 struct GuideLifeItemEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appLanguage) private var language
     let item: KaiXGuideLifeItemDTO
     let onSave: (KaiXGuideLifeItemPayload) async -> Bool
 
@@ -329,22 +332,22 @@ struct GuideLifeItemEditorSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("标题", text: $title)
-                    TextField("公司 / 房东 / 机构", text: $provider)
-                    TextField("金额（JPY）", text: $amount).keyboardType(.numberPad)
-                    TextField("支付方式", text: $paymentMethod)
+                    TextField(guideOSText(language, "标题", "タイトル", "Title"), text: $title)
+                    TextField(guideOSText(language, "公司 / 房东 / 机构", "会社 / 大家 / 機関", "Company / landlord / institution"), text: $provider)
+                    TextField(guideOSText(language, "金额（JPY）", "金額（円）", "Amount (JPY)"), text: $amount).keyboardType(.numberPad)
+                    TextField(guideOSText(language, "支付方式", "支払い方法", "Payment method"), text: $paymentMethod)
                 }
                 Section {
-                    Stepper("每月 \(dueDay) 号", value: $dueDay, in: 0...31)
-                    Stepper("提前 \(reminderDays) 天提醒", value: $reminderDays, in: 0...30)
+                    Stepper(guideOSText(language, "每月 \(dueDay) 号", "毎月\(dueDay)日", "Day \(dueDay) monthly"), value: $dueDay, in: 0...31)
+                    Stepper(guideOSText(language, "提前 \(reminderDays) 天提醒", "\(reminderDays)日前に通知", "Remind \(reminderDays)d before"), value: $reminderDays, in: 0...30)
                 }
             }
-            .navigationTitle("编辑生活事项")
+            .navigationTitle(guideOSText(language, "编辑生活事项", "生活項目を編集", "Edit life item"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(guideOSText(language, "取消", "キャンセル", "Cancel")) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(saving ? "保存中" : "保存") {
+                    Button(saving ? guideOSText(language, "保存中", "保存中", "Saving") : guideOSText(language, "保存", "保存", "Save")) {
                         Task {
                             saving = true
                             let ok = await onSave(.init(

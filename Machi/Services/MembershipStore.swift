@@ -255,14 +255,16 @@ final class MembershipStore: ObservableObject {
             membershipActive = resp.membershipActive
             currentPeriodEnd = resp.currentPeriodEnd ?? ""
             state = resp.membershipActive ? .success : .idle
+            // Only finish once the SERVER gave a definitive answer. If the verify
+            // call THREW (network / server down), do NOT finish — StoreKit then
+            // re-delivers the transaction and the app auto-retries verify on the
+            // next launch (Transaction.updates / currentEntitlements), so a paid
+            // subscription is never stuck "charged but never granted".
+            if finishTransaction {
+                await transaction.finish()
+            }
         } catch {
             state = .failed(error.localizedDescription)
-        }
-        // Always finish so StoreKit stops re-delivering the transaction,
-        // even if our server call failed (it will be retried on next launch
-        // via Transaction.currentEntitlements / restore).
-        if finishTransaction {
-            await transaction.finish()
         }
     }
 }

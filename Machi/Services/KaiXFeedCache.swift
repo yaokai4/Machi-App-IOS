@@ -54,4 +54,17 @@ enum KaiXFeedCache {
               Date().timeIntervalSince(snapshot.savedAt) < maxAge else { return [] }
         return snapshot.items
     }
+
+    /// Folder this cache lives in (used by the data-management screen to size /
+    /// clear it). Lazily created in `fileURL`.
+    static var directory: URL? {
+        guard let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return nil }
+        return caches.appendingPathComponent("KaiXFeedCache", isDirectory: true)
+    }
+
+    /// Drop every cached feed snapshot. Safe: a later launch just re-fetches.
+    static func clearAll() {
+        guard let dir = directory else { return }
+        try? FileManager.default.removeItem(at: dir)
+    }
 }

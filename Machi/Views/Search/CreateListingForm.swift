@@ -758,7 +758,7 @@ struct CreateCityListingView: View {
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.primary)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(KXListingCopy.pickText(language, "点此开通会员后即可发布", "タップしてメンバー登録すると掲載できます", "Tap to upgrade and publish"))
+                    Text(KXListingCopy.pickText(language, "本类型首条可免费发布，之后开通会员继续", "このカテゴリは初回無料、以降はメンバー登録で継続", "First listing free; upgrade to post more"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
@@ -1206,13 +1206,11 @@ struct CreateCityListingView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             Button {
-                // Stop a non-member before they submit a gated listing — show a
-                // clear modal with upgrade options, not just the server's error.
-                if needsMembership {
-                    showMembershipGate = true
-                } else {
-                    Task { await submit() }
-                }
+                // Always ATTEMPT the publish: new accounts get a free first listing
+                // of each gated type (server decides), so we must not pre-block.
+                // If the server returns MEMBERSHIP_REQUIRED, submit() surfaces the
+                // upgrade gate.
+                Task { await submit() }
             } label: {
                 HStack(spacing: 8) {
                     if isSubmitting { KXSpinner(size: 18, lineWidth: 2.2, tint: .white) }
@@ -1718,6 +1716,14 @@ struct CreateCityListingView: View {
                 locationText: location
             )
         } catch {
+            // The free first-listing allowance is used up (or membership truly
+            // required) → show the upgrade gate instead of a bottom error.
+            if let api = error as? KaiXAPIError,
+               api.error.code == "MEMBERSHIP_REQUIRED" || api.error.code == "MEMBERSHIP_LISTING_QUOTA_EXCEEDED" {
+                isSubmitting = false
+                showMembershipGate = true
+                return
+            }
             if let failed = mediaDrafts.first(where: {
                 if case .uploading = mediaUploadPhases[$0.id] { return true }
                 if case .completing = mediaUploadPhases[$0.id] { return true }

@@ -493,8 +493,11 @@ struct LocalizationService {
         "appearance": [.zh: "外观", .ja: "外観", .en: "Appearance"],
         "logout": [.zh: "退出登录", .ja: "ログアウト", .en: "Log out"],
         "ok": [.zh: "好", .ja: "OK", .en: "OK"],
-        "workbenchTitle": [.zh: "我的工作台", .ja: "マイワークベンチ", .en: "My workbench"],
-        "workbenchSettingsSubtitle": [.zh: "发布、收藏、会员和资料入口", .ja: "投稿・保存・会員・資料への入口", .en: "Posts, saves, membership, and resources"],
+        // Renamed from "我的工作台" to disambiguate from the new personal
+        // 我的工作台 (PersonalWorkbenchView). This one is the publish / merchant /
+        // 经营 console; the personal Todo/日历/申请/账单 hub now owns "我的工作台".
+        "workbenchTitle": [.zh: "经营工作台", .ja: "運営ワークベンチ", .en: "Business workbench"],
+        "workbenchSettingsSubtitle": [.zh: "发布、交易、商家与会员资料入口", .ja: "投稿・取引・店舗・会員資料への入口", .en: "Publishing, deals, merchant, and resources"],
         "workbenchMemberStandard": [.zh: "普通成员", .ja: "一般メンバー", .en: "Standard member"],
         "workbenchPublishTrading": [.zh: "发布与交易", .ja: "投稿と取引", .en: "Publishing and deals"],
         "workbenchPublishCity": [.zh: "发布信息", .ja: "投稿する", .en: "Create listing"],

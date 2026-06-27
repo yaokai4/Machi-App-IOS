@@ -5,6 +5,7 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("currentUserID") private var currentUserID = ""
+    @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
     @AppStorage("appLanguageCode") private var appLanguageCode = AppLanguage.system.rawValue
     @AppStorage("appAppearance") private var appAppearance = AppAppearance.light.rawValue
     @StateObject private var appState = AppState()
@@ -60,7 +61,7 @@ struct ContentView: View {
                     Task { await appState.bootstrap(context: modelContext, currentUserId: currentUserID) }
                 }
             case .empty:
-                AuthView(onAuthenticated: completeLogin, onBrowseAsGuest: enterAsGuest)
+                entryView
                     .transition(.opacity)
             case .loaded:
                 if let currentUser = appState.currentUser {
@@ -74,7 +75,7 @@ struct ContentView: View {
                         // `app.bootstrap` to bracket cold launch in Instruments.
                         .onAppear { Self.markFirstHomeRender() }
                 } else {
-                    AuthView(onAuthenticated: completeLogin, onBrowseAsGuest: enterAsGuest)
+                    entryView
                         .transition(.opacity)
                 }
             }
@@ -108,11 +109,17 @@ struct ContentView: View {
         // GuestGate.shared.requireLogin(); we present the auth flow here and
         // upgrade the guest to the real account on success.
         .sheet(isPresented: $guestGate.isPromptingLogin) {
-            AuthView { user in
+            AuthView(onAuthenticated: { user in
                 guestGate.dismiss()
                 completeLogin(user)
-            }
+            }, onBrowseAsGuest: {
+                // Clear "稍后再说" escape so a gated guest is never trapped behind
+                // the login sheet with no obvious way out (the prompt is shown for
+                // optional actions — saving a Todo, a reminder — not a hard wall).
+                guestGate.dismiss()
+            })
             .environment(\.appLanguage, language)
+            .presentationDragIndicator(.visible)
         }
         .task(id: currentUserID) {
             await KXPerf.measure("app.bootstrap") {
@@ -356,6 +363,21 @@ struct ContentView: View {
         let iso = ISO8601DateFormatter()
         iso.formatOptions = [.withInternetDateTime]
         return iso.date(from: raw)
+    }
+
+    /// First-run shows the onboarding value cards (guest-first); after that, or
+    /// once dismissed, the auth screen. Deferring registration friction behind a
+    /// "Browse first" CTA is the cold-start funnel fix.
+    @ViewBuilder
+    private var entryView: some View {
+        if hasSeenOnboarding {
+            AuthView(onAuthenticated: completeLogin, onBrowseAsGuest: enterAsGuest)
+        } else {
+            OnboardingView(
+                onBrowseAsGuest: { hasSeenOnboarding = true; enterAsGuest() },
+                onContinueToAuth: { hasSeenOnboarding = true }
+            )
+        }
     }
 
     /// Shared success path for a real (non-guest) login or registration.

@@ -129,7 +129,25 @@ final class HomeViewModel: ObservableObject {
     private func loadPage(context: ModelContext, currentUser: UserEntity, postStore: PostStore, reset: Bool) async -> Bool {
         if reset {
             if posts.isEmpty {
-                state = .loading
+                // Stale-while-revalidate: paint the last cached feed instantly so
+                // a slow-but-working network (e.g. 国内 4G to the Hong Kong edge)
+                // no longer leaves the user staring at a skeleton. The live
+                // refresh below replaces these posts in place once it arrives —
+                // picking up any deletes/edits — so nothing is stale for long; it
+                // just appears immediately instead of only after the round trip.
+                let cached = KaiXFeedCache.load(key: feedCacheKey())
+                if !cached.isEmpty {
+                    let bundle = ServerEntityFactory.postBundle(from: cached)
+                    authors.merge(bundle.authors) { _, fresh in fresh }
+                    mediaByPostId.merge(bundle.mediaByPostId) { _, fresh in fresh }
+                    postStore.register(bundle.allPosts)
+                    posts = balanceOfficialRuns(bundle.orderedPosts)
+                    loadedIds = Set(posts.map(\.id))
+                    postStore.setFeed(posts, append: false)
+                    state = .loaded
+                } else {
+                    state = .loading
+                }
             }
         } else {
             isLoadingMore = true

@@ -4,83 +4,8 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-struct GuideOSDashboardSection: View {
-    @Environment(\.appLanguage) private var language
-
-    let data: KaiXGuideActivePlanResponse?
-    let isLoading: Bool
-    let message: String?
-    let isGuest: Bool
-    let onOpenPlan: () -> Void
-    let onOpenCalendar: () -> Void
-    let onOpenManage: () -> Void
-    let onCompleteTodo: (KaiXGuideTodoDTO) -> Void
-    let onCreateTodo: (_ content: String, _ plannedDate: String?) async -> Bool
-
-    private var todayTodos: [KaiXGuideTodoDTO] { data?.todayTodos ?? [] }
-    private var upcomingTodos: [KaiXGuideTodoDTO] { data?.upcomingTodos ?? [] }
-    private var hasAnyTodos: Bool { !todayTodos.isEmpty || !upcomingTodos.isEmpty }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            GuideOSHeaderRow(
-                // The hero card above already says "今日 / Today"; name this
-                // section by its function so the two headers don't read as a
-                // duplicated "今日 / 今日" stack.
-                title: guideOSText(language, "今日", "今日", "Today"),
-                subtitle: isGuest
-                    ? guideOSText(language, "登录后同步 Todo、日历和截止日", "ログインするとTodo・カレンダー・期限を同期できます", "Log in to sync todos, calendar, and deadlines")
-                    : guideOSText(language, "今天要做的事和即将到期的截止日", "今日やることと近づく期限", "What's due today and coming up")
-            )
-
-            if let message, !message.isEmpty {
-                GuideOSNotice(message: message)
-            }
-
-            // Only surface the goal card when there is a genuinely in-progress
-            // plan (<100%). A finished or absent plan no longer takes the hero
-            // slot — that was the source of the stale "刚到日本 7 天 100%" card.
-            if let plan = data?.plan, plan.progressPercent < 100 {
-                GuideOSPlanCard(plan: plan, isGuest: isGuest, isLoading: isLoading, onOpenPlan: onOpenPlan)
-            }
-
-            // ONE place to add a task. The full list (我的一天/重要/计划中/已完成)
-            // is one "全部待办" tap away, so there are no duplicated 待办 buttons.
-            GuideQuickTodoComposer(isSaving: isLoading, onCreate: onCreateTodo)
-
-            if !todayTodos.isEmpty {
-                GuideOSTodoStrip(title: guideOSText(language, "今天要做", "今日やること", "Today"), todos: todayTodos, onComplete: onCompleteTodo)
-            }
-
-            if !upcomingTodos.isEmpty {
-                GuideOSTodoStrip(title: guideOSText(language, "即将到期", "まもなく期限", "Upcoming"), todos: Array(upcomingTodos.prefix(6)), onComplete: onCompleteTodo)
-            }
-
-            if !isGuest, hasAnyTodos {
-                Button(action: onOpenPlan) {
-                    Label(guideOSText(language, "全部待办", "すべてのTodo", "All tasks"), systemImage: "list.bullet")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(KXColor.accent)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                        .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                }
-                .buttonStyle(.fullArea)
-                .contentShape(Rectangle())
-                .accessibilityIdentifier("guide.quick.todo")
-            }
-
-            // Two distinct destinations only: 待办 lives above, so the row keeps
-            // just 日历 and 管理 (路径 is now an optional template inside 管理).
-            GuideOSQuickRow(items: [
-                .init(title: guideOSText(language, "日历", "カレンダー", "Calendar"), icon: "calendar", accessibilityId: "guide.quick.calendar", action: onOpenCalendar),
-                .init(title: guideOSText(language, "管理", "管理", "Manage"), icon: "folder.fill.badge.gearshape", accessibilityId: "guide.quick.manage", action: onOpenManage)
-            ])
-        }
-        .padding(15)
-        .kxGlassSurface(radius: 24, elevated: true)
-    }
-}
+// (GuideOSDashboardSection was removed: the Guide-OS "今日" dashboard moved into
+// the personal 我的工作台, which uses its own summary + quick-actions instead.)
 
 struct GuidePlannerFormShell<Fields: View, Saved: View>: View {
     @Environment(\.appLanguage) private var language
@@ -325,7 +250,7 @@ struct GuideQuickTodoComposer: View {
                 HStack(spacing: 8) {
                     GuideQuickDateChip(title: guideOSText(language, "今天", "今日", "Today"), isSelected: selectedDate == shifted(0)) { selectedDate = shifted(0) }
                     GuideQuickDateChip(title: guideOSText(language, "明天", "明日", "Tomorrow"), isSelected: selectedDate == shifted(1)) { selectedDate = shifted(1) }
-                    GuideQuickDateChip(title: "+7 天", isSelected: selectedDate == shifted(7)) { selectedDate = shifted(7) }
+                    GuideQuickDateChip(title: guideOSText(language, "+7 天", "+7日", "+7 days"), isSelected: selectedDate == shifted(7)) { selectedDate = shifted(7) }
                     GuideQuickDateChip(
                         title: (selectedDate != nil && !isPresetDate) ? GuideOSDate.short(selectedDate!) : guideOSText(language, "其他日期", "他の日付", "Pick date"),
                         isSelected: selectedDate != nil && !isPresetDate
@@ -632,16 +557,18 @@ struct GuideContractsView: View {
     @State private var contactInfo = ""
     @State private var notes = ""
 
-    private let categories = [
-        ("housing", "租房合同"),
-        ("phone", "手机合约"),
-        ("internet", "网络合约"),
-        ("insurance", "保险合同"),
-        ("school", "学校合同"),
-        ("employment", "工作合同"),
-        ("subscription", "订阅服务"),
-        ("other", "其他合同"),
-    ]
+    private var categories: [(String, String)] {
+        [
+            ("housing", guideOSText(language, "租房合同", "賃貸契約", "Lease")),
+            ("phone", guideOSText(language, "手机合约", "携帯契約", "Phone plan")),
+            ("internet", guideOSText(language, "网络合约", "ネット契約", "Internet")),
+            ("insurance", guideOSText(language, "保险合同", "保険契約", "Insurance")),
+            ("school", guideOSText(language, "学校合同", "学校契約", "School")),
+            ("employment", guideOSText(language, "工作合同", "雇用契約", "Employment")),
+            ("subscription", guideOSText(language, "订阅服务", "サブスク", "Subscription")),
+            ("other", guideOSText(language, "其他合同", "その他の契約", "Other")),
+        ]
+    }
 
     var body: some View {
         ZStack {
@@ -685,7 +612,7 @@ struct GuideContractsView: View {
         .navigationTitle(guideOSText(language, "合同管理", "契約管理", "Contracts"))
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            if model.requireLogin("登录后可以管理合同和到期提醒。") {
+            if model.requireLogin(guideOSText(language, "登录后可以管理合同和到期提醒。", "ログインすると契約や期限のリマインダーを管理できます。", "Log in to manage contracts and expiry reminders.")) {
                 await model.loadContracts()
             }
         }
@@ -695,11 +622,11 @@ struct GuideContractsView: View {
     private var contractForm: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(editingId == nil ? "添加合同" : "编辑合同")
+                Text(editingId == nil ? guideOSText(language, "添加合同", "契約を追加", "Add contract") : guideOSText(language, "编辑合同", "契約を編集", "Edit contract"))
                     .font(.headline.weight(.bold))
                 Spacer()
                 if editingId != nil {
-                    Button("取消") { resetForm() }
+                    Button(guideOSText(language, "取消", "キャンセル", "Cancel")) { resetForm() }
                         .font(.caption.weight(.bold))
                         .frame(minHeight: 44)
                 }
@@ -711,39 +638,39 @@ struct GuideContractsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .frame(minHeight: 32)
                 .background(KXColor.accentSoft.opacity(0.5), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            Picker("合同类型", selection: $category) {
+            Picker(guideOSText(language, "合同类型", "契約の種類", "Contract type"), selection: $category) {
                 ForEach(categories, id: \.0) { key, label in Text(label).tag(key) }
             }
             .pickerStyle(.menu)
-            GuideOSTextField(title: "合同名称", text: $title)
-            GuideOSTextField(title: "机构 / 对方", text: $provider)
+            GuideOSTextField(title: guideOSText(language, "合同名称", "契約名", "Contract name"), text: $title)
+            GuideOSTextField(title: guideOSText(language, "机构 / 对方", "相手先 / 事業者", "Provider / counterparty"), text: $provider)
             HStack(alignment: .top, spacing: 10) {
-                GuideOSDateField(title: "开始日期", date: $startDate)
-                GuideOSDateField(title: "到期日期", date: $endDate)
+                GuideOSDateField(title: guideOSText(language, "开始日期", "開始日", "Start date"), date: $startDate)
+                GuideOSDateField(title: guideOSText(language, "到期日期", "満了日", "Expiry date"), date: $endDate)
             }
             VStack(alignment: .leading, spacing: 8) {
-                Text("解约窗口")
+                Text(guideOSText(language, "解约窗口", "解約期間", "Cancellation window"))
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.secondary)
                 HStack(alignment: .top, spacing: 10) {
-                    GuideOSDateField(title: "可解约起", date: $cancellationStart)
-                    GuideOSDateField(title: "可解约止", date: $cancellationEnd)
+                    GuideOSDateField(title: guideOSText(language, "可解约起", "解約開始", "Window start"), date: $cancellationStart)
+                    GuideOSDateField(title: guideOSText(language, "可解约止", "解約終了", "Window end"), date: $cancellationEnd)
                 }
             }
-            Toggle("自动续约", isOn: $autoRenew)
+            Toggle(guideOSText(language, "自动续约", "自動更新", "Auto-renew"), isOn: $autoRenew)
             HStack(spacing: 10) {
-                GuideOSTextField(title: "月费 JPY", text: $monthlyCost)
+                GuideOSTextField(title: guideOSText(language, "月费 JPY", "月額 JPY", "Monthly JPY"), text: $monthlyCost)
                     .keyboardType(.numberPad)
-                GuideOSTextField(title: "年费 JPY", text: $yearlyCost)
+                GuideOSTextField(title: guideOSText(language, "年费 JPY", "年額 JPY", "Yearly JPY"), text: $yearlyCost)
                     .keyboardType(.numberPad)
             }
-            Stepper("提前 \(reminderDays) 天提醒", value: $reminderDays, in: 0...365)
-            GuideOSTextField(title: "联系方式", text: $contactInfo)
-            TextField("备注", text: $notes, axis: .vertical)
+            Stepper(guideOSText(language, "提前 \(reminderDays) 天提醒", "\(reminderDays)日前に通知", "Remind \(reminderDays) days before"), value: $reminderDays, in: 0...365)
+            GuideOSTextField(title: guideOSText(language, "联系方式", "連絡先", "Contact"), text: $contactInfo)
+            TextField(guideOSText(language, "备注", "メモ", "Notes"), text: $notes, axis: .vertical)
                 .lineLimit(3...6)
                 .padding(12)
                 .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-            GuideOSPrimaryButton(title: model.isSaving ? "保存中" : "保存合同") {
+            GuideOSPrimaryButton(title: model.isSaving ? guideOSText(language, "保存中", "保存中", "Saving") : guideOSText(language, "保存合同", "契約を保存", "Save contract")) {
                 Task {
                     let ok = await model.saveContract(id: editingId, payload: currentPayload())
                     if ok { resetForm() }
@@ -831,6 +758,7 @@ struct GuideContractsView: View {
 }
 
 private struct GuideContractRow: View {
+    @Environment(\.appLanguage) private var language
     let item: KaiXGuideContractDTO
     let onEdit: () -> Void
     let onArchive: () -> Void
@@ -848,22 +776,22 @@ private struct GuideContractRow: View {
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 6) {
                         Text(item.title).font(.subheadline.weight(.bold)).lineLimit(2)
-                        if item.autoRenew { GuideOSMiniBadge(text: "自动续约") }
+                        if item.autoRenew { GuideOSMiniBadge(text: guideOSText(language, "自动续约", "自動更新", "Auto-renew")) }
                     }
                     if !item.provider.isEmpty { Text(item.provider).font(.caption).foregroundStyle(.secondary) }
                     HStack(spacing: 6) {
                         if let date = item.cancellationWindowStart ?? item.endDate {
                             GuideOSDeleteCardChip(text: GuideOSDate.short(date))
                         }
-                        if item.monthlyCost > 0 { GuideOSDeleteCardChip(text: "月 ¥\(item.monthlyCost)") }
-                        if item.yearlyCost > 0 { GuideOSDeleteCardChip(text: "年 ¥\(item.yearlyCost)") }
+                        if item.monthlyCost > 0 { GuideOSDeleteCardChip(text: guideOSText(language, "月 ¥\(item.monthlyCost)", "月 ¥\(item.monthlyCost)", "¥\(item.monthlyCost)/mo")) }
+                        if item.yearlyCost > 0 { GuideOSDeleteCardChip(text: guideOSText(language, "年 ¥\(item.yearlyCost)", "年 ¥\(item.yearlyCost)", "¥\(item.yearlyCost)/yr")) }
                     }
                 }
                 Spacer(minLength: 0)
                 Menu {
-                    Button("编辑", action: onEdit)
-                    if item.status == "active" { Button("归档", action: onArchive) }
-                    Button("删除", role: .destructive) { confirmingDelete = true }
+                    Button(guideOSText(language, "编辑", "編集", "Edit"), action: onEdit)
+                    if item.status == "active" { Button(guideOSText(language, "归档", "アーカイブ", "Archive"), action: onArchive) }
+                    Button(guideOSText(language, "删除", "削除", "Delete"), role: .destructive) { confirmingDelete = true }
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.headline)
@@ -871,13 +799,13 @@ private struct GuideContractRow: View {
                 }
                 .contentShape(Rectangle())
             }
-            GuideAttachmentSection(entityType: "guide_contract", entityId: item.id, title: "合同附件")
+            GuideAttachmentSection(entityType: "guide_contract", entityId: item.id, title: guideOSText(language, "合同附件", "契約の添付", "Contract files"))
         }
         .padding(13)
         .kxGlassSurface(radius: 18)
-        .confirmationDialog("删除该合同及关联提醒？", isPresented: $confirmingDelete, titleVisibility: .visible) {
-            Button("删除", role: .destructive, action: onDelete)
-            Button("取消", role: .cancel) {}
+        .confirmationDialog(guideOSText(language, "删除该合同及关联提醒？", "この契約と関連リマインダーを削除しますか？", "Delete this contract and its reminders?"), isPresented: $confirmingDelete, titleVisibility: .visible) {
+            Button(guideOSText(language, "删除", "削除", "Delete"), role: .destructive, action: onDelete)
+            Button(guideOSText(language, "取消", "キャンセル", "Cancel"), role: .cancel) {}
         }
     }
 }
@@ -887,19 +815,22 @@ struct GuideDocumentsView: View {
     @StateObject private var model = GuideTodoViewModel()
     @State private var editingId: String?
     @State private var category = "residence_card"
-    @State private var title = "在留卡"
+    @State private var title = ""
+    @State private var didInitTitle = false
     @State private var expiresAt = Date()
     @State private var reminderDays = 60
     @State private var notes = ""
 
-    private let categories = [
-        ("residence_card", "在留卡"),
-        ("passport", "护照"),
-        ("my_number", "My Number"),
-        ("drivers_license", "驾照"),
-        ("health_insurance", "健康保险证"),
-        ("other", "其他证件"),
-    ]
+    private var categories: [(String, String)] {
+        [
+            ("residence_card", guideOSText(language, "在留卡", "在留カード", "Residence card")),
+            ("passport", guideOSText(language, "护照", "パスポート", "Passport")),
+            ("my_number", "My Number"),
+            ("drivers_license", guideOSText(language, "驾照", "運転免許", "Driver's license")),
+            ("health_insurance", guideOSText(language, "健康保险证", "健康保険証", "Health insurance card")),
+            ("other", guideOSText(language, "其他证件", "その他の証明書", "Other document")),
+        ]
+    }
 
     var body: some View {
         ZStack {
@@ -910,11 +841,11 @@ struct GuideDocumentsView: View {
                         title: guideOSText(language, "证件到期", "証明書期限", "Document expiry"),
                         subtitle: guideOSText(language, "只填写到期日期即可，不上传证件图片，也不需要证件号码。", "有効期限だけ入力し、画像や番号は不要です。", "Add only an expiry date. No image or document number is needed.")
                     )
-                    GuideOSEmptyMini(text: "隐私优先：所有日期都可选；不填写任何身份资料也能完整使用 Guide。")
+                    GuideOSEmptyMini(text: guideOSText(language, "隐私优先：所有日期都可选；不填写任何身份资料也能完整使用 Guide。", "プライバシー優先：日付はすべて任意。身分情報を入力しなくてもGuideを使えます。", "Privacy first: every date is optional; Guide works fully without any ID details."))
                     documentForm
                     if let message = model.message { GuideOSNotice(message: message) }
                     if model.documents.isEmpty && !model.isLoading {
-                        GuideOSEmptyPanel(title: "还没有证件提醒", subtitle: "添加日期后，会自动生成高优先级 Todo 和日历提醒。")
+                        GuideOSEmptyPanel(title: guideOSText(language, "还没有证件提醒", "証明書のリマインダーはまだありません", "No document reminders yet"), subtitle: guideOSText(language, "添加日期后，会自动生成高优先级 Todo 和日历提醒。", "日付を追加すると、優先度の高いTodoとカレンダー通知が自動生成されます。", "Add a date to auto-create a high-priority task and calendar reminder."))
                     } else {
                         ForEach(model.documents) { item in
                             GuideDocumentRow(
@@ -933,7 +864,11 @@ struct GuideDocumentsView: View {
         .navigationTitle(guideOSText(language, "证件到期", "証明書期限", "Document expiry"))
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            if model.requireLogin("登录后可以保存证件到期提醒。") {
+            if !didInitTitle {
+                didInitTitle = true
+                if title.isEmpty, let label = categories.first(where: { $0.0 == category })?.1 { title = label }
+            }
+            if model.requireLogin(guideOSText(language, "登录后可以保存证件到期提醒。", "ログインすると証明書の期限リマインダーを保存できます。", "Log in to save document expiry reminders.")) {
                 await model.loadDocuments()
             }
         }
@@ -943,30 +878,30 @@ struct GuideDocumentsView: View {
     private var documentForm: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(editingId == nil ? "添加证件提醒" : "编辑证件提醒")
+                Text(editingId == nil ? guideOSText(language, "添加证件提醒", "証明書リマインダーを追加", "Add document reminder") : guideOSText(language, "编辑证件提醒", "証明書リマインダーを編集", "Edit document reminder"))
                     .font(.headline.weight(.bold))
                 Spacer()
                 if editingId != nil {
-                    Button("取消") { resetForm() }
+                    Button(guideOSText(language, "取消", "キャンセル", "Cancel")) { resetForm() }
                         .font(.caption.weight(.bold))
                         .frame(minHeight: 44)
                 }
             }
-            Picker("证件类型", selection: $category) {
+            Picker(guideOSText(language, "证件类型", "証明書の種類", "Document type"), selection: $category) {
                 ForEach(categories, id: \.0) { key, label in Text(label).tag(key) }
             }
             .pickerStyle(.menu)
             .onChange(of: category) { _, value in
                 if let label = categories.first(where: { $0.0 == value })?.1 { title = label }
             }
-            GuideOSTextField(title: "显示名称", text: $title)
-            DatePicker("到期日期", selection: $expiresAt, displayedComponents: .date)
-            Stepper("提前 \(reminderDays) 天提醒", value: $reminderDays, in: 0...365)
-            TextField("备注", text: $notes, axis: .vertical)
+            GuideOSTextField(title: guideOSText(language, "显示名称", "表示名", "Display name"), text: $title)
+            DatePicker(guideOSText(language, "到期日期", "有効期限", "Expiry date"), selection: $expiresAt, displayedComponents: .date)
+            Stepper(guideOSText(language, "提前 \(reminderDays) 天提醒", "\(reminderDays)日前に通知", "Remind \(reminderDays) days before"), value: $reminderDays, in: 0...365)
+            TextField(guideOSText(language, "备注", "メモ", "Notes"), text: $notes, axis: .vertical)
                 .lineLimit(3...6)
                 .padding(12)
                 .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-            GuideOSPrimaryButton(title: model.isSaving ? "保存中" : "保存提醒") {
+            GuideOSPrimaryButton(title: model.isSaving ? guideOSText(language, "保存中", "保存中", "Saving") : guideOSText(language, "保存提醒", "リマインダーを保存", "Save reminder")) {
                 Task {
                     let ok = await model.saveDocument(
                         id: editingId,
@@ -1000,7 +935,7 @@ struct GuideDocumentsView: View {
     private func resetForm() {
         editingId = nil
         category = "residence_card"
-        title = "在留卡"
+        title = categories.first(where: { $0.0 == "residence_card" })?.1 ?? ""
         expiresAt = Date()
         reminderDays = 60
         notes = ""
@@ -1008,6 +943,7 @@ struct GuideDocumentsView: View {
 }
 
 private struct GuideDocumentRow: View {
+    @Environment(\.appLanguage) private var language
     let item: KaiXGuideDocumentDTO
     let onEdit: () -> Void
     let onDelete: () -> Void
@@ -1028,7 +964,7 @@ private struct GuideDocumentRow: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                     }
-                    Text("提前 \(item.reminderDaysBefore) 天提醒")
+                    Text(guideOSText(language, "提前 \(item.reminderDaysBefore) 天提醒", "\(item.reminderDaysBefore)日前に通知", "Remind \(item.reminderDaysBefore) days before"))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -1046,13 +982,13 @@ private struct GuideDocumentRow: View {
                 .buttonStyle(.fullArea)
                 .contentShape(Rectangle())
             }
-            GuideAttachmentSection(entityType: "guide_document", entityId: item.id, title: "可选附件")
+            GuideAttachmentSection(entityType: "guide_document", entityId: item.id, title: guideOSText(language, "可选附件", "任意の添付", "Optional files"))
         }
         .padding(13)
         .kxGlassSurface(radius: 18)
-        .confirmationDialog("删除该证件提醒？", isPresented: $confirmingDelete, titleVisibility: .visible) {
-            Button("删除", role: .destructive, action: onDelete)
-            Button("取消", role: .cancel) {}
+        .confirmationDialog(guideOSText(language, "删除该证件提醒？", "この証明書リマインダーを削除しますか？", "Delete this document reminder?"), isPresented: $confirmingDelete, titleVisibility: .visible) {
+            Button(guideOSText(language, "删除", "削除", "Delete"), role: .destructive, action: onDelete)
+            Button(guideOSText(language, "取消", "キャンセル", "Cancel"), role: .cancel) {}
         }
     }
 }
@@ -1081,7 +1017,7 @@ struct GuideGoalsView: View {
                     )
 
                     Button {
-                        if model.requireLogin("登录后可以创建并同步自定义目标。") {
+                        if model.requireLogin(guideOSText(language, "登录后可以创建并同步自定义目标。", "ログインするとカスタム目標を作成・同期できます。", "Log in to create and sync custom goals.")) {
                             showingCreate.toggle()
                         }
                     } label: {
@@ -1108,7 +1044,7 @@ struct GuideGoalsView: View {
                                     displayedComponents: .date
                                 )
                             }
-                            GuideOSPrimaryButton(title: model.isSaving ? "创建中" : "创建目标") {
+                            GuideOSPrimaryButton(title: model.isSaving ? guideOSText(language, "创建中", "作成中", "Creating") : guideOSText(language, "创建目标", "目標を作成", "Create goal")) {
                                 Task {
                                     let ok = await model.createCustomGoal(
                                         title: goalTitle,
@@ -1176,7 +1112,7 @@ struct GuideGoalsView: View {
                                             }
                                             .frame(height: 7)
                                             if let next = plan.nextTodo {
-                                                Text("下一步：\(next.title)")
+                                                Text(guideOSText(language, "下一步：\(next.title)", "次のステップ：\(next.title)", "Next: \(next.title)"))
                                                     .font(.caption.weight(.semibold))
                                                     .foregroundStyle(.secondary)
                                                     .lineLimit(2)
@@ -1186,7 +1122,7 @@ struct GuideGoalsView: View {
                                     }
                                     .buttonStyle(.fullArea)
                                     .contentShape(Rectangle())
-                                    GuideAttachmentSection(entityType: "guide_goal", entityId: plan.id, title: "目标附件")
+                                    GuideAttachmentSection(entityType: "guide_goal", entityId: plan.id, title: guideOSText(language, "目标附件", "目標の添付", "Goal files"))
                                 }
                                 .padding(14)
                                 .kxGlassSurface(radius: 18)
@@ -1240,7 +1176,7 @@ struct GuideAttachmentSection: View {
 
     let entityType: String
     let entityId: String
-    var title: String = "附件"
+    var title: String? = nil
 
     @State private var files: [KaiXUploadedFileDTO] = []
     @State private var isLoading = false
@@ -1255,7 +1191,7 @@ struct GuideAttachmentSection: View {
                 Image(systemName: "paperclip")
                     .font(.subheadline.weight(.black))
                     .foregroundStyle(KXColor.accent)
-                Text(title)
+                Text(title ?? guideOSText(language, "附件", "添付", "Attachments"))
                     .font(.subheadline.weight(.black))
                 if !files.isEmpty {
                     Text("\(files.count)")

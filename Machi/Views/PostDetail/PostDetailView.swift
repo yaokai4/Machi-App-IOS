@@ -187,7 +187,7 @@ struct PostDetailView: View {
                 }
 
                 Button(role: .destructive) {
-                    localActionMessage = L("reportRecorded", language)
+                    performReport { try await KaiXAPIClient.shared.reportPost(postId, reason: "other") }
                 } label: {
                     Label(L("reportPost", language), systemImage: "flag")
                 }
@@ -283,6 +283,20 @@ struct PostDetailView: View {
         }
         UIPasteboard.general.string = "machi://post/\(post.id)"
         localActionMessage = successMessage ?? L("linkCopied", language)
+    }
+
+    /// C3: file a REAL report (the buttons used to only show a confirmation toast
+    /// without ever calling the API). Confirms only on success; surfaces errors.
+    private func performReport(_ action: @escaping () async throws -> Void) {
+        if currentUser.isGuest { GuestGate.shared.requireLogin(); return }
+        Task {
+            do {
+                try await action()
+                localActionMessage = L("reportRecorded", language)
+            } catch {
+                localActionMessage = error.kaixUserMessage
+            }
+        }
     }
 
     private var postUnavailableState: some View {
@@ -437,7 +451,7 @@ struct PostDetailView: View {
                 onOpenAuthor: { router.open(.profile(userId: comment.authorId)) },
                 onLike: { Task { await viewModel.toggleCommentLike(context: modelContext, comment: comment) } },
                 onReply: { startReply(to: comment) },
-                onReport: { localActionMessage = L("reportRecorded", language) },
+                onReport: { performReport { try await KaiXAPIClient.shared.reportComment(comment.id, reason: "other") } },
                 onDelete: {
                     Task { await viewModel.deleteComment(context: modelContext, comment: comment, postStore: postStore, commentStore: commentStore) }
                 }
@@ -458,7 +472,7 @@ struct PostDetailView: View {
                                 onOpenAuthor: { router.open(.profile(userId: reply.authorId)) },
                                 onLike: { Task { await viewModel.toggleCommentLike(context: modelContext, comment: reply) } },
                                 onReply: { startReply(to: reply) },
-                                onReport: { localActionMessage = L("reportRecorded", language) },
+                                onReport: { performReport { try await KaiXAPIClient.shared.reportComment(reply.id, reason: "other") } },
                                 canDelete: reply.authorId == currentUser.id,
                                 onDelete: {
                                     Task { await viewModel.deleteComment(context: modelContext, comment: reply, postStore: postStore, commentStore: commentStore) }

@@ -6,11 +6,11 @@ private enum GuideCalendarMode: String, CaseIterable, Identifiable {
     case agenda
 
     var id: String { rawValue }
-    var title: String {
+    func title(_ language: AppLanguage) -> String {
         switch self {
-        case .month: return "月"
-        case .week: return "周"
-        case .agenda: return "日程"
+        case .month: return guideOSText(language, "月", "月", "Month")
+        case .week: return guideOSText(language, "周", "週", "Week")
+        case .agenda: return guideOSText(language, "日程", "予定", "Agenda")
         }
     }
 }
@@ -22,12 +22,12 @@ private enum GuideCalendarScope: String, CaseIterable, Identifiable {
     case overdue
 
     var id: String { rawValue }
-    var title: String {
+    func title(_ language: AppLanguage) -> String {
         switch self {
-        case .all: return "全部"
-        case .next7: return "未来 7 天"
-        case .next30: return "未来 30 天"
-        case .overdue: return "逾期"
+        case .all: return guideOSText(language, "全部", "すべて", "All")
+        case .next7: return guideOSText(language, "未来 7 天", "今後7日間", "Next 7 days")
+        case .next30: return guideOSText(language, "未来 30 天", "今後30日間", "Next 30 days")
+        case .overdue: return guideOSText(language, "逾期", "期限切れ", "Overdue")
         }
     }
 }
@@ -79,7 +79,7 @@ struct GuideCalendarView: View {
     private var countdowns: [(date: String, title: String, days: Int)] {
         grouped.compactMap { date, items in
             guard let days = GuideCalendarCountdown.daysUntil(date), days >= 0 else { return nil }
-            return (date, items.first?.title ?? "\(items.count) 项任务", days)
+            return (date, items.first?.title ?? guideOSText(language, "\(items.count) 项任务", "\(items.count)件のタスク", "\(items.count) tasks"), days)
         }
         .sorted { $0.days < $1.days }
         .prefix(5)
@@ -102,7 +102,7 @@ struct GuideCalendarView: View {
                     GuideOSHeaderRow(title: guideOSText(language, "Guide 日历", "Guide カレンダー", "Guide calendar"), subtitle: guideOSText(language, "出愿、ES、面试、JLPT、签证、房租水电都按日期聚合", "出願・ES・面接・JLPT・ビザ・家賃公共料金を日付で整理", "Applications, interviews, exams, visa, and bills by date"))
                     Picker("", selection: $mode) {
                         ForEach(GuideCalendarMode.allCases) { item in
-                            Text(item.title).tag(item)
+                            Text(item.title(language)).tag(item)
                         }
                     }
                     .pickerStyle(.segmented)
@@ -112,7 +112,7 @@ struct GuideCalendarView: View {
                                 Button {
                                     scope = item
                                 } label: {
-                                    Text(item.title)
+                                    Text(item.title(language))
                                         .font(.caption.weight(.bold))
                                         .padding(.horizontal, 13)
                                         .frame(minHeight: 44)
@@ -206,12 +206,23 @@ struct GuideCalendarView: View {
 }
 
 private struct GuideCalendarMonthGrid: View {
+    @Environment(\.appLanguage) private var language
     let grouped: [String: [KaiXGuideCalendarItemDTO]]
     @Binding var selectedDate: String
     let onMove: (_ id: String, _ date: String) -> Void
     @State private var cursor = Date()
 
-    private let weekdays = ["日", "一", "二", "三", "四", "五", "六"]
+    private var weekdays: [String] {
+        [
+            guideOSText(language, "日", "日", "Sun"),
+            guideOSText(language, "一", "月", "Mon"),
+            guideOSText(language, "二", "火", "Tue"),
+            guideOSText(language, "三", "水", "Wed"),
+            guideOSText(language, "四", "木", "Thu"),
+            guideOSText(language, "五", "金", "Fri"),
+            guideOSText(language, "六", "土", "Sat")
+        ]
+    }
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
 
     private var cells: [Date] {
@@ -223,7 +234,16 @@ private struct GuideCalendarMonthGrid: View {
 
     private var monthTitle: String {
         let comps = Calendar.current.dateComponents([.year, .month], from: cursor)
-        return "\(comps.year ?? 0) 年 \(comps.month ?? 0) 月"
+        let year = comps.year ?? 0
+        let month = comps.month ?? 0
+        return guideOSText(language, "\(year) 年 \(month) 月", "\(year)年\(month)月", "\(monthName(month)) \(year)")
+    }
+
+    private func monthName(_ month: Int) -> String {
+        let names = ["", "January", "February", "March", "April", "May", "June",
+                     "July", "August", "September", "October", "November", "December"]
+        guard month >= 1, month <= 12 else { return "\(month)" }
+        return names[month]
     }
 
     var body: some View {
@@ -240,7 +260,7 @@ private struct GuideCalendarMonthGrid: View {
                         cursor = Date()
                         selectedDate = GuideOSDate.today()
                     } label: {
-                        Text("今天")
+                        Text(guideOSText(language, "今天", "今日", "Today"))
                             .font(.caption.weight(.bold))
                             .frame(minHeight: 44)
                             .padding(.horizontal, 14)
@@ -313,12 +333,23 @@ private struct GuideCalendarMonthGrid: View {
 }
 
 private struct GuideCalendarWeekBoard: View {
+    @Environment(\.appLanguage) private var language
     let grouped: [String: [KaiXGuideCalendarItemDTO]]
     @Binding var selectedDate: String
     let onMove: (_ id: String, _ date: String) -> Void
     @State private var cursor = Date()
 
-    private let weekdays = ["日", "一", "二", "三", "四", "五", "六"]
+    private var weekdays: [String] {
+        [
+            guideOSText(language, "日", "日", "Sun"),
+            guideOSText(language, "一", "月", "Mon"),
+            guideOSText(language, "二", "火", "Tue"),
+            guideOSText(language, "三", "水", "Wed"),
+            guideOSText(language, "四", "木", "Thu"),
+            guideOSText(language, "五", "金", "Fri"),
+            guideOSText(language, "六", "土", "Sat")
+        ]
+    }
 
     private var days: [Date] {
         let calendar = Calendar.current
@@ -329,7 +360,14 @@ private struct GuideCalendarWeekBoard: View {
     private var rangeTitle: String {
         guard let first = days.first, let last = days.last else { return "" }
         let c = Calendar.current
-        return "\(c.component(.month, from: first))月\(c.component(.day, from: first))日 - \(c.component(.month, from: last))月\(c.component(.day, from: last))日"
+        let m1 = c.component(.month, from: first)
+        let d1 = c.component(.day, from: first)
+        let m2 = c.component(.month, from: last)
+        let d2 = c.component(.day, from: last)
+        return guideOSText(language,
+                           "\(m1)月\(d1)日 - \(m2)月\(d2)日",
+                           "\(m1)月\(d1)日 - \(m2)月\(d2)日",
+                           "\(m1)/\(d1) - \(m2)/\(d2)")
     }
 
     var body: some View {
@@ -344,7 +382,7 @@ private struct GuideCalendarWeekBoard: View {
                         cursor = Date()
                         selectedDate = GuideOSDate.today()
                     } label: {
-                        Text("本周")
+                        Text(guideOSText(language, "本周", "今週", "This week"))
                             .font(.caption.weight(.bold))
                             .frame(minHeight: 44)
                             .padding(.horizontal, 14)
@@ -394,7 +432,12 @@ private struct GuideCalendarWeekBoard: View {
         } label: {
             VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(isToday ? "今天" : "周\(weekdays[max(0, min(dayIndex, weekdays.count - 1))])")
+                    Text(isToday
+                         ? guideOSText(language, "今天", "今日", "Today")
+                         : guideOSText(language,
+                                       "周\(weekdays[max(0, min(dayIndex, weekdays.count - 1))])",
+                                       weekdays[max(0, min(dayIndex, weekdays.count - 1))],
+                                       weekdays[max(0, min(dayIndex, weekdays.count - 1))]))
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(isSelected ? .white.opacity(0.82) : .secondary)
                     Text("\(Calendar.current.component(.day, from: date))")
@@ -407,7 +450,7 @@ private struct GuideCalendarWeekBoard: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     if items.isEmpty {
-                        Text("空")
+                        Text(guideOSText(language, "空", "なし", "Empty"))
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(.secondary)
                     } else {
@@ -423,7 +466,7 @@ private struct GuideCalendarWeekBoard: View {
                                 .draggable(item.id)
                         }
                         if items.count > 4 {
-                            Text("+\(items.count - 4) 项")
+                            Text(guideOSText(language, "+\(items.count - 4) 项", "+\(items.count - 4)件", "+\(items.count - 4)"))
                                 .font(.caption2.weight(.bold))
                                 .foregroundStyle(KXColor.accent)
                         }
@@ -445,6 +488,7 @@ private struct GuideCalendarWeekBoard: View {
 }
 
 private struct GuideCalendarSelectedDay: View {
+    @Environment(\.appLanguage) private var language
     let date: String
     let items: [KaiXGuideCalendarItemDTO]
     @ObservedObject var model: GuideCalendarViewModel
@@ -455,12 +499,12 @@ private struct GuideCalendarSelectedDay: View {
                 Text(GuideOSDate.short(date))
                     .font(.headline.weight(.bold))
                 Spacer()
-                Text("\(items.count) 项")
+                Text(guideOSText(language, "\(items.count) 项", "\(items.count)件", "\(items.count) items"))
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.secondary)
             }
             if items.isEmpty {
-                GuideOSEmptyMini(text: "这一天还没有任务，可以直接在上方添加。")
+                GuideOSEmptyMini(text: guideOSText(language, "这一天还没有任务，可以直接在上方添加。", "この日の予定はまだありません。上から追加できます。", "No tasks for this day yet. Add one above."))
             } else {
                 ForEach(items) { item in
                     if let todo = item.todo {
@@ -488,14 +532,15 @@ private struct GuideCalendarSelectedDay: View {
 }
 
 private struct GuideCalendarAgendaList: View {
+    @Environment(\.appLanguage) private var language
     let grouped: [(String, [KaiXGuideCalendarItemDTO])]
     @ObservedObject var model: GuideCalendarViewModel
 
     var body: some View {
         if grouped.isEmpty {
             GuideOSEmptyPanel(
-                title: "还没有日程",
-                subtitle: "添加 Todo、申请、面试或生活缴费后，会自动出现在这里。"
+                title: guideOSText(language, "还没有日程", "予定はまだありません", "No agenda yet"),
+                subtitle: guideOSText(language, "添加 Todo、申请、面试或生活缴费后，会自动出现在这里。", "Todo・出願・面接・公共料金などを追加すると、ここに自動で表示されます。", "Add a todo, application, interview, or bill and it will appear here automatically.")
             )
         } else {
             LazyVStack(alignment: .leading, spacing: 14) {
@@ -515,7 +560,7 @@ private struct GuideCalendarAgendaList: View {
                     .font(.headline.weight(.bold))
                     .foregroundStyle(overdue ? Color.orange : Color.primary)
                 Spacer()
-                Text("\(items.count) 项")
+                Text(guideOSText(language, "\(items.count) 项", "\(items.count)件", "\(items.count) items"))
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.secondary)
             }
@@ -543,14 +588,15 @@ private struct GuideCalendarAgendaList: View {
     }
 
     private func dateLabel(_ date: String) -> String {
-        if date == GuideOSDate.today() { return "今天" }
-        if date == GuideOSDate.today(offset: 1) { return "明天" }
-        if date < GuideOSDate.today() { return "逾期 · \(GuideOSDate.short(date))" }
+        if date == GuideOSDate.today() { return guideOSText(language, "今天", "今日", "Today") }
+        if date == GuideOSDate.today(offset: 1) { return guideOSText(language, "明天", "明日", "Tomorrow") }
+        if date < GuideOSDate.today() { return guideOSText(language, "逾期 · \(GuideOSDate.short(date))", "期限切れ · \(GuideOSDate.short(date))", "Overdue · \(GuideOSDate.short(date))") }
         return GuideOSDate.short(date)
     }
 }
 
 private struct GuideCalendarEventComposer: View {
+    @Environment(\.appLanguage) private var language
     @ObservedObject var model: GuideCalendarViewModel
     let defaultDate: String
     @State private var isExpanded = false
@@ -574,10 +620,10 @@ private struct GuideCalendarEventComposer: View {
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(KXColor.accent)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("新建日程")
+                        Text(guideOSText(language, "新建日程", "予定を作成", "New event"))
                             .font(.subheadline.weight(.bold))
                             .foregroundStyle(.primary)
-                        Text("会议、预约和个人安排，独立于 Todo")
+                        Text(guideOSText(language, "会议、预约和个人安排，独立于 Todo", "会議・予約・個人の予定。Todoとは別管理。", "Meetings, appointments, and personal plans, separate from todos"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -594,28 +640,28 @@ private struct GuideCalendarEventComposer: View {
 
             if isExpanded {
                 Divider().opacity(0.55)
-                TextField("日程标题，例如：大学院线上说明会", text: $title)
+                TextField(guideOSText(language, "日程标题，例如：大学院线上说明会", "予定のタイトル（例：大学院オンライン説明会）", "Event title, e.g. grad school online info session"), text: $title)
                     .textInputAutocapitalization(.sentences)
                     .padding(.horizontal, 12)
                     .frame(minHeight: 46)
                     .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                DatePicker("日期", selection: $date, displayedComponents: .date)
+                DatePicker(guideOSText(language, "日期", "日付", "Date"), selection: $date, displayedComponents: .date)
                     .font(.subheadline.weight(.semibold))
-                Toggle("全天", isOn: $allDay)
+                Toggle(guideOSText(language, "全天", "終日", "All-day"), isOn: $allDay)
                     .font(.subheadline.weight(.semibold))
                 if !allDay {
-                    DatePicker("时间", selection: $time, displayedComponents: .hourAndMinute)
+                    DatePicker(guideOSText(language, "时间", "時刻", "Time"), selection: $time, displayedComponents: .hourAndMinute)
                         .font(.subheadline.weight(.semibold))
                 }
-                Picker("重复", selection: $recurrence) {
-                    Text("不重复").tag("")
-                    Text("每天").tag("daily")
-                    Text("每周").tag("weekly")
-                    Text("每月").tag("monthly")
-                    Text("每年").tag("yearly")
+                Picker(guideOSText(language, "重复", "繰り返し", "Repeat"), selection: $recurrence) {
+                    Text(guideOSText(language, "不重复", "繰り返さない", "Never")).tag("")
+                    Text(guideOSText(language, "每天", "毎日", "Daily")).tag("daily")
+                    Text(guideOSText(language, "每周", "毎週", "Weekly")).tag("weekly")
+                    Text(guideOSText(language, "每月", "毎月", "Monthly")).tag("monthly")
+                    Text(guideOSText(language, "每年", "毎年", "Yearly")).tag("yearly")
                 }
                 .font(.subheadline.weight(.semibold))
-                TextField("备注（可选）", text: $notes, axis: .vertical)
+                TextField(guideOSText(language, "备注（可选）", "メモ（任意）", "Notes (optional)"), text: $notes, axis: .vertical)
                     .lineLimit(2...5)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
@@ -642,7 +688,7 @@ private struct GuideCalendarEventComposer: View {
                 } label: {
                     HStack {
                         if model.isSaving { ProgressView().tint(.white) }
-                        Text(model.isSaving ? "添加中" : "添加日程")
+                        Text(model.isSaving ? guideOSText(language, "添加中", "追加中", "Adding") : guideOSText(language, "添加日程", "予定を追加", "Add event"))
                             .font(.subheadline.weight(.bold))
                     }
                     .frame(maxWidth: .infinity, minHeight: 46)
@@ -667,6 +713,7 @@ private struct GuideCalendarEventComposer: View {
 }
 
 private struct GuideCalendarEventRow: View {
+    @Environment(\.appLanguage) private var language
     let event: KaiXGuideCalendarItemDTO
     @ObservedObject var model: GuideCalendarViewModel
     @State private var showEditor = false
@@ -686,9 +733,9 @@ private struct GuideCalendarEventRow: View {
                         .foregroundStyle(.primary)
                         .lineLimit(2)
                     HStack(spacing: 8) {
-                        Text(event.allDay == false ? GuideCalendarEventEditor.timeText(event.startAt) : "全天")
+                        Text(event.allDay == false ? GuideCalendarEventEditor.timeText(event.startAt, language) : guideOSText(language, "全天", "終日", "All-day"))
                         if let recurrence = event.recurrence, !recurrence.isEmpty {
-                            Text(GuideCalendarEventEditor.recurrenceLabel(recurrence))
+                            Text(GuideCalendarEventEditor.recurrenceLabel(recurrence, language))
                         }
                     }
                     .font(.caption.weight(.semibold))
@@ -719,6 +766,7 @@ private struct GuideCalendarEventRow: View {
 
 private struct GuideCalendarEventEditor: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appLanguage) private var language
     let event: KaiXGuideCalendarItemDTO
     @ObservedObject var model: GuideCalendarViewModel
     @State private var title: String
@@ -746,33 +794,33 @@ private struct GuideCalendarEventEditor: View {
                 GuideBackground()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
-                        TextField("标题", text: $title)
+                        TextField(guideOSText(language, "标题", "タイトル", "Title"), text: $title)
                             .font(.title3.weight(.bold))
                             .padding(.horizontal, 14)
                             .frame(minHeight: 52)
                             .background(KXColor.livingSurface.opacity(0.82), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                         VStack(spacing: 4) {
-                            DatePicker("日期", selection: $date, displayedComponents: .date)
-                            Toggle("全天", isOn: $allDay)
+                            DatePicker(guideOSText(language, "日期", "日付", "Date"), selection: $date, displayedComponents: .date)
+                            Toggle(guideOSText(language, "全天", "終日", "All-day"), isOn: $allDay)
                             if !allDay {
-                                DatePicker("时间", selection: $time, displayedComponents: .hourAndMinute)
+                                DatePicker(guideOSText(language, "时间", "時刻", "Time"), selection: $time, displayedComponents: .hourAndMinute)
                             }
-                            Picker("重复", selection: $recurrence) {
-                                Text("不重复").tag("")
-                                Text("每天").tag("daily")
-                                Text("每周").tag("weekly")
-                                Text("每月").tag("monthly")
-                                Text("每年").tag("yearly")
+                            Picker(guideOSText(language, "重复", "繰り返し", "Repeat"), selection: $recurrence) {
+                                Text(guideOSText(language, "不重复", "繰り返さない", "Never")).tag("")
+                                Text(guideOSText(language, "每天", "毎日", "Daily")).tag("daily")
+                                Text(guideOSText(language, "每周", "毎週", "Weekly")).tag("weekly")
+                                Text(guideOSText(language, "每月", "毎月", "Monthly")).tag("monthly")
+                                Text(guideOSText(language, "每年", "毎年", "Yearly")).tag("yearly")
                             }
                         }
                         .font(.subheadline.weight(.semibold))
                         .padding(14)
                         .background(KXColor.livingSurface.opacity(0.82), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("备注")
+                            Text(guideOSText(language, "备注", "メモ", "Notes"))
                                 .font(.caption.weight(.bold))
                                 .foregroundStyle(.secondary)
-                            TextField("地址、链接、联系人或准备事项", text: $notes, axis: .vertical)
+                            TextField(guideOSText(language, "地址、链接、联系人或准备事项", "住所・リンク・連絡先・持ち物など", "Address, link, contact, or things to prepare"), text: $notes, axis: .vertical)
                                 .lineLimit(4...10)
                         }
                         .padding(14)
@@ -780,7 +828,7 @@ private struct GuideCalendarEventEditor: View {
                         Button(role: .destructive) {
                             confirmDelete = true
                         } label: {
-                            Label("删除日程", systemImage: "trash")
+                            Label(guideOSText(language, "删除日程", "予定を削除", "Delete event"), systemImage: "trash")
                                 .font(.subheadline.weight(.bold))
                                 .frame(maxWidth: .infinity, minHeight: 46)
                         }
@@ -791,14 +839,14 @@ private struct GuideCalendarEventEditor: View {
                     .padding(KXSpacing.screen)
                 }
             }
-            .navigationTitle("日程详情")
+            .navigationTitle(guideOSText(language, "日程详情", "予定の詳細", "Event details"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button(guideOSText(language, "取消", "キャンセル", "Cancel")) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(model.isSaving ? "保存中" : "保存") {
+                    Button(model.isSaving ? guideOSText(language, "保存中", "保存中", "Saving") : guideOSText(language, "保存", "保存", "Save")) {
                         let dateText = GuideOSDate.iso(date)
                         let startAt = allDay ? dateText : "\(dateText)T\(Self.timeFormatter.string(from: time))"
                         Task {
@@ -820,36 +868,39 @@ private struct GuideCalendarEventEditor: View {
                     .disabled(model.isSaving || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            .confirmationDialog("删除这个日程？", isPresented: $confirmDelete, titleVisibility: .visible) {
-                Button("删除", role: .destructive) {
+            .confirmationDialog(guideOSText(language, "删除这个日程？", "この予定を削除しますか？", "Delete this event?"), isPresented: $confirmDelete, titleVisibility: .visible) {
+                Button(guideOSText(language, "删除", "削除", "Delete"), role: .destructive) {
                     Task {
                         if await model.deleteCalendarEvent(event) { dismiss() }
                     }
                 }
-                Button("取消", role: .cancel) {}
+                Button(guideOSText(language, "取消", "キャンセル", "Cancel"), role: .cancel) {}
             } message: {
-                Text("删除后无法恢复。")
+                Text(guideOSText(language, "删除后无法恢复。", "削除すると元に戻せません。", "This cannot be undone."))
             }
         }
     }
 
-    static func timeText(_ raw: String?) -> String {
-        guard let raw, let marker = raw.range(of: "T") else { return "定时日程" }
+    static func timeText(_ raw: String?, _ language: AppLanguage) -> String {
+        guard let raw, let marker = raw.range(of: "T") else {
+            return guideOSText(language, "定时日程", "時間指定の予定", "Timed event")
+        }
         return String(raw[marker.upperBound...].prefix(5))
     }
 
-    static func recurrenceLabel(_ raw: String) -> String {
+    static func recurrenceLabel(_ raw: String, _ language: AppLanguage) -> String {
         switch raw {
-        case "daily": return "每天"
-        case "weekly": return "每周"
-        case "monthly": return "每月"
-        case "yearly": return "每年"
+        case "daily": return guideOSText(language, "每天", "毎日", "Daily")
+        case "weekly": return guideOSText(language, "每周", "毎週", "Weekly")
+        case "monthly": return guideOSText(language, "每月", "毎月", "Monthly")
+        case "yearly": return guideOSText(language, "每年", "毎年", "Yearly")
         default: return raw
         }
     }
 
     private static func timeDate(_ raw: String?) -> Date {
-        let value = timeText(raw)
+        // Only the HH:mm parse matters here; pass any language for the placeholder fallback.
+        let value = timeText(raw, .zh)
         return timeFormatter.date(from: value) ?? Date()
     }
 
@@ -889,7 +940,7 @@ private struct GuideCalendarCountdownStrip: View {
                     HStack(spacing: 10) {
                         ForEach(items, id: \.date) { item in
                             VStack(alignment: .leading, spacing: 6) {
-                                Text(item.days == 0 ? "今天" : "\(item.days) 天")
+                                Text(item.days == 0 ? guideOSText(language, "今天", "今日", "Today") : guideOSText(language, "\(item.days) 天", "あと\(item.days)日", "\(item.days) days"))
                                     .font(.title3.weight(.bold))
                                     .foregroundStyle(item.days <= 3 ? .orange : KXColor.accent)
                                 Text(item.title)

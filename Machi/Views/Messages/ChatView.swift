@@ -137,6 +137,7 @@ struct ChatView: View {
     @State private var pickerItems: [PhotosPickerItem] = []
     @State private var isShowingDeleteThreadConfirm = false
     @State private var actionMessage: String?
+    @AppStorage("blockedUserIds") private var blockedUserIdsRaw = ""
     /// Unread count captured when the chat opens, before we mark it read — used
     /// to place the "以下是新消息" divider above the first message that arrived
     /// since the user last looked at this thread.
@@ -331,8 +332,16 @@ struct ChatView: View {
                     Label(L("copyLink", language), systemImage: "doc.on.doc")
                 }
 
-                Button(L("reportUser", language), role: .destructive) {
-                    actionMessage = L("reportRecorded", language)
+                if peer != nil {
+                    // C3/H1: real report + a Block reachable at the point of abuse
+                    // (Apple 1.2 expects block discoverable inside the DM, not only
+                    // on the profile).
+                    Button(role: .destructive) { reportPeer() } label: {
+                        Label(L("reportUser", language), systemImage: "flag")
+                    }
+                    Button(role: .destructive) { blockPeer() } label: {
+                        Label(L("blockUser", language), systemImage: "hand.raised.slash")
+                    }
                 }
 
                 Button(L("deleteConversation", language), role: .destructive) {
@@ -352,6 +361,40 @@ struct ChatView: View {
         .kxGlassBar(ignoresTopSafeArea: true)
         .overlay(alignment: .bottom) {
             Divider().opacity(0.35)
+        }
+    }
+
+    private func reportPeer() {
+        guard let peer else { return }
+        if currentUser.isGuest { GuestGate.shared.requireLogin(); return }
+        Task {
+            do {
+                try await KaiXAPIClient.shared.reportUser(peer.id, reason: "harassment")
+                actionMessage = L("reportRecorded", language)
+            } catch {
+                actionMessage = error.kaixUserMessage
+            }
+        }
+    }
+
+    private func blockPeer() {
+        guard let peer else { return }
+        if currentUser.isGuest { GuestGate.shared.requireLogin(); return }
+        Task {
+            do {
+                try await KaiXAPIClient.shared.setBlock(peer.id, true)
+                var ids = Set(blockedUserIdsRaw.split(separator: "|").map(String.init))
+                ids.insert(peer.id)
+                blockedUserIdsRaw = ids.sorted().joined(separator: "|")
+                actionMessage = L("userBlocked", language)
+                // Leave the conversation after blocking — the composer would only
+                // 403 on send now (server enforces the block), so keeping it open
+                // is misleading. Pop back to the messages list.
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                dismiss()
+            } catch {
+                actionMessage = error.kaixUserMessage
+            }
         }
     }
 

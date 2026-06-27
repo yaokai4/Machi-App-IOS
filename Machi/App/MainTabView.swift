@@ -254,6 +254,12 @@ struct MainTabView: View {
                         GuideCompanyListView()
                     case "guide-interviews":
                         GuideInterviewReviewListView()
+                    case "personal-workbench":
+                        PersonalWorkbenchView(currentUser: currentUser)
+                    case "guide-calendar":
+                        GuideCalendarView()
+                    case "guide-applications":
+                        GuideApplicationPlannerView()
                     case "search-screen":
                         SearchScreen(currentUser: currentUser, initialQuery: "tokyo")
                     case "profile-self":

@@ -32,6 +32,13 @@ final class GuideViewModel: ObservableObject {
         let normalizedCountry = country.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let language = currentGuideLanguage()
         if !force, loadedCountry == normalizedCountry, loadedLanguage == language, home != nil { return }
+        let cacheKey = "guide-home_\(normalizedCountry.isEmpty ? "jp" : normalizedCountry)_\(language)"
+        // Cold launch (the in-memory store is wiped on termination): paint the
+        // last-seen Guide instantly from the on-disk snapshot so 国内慢网 doesn't
+        // show a blank/loading Guide; the live fetch below refreshes it in place.
+        if home == nil, let cached = KaiXSnapshotCache.load(KaiXGuideHomeResponse.self, key: cacheKey) {
+            home = cached
+        }
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
@@ -54,6 +61,7 @@ final class GuideViewModel: ObservableObject {
             home = try await KaiXAPIClient.shared.guideHome(country: normalizedCountry.isEmpty ? "jp" : normalizedCountry, language: language)
             loadedCountry = normalizedCountry
             loadedLanguage = language
+            if let home { KaiXSnapshotCache.save(home, key: cacheKey) }
         } catch {
             if normalizedCountry.isEmpty || normalizedCountry == "jp" {
                 home = GuideFallbackContent.home(language: language)

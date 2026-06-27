@@ -217,6 +217,15 @@ struct SettingsView: View {
             SettingsRowLink(icon: "info.circle", tint: .gray, title: L("aboutKaiX", language), value: KaiXBackend.appVersion, subtitle: "\(L("version", language)) \(KaiXBackend.appVersion)") {
                 AboutKaiXView()
             }
+            SettingsDivider()
+            SettingsRowLink(
+                icon: "externaldrive",
+                tint: .indigo,
+                title: KXListingCopy.pickText(language, "数据管理", "データ管理", "Data & storage"),
+                subtitle: KXListingCopy.pickText(language, "缓存与存储清理", "キャッシュと保存容量", "Cache & storage")
+            ) {
+                DataManagementView()
+            }
         }
     }
 

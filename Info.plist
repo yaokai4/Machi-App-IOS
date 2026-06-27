@@ -25,5 +25,12 @@
 			</array>
 		</dict>
 	</array>
+	<!--
+	  Export-compliance: the app uses only exempt encryption (standard HTTPS/TLS
+	  + Apple-provided crypto). Declaring this here auto-answers the export
+	  question so every TestFlight/App Store submission stops stalling on it.
+	-->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

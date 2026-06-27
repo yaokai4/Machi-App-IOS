@@ -359,25 +359,27 @@ final class MachiWalkthroughUITests: XCTestCase {
         tapTab(app, "tabbar.guide")
 
         // Query by the stable, locale-independent identifiers (not the localized
-        // "路径"/"日历" labels) so the test survives a language switch.
-        let goals = app.buttons["guide.quick.goals"]
-        XCTAssertTrue(goals.waitForExistence(timeout: 25), "Guide home quick-grid should load")
+        // "学校库"/"公司库" labels) so the test survives a language switch. The
+        // Guide home now leads with the two core-library cards; both are
+        // FullArea buttons, so their blank Spacer area must hit-test.
+        let schools = app.buttons["guide.library.schools"]
+        XCTAssertTrue(schools.waitForExistence(timeout: 25), "Guide home core libraries should load")
         snap("hitarea_before")
 
-        let calendar = app.buttons["guide.quick.calendar"]
-        XCTAssertTrue(calendar.waitForExistence(timeout: 5), "日历 grid button should exist")
-        // Far-right of the button = blank Spacer area, NOT the text/icon.
-        calendar.coordinate(withNormalizedOffset: CGVector(dx: 0.88, dy: 0.5)).tap()
+        let companies = app.buttons["guide.library.companies"]
+        XCTAssertTrue(companies.waitForExistence(timeout: 5), "公司库 card should exist")
+        // Far-right of the card = blank Spacer area, NOT the icon/title.
+        companies.coordinate(withNormalizedOffset: CGVector(dx: 0.88, dy: 0.5)).tap()
 
-        // Navigating away from the home means the grid (路径 button) disappears.
-        let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: goals)
+        // Navigating away from the home means the 学校库 card disappears.
+        let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: schools)
         wait(for: [gone], timeout: 8)
         snap("hitarea_after")
-        XCTAssertFalse(goals.exists, "Tapping the 日历 button's blank area must navigate — proves full-area hit testing")
+        XCTAssertFalse(schools.exists, "Tapping the 公司库 card's blank area must navigate — proves full-area hit testing")
     }
 
     /// Regression test for "the tab bar jumps up onto the keyboard". Focuses the
-    /// Guide quick-add field and asserts the floating tab bar stays pinned at the
+    /// Guide search field and asserts the floating tab bar stays pinned at the
     /// bottom (its maxY is unchanged) instead of being shoved up above the
     /// keyboard. With the bug, maxY would drop by ~the keyboard height.
     @MainActor
@@ -389,8 +391,8 @@ final class MachiWalkthroughUITests: XCTestCase {
         XCTAssertTrue(bar.waitForExistence(timeout: 25), "tab bar should exist on Guide")
         let restingMaxY = bar.frame.maxY
 
-        let composer = app.textFields.firstMatch
-        XCTAssertTrue(composer.waitForExistence(timeout: 5), "Guide quick-add field should exist")
+        let composer = app.textFields["guide.search.field"]
+        XCTAssertTrue(composer.waitForExistence(timeout: 5), "Guide search field should exist")
         composer.tap()
         let kb = app.keyboards.firstMatch
         XCTAssertTrue(kb.waitForExistence(timeout: 6), "software keyboard should attach")

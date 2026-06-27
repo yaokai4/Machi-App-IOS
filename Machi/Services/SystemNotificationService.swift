@@ -14,10 +14,12 @@ extension Notification.Name {
 /// Bridges server-side social notifications (likes, comments, follows…)
 /// into REAL iOS system notifications via `UNUserNotificationCenter`.
 ///
-/// Remote APNs push needs server-side APNs infrastructure; until that
-/// exists, this service makes every notification the app learns about
-/// (foreground polling / sync) surface as a genuine system banner +
-/// app-icon badge, and routes taps back into the app.
+/// Remote APNs push IS wired end-to-end (PushTokenService uploads the device
+/// token; web/server_apns.py signs an ES256 provider JWT and pushes on DM /
+/// inquiry / social events). This service complements it: it presents
+/// foreground banners, owns the tap-routing delegate, and surfaces any
+/// notification the in-app sync learns about as a genuine banner + app-icon
+/// badge — so killed-app (APNs) and foreground (this) are both covered.
 @MainActor
 final class SystemNotificationService: NSObject {
     static let shared = SystemNotificationService()

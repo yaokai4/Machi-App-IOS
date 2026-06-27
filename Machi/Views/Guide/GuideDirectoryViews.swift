@@ -179,8 +179,23 @@ struct GuideSchoolListView: View {
                 pageSize: 50
             )
             schools = response.items
+            // Cache the last-seen list so an offline reopen shows samples, not a blank.
+            KaiXSnapshotCache.save(response.items, key: "guide-schools-\(country)")
         } catch {
-            errorMessage = error.localizedDescription
+            // Offline: prefer the last-seen list as samples so the page stays
+            // visually complete instead of collapsing to an error icon. Only fall
+            // back to the friendly error copy when there is no cache at all.
+            if let cached = KaiXSnapshotCache.load([KaiXGuideSchoolDTO].self, key: "guide-schools-\(country)"), !cached.isEmpty {
+                schools = cached
+                errorMessage = nil
+            } else {
+                errorMessage = guideText(
+                    language,
+                    "暂时连不上服务器，学校库没能加载。联网后下拉刷新即可查看完整资料。",
+                    "サーバーに接続できず、学校データベースを読み込めません。通信が回復したら下に引いて更新してください。",
+                    "Can't reach the server to load the school library right now. Pull to refresh once you're back online."
+                )
+            }
         }
     }
 }
@@ -352,8 +367,19 @@ struct GuideCompanyListView: View {
                 pageSize: 50
             )
             companies = response.items
+            KaiXSnapshotCache.save(response.items, key: "guide-companies-\(country)")
         } catch {
-            errorMessage = error.localizedDescription
+            if let cached = KaiXSnapshotCache.load([KaiXGuideCompanyDTO].self, key: "guide-companies-\(country)"), !cached.isEmpty {
+                companies = cached
+                errorMessage = nil
+            } else {
+                errorMessage = guideText(
+                    language,
+                    "暂时连不上服务器，公司库没能加载。联网后下拉刷新即可查看完整资料。",
+                    "サーバーに接続できず、企業データベースを読み込めません。通信が回復したら下に引いて更新してください。",
+                    "Can't reach the server to load the company library right now. Pull to refresh once you're back online."
+                )
+            }
         }
     }
 }
