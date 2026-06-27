@@ -172,16 +172,36 @@ struct MyWorkbenchView: View {
                 MyCityListingsView(currentUser: currentUser)
             }
             SettingsDivider()
-            SettingsRowLink(icon: "bubble.left.and.bubble.right.fill", tint: .orange, title: L("inquiriesTitle", language), value: summary.flatMap { countValue($0.receivedInquiries) }, subtitle: L("inquiriesSubtitle", language)) {
-                MyInquiriesView(currentUser: currentUser)
+            // 我的咨询 = plain consultations only (二手 / 优惠 / 活动).
+            SettingsRowLink(icon: "bubble.left.and.bubble.right.fill", tint: .orange, title: L("inquiriesTitle", language), subtitle: KXListingCopy.pickText(language, "二手、优惠、活动等沟通", "中古・クーポン・イベントの連絡", "Secondhand, deals & events")) {
+                MyInquiriesView(currentUser: currentUser, bucket: "consultation")
             }
             SettingsDivider()
+            // 我的预约 = scheduled bookings (看房 / 订座 / 到店服务) — these carry a
+            // date/time/place, so they live here, not mixed into 我的咨询.
             SettingsRowLink(
                 icon: "calendar.badge.clock", tint: KXColor.accent,
                 title: KXListingCopy.pickText(language, "我的预约", "予約", "My reservations"),
-                subtitle: KXListingCopy.pickText(language, "看房、到店与服务的预约时段", "内見・来店・サービスの予約", "Your viewing & visit bookings")
+                subtitle: KXListingCopy.pickText(language, "看房、订座与到店服务预约", "内見・予約・来店サービス", "Viewings, bookings & visits")
             ) {
-                MyReservationsView()
+                MyInquiriesView(
+                    currentUser: currentUser,
+                    bucket: "reservation",
+                    navTitle: KXListingCopy.pickText(language, "我的预约", "予約", "My reservations")
+                )
+            }
+            SettingsDivider()
+            // 我的申请 = real applications (招聘报名). Previously had no iOS entry.
+            SettingsRowLink(
+                icon: "checklist", tint: .indigo,
+                title: KXListingCopy.pickText(language, "我的申请", "応募", "My applications"),
+                subtitle: KXListingCopy.pickText(language, "招聘报名与进度", "求人応募と進捗", "Job applications & status")
+            ) {
+                MyInquiriesView(
+                    currentUser: currentUser,
+                    bucket: "application",
+                    navTitle: KXListingCopy.pickText(language, "我的申请", "応募", "My applications")
+                )
             }
             SettingsDivider()
             SettingsRowLink(icon: "doc.text.image.fill", tint: .blue, title: L("workbenchMyPostsTitle", language), value: "\(viewModel.postCount)", subtitle: L("workbenchMyPostsSubtitle", language)) {

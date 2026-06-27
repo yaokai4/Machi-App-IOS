@@ -9,6 +9,11 @@ struct MyInquiriesView: View {
     @EnvironmentObject private var router: AppRouter
 
     let currentUser: UserEntity
+    /// Workbench IA bucket: "consultation" (我的咨询), "reservation" (我的预约),
+    /// or "application" (我的申请). Keeps each record under one entry only.
+    var bucket: String = "consultation"
+    /// Optional nav title override (defaults to 我的咨询).
+    var navTitle: String? = nil
 
     private enum Role: String, CaseIterable, Identifiable {
         case received, sent
@@ -36,7 +41,7 @@ struct MyInquiriesView: View {
 
             content
         }
-        .navigationTitle(L("inquiriesTitle", language))
+        .navigationTitle(navTitle ?? L("inquiriesTitle", language))
         .navigationBarTitleDisplayMode(.inline)
         .kxPageBackground()
         .task(id: role) { await load() }
@@ -430,7 +435,7 @@ struct MyInquiriesView: View {
             return
         }
         do {
-            let items = try await KaiXAPIClient.shared.myListingInquiries(role: role.rawValue)
+            let items = try await KaiXAPIClient.shared.myListingInquiries(role: role.rawValue, bucket: bucket)
             itemsByRole[role] = items
             state = items.isEmpty ? .empty : .loaded
         } catch {

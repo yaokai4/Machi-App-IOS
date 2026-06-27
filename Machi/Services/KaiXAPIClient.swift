@@ -884,9 +884,14 @@ final class KaiXAPIClient {
 
     /// Buyer↔seller contacts about my listings (role=received) or ones I
     /// sent (role=sent). Mirrors the Web workbench inquiries screen.
-    func myListingInquiries(role: String) async throws -> [KaiXListingInquiryDTO] {
+    /// `bucket` routes inquiries into the workbench IA buckets so a record
+    /// only appears under one entry: "consultation" (二手/优惠/活动咨询),
+    /// "reservation" (看房/订座/服务预约), "application" (招聘报名). Empty = all.
+    func myListingInquiries(role: String, bucket: String = "") async throws -> [KaiXListingInquiryDTO] {
         struct Response: Decodable { let items: [KaiXListingInquiryDTO] }
-        let data = try await request("GET", "/api/my/listing-inquiries", queryItems: [URLQueryItem(name: "role", value: role)])
+        var queryItems = [URLQueryItem(name: "role", value: role)]
+        if !bucket.isEmpty { queryItems.append(URLQueryItem(name: "bucket", value: bucket)) }
+        let data = try await request("GET", "/api/my/listing-inquiries", queryItems: queryItems)
         let response: Response = try decode(data)
         return response.items
     }
