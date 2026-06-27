@@ -1469,13 +1469,17 @@ private struct ListingIntakeField: Identifiable, Equatable {
     let placeholder: String
     let options: [String]
     let required: Bool
+    /// Renders a calendar DatePicker (no past dates) instead of free text, so
+    /// viewing / booking dates are picked, never mistyped.
+    let isDate: Bool
 
-    init(_ id: String, label: String, placeholder: String = "", options: [String] = [], required: Bool = false) {
+    init(_ id: String, label: String, placeholder: String = "", options: [String] = [], required: Bool = false, isDate: Bool = false) {
         self.id = id
         self.label = label
         self.placeholder = placeholder
         self.options = options
         self.required = required
+        self.isDate = isDate
     }
 }
 
@@ -1562,7 +1566,7 @@ private struct ListingIntakeSpec {
                     actionWord: "预约搬家清洁",
                     noteLabel: "物品/房间说明",
                     fields: [
-                        ListingIntakeField("date", label: "希望日期", placeholder: "例如 7 月 1 日", required: true),
+                        ListingIntakeField("date", label: "希望日期", placeholder: "例如 7 月 1 日", required: true, isDate: true),
                         ListingIntakeField("address_area", label: "服务区域", placeholder: "新宿区 / 丰岛区", required: true),
                         ListingIntakeField("volume", label: "物品量/房型", placeholder: "1K / 纸箱 20 个 / 大件 3 件"),
                         ListingIntakeField("contact", label: "联系方式", placeholder: "微信 / LINE / 电话", required: true),
@@ -1585,7 +1589,7 @@ private struct ListingIntakeSpec {
                     actionWord: "预约美容健康",
                     noteLabel: "注意事项",
                     fields: [
-                        ListingIntakeField("date", label: "预约日期", placeholder: "例如 6 月 20 日", required: true),
+                        ListingIntakeField("date", label: "预约日期", placeholder: "例如 6 月 20 日", required: true, isDate: true),
                         ListingIntakeField("time", label: "预约时段", options: ["上午", "下午", "晚上", "周末"], required: true),
                         ListingIntakeField("service", label: "服务项目", placeholder: "剪发 / 美甲 / 按摩 / 体检预约", required: true),
                         ListingIntakeField("contact", label: "联系方式", placeholder: "微信 / LINE / 电话", required: true),
@@ -1602,7 +1606,7 @@ private struct ListingIntakeSpec {
                 actionWord: "预约看房",
                 noteLabel: "备注",
                 fields: [
-                    ListingIntakeField("date", label: "希望看房日期", placeholder: "例如 6 月 12 日", required: true),
+                    ListingIntakeField("date", label: "希望看房日期", placeholder: "例如 6 月 12 日", required: true, isDate: true),
                     ListingIntakeField("time", label: "希望时段", options: ["上午", "下午", "晚上", "周末"], required: true),
                     ListingIntakeField("situation", label: "当前情况", options: ["在日本", "海外", "学生", "在职"]),
                     ListingIntakeField("move_in", label: "入住时间", placeholder: "例如 7 月上旬 / 即可入住"),
@@ -1633,7 +1637,7 @@ private struct ListingIntakeSpec {
                 fields: [
                     ListingIntakeField("city", label: "服务城市", required: true),
                     ListingIntakeField("service_scene", label: "服务场景", options: ["到店预约", "景点门票", "一日游", "机场接送", "翻译手续", "搬家清洁", "生活开通", "美容健康"]),
-                    ListingIntakeField("date", label: "希望日期", placeholder: "例如 6 月 12 日"),
+                    ListingIntakeField("date", label: "希望日期", placeholder: "例如 6 月 12 日", isDate: true),
                     ListingIntakeField("time", label: "希望时段", options: ["上午", "下午", "晚上", "周末"]),
                     ListingIntakeField("people", label: "人数/件数", placeholder: "例如 2 人 / 3 件行李 / 1 套资料"),
                     ListingIntakeField("contact", label: "联系方式", placeholder: "微信 / LINE / 电话", required: true),
@@ -1758,7 +1762,26 @@ private struct ListingIntakeSheet: View {
             Text(field.required ? "\(ListingIntakeLocalizer.text(field.label, language)) *" : ListingIntakeLocalizer.text(field.label, language))
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.secondary)
-            if field.options.isEmpty {
+            if field.isDate {
+                DatePicker(
+                    "",
+                    selection: dateBinding(for: field),
+                    in: Date()...,
+                    displayedComponents: .date
+                )
+                .labelsHidden()
+                .datePickerStyle(.compact)
+                .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
+                .padding(.horizontal, 12)
+                .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                // Seed the stored value so a required date validates even if the
+                // user accepts the default without opening the picker.
+                .onAppear {
+                    if (values[field.id] ?? "").isEmpty {
+                        values[field.id] = Self.intakeDateFormatter.string(from: dateBinding(for: field).wrappedValue)
+                    }
+                }
+            } else if field.options.isEmpty {
                 TextField(ListingIntakeLocalizer.text(field.placeholder.isEmpty ? field.label : field.placeholder, language), text: binding(for: field))
                     .font(.subheadline.weight(.semibold))
                     .padding(.horizontal, 12)
@@ -1786,6 +1809,26 @@ private struct ListingIntakeSheet: View {
         Binding(
             get: { values[field.id, default: ""] },
             set: { values[field.id] = $0 }
+        )
+    }
+
+    /// Stable, parseable storage format for picked dates (shown back in 我的咨询).
+    private static let intakeDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    private func dateBinding(for field: ListingIntakeField) -> Binding<Date> {
+        Binding(
+            get: {
+                if let raw = values[field.id], let parsed = Self.intakeDateFormatter.date(from: raw) {
+                    return parsed
+                }
+                return Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+            },
+            set: { values[field.id] = Self.intakeDateFormatter.string(from: $0) }
         )
     }
 

@@ -13,6 +13,7 @@ struct AuthView: View {
     @State private var isShowingRegionPicker = false
     @State private var isGoogleLoading = false
     @State private var appleNonce = ""
+    @FocusState private var captchaFieldFocused: Bool
 
     let onAuthenticated: (UserEntity) -> Void
     /// When provided, shows a "browse as guest" affordance so people can
@@ -319,14 +320,22 @@ struct AuthView: View {
 
                     // Solving the captcha is what unlocks "send code" — the
                     // email-code request is the bot-abuse vector being gated.
+                    // Once the code is sent the challenge is spent, so the row
+                    // collapses into a "verified" confirmation instead of
+                    // wiping itself and re-prompting.
                     if viewModel.captchaEnabled {
-                        AuthCaptchaField(
-                            code: captchaBinding,
-                            image: viewModel.captchaImage,
-                            loading: viewModel.captchaLoading,
-                            error: viewModel.fieldError(.captcha),
-                            onRefresh: { Task { await viewModel.refreshCaptcha() } }
-                        )
+                        if viewModel.captchaVerified {
+                            AuthCaptchaVerifiedRow()
+                        } else {
+                            AuthCaptchaField(
+                                code: captchaBinding,
+                                image: viewModel.captchaImage,
+                                loading: viewModel.captchaLoading,
+                                error: viewModel.fieldError(.captcha),
+                                focus: $captchaFieldFocused,
+                                onRefresh: { Task { await viewModel.refreshCaptcha() } }
+                            )
+                        }
                     }
 
                     AuthCodeField(
@@ -356,6 +365,7 @@ struct AuthView: View {
                         image: viewModel.captchaImage,
                         loading: viewModel.captchaLoading,
                         error: viewModel.fieldError(.captcha),
+                        focus: $captchaFieldFocused,
                         onRefresh: { Task { await viewModel.refreshCaptcha() } }
                     )
                 }
@@ -472,6 +482,43 @@ struct AuthView: View {
         .task(id: viewModel.mode) {
             await viewModel.refreshCaptcha()
         }
+        // A rejected captcha re-arms a fresh image and pulls focus straight to
+        // the input so the user can retype without hunting for the field.
+        .onChange(of: viewModel.captchaFocusRequest) { _, _ in
+            captchaFieldFocused = true
+        }
+    }
+}
+
+/// Collapsed confirmation shown after the captcha has done its job (the email
+/// code was sent). Reassures the user they don't need to solve it again.
+private struct AuthCaptchaVerifiedRow: View {
+    @Environment(\.appLanguage) private var language
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L("authCaptcha", language))
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(.green)
+                Text(L("authCaptchaVerified", language))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 56)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(KXColor.successSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
+                    .strokeBorder(Color.green.opacity(0.28))
+            )
+        }
+        .transition(.opacity)
     }
 }
 
@@ -536,6 +583,7 @@ private struct AuthCaptchaField: View {
     let image: Data?
     let loading: Bool
     var error: String?
+    var focus: FocusState<Bool>.Binding
     let onRefresh: () -> Void
 
     var body: some View {
@@ -559,6 +607,7 @@ private struct AuthCaptchaField: View {
                         .keyboardType(.asciiCapable)
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
+                        .focused(focus)
                         .accessibilityIdentifier("auth.captcha")
                 }
                 .padding(.horizontal, 16)

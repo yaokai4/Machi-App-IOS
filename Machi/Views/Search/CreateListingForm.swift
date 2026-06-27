@@ -228,6 +228,18 @@ struct CreateCityListingView: View {
     @State private var selectedRegion: KaiXRegionDirectory.Region?
     @State private var isShowingRegionPicker = false
     @State private var publishedReceipt: ListingPublishReceipt?
+    @State private var showMembershipSheet = false
+    @State private var showMembershipGate = false
+
+    /// Listing types gated behind Machi membership (mirrors the server's
+    /// LISTING_TYPES_REQUIRING_MEMBERSHIP). Used to prompt *before* the user
+    /// fills out the whole form and again when they tap publish, instead of
+    /// only surfacing the server's 403 as a bottom error.
+    private static let membershipGatedTypes: Set<String> = ["rental", "job", "hiring", "local_service", "discount"]
+
+    private var needsMembership: Bool {
+        Self.membershipGatedTypes.contains(listingType) && !currentUser.isVerifiedMember && !isEditing
+    }
 
     private var region: KaiXRegionDirectory.Region? {
         if let selectedRegion { return selectedRegion }
@@ -610,6 +622,7 @@ struct CreateCityListingView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     createHero
+                    if needsMembership { membershipBanner }
                     publishRegionCard
                     photoSection
                     basicInfoSection
@@ -693,6 +706,73 @@ struct CreateCityListingView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
+        .sheet(isPresented: $showMembershipSheet) {
+            NavigationStack { MembershipView(currentUser: currentUser) }
+        }
+        .confirmationDialog(
+            membershipGateTitle,
+            isPresented: $showMembershipGate,
+            titleVisibility: .visible
+        ) {
+            Button(KXListingCopy.pickText(language, "开通会员", "メンバー登録", "Get membership")) {
+                showMembershipSheet = true
+            }
+            Button(KXListingCopy.pickText(language, "了解权益", "特典を見る", "See benefits")) {
+                showMembershipSheet = true
+            }
+            Button(KXListingCopy.pickText(language, "取消", "キャンセル", "Cancel"), role: .cancel) {}
+        } message: {
+            Text(membershipGateMessage)
+        }
+    }
+
+    private var membershipGateTitle: String {
+        switch listingType {
+        case "rental": return KXListingCopy.pickText(language, "发布房源需要 Machi 会员", "物件掲載には Machi メンバーが必要", "Listing rentals needs Machi membership")
+        case "job", "hiring": return KXListingCopy.pickText(language, "发布招聘需要 Machi 会员", "求人掲載には Machi メンバーが必要", "Posting jobs needs Machi membership")
+        case "local_service": return KXListingCopy.pickText(language, "发布服务需要 Machi 会员", "サービス掲載には Machi メンバーが必要", "Listing services needs Machi membership")
+        case "discount": return KXListingCopy.pickText(language, "发布优惠需要 Machi 会员", "クーポン掲載には Machi メンバーが必要", "Posting deals needs Machi membership")
+        default: return KXListingCopy.pickText(language, "发布该信息需要 Machi 会员", "掲載には Machi メンバーが必要", "This listing needs Machi membership")
+        }
+    }
+
+    private var membershipGateMessage: String {
+        KXListingCopy.pickText(
+            language,
+            "认证会员可获得高信任发布权限与认证标识。开通后即可发布。",
+            "認証メンバーになると、高信頼の掲載権限と認証バッジが付与されます。",
+            "Verified members get high-trust posting and a verified badge. Upgrade to publish."
+        )
+    }
+
+    /// Prominent, tappable notice shown at the top of the form for a non-member
+    /// on a gated type — so they learn the requirement before filling it all in.
+    private var membershipBanner: some View {
+        Button { showMembershipGate = true } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.title3)
+                    .foregroundStyle(KXColor.accent)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(membershipGateTitle)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(KXListingCopy.pickText(language, "点此开通会员后即可发布", "タップしてメンバー登録すると掲載できます", "Tap to upgrade and publish"))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.bold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(KXColor.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KXColor.accent.opacity(0.3), lineWidth: 0.8))
+        }
+        .buttonStyle(.plain)
     }
 
     /// Clears the per-listing fields so the user can immediately publish another
@@ -1125,7 +1205,15 @@ struct CreateCityListingView: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Button { Task { await submit() } } label: {
+            Button {
+                // Stop a non-member before they submit a gated listing — show a
+                // clear modal with upgrade options, not just the server's error.
+                if needsMembership {
+                    showMembershipGate = true
+                } else {
+                    Task { await submit() }
+                }
+            } label: {
                 HStack(spacing: 8) {
                     if isSubmitting { KXSpinner(size: 18, lineWidth: 2.2, tint: .white) }
                     Text(isSubmitting ? KXListingCopy.pickText(language, "提交中", "送信中", "Submitting") : isEditing ? KXListingCopy.pickText(language, "保存修改", "変更を保存", "Save changes") : KXListingCopy.submitLabel(for: listingType, language))

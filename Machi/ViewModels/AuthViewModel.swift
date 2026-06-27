@@ -46,6 +46,14 @@ final class AuthViewModel: ObservableObject {
     @Published var captchaImage: Data?
     @Published var captchaCode = ""
     @Published var captchaLoading = false
+    // After a successful email-code request the server has *consumed* the
+    // captcha challenge (registration itself needs no captcha), so the row
+    // collapses into a "verified" confirmation instead of re-prompting. A
+    // resend (cooldown end) re-arms it with a fresh challenge.
+    @Published var captchaVerified = false
+    // Bumped to ask the view to move keyboard focus to the captcha field
+    // (used when a bad captcha forces a re-entry).
+    @Published var captchaFocusRequest = 0
     private var captchaId = ""
 
     func submit(context: ModelContext, language: AppLanguage) async -> UserEntity? {
@@ -155,12 +163,33 @@ final class AuthViewModel: ObservableObject {
             codeSent = true
             infoMessage = L("authCodeSent", language)
             startCooldown(60)
-            // The challenge is single-use — a resend needs a fresh image.
-            await refreshCaptcha()
+            // Success: the server consumed the captcha and registration won't
+            // ask for it again. Keep the user's input visible — collapse the
+            // row into a "verified" badge rather than wiping + reloading it.
+            if captchaEnabled, !captchaId.isEmpty {
+                captchaVerified = true
+                fieldErrors[.captcha] = nil
+            }
         } catch let apiError as KaiXAPIError {
+            // The challenge was submitted to the server, which burns it on every
+            // verify — so any server verdict needs a fresh image. Refresh, then
+            // surface the precise reason and pull focus back to the captcha.
+            let consumed = captchaEnabled && !captchaId.isEmpty
+            if consumed { await refreshCaptcha() }
             apply(apiError: apiError, language: language)
-            await refreshCaptcha()
+            if consumed {
+                let code = apiError.error.code
+                let isCaptchaVerdict = ["invalid_captcha", "captcha_expired", "captcha_required"].contains(code)
+                // Non-captcha failures (e.g. rate limit) still invalidated the
+                // image; say so explicitly instead of silently clearing it.
+                if !isCaptchaVerdict, fieldErrors[.captcha] == nil {
+                    fieldErrors[.captcha] = L("authCaptchaRefreshed", language)
+                }
+                captchaFocusRequest += 1
+            }
         } catch {
+            // Network failure never reached the server, so the captcha is still
+            // valid — leave the user's input untouched.
             errorMessage = L("authNetworkError", language)
         }
     }
@@ -178,6 +207,7 @@ final class AuthViewModel: ObservableObject {
         let seq = captchaFetchSeq
         captchaLoading = true
         captchaCode = ""
+        captchaVerified = false
         fieldErrors[.captcha] = nil
         do {
             let res = try await KaiXAPIClient.shared.fetchCaptcha(scene: mode == .login ? "login" : "register")
@@ -204,6 +234,12 @@ final class AuthViewModel: ObservableObject {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
                 if Task.isCancelled { return }
                 self.codeCooldown = max(0, self.codeCooldown - 1)
+            }
+            // Cooldown ended: a resend needs a brand-new challenge because the
+            // previous one was consumed. Re-arm it so the user can solve a fresh
+            // image before tapping "resend".
+            if let self, !Task.isCancelled, self.captchaVerified {
+                await self.refreshCaptcha()
             }
         }
     }

@@ -241,7 +241,16 @@ struct MyCityListingsView: View {
             if let index = listings.firstIndex(where: { $0.id == listing.id }) {
                 listings[index] = updated
             }
-            showActionMessage(status == "hidden" ? L("listingHiddenDone", language) : status == "published" ? L("listingRepublishedDone", language) : L("listingStatusUpdated", language))
+            // Specific confirmation per action — never a vague "状态已更新".
+            let doneKey: String = switch status {
+            case "hidden": "listingHiddenDone"
+            case "published": "listingRepublishedDone"
+            case "sold": "listingMarkedSoldDone"
+            case "rented": "listingMarkedRentedDone"
+            case "closed": "listingMarkedClosedDone"
+            default: "listingStatusUpdated"
+            }
+            showActionMessage(L(doneKey, language))
         } catch {
             showActionMessage(error.kaixUserMessage)
         }

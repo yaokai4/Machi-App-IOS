@@ -332,8 +332,12 @@ struct RegionPickerView: View {
 
     private func searchMatches(query: String) -> [KaiXRegionDirectory.Region] {
         Array(allSelectableRegions().filter { region in
+            // Match across scripts so "东京 / 東京 / tokyo / jp.tokyo" all hit,
+            // regardless of the app's current display language.
             region.countryName.localizedCaseInsensitiveContains(query)
             || KaiXRegionDirectory.localizedDisplayName(region, language: language).localizedCaseInsensitiveContains(query)
+            || KaiXRegionDirectory.localizedDisplayName(region, language: .ja).localizedCaseInsensitiveContains(query)
+            || KaiXRegionDirectory.localizedDisplayName(region, language: .en).localizedCaseInsensitiveContains(query)
             || region.countryCode.contains(query)
             || region.provinceName.localizedCaseInsensitiveContains(query)
             || region.provinceCode.contains(query)

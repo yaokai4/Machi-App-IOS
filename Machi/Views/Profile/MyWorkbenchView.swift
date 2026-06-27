@@ -164,8 +164,8 @@ struct MyWorkbenchView: View {
 
     private var publishSection: some View {
         SettingsSectionCard(title: L("workbenchPublishTrading", language)) {
-            SettingsRowLink(icon: "plus.circle.fill", tint: KXColor.accent, title: L("workbenchPublishCity", language), subtitle: L("workbenchPublishCitySubtitle", language), revealsNavBar: false) {
-                CreateCityListingView(listingType: "secondhand", citySlug: currentRegionCode, currentUser: currentUser, onPublishedListing: onPublishedListing)
+            SettingsRowLink(icon: "plus.circle.fill", tint: KXColor.accent, title: L("workbenchPublishCity", language), subtitle: L("workbenchPublishCitySubtitle", language)) {
+                PublishListingTypeChooserView(citySlug: currentRegionCode, currentUser: currentUser, onPublishedListing: onPublishedListing)
             }
             SettingsDivider()
             SettingsRowLink(icon: "shippingbox.fill", tint: .teal, title: L("workbenchCityListingsTitle", language), value: summary.flatMap { countValue($0.publishedListings) }, subtitle: L("workbenchCityListingsSubtitle", language)) {
@@ -247,5 +247,68 @@ private struct WorkbenchPill: View {
             .padding(.horizontal, 9)
             .frame(height: 26)
             .background(KXColor.accent.opacity(0.10), in: Capsule())
+    }
+}
+
+/// Type chooser for "发布城市信息" — so the main publish entry covers every
+/// marketplace channel (二手 / 租房 / 招聘 / 本地服务 / 优惠), not just secondhand.
+/// Membership-gated types are still enforced inside CreateCityListingView.
+struct PublishListingTypeChooserView: View {
+    @Environment(\.appLanguage) private var language
+    let citySlug: String
+    let currentUser: UserEntity
+    var onPublishedListing: ((String) -> Void)?
+
+    private struct Option: Identifiable {
+        let type: String
+        let icon: String
+        let tint: Color
+        var id: String { type }
+    }
+
+    private let options: [Option] = [
+        .init(type: "secondhand", icon: "shippingbox.fill", tint: .teal),
+        .init(type: "rental", icon: "house.fill", tint: .blue),
+        .init(type: "job", icon: "briefcase.fill", tint: .indigo),
+        .init(type: "local_service", icon: "storefront.fill", tint: .brown),
+        .init(type: "discount", icon: "tag.fill", tint: .pink),
+    ]
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 15) {
+                SettingsSectionCard(title: L("workbenchPublishCity", language)) {
+                    ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
+                        if index > 0 { SettingsDivider() }
+                        SettingsRowLink(
+                            icon: option.icon,
+                            tint: option.tint,
+                            title: KXListingCopy.createTitle(for: option.type, language),
+                            subtitle: publishSubtitle(option.type),
+                            revealsNavBar: false
+                        ) {
+                            CreateCityListingView(listingType: option.type, citySlug: citySlug, currentUser: currentUser, onPublishedListing: onPublishedListing)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.top, 12)
+            .kxTabBarSafeBottomPadding()
+        }
+        .navigationTitle(L("workbenchPublishCity", language))
+        .navigationBarTitleDisplayMode(.inline)
+        .kxPageBackground()
+    }
+
+    private func publishSubtitle(_ type: String) -> String {
+        switch type {
+        case "secondhand": return KXListingCopy.pickText(language, "出售、求购、免费送", "売る・買う・譲る", "Sell, buy, give away")
+        case "rental": return KXListingCopy.pickText(language, "整租、合租与转租房源", "賃貸・シェア・転貸", "Rentals, shares, sublets")
+        case "job": return KXListingCopy.pickText(language, "招聘与兼职职位", "求人・アルバイト", "Jobs & part-time roles")
+        case "local_service": return KXListingCopy.pickText(language, "本地商家与上门服务", "ローカル店舗・出張サービス", "Local shops & services")
+        case "discount": return KXListingCopy.pickText(language, "优惠券与团购套餐", "クーポン・割引", "Deals & coupons")
+        default: return ""
+        }
     }
 }

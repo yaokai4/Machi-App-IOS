@@ -97,7 +97,24 @@ struct MediaGridView: View {
     }
 
     private func tileAspectRatio(for item: MediaEntity, count: Int) -> CGFloat {
-        count == 1 && item.type == .video ? 16.0 / 10.0 : 1.0
+        // Multi-image grids keep the square rhythm; single media gets a
+        // height-aware shape so the feed stays scannable.
+        guard count == 1 else { return 1.0 }
+        if item.type == .video { return 16.0 / 10.0 }
+        return Self.singleImageAspectRatio(width: item.width, height: item.height)
+    }
+
+    /// Aspect ratio (width / height) for a lone feed photo. Uses the image's
+    /// natural ratio — so a landscape food shot is shown short and uncropped
+    /// instead of being force-squared — but clamps it to a comfortable window
+    /// (4:5 portrait … 16:9 landscape) so a tall portrait can't dominate the
+    /// card and a panorama can't shrink to a sliver. Unknown dimensions fall
+    /// back to a calm 4:3.
+    static func singleImageAspectRatio(width: Double, height: Double) -> CGFloat {
+        let natural = (width > 0 && height > 0) ? CGFloat(width / height) : 4.0 / 3.0
+        let minRatio: CGFloat = 4.0 / 5.0   // 0.80 — tallest allowed (portrait)
+        let maxRatio: CGFloat = 16.0 / 9.0  // 1.78 — widest allowed (landscape)
+        return min(max(natural, minRatio), maxRatio)
     }
 
 }
