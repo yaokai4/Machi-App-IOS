@@ -7,7 +7,7 @@ final class GuideJourneyShotUITests: XCTestCase {
 
     func testCaptureGuideJourneys() throws {
         let app = XCUIApplication()
-        app.launchArguments += ["-KXAutoGuest", "-kaix.api.base", "http://127.0.0.1:8787"]
+        app.launchArguments += ["-KXAutoGuest", "-KXAllowLocalAPI", "-kaix.api.base", "http://127.0.0.1:8787"]
         app.launch()
 
         // Enter as guest if the auth wall is shown.

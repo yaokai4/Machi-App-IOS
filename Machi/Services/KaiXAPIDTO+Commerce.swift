@@ -731,6 +731,7 @@ struct KaiXCommentDTO: Codable, Equatable {
     let like_count: Int
     let liked: Bool
     let author: KaiXUserDTO?
+    let is_accepted: Bool?
 }
 
 struct KaiXNotificationDTO: Codable, Equatable {

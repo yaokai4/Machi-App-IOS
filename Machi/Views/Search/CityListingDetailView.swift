@@ -757,19 +757,27 @@ struct CityListingDetailView: View {
                 ListingBookingSection(listingId: listing.id, listingType: listing.type)
 
                 KXListingSection(title: KXListingCopy.pickText(language, "发布者", "投稿者", "Poster"), icon: "person.crop.circle") {
-                    HStack(spacing: 12) {
-                        Circle()
-                            .fill(KXColor.livingAccentSoft)
-                            .frame(width: 44, height: 44)
-                            .overlay(Text((listing.seller?.display_name ?? "M").prefix(1)).font(.headline.weight(.bold)).foregroundStyle(KXColor.livingAccent))
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(listing.seller?.display_name ?? KXListingCopy.pickText(language, "Machi 用户", "Machi ユーザー", "Machi user"))
-                                .font(.subheadline.weight(.bold))
-                            Text(KXListingCopy.verificationLabel(listing.verification_status, language))
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 12) {
+                            Circle()
+                                .fill(KXColor.livingAccentSoft)
+                                .frame(width: 44, height: 44)
+                                .overlay(Text((listing.seller?.display_name ?? "M").prefix(1)).font(.headline.weight(.bold)).foregroundStyle(KXColor.livingAccent))
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(listing.seller?.display_name ?? KXListingCopy.pickText(language, "Machi 用户", "Machi ユーザー", "Machi user"))
+                                    .font(.subheadline.weight(.bold))
+                                Text(KXListingCopy.verificationLabel(listing.verification_status, language))
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
                         }
-                        Spacer()
+                        trustChipRow(listing)
+                        if sellerIsNew(listing) && !sellerVerified(listing) {
+                            Label(KXListingCopy.pickText(language, "新账号，交易前请多核实身份、当面验货", "新規アカウントです。取引前に本人確認と現物確認をおすすめします", "New account — verify identity and inspect in person before trading"), systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.orange)
+                        }
                     }
                 }
 
@@ -782,8 +790,22 @@ struct CityListingDetailView: View {
                     listingRail(title: KXListingCopy.pickText(language, "相似推荐", "関連おすすめ", "Similar listings"), icon: "sparkles.rectangle.stack", items: similarItems)
                 }
 
-                KXListingSection(title: KXListingCopy.pickText(language, "安全提醒", "安全の注意", "Safety tips"), icon: "shield.checkered") {
+                KXListingSection(
+                    title: KXListingCopy.isHighRisk(listing.type)
+                        ? KXListingCopy.pickText(language, "高风险类目 · 谨慎交易", "高リスクカテゴリ・取引注意", "High-risk category · trade carefully")
+                        : KXListingCopy.pickText(language, "安全提醒", "安全の注意", "Safety tips"),
+                    icon: KXListingCopy.isHighRisk(listing.type) ? "exclamationmark.shield.fill" : "shield.checkered"
+                ) {
                     VStack(alignment: .leading, spacing: 8) {
+                        if KXListingCopy.isHighRisk(listing.type) {
+                            Text(KXListingCopy.pickText(language,
+                                "Machi 只是信息平台，不代收任何押金 / 订金 / 货款，任何要求提前转账的都要高度警惕。",
+                                "Machi は情報プラットフォームであり、敷金・申込金・代金を一切預かりません。事前送金を求められたら十分にご注意ください。",
+                                "Machi is only an info platform and never holds deposits or payments. Be very cautious of any upfront-transfer request."))
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.orange)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                         ForEach(KXListingCopy.safetyTips(for: listing.type, language), id: \.self) { tip in
                             Label(tip, systemImage: "checkmark.circle")
                                 .font(.caption.weight(.semibold))
@@ -930,6 +952,60 @@ struct CityListingDetailView: View {
     private func isOwnListing(_ listing: KaiXCityListingDTO) -> Bool {
         let sellerId = listing.seller_user_id ?? listing.sellerUserId ?? ""
         return listing.can_manage == true || listing.canManage == true || sellerId == currentUser.id
+    }
+
+    private func sellerVerified(_ listing: KaiXCityListingDTO) -> Bool {
+        let s = listing.seller
+        return s?.is_verified == true || s?.is_verified_member == true || s?.merchant_verified == true || listing.verification_status == "verified"
+    }
+
+    private func sellerJoinDate(_ listing: KaiXCityListingDTO) -> Date? {
+        let iso = listing.seller?.joined_at ?? listing.seller?.created_at
+        guard let iso, !iso.isEmpty else { return nil }
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = f.date(from: iso) { return d }
+        f.formatOptions = [.withInternetDateTime]
+        return f.date(from: iso)
+    }
+
+    private func sellerIsNew(_ listing: KaiXCityListingDTO) -> Bool {
+        guard let d = sellerJoinDate(listing) else { return false }
+        return Date().timeIntervalSince(d) < 14 * 24 * 60 * 60
+    }
+
+    @ViewBuilder
+    private func trustChipRow(_ listing: KaiXCityListingDTO) -> some View {
+        let verified = sellerVerified(listing)
+        let heat = Int(listing.seller?.total_heat ?? 0)
+        HStack(spacing: 8) {
+            trustChip(
+                icon: verified ? "checkmark.seal.fill" : "seal",
+                text: verified
+                    ? KXListingCopy.pickText(language, "已实名认证", "本人確認済み", "Verified")
+                    : KXListingCopy.pickText(language, "未认证", "未認証", "Unverified"),
+                tint: verified ? .green : .secondary
+            )
+            if let d = sellerJoinDate(listing) {
+                trustChip(icon: "calendar", text: DateFormatterUtils.localizedTemplateString("yMMM", localeID: DateFormatterUtils.localeID(for: language), date: d), tint: .secondary)
+            }
+            if heat > 0 {
+                trustChip(icon: "flame.fill", text: KXListingCopy.pickText(language, "贡献值 \(heat)", "貢献度 \(heat)", "Contribution \(heat)"), tint: .orange)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func trustChip(icon: String, text: String, tint: Color) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: icon)
+            Text(text)
+        }
+        .font(.caption2.weight(.bold))
+        .foregroundStyle(tint)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(tint.opacity(0.12), in: Capsule())
     }
 
     private func quickInquiries(for listing: KaiXCityListingDTO) -> [ListingQuickInquiry] {

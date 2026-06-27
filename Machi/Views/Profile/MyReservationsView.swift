@@ -320,7 +320,7 @@ struct MySlotManagerListView: View {
             }
             var seen = Set<String>()
             listings = results
-                .filter { ($0.status ?? "") != "sold" && seen.insert($0.id).inserted }
+                .filter { $0.status != "sold" && seen.insert($0.id).inserted }
                 .sorted { ($0.updated_at ?? $0.updatedAt ?? "") > ($1.updated_at ?? $1.updatedAt ?? "") }
             state = listings.isEmpty ? .empty : .loaded
         } catch {

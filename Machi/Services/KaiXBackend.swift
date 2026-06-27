@@ -41,10 +41,27 @@ enum KaiXBackend {
     /// Effective base URL. Release device builds deliberately ignore the
     /// mutable UserDefaults override so a production app cannot be redirected
     /// to an arbitrary API host by stale QA defaults or device tampering.
+    ///
+    /// Debug launch arguments are intentionally stricter for loopback hosts:
+    /// `-kaix.api.base http://127.0.0.1:8787` now requires `-KXAllowLocalAPI`.
+    /// This keeps ordinary simulator smoke runs on production data instead of
+    /// accidentally inheriting a stale local-backend argument and showing a
+    /// first-screen "cannot connect" error.
     static var baseURL: URL {
 #if DEBUG
-        if let stored = UserDefaults.standard.string(forKey: "kaix.api.base"),
-           let url = validatedBaseURL(stored) {
+        if let cli = launchArgumentValue("-kaix.api.base") {
+            if let url = validatedBaseURL(cli), shouldUseCommandLineOverride(url) {
+                return url
+            }
+        } else if let env = ProcessInfo.processInfo.environment["KAIX_API_BASE"] {
+            // Test/CI host override (e.g. KaiXAPIClientTests). Loopback still
+            // requires an explicit allow signal so a stray env var can't redirect
+            // a real build — see shouldUseCommandLineOverride.
+            if let url = validatedBaseURL(env), shouldUseCommandLineOverride(url) {
+                return url
+            }
+        } else if let stored = UserDefaults.standard.string(forKey: "kaix.api.base"),
+                  let url = validatedBaseURL(stored) {
             return url
         }
 #endif
@@ -54,6 +71,25 @@ enum KaiXBackend {
         }
         return defaultBaseURL
     }
+
+#if DEBUG
+    private static func launchArgumentValue(_ key: String) -> String? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let index = args.firstIndex(of: key), index + 1 < args.count else { return nil }
+        return args[index + 1]
+    }
+
+    private static func shouldUseCommandLineOverride(_ url: URL) -> Bool {
+        guard isLoopback(url) else { return true }
+        let args = ProcessInfo.processInfo.arguments
+        if args.contains("-KXAllowLocalAPI") { return true }
+        // Explicit test/CI opt-in: the backend smoke tests set this, so a local
+        // base URL from the environment is honoured without also needing the
+        // launch argument.
+        if ProcessInfo.processInfo.environment["KAIX_RUN_BACKEND_SMOKE_TESTS"] == "1" { return true }
+        return UserDefaults.standard.bool(forKey: "kaix.api.allowLocal")
+    }
+#endif
 
     /// Persist a new base URL override (debug/QA only).
     static func setBaseURL(_ url: URL?) {
@@ -75,14 +111,18 @@ enum KaiXBackend {
         return url.scheme == "http" || url.scheme == "https" ? url : nil
 #else
         guard url.scheme == "https" else { return nil }
-        let loopbackHosts = ["localhost", "127.0.0.1", "0.0.0.0", "::1"]
-        guard !loopbackHosts.contains(host), !host.hasPrefix("127.") else {
+        guard !isLoopback(url) else {
             return nil
         }
         let trustedHosts = ["machicity.com", "www.machicity.com", "api.machicity.com"]
         guard trustedHosts.contains(host) else { return nil }
         return url
 #endif
+    }
+
+    private static func isLoopback(_ url: URL) -> Bool {
+        guard let host = url.host?.lowercased() else { return false }
+        return ["localhost", "127.0.0.1", "0.0.0.0", "::1"].contains(host) || host.hasPrefix("127.")
     }
 
     /// Bearer token persisted in the iOS Keychain (with a one-time

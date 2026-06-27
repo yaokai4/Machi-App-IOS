@@ -1733,7 +1733,21 @@ enum KXListingCopy {
         }
     }
 
+    /// Listing types that warrant extra-prominent (high-risk) safety framing.
+    static func isHighRisk(_ type: String) -> Bool {
+        ["rental", "work", "job", "hiring", "local_service", "discount"].contains(type)
+    }
+
     static func safetyTips(for type: String, _ language: AppLanguage = .zh) -> [String] {
+        baseSafetyTips(for: type, language) + [
+            pickText(language,
+                     "谨防站外交易：不点陌生链接、不私下加站外好友打款，沟通与交易尽量留在 Machi 内，遇到可疑行为立即举报",
+                     "プラットフォーム外取引に注意：不審なリンクを開かず、外部で個別送金せず、やり取りと取引は Machi 内で行い、不審な行為はすぐ通報してください",
+                     "Beware off-platform deals: don't open unknown links or pay outside the app; keep chat and trades on Machi and report anything suspicious")
+        ]
+    }
+
+    private static func baseSafetyTips(for type: String, _ language: AppLanguage = .zh) -> [String] {
         if type == "rental" {
             return [
                 pickText(language, "Machi 不代收押金、订金或房租", "Machi は敷金・申込金・家賃を預かりません", "Machi does not hold deposits, reservation fees, or rent"),

@@ -537,6 +537,10 @@ struct KXFloatingComposeButton: View {
         }
         .buttonStyle(KXPressableStyle(scale: 0.90))
         .sensoryFeedback(.impact(weight: .light), trigger: tapCount)
+        // Stable hook for UI tests (Home + Discover both use this button) and a
+        // VoiceOver-friendly target. Only the active tab's copy is hit-testable,
+        // so the duplicate id across tabs is never ambiguous.
+        .accessibilityIdentifier("compose.floating")
     }
 }
 

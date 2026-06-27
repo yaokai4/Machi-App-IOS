@@ -167,7 +167,8 @@ enum ServerEntityFactory {
             createdAt: date(dto.created_at),
             updatedAt: date(dto.updated_at),
             remoteId: dto.id,
-            syncStatus: .synced
+            syncStatus: .synced,
+            isAccepted: dto.is_accepted ?? false
         )
     }
 

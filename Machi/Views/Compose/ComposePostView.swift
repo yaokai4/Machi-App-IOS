@@ -56,6 +56,7 @@ struct ComposePostView: View {
             }
             .kxPageBackground()
             .toolbar(.hidden, for: .navigationBar)
+            .accessibilityIdentifier("compose.root")
         }
         .confirmationDialog(L("discardDraftTitle", language), isPresented: $showDiscardDialog, titleVisibility: .visible) {
             Button(L("saveDraft", language)) {

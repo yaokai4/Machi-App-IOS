@@ -24,6 +24,9 @@ struct DiscoverView: View {
     @State private var isShowingNotifications = false
 
     let currentUser: UserEntity
+    /// Opens the global composer. Supplied by the host (MainTabView); when nil
+    /// (previews) the floating compose button is simply not shown.
+    var onCompose: (() -> Void)? = nil
 
     private var currentRegion: KaiXRegionDirectory.Region? {
         regionStore.current
@@ -128,6 +131,25 @@ struct DiscoverView: View {
         .background(KXColor.livingBackground)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("discover.root")
+        // FAB is layered OUTSIDE the `discover.root` accessibility container (a
+        // sibling on top, mirroring Home) so it stays hit-testable — nesting it
+        // inside `.accessibilityElement(children: .contain)` makes it
+        // present-but-not-hittable for XCUITest/VoiceOver.
+        .overlay(alignment: .bottomTrailing) {
+            if let onCompose {
+                // Same floating compose button as Home, kept clear of the tab bar
+                // via the dynamic bottom-content padding. Tapping opens the
+                // composer (guests are intercepted with the login gate upstream),
+                // never a post — directly addressing the audit's "FAB landed on
+                // a deleted post detail" confusion on this surface.
+                KXFloatingComposeButton {
+                    onCompose()
+                }
+                .accessibilityLabel(L("compose", language))
+                .padding(.trailing, KXSpacing.lg)
+                .padding(.bottom, chrome.bottomContentPadding + KXSpacing.sm)
+            }
+        }
         .toolbar(.hidden, for: .navigationBar)
         .task {
             await load()

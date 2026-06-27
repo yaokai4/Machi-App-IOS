@@ -758,7 +758,7 @@ struct CreateCityListingView: View {
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.primary)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(KXListingCopy.pickText(language, "本类型首条可免费发布，之后开通会员继续", "このカテゴリは初回無料、以降はメンバー登録で継続", "First listing free; upgrade to post more"))
+                    Text(KXListingCopy.pickText(language, "开通认证会员即可发布本类型，并获得认证标识", "メンバー登録でこのカテゴリを投稿でき、認証バッジも付きます", "Become a verified member to post in this channel"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }

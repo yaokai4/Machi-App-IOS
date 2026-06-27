@@ -249,6 +249,25 @@ final class PostDetailViewModel: ObservableObject {
         }
     }
 
+    /// Accept (or un-accept) an answer as the best answer for a question post.
+    /// Only meaningful when the current user authored the question.
+    func acceptAnswer(context: ModelContext, comment: CommentEntity) async {
+        let next = !comment.isAccepted
+        do {
+            try await CommentRepository(context: context).acceptAnswer(comment: comment, on: next)
+            if next {
+                // One accepted answer per question — clear any previous one locally.
+                for other in comments where other.id != comment.id && other.isAccepted {
+                    other.isAccepted = false
+                }
+            }
+            // Reassign so the @Published array republishes (badge + reorder reflect immediately).
+            comments = comments
+        } catch {
+            transientCommentError = error.kaixUserMessage
+        }
+    }
+
     func updatePost(context: ModelContext, content: String, postStore: PostStore) async -> Bool {
         guard let post else { return false }
         transientPostError = nil

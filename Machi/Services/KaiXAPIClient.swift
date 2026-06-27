@@ -1529,6 +1529,11 @@ final class KaiXAPIClient {
         _ = try await request(on ? "POST" : "DELETE", "/api/comments/\(id.encodedPathSegment)/like")
     }
 
+    /// Mark/unmark a comment as the accepted best answer (question author only, enforced server-side).
+    func acceptAnswer(_ id: String, _ on: Bool) async throws {
+        _ = try await request(on ? "POST" : "DELETE", "/api/comments/\(id.encodedPathSegment)/accept")
+    }
+
     // MARK: - search & topics
 
     func search(_ q: String, kind: SearchKind = .all) async throws -> KaiXSearchResponse {

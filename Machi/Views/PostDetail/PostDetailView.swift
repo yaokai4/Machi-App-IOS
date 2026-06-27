@@ -51,17 +51,35 @@ struct PostDetailView: View {
     }
 
     private func sorted(_ comments: [CommentEntity]) -> [CommentEntity] {
+        let base: [CommentEntity]
         switch sortMode {
         case .latest:
-            comments.sorted { $0.createdAt > $1.createdAt }
+            base = comments.sorted { $0.createdAt > $1.createdAt }
         case .hot:
-            comments.sorted {
+            base = comments.sorted {
                 if $0.likeCount == $1.likeCount {
                     return $0.createdAt > $1.createdAt
                 }
                 return $0.likeCount > $1.likeCount
             }
         }
+        // Pin an accepted best answer to the top, preserving order otherwise.
+        let accepted = base.filter { $0.isAccepted }
+        guard !accepted.isEmpty else { return base }
+        return accepted + base.filter { !$0.isAccepted }
+    }
+
+    /// The post when it is a question — drives the Q&A status chip + accept affordances.
+    private var questionPost: PostEntity? {
+        let post = postStore.post(id: postId) ?? viewModel.post
+        return post?.contentType == .question ? post : nil
+    }
+    private var isQuestionAuthor: Bool {
+        guard let q = questionPost else { return false }
+        return q.authorId == currentUser.id
+    }
+    private var isResolved: Bool {
+        questionPost != nil && viewModel.comments.contains { $0.isAccepted }
     }
 
     var body: some View {
@@ -454,7 +472,9 @@ struct PostDetailView: View {
                 onReport: { performReport { try await KaiXAPIClient.shared.reportComment(comment.id, reason: "other") } },
                 onDelete: {
                     Task { await viewModel.deleteComment(context: modelContext, comment: comment, postStore: postStore, commentStore: commentStore) }
-                }
+                },
+                canAccept: isQuestionAuthor,
+                onAccept: { Task { await viewModel.acceptAnswer(context: modelContext, comment: comment) } }
             )
 
             if !visibleReplies.isEmpty {
@@ -517,9 +537,21 @@ struct PostDetailView: View {
     }
 
     private var commentHeader: some View {
-        HStack {
+        HStack(spacing: KXSpacing.sm) {
             Text(L("comments", language))
                 .font(KXTypography.section)
+            if questionPost != nil {
+                HStack(spacing: 3) {
+                    Image(systemName: isResolved ? "checkmark.seal.fill" : "questionmark.circle")
+                        .font(.caption2.weight(.bold))
+                    Text(isResolved ? L("qaResolved", language) : L("qaOpen", language))
+                        .font(.caption.weight(.semibold))
+                }
+                .foregroundStyle(isResolved ? Color.green : KXColor.accent)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background((isResolved ? Color.green : KXColor.accent).opacity(0.12), in: Capsule())
+            }
             Spacer()
             KXSegmentedControl(CommentSortMode.allCases, selection: $sortMode, itemMinWidth: 58, itemHeight: 30) { mode in
                 Text(mode.title(language))
@@ -711,6 +743,8 @@ private struct CommentRowView: View {
     let onReply: () -> Void
     let onReport: () -> Void
     let onDelete: () -> Void
+    var canAccept = false
+    var onAccept: () -> Void = {}
 
     var body: some View {
         HStack(alignment: .top, spacing: KXSpacing.sm) {
@@ -727,6 +761,17 @@ private struct CommentRowView: View {
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.primary)
                         KXUserBadge(user: author)
+                        if comment.isAccepted {
+                            HStack(spacing: 2) {
+                                Image(systemName: "checkmark.seal.fill")
+                                Text(L("acceptedBadge", language))
+                            }
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(Color.green)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.green.opacity(0.12), in: Capsule())
+                        }
                         Text(DateFormatterUtils.relativeText(from: comment.createdAt, language: language))
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -749,7 +794,19 @@ private struct CommentRowView: View {
 
                     Spacer(minLength: KXSpacing.sm)
 
+                    if canAccept {
+                        CommentActionButton(
+                            title: comment.isAccepted ? L("unacceptAnswer", language) : L("acceptAnswer", language),
+                            systemImage: comment.isAccepted ? "checkmark.seal.fill" : "checkmark.seal",
+                            tint: comment.isAccepted ? .green : .secondary,
+                            action: onAccept
+                        )
+                    }
+
                     Menu {
+                        if canAccept {
+                            Button(comment.isAccepted ? L("unacceptAnswer", language) : L("acceptAnswer", language), action: onAccept)
+                        }
                         if comment.authorId == currentUser.id {
                             Button(L("delete", language), role: .destructive, action: onDelete)
                         } else {
@@ -769,6 +826,12 @@ private struct CommentRowView: View {
         }
         .padding(KXSpacing.lg)
         .kxGlassSurface(radius: KXRadius.lg)
+        .overlay {
+            if comment.isAccepted {
+                RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous)
+                    .stroke(Color.green.opacity(0.5), lineWidth: 1.5)
+            }
+        }
     }
 }
 

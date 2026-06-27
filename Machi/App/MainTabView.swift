@@ -299,7 +299,7 @@ struct MainTabView: View {
             }
         case .search:
             NavigationStack(path: router.binding(for: .search)) {
-                DiscoverView(currentUser: currentUser)
+                DiscoverView(currentUser: currentUser, onCompose: { isShowingComposer = true })
                     .kxRouteDestinations(currentUser: currentUser)
                     .kxEnableSwipeBack()
             }

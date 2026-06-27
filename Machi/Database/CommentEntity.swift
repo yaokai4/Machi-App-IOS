@@ -16,6 +16,9 @@ final class CommentEntity {
     var syncStatusRaw: String
     var deletedAt: Date?
     var cursor: String?
+    /// Whether the question author marked this answer as the accepted best answer.
+    /// Defaulted so SwiftData lightweight migration backfills existing rows.
+    var isAccepted: Bool = false
 
     init(
         id: String = UUID().uuidString,
@@ -30,7 +33,8 @@ final class CommentEntity {
         remoteId: String? = nil,
         syncStatus: SyncStatus = .local,
         deletedAt: Date? = nil,
-        cursor: String? = nil
+        cursor: String? = nil,
+        isAccepted: Bool = false
     ) {
         self.id = id
         self.postId = postId
@@ -45,6 +49,7 @@ final class CommentEntity {
         self.syncStatusRaw = syncStatus.rawValue
         self.deletedAt = deletedAt
         self.cursor = cursor
+        self.isAccepted = isAccepted
     }
 }
 

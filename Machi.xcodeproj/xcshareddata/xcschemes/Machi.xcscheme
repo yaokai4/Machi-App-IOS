@@ -13,6 +13,14 @@
          <CommandLineArgument argument = "-KXAutoGuest" isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>
+      <EnvironmentVariables>
+         <EnvironmentVariable key = "KAIX_API_BASE" value = "http://127.0.0.1:8787" isEnabled = "NO">
+         </EnvironmentVariable>
+         <EnvironmentVariable key = "KAIX_RUN_BACKEND_SMOKE_TESTS" value = "1" isEnabled = "NO">
+         </EnvironmentVariable>
+         <EnvironmentVariable key = "KAIX_CAPTCHA_LOGIN_ENABLED" value = "0" isEnabled = "NO">
+         </EnvironmentVariable>
+      </EnvironmentVariables>
       <Testables>
          <TestableReference skipped = "NO">
             <BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "359BD8A42FBEC344006E5BA1" BuildableName = "MachiTests.xctest" BlueprintName = "MachiTests" ReferencedContainer = "container:Machi.xcodeproj">

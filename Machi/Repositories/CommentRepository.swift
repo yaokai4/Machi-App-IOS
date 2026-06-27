@@ -34,4 +34,16 @@ final class CommentRepository {
         comment.likeCount = max(0, comment.likeCount + (comment.isLikedByCurrentUser ? 1 : -1))
         try context.save()
     }
+
+    /// Mark/unmark a comment as the accepted best answer. Server enforces that
+    /// only the question author may do this and that there is one per question.
+    func acceptAnswer(comment: CommentEntity, on: Bool) async throws {
+        if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
+            try await KaiXAPIClient.shared.acceptAnswer(comment.id, on)
+            comment.isAccepted = on
+            return
+        }
+        comment.isAccepted = on
+        try context.save()
+    }
 }
