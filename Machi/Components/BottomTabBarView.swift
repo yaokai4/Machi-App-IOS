@@ -13,7 +13,7 @@ struct BottomTabBarView: View {
             ForEach(AppTab.allCases) { tab in
                 let isSelected = selection == tab
                 Button {
-                    withAnimation(.snappy(duration: 0.2)) {
+                    withAnimation(KXMotion.select) {
                         selection = tab
                     }
                 } label: {
@@ -28,11 +28,15 @@ struct BottomTabBarView: View {
                             }
 
                         Text(tab.title(language))
-                            .font(.system(size: 10, weight: isSelected ? .bold : .semibold))
+                            .kxScaledFont(10, relativeTo: .caption2, weight: isSelected ? .bold : .semibold)
                             .lineLimit(1)
                             .minimumScaleFactor(0.72)
                             .allowsTightening(true)
-                            .frame(height: 12, alignment: .center)
+                            // Scale with Dynamic Type (was frozen at 10pt), but
+                            // cap so very large accessibility sizes can't blow out
+                            // the fixed-height bar.
+                            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+                            .frame(minHeight: 12, alignment: .center)
                     }
                     .foregroundStyle(isSelected ? KXColor.accent : Color.primary.opacity(0.88))
                     .frame(maxWidth: .infinity)
@@ -57,17 +61,18 @@ struct BottomTabBarView: View {
             if reduceTransparency {
                 Capsule().fill(KXColor.elevatedBackground.opacity(0.94))
             } else {
+                // Single glass layer + one hairline + one soft shadow. Dropped
+                // the triple white fills, the inset white stroke, and the fake
+                // white negative-offset "highlight" shadow (which flashed a pale
+                // rim over dark/coloured page backgrounds — cheap-looking).
                 Capsule()
-                    .fill(Color.white.opacity(0.032))
-                    .kxLiquidGlass(.bar, in: Capsule(), interactive: false, tint: Color.white.opacity(0.026))
-                    .overlay(Capsule().fill(Color.white.opacity(0.024)))
+                    .fill(Color.white.opacity(0.03))
+                    .kxLiquidGlass(.bar, in: Capsule(), interactive: false)
             }
         }
         .clipShape(Capsule())
-        .overlay(Capsule().stroke(KXColor.glassStroke.opacity(0.34), lineWidth: 0.65))
-        .overlay(Capsule().stroke(Color.white.opacity(0.46), lineWidth: 0.4).padding(1))
-        .shadow(color: Color.black.opacity(0.09), radius: 14, y: 7)
-        .shadow(color: Color.white.opacity(0.42), radius: 1, y: -0.5)
+        .overlay(Capsule().stroke(KXColor.glassStroke.opacity(0.4), lineWidth: 0.7))
+        .shadow(color: Color.black.opacity(0.12), radius: 16, y: 8)
         .padding(.horizontal, 22)
         .sensoryFeedback(.selection, trigger: selection)
         .accessibilityElement(children: .contain)
@@ -132,7 +137,6 @@ private struct SelectedTabBubble: View {
             .fill(KXColor.accent.opacity(0.085))
             .kxLiquidGlass(.selected, in: Capsule(), tint: KXColor.accent.opacity(0.075))
             .overlay(Capsule().stroke(KXColor.accent.opacity(0.16), lineWidth: 0.65))
-            .overlay(Capsule().stroke(Color.white.opacity(0.58), lineWidth: 0.4).padding(1))
             .shadow(color: KXColor.accent.opacity(0.10), radius: 7, y: 3)
     }
 }

@@ -29,10 +29,10 @@ struct CachedMediaImageView: View {
                 failureView
             }
         }
-        // Cross-fade the shimmer skeleton → decoded image so media reveals
-        // smoothly instead of popping in (App Store-grade feel, every tile).
-        .animation(.easeOut(duration: 0.28), value: image == nil)
-        .animation(.easeOut(duration: 0.2), value: failed)
+        // Cold loads cross-fade in (the `withAnimation` in `load()` drives the
+        // Image's `.transition(.opacity)`); a memory-cache hit paints instantly
+        // with no animation, so scrolling back to a seen tile doesn't re-trigger
+        // a fade or churn animation transactions on the scroll's hot path.
         .task(id: loadKey) {
             await load()
         }
@@ -76,6 +76,16 @@ struct CachedMediaImageView: View {
             return
         }
 
+        // Fast path: synchronous memory-cache hit → paint immediately, no fade.
+        // This is the common case when a recycled cell scrolls back into view.
+        if let cached = ImageCacheService.shared.cachedImageSync(for: url, targetPixelSize: targetPixelSize) {
+            image = cached
+            loadedURL = url
+            loadedPixelSize = targetPixelSize
+            failed = false
+            return
+        }
+
         let isSameRequest = loadedURL == url && Int(loadedPixelSize.rounded()) == Int(targetPixelSize.rounded())
         if !isSameRequest {
             failed = false
@@ -85,7 +95,10 @@ struct CachedMediaImageView: View {
         let requestedPixelSize = targetPixelSize
         if let loaded = await ImageCacheService.shared.image(for: requestedURL, targetPixelSize: requestedPixelSize) {
             guard !Task.isCancelled else { return }
-            image = loaded
+            // Cold load (disk/network): reveal with a gentle cross-fade.
+            withAnimation(.easeOut(duration: 0.2)) {
+                image = loaded
+            }
             loadedURL = requestedURL
             loadedPixelSize = requestedPixelSize
             failed = false

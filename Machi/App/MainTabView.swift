@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct MainTabView: View {
     @Environment(\.appLanguage) private var language
@@ -50,10 +51,10 @@ struct MainTabView: View {
                     tabContent(tab)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                         .opacity(chrome.selectedTab == tab ? 1 : 0)
-                        // Subtle settle: the incoming tab scales 0.988 → 1 with
-                        // the existing snappy fade, so switching reads as a
-                        // gentle pop instead of a hard cross-dissolve.
-                        .scaleEffect(chrome.selectedTab == tab ? 1 : 0.988)
+                        // Plain opacity cross-fade. A `.scaleEffect` here forced
+                        // the whole (often huge: Discover/feed) tab subtree to
+                        // offscreen-rasterize every switch — a visible hitch on
+                        // tab change for no real benefit.
                         .allowsHitTesting(chrome.selectedTab == tab)
                         .accessibilityHidden(chrome.selectedTab != tab)
                 }
@@ -83,6 +84,12 @@ struct MainTabView: View {
             }
         }
         .animation(.snappy(duration: 0.22), value: chrome.isTabBarHidden)
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
+            // Tabs are kept alive (opacity 0) forever for instant switching, so
+            // memory only grows. Under pressure, drop every tab except the one on
+            // screen — they rebuild on next visit, far cheaper than being killed.
+            loadedTabs = [chrome.selectedTab]
+        }
         .onAppear {
             #if DEBUG
             // UI 验证/截图脚本用:`simctl launch <udid> <bundle> -KXOpenTab discover`

@@ -16,9 +16,11 @@ struct DiscoverView: View {
     @StateObject private var viewModel = SearchViewModel()
     @ObservedObject private var regionStore = RegionStore.shared
     @ObservedObject private var languageManager = LanguageManager.shared
-    @State private var selectedSegment: DiscoverSegment = .recommend
-    @State private var selectedHotScope: DiscoverHotScope = .city
-    @State private var searchDraft = ""
+    // Persisted across tab switches / relaunches so the user's chosen view
+    // (推荐 / 热榜 / 正在发生 and city-vs-country) is remembered instead of
+    // snapping back to 推荐 every time they leave and return.
+    @SceneStorage("discover.segment") private var selectedSegment: DiscoverSegment = .recommend
+    @SceneStorage("discover.hotScope") private var selectedHotScope: DiscoverHotScope = .city
     @State private var isShowingRegionSelector = false
     @State private var isShowingMoreChannels = false
     @State private var isShowingNotifications = false
@@ -218,7 +220,8 @@ struct DiscoverView: View {
                             authors: viewModel.authors,
                             language: language,
                             onOpenPost: openPost,
-                            onRefresh: { Task { await load() } }
+                            onRefresh: { Task { await load() } },
+                            isActive: chrome.selectedTab == .search
                         )
                     case .ranking:
                         // Server owns the ranking, the explainable reason, and the
@@ -367,35 +370,32 @@ struct DiscoverView: View {
                 .accessibilityLabel(L("notifications", language))
             }
 
-            HStack(spacing: 10) {
-                Image(systemName: "magnifyingglass")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(KXColor.accent)
-                TextField(L("searchPlaceholderShort", language), text: $searchDraft)
-                    .textInputAutocapitalization(.never)
-                    .disableAutocorrection(true)
-                    .submitLabel(.search)
-                    .font(.subheadline.weight(.semibold))
-                    .onSubmit { submitDiscoverSearch() }
-                if !searchDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Button {
-                        submitDiscoverSearch()
-                    } label: {
-                        Image(systemName: "arrow.right.circle.fill")
-                            .font(.title3.weight(.bold))
-                            .foregroundStyle(KXColor.accent)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(L("search", language))
+            // Tap opens the dedicated search screen (live, debounced results) —
+            // one consistent search experience. The old inline field looked like
+            // it would search-as-you-type but only acted on Enter and then jumped
+            // away anyway, which read as "typed but nothing happened".
+            Button {
+                router.open(.search(initialQuery: ""))
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(KXColor.accent)
+                    Text(L("searchPlaceholderShort", language))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, KXSpacing.lg)
+                .frame(height: 50)
+                .frame(maxWidth: .infinity)
+                .kxGlassCapsule()
+                .overlay {
+                    Capsule()
+                        .stroke(KXColor.glassStroke.opacity(0.88), lineWidth: 0.8)
                 }
             }
-            .padding(.horizontal, KXSpacing.lg)
-            .frame(height: 50)
-            .kxGlassCapsule()
-            .overlay {
-                Capsule()
-                    .stroke(KXColor.glassStroke.opacity(0.88), lineWidth: 0.8)
-            }
+            .buttonStyle(KXPressableStyle())
             .accessibilityLabel(L("searchPlaceholder", language))
         }
         .padding(.horizontal, KaiXTheme.horizontalPadding)
@@ -511,11 +511,6 @@ struct DiscoverView: View {
         await viewModel.load(context: modelContext, currentUser: currentUser, postStore: postStore, searchStore: searchStore)
     }
 
-    private func submitDiscoverSearch() {
-        let query = searchDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return }
-        router.open(.search(initialQuery: query))
-    }
 }
 
 private enum DiscoverSegment: String, CaseIterable, Identifiable, Hashable {
@@ -838,6 +833,8 @@ private struct DiscoverCategoryGrid: View {
 /// The shared row used in both the 8-cell grid and the More sheet.
 private struct DiscoverCategoryCell: View {
     @Environment(\.appLanguage) private var language
+    @Environment(\.kxListingZoomNamespace) private var zoomNamespace
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     enum Prominence {
         case normal
         case high
@@ -848,7 +845,11 @@ private struct DiscoverCategoryCell: View {
 
     var body: some View {
         if prominence == .high {
+            // Listing-channel cards become the zoom SOURCE so tapping morphs the
+            // tile into the channel screen (iOS 18+; plain push otherwise). The
+            // id matches the channel's destination id ("channel-<listingType>").
             highCard
+                .kxListingZoomSource("channel-\(category.listingType ?? "none")", reduceMotion ? nil : zoomNamespace)
         } else {
             normalCard
         }
@@ -1536,8 +1537,14 @@ private struct HappeningSection: View {
     let language: AppLanguage
     let onOpenPost: (PostEntity) -> Void
     let onRefresh: () -> Void
+    /// Only poll while Discover is the visible tab. Tabs are kept alive (opacity
+    /// 0) when you switch away, so without this the 45s loop kept firing network
+    /// + main-thread state updates on every other screen — a periodic hitch and
+    /// wasted battery/data the whole time you're elsewhere in the app.
+    var isActive: Bool = true
 
     @State private var liveNewCount = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var pollKey: String { region?.regionCode ?? "all" }
 
@@ -1558,9 +1565,12 @@ private struct HappeningSection: View {
             if liveNewCount > 0 {
                 newContentBanner
             }
+            // New radar items animate in/out (stable post.id) instead of the
+            // list hard-swapping when the user taps "refresh" or fresh data lands.
             content
+                .animation(reduceMotion ? nil : KXMotion.reveal, value: posts.map(\.id))
         }
-        .task(id: pollKey) { await pollLoop() }
+        .task(id: "\(pollKey)|\(isActive)") { await pollLoop() }
         .onChange(of: posts.map(\.id)) { _, _ in
             // New data flowed in from the parent (refresh / region change) —
             // the user is now looking at the latest, so clear the nudge.
@@ -1588,7 +1598,7 @@ private struct HappeningSection: View {
 
     private var newContentBanner: some View {
         Button {
-            liveNewCount = 0
+            withAnimation(reduceMotion ? nil : KXMotion.reveal) { liveNewCount = 0 }
             onRefresh()
         } label: {
             HStack(spacing: 6) {
@@ -1632,7 +1642,7 @@ private struct HappeningSection: View {
     }
 
     private func pollLoop() async {
-        guard KaiXBackend.token != nil else { return }
+        guard isActive, KaiXBackend.token != nil else { return }
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(45))
             guard !Task.isCancelled else { break }

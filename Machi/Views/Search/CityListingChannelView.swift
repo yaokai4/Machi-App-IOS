@@ -117,6 +117,8 @@ struct CityListingChannelView: View {
     let listingType: String
     let currentUser: UserEntity
     /// Shared with CityListingDetailView (via the router) for the card→detail
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     /// zoom transition. nil outside the router path → plain push.
     var zoomNamespace: Namespace.ID? = nil
 
@@ -152,6 +154,17 @@ struct CityListingChannelView: View {
     @State private var nextCursor: String?
     @State private var nextHiringCursor: String?
     @State private var isLoadingMore = false
+    /// True while a `quiet` reload (filter/sort change) is in flight — drives a
+    /// small "updating…" indicator so a silent reload never reads as "frozen".
+    @State private var isReloading = false
+    /// Set when the channel auto-expands a too-thin single city to its metro
+    /// circle on first open — surfaces a one-time "showing 关东圈 · this city
+    /// only" notice so the widened scope isn't silently confusing.
+    @State private var scopeAutoExpanded = false
+    /// Bumped on every load. A request that finishes after a newer one started
+    /// (rapid filter/sort tapping on a slow network) discards its result instead
+    /// of clobbering the newer list — "last issued wins", not "last returned".
+    @State private var loadGeneration = 0
 
     private var hasMoreListings: Bool {
         nextCursor != nil || nextHiringCursor != nil
@@ -160,11 +173,20 @@ struct CityListingChannelView: View {
     private var marketplaceGridSpacing: CGFloat { 12 }
 
     private var marketplaceCardWidth: CGFloat {
-        let contentWidth = activeScreenWidth - (KaiXTheme.horizontalPadding * 2)
+        let contentWidth = screenWidth - (KaiXTheme.horizontalPadding * 2)
         return max(142, floor((contentWidth - marketplaceGridSpacing) / 2))
     }
 
-    private var activeScreenWidth: CGFloat {
+    /// Cached once in `.onAppear` (see `currentScreenWidth`). Was a computed
+    /// property that walked `UIApplication.connectedScenes` on EVERY access —
+    /// i.e. once per card width during layout and scroll. Reading a stored
+    /// value is free; the screen width doesn't change mid-scroll anyway.
+    // Seed from the real screen width at init (not a hardcoded 393) so the
+    // two-column grid lays out correctly on the FIRST frame — no SE/iPad/Split
+    // View width jump after onAppear.
+    @State private var screenWidth: CGFloat = CityListingChannelView.resolveScreenWidth()
+
+    private static func resolveScreenWidth() -> CGFloat {
         UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .first { $0.activationState != .unattached }?
@@ -224,7 +246,19 @@ struct CityListingChannelView: View {
         rentalTab ?? (listingType == "hotels" || listingType == "stays" ? .stays : .homes)
     }
 
-    private var visibleItems: [KaiXCityListingDTO] {
+    /// Materialised filtered+sorted list. Recomputed only when data or filters
+    /// change (`recomputeVisibleItems`) — not on every `body` evaluation, the way
+    /// a computed property was. A filter change updates it immediately for
+    /// instant client-side feedback, before the server reload returns.
+    @State private var visibleItems: [KaiXCityListingDTO] = []
+
+    /// Signature of every input that affects `visibleItems`; a change drives an
+    /// immediate local recompute via `.onChange` in `body`.
+    private var visibleFilterSignature: String {
+        "\(serviceSection)|\(selectedCategory)|\(query)|\(minimumPrice)|\(maximumPrice)|\(sortMode)|\(staysActive)|\(baseType)"
+    }
+
+    private func recomputeVisibleItems() {
         let sectionCategories = Self.serviceSections.first { $0.key == serviceSection }?.categories ?? []
         let filtered = items.filter { item in
             // 住宿新入口只展示民宿；服务频道隐藏全部住宿历史类目。
@@ -249,7 +283,7 @@ struct CityListingChannelView: View {
             // 重复判断——gte 这类语义客户端复刻不了，重复判断只会误隐藏。
             return categoryOK && sectionOK && queryOK && priceOK
         }
-        return filtered.sorted(by: sortMode.sortsBefore)
+        visibleItems = filtered.sorted(by: sortMode.sortsBefore)
     }
 
     private var selectedArea: ListingScopeArea? {
@@ -281,7 +315,10 @@ struct CityListingChannelView: View {
     private var activeFilterCount: Int {
         var count = 0
         if selectedCategory != "全部" { count += 1 }
-        if scopeMode != .city { count += 1 }
+        // The metro-circle scope the app auto-expanded into on first open is NOT
+        // a user filter — don't count it, or the empty state wrongly offers
+        // "clear filters" when the user set none.
+        if scopeMode != .city && !scopeAutoExpanded { count += 1 }
         if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { count += 1 }
         if !minimumPrice.isEmpty { count += 1 }
         if !maximumPrice.isEmpty { count += 1 }
@@ -375,6 +412,9 @@ struct CityListingChannelView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 16) {
+                        if scopeAutoExpanded, scopeMode == .area {
+                            scopeExpandedNotice
+                        }
                         if baseType == "local_service" {
                             MerchantDirectoryStripView(citySlug: regionCode)
                         }
@@ -384,6 +424,13 @@ struct CityListingChannelView: View {
                             // server page. Re-armed by id whenever items grow.
                             KXInlineLoader()
                                 .task(id: items.count) { await loadMore() }
+                        } else if !isLoading, errorMessage == nil, !visibleItems.isEmpty {
+                            // Clear end-of-list boundary instead of just stopping.
+                            Text(KXListingCopy.pickText(language, "已显示全部", "すべて表示しました", "You've reached the end"))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 20)
                         }
                     }
                     .padding(.horizontal, KaiXTheme.horizontalPadding)
@@ -393,6 +440,24 @@ struct CityListingChannelView: View {
                 }
                 .refreshable { await load() }
                 .kxScrollCollapse($headerCollapsed)
+                .overlay(alignment: .top) {
+                    if isReloading {
+                        HStack(spacing: 7) {
+                            ProgressView().controlSize(.small)
+                            Text(KXListingCopy.pickText(language, "更新中", "更新中", "Updating"))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, 13)
+                        .frame(height: 34)
+                        .background(KXColor.cardBackground.opacity(0.96), in: Capsule())
+                        .overlay(Capsule().stroke(KXColor.glassStroke.opacity(0.6), lineWidth: 0.7))
+                        .shadow(color: KXColor.glassShadow.opacity(0.3), radius: 8, y: 3)
+                        .padding(.top, 8)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                }
+                .animation(KXMotion.reveal, value: isReloading)
             }
         }
         .overlay(alignment: .bottom) {
@@ -402,6 +467,9 @@ struct CityListingChannelView: View {
             }
         }
         .kxPageBackground()
+        // Zoom DESTINATION: morph in from the Discover entry card with the same
+        // id ("channel-<listingType>"). No-op (plain push) when no namespace.
+        .kxListingZoomDestination("channel-\(listingType)", reduceMotion ? nil : zoomNamespace)
         .sheet(isPresented: $filtersOpen) { filterSheet }
         .sheet(isPresented: $wishlistOpen) {
             WishlistView { id in openFromWishlist(id) }
@@ -413,6 +481,44 @@ struct CityListingChannelView: View {
         }
         .onChange(of: minimumPrice) { _, _ in Task { await load(quiet: true) } }
         .onChange(of: maximumPrice) { _, _ in Task { await load(quiet: true) } }
+        // Instant client-side re-filter the moment any filter changes — the
+        // server reload that follows refreshes it again with fresh data.
+        .onChange(of: visibleFilterSignature) { _, _ in recomputeVisibleItems() }
+        .onAppear { screenWidth = Self.resolveScreenWidth() }
+    }
+
+    private var scopeExpandedNotice: some View {
+        Button {
+            scopeMode = .city
+            selectedScopeArea = ""
+            selectedScopeRegionCode = ""
+            scopeAutoExpanded = false
+            Task { await load() }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "info.circle.fill")
+                    .foregroundStyle(KXColor.livingAccent)
+                Text(KXListingCopy.pickText(language,
+                                            "已扩大范围至\(activeScopeLabel)",
+                                            "\(activeScopeLabel)に範囲を広げています",
+                                            "Showing the wider \(activeScopeLabel)"))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                Spacer(minLength: 4)
+                Text(KXListingCopy.pickText(language, "只看本市", "この市のみ", "This city only"))
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(KXColor.livingAccent)
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(KXColor.livingAccent)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(KXColor.livingAccentSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .transition(.opacity)
     }
 
     private var header: some View {
@@ -1032,6 +1138,7 @@ struct CityListingChannelView: View {
                         scopeMode = .area
                         selectedScopeArea = area.id
                         selectedScopeRegionCode = ""
+                        scopeAutoExpanded = false   // user chose this scope explicitly
                         Task { await load() }
                     } label: {
                         HStack(spacing: 10) {
@@ -1068,6 +1175,7 @@ struct CityListingChannelView: View {
                                 scopeMode = .selectedCity
                                 selectedScopeRegionCode = city.regionCode
                                 selectedScopeArea = ""
+                                scopeAutoExpanded = false   // user chose this scope explicitly
                                 Task { await load() }
                             } label: {
                                 Text(KaiXRegionDirectory.localizedShortLabel(city, language: language))
@@ -1196,23 +1304,53 @@ struct CityListingChannelView: View {
                 .frame(maxWidth: .infinity, minHeight: 260)
         } else if visibleItems.isEmpty {
             VStack(spacing: 18) {
-                EmptyStateView(
-                    title: KXListingCopy.emptyTitle(for: staysActive ? "stays" : baseType, language),
-                    subtitle: KXListingCopy.emptySubtitle(for: staysActive ? "stays" : baseType, language),
-                    systemImage: KXListingCopy.icon(for: baseType)
-                )
-                Button {
-                    router.open(.createCityListing(type: KXListingCopy.createType(for: lodgingActive ? "local_service" : baseType), citySlug: regionCode))
-                } label: {
-                    Label(KXListingCopy.createTitle(for: lodgingActive ? "local_service" : baseType, language), systemImage: "plus.circle.fill")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 22)
-                        .frame(height: 48)
-                        .background(KXColor.livingAccent, in: Capsule())
-                        .shadow(color: KXColor.livingAccent.opacity(0.25), radius: 12, y: 5)
+                if activeFilterCount > 0 {
+                    // Empty because the filters are too narrow → lead with
+                    // "clear filters", not an unrelated "go publish".
+                    EmptyStateView(
+                        title: KXListingCopy.pickText(language, "没有符合条件的结果", "条件に合う結果がありません", "No matches for these filters"),
+                        subtitle: KXListingCopy.pickText(language, "试试放宽筛选或扩大范围", "条件を緩めるか範囲を広げてみてください", "Try relaxing your filters or widening the area"),
+                        systemImage: "line.3.horizontal.decrease.circle"
+                    )
+                    Button {
+                        clearAllFilters()
+                    } label: {
+                        Label(KXListingCopy.pickText(language, "清空筛选", "条件をクリア", "Clear filters"), systemImage: "arrow.counterclockwise")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 22)
+                            .frame(height: 48)
+                            .background(KXColor.livingAccent, in: Capsule())
+                            .shadow(color: KXColor.livingAccent.opacity(0.25), radius: 12, y: 5)
+                    }
+                    .buttonStyle(KXPressableStyle())
+                    Button {
+                        router.open(.createCityListing(type: KXListingCopy.createType(for: lodgingActive ? "local_service" : baseType), citySlug: regionCode))
+                    } label: {
+                        Text(KXListingCopy.createTitle(for: lodgingActive ? "local_service" : baseType, language))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(KXColor.livingAccent)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    EmptyStateView(
+                        title: KXListingCopy.emptyTitle(for: staysActive ? "stays" : baseType, language),
+                        subtitle: KXListingCopy.emptySubtitle(for: staysActive ? "stays" : baseType, language),
+                        systemImage: KXListingCopy.icon(for: baseType)
+                    )
+                    Button {
+                        router.open(.createCityListing(type: KXListingCopy.createType(for: lodgingActive ? "local_service" : baseType), citySlug: regionCode))
+                    } label: {
+                        Label(KXListingCopy.createTitle(for: lodgingActive ? "local_service" : baseType, language), systemImage: "plus.circle.fill")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 22)
+                            .frame(height: 48)
+                            .background(KXColor.livingAccent, in: Capsule())
+                            .shadow(color: KXColor.livingAccent.opacity(0.25), radius: 12, y: 5)
+                    }
+                    .buttonStyle(KXPressableStyle())
                 }
-                .buttonStyle(KXPressableStyle())
             }
             .frame(maxWidth: .infinity, minHeight: 280)
         } else if isWorkChannel {
@@ -1230,16 +1368,19 @@ struct CityListingChannelView: View {
         } else if baseType == "secondhand" {
             // Two-column photo grid: square covers, price first, quick scan.
             LazyVStack(spacing: 14) {
-                ForEach(secondhandRows.indices, id: \.self) { rowIndex in
+                // Stable id (first item's id) instead of row index, so paging
+                // loadMore / re-filter inserts rows incrementally instead of
+                // forcing SwiftUI to rebuild every row.
+                ForEach(secondhandRows, id: \.first?.id) { row in
                     HStack(alignment: .top, spacing: marketplaceGridSpacing) {
-                        ForEach(secondhandRows[rowIndex]) { item in
+                        ForEach(row) { item in
                             KXSecondhandListingCard(listing: item, width: marketplaceCardWidth) {
                                 router.open(.cityListingDetail(listingId: item.id))
                             }
                             .kxListingZoomSource("listing-\(item.id)", zoomNamespace)
                             .transition(.opacity.combined(with: .move(edge: .bottom)))
                         }
-                        if secondhandRows[rowIndex].count == 1 {
+                        if row.count == 1 {
                             Spacer(minLength: 0)
                                 .frame(width: marketplaceCardWidth)
                         }
@@ -1280,32 +1421,16 @@ struct CityListingChannelView: View {
         }
     }
 
-    /// 按频道形态给出对应骨架占位，替代单调的居中转圈，初次加载也保留版式。
-    @ViewBuilder
+    /// 按频道形态给出对应骨架占位。Extracted to `ChannelLoadingSkeleton` (a
+    /// separate value-typed View) to keep this already-large struct's body
+    /// lighter — the first step of breaking the channel screen into pieces.
     private var loadingSkeleton: some View {
-        if isWorkChannel {
-            LazyVStack(spacing: 12) {
-                ForEach(0..<5, id: \.self) { _ in KXJobSkeletonRow() }
-            }
-        } else if baseType == "secondhand" {
-            LazyVStack(spacing: 14) {
-                ForEach(0..<3, id: \.self) { _ in
-                    HStack(alignment: .top, spacing: marketplaceGridSpacing) {
-                        KXSecondhandSkeletonCard(width: marketplaceCardWidth)
-                        KXSecondhandSkeletonCard(width: marketplaceCardWidth)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-        } else if baseType == "rental" {
-            LazyVStack(spacing: 18) {
-                ForEach(0..<3, id: \.self) { _ in KXBigPhotoSkeletonCard() }
-            }
-        } else {
-            LazyVStack(spacing: 12) {
-                ForEach(0..<3, id: \.self) { _ in KXBigPhotoSkeletonCard() }
-            }
-        }
+        ChannelLoadingSkeleton(
+            isWorkChannel: isWorkChannel,
+            baseType: baseType,
+            cardWidth: marketplaceCardWidth,
+            gridSpacing: marketplaceGridSpacing
+        )
     }
 
     /// quiet = 筛选/排序微调时静默重载：保留旧列表直到新结果回来，避免闪白。
@@ -1316,6 +1441,10 @@ struct CityListingChannelView: View {
             return
         }
         if !quiet { isLoading = true }
+        if quiet { isReloading = true }
+        loadGeneration += 1
+        let generation = loadGeneration
+        defer { if generation == loadGeneration { isReloading = false } }
         errorMessage = nil
         do {
             let scope = listingScopeQuery(for: region)
@@ -1324,6 +1453,7 @@ struct CityListingChannelView: View {
                 async let hiring = KaiXAPIClient.shared.listingsPage(type: "hiring", citySlug: scope.citySlug, regionCode: scope.regionCode, regionCodes: scope.regionCodes, countryCode: scope.countryCode, query: query, minPrice: Double(minimumPrice), maxPrice: Double(maximumPrice), sort: serverSort, attributes: attrFilters)
                 let jobPage = try await jobs
                 let hiringPage = try await hiring
+                guard generation == loadGeneration else { return }   // superseded by a newer load
                 items = (jobPage.items + hiringPage.items).sorted(by: KXListingCopy.sortForDisplay)
                 nextCursor = jobPage.nextCursor
                 nextHiringCursor = hiringPage.nextCursor
@@ -1342,12 +1472,15 @@ struct CityListingChannelView: View {
                     sort: serverSort,
                     attributes: attrFilters
                 )
+                guard generation == loadGeneration else { return }   // superseded by a newer load
                 items = page.items
                 nextCursor = page.nextCursor
                 nextHiringCursor = nil
             }
             isLoading = false
+            recomputeVisibleItems()
         } catch {
+            guard generation == loadGeneration else { return }
             errorMessage = error.localizedDescription
             isLoading = false
         }
@@ -1359,6 +1492,7 @@ struct CityListingChannelView: View {
         guard !isLoadingMore, !isLoading, hasMoreListings, let region else { return }
         isLoadingMore = true
         defer { isLoadingMore = false }
+        let generation = loadGeneration
         let scope = listingScopeQuery(for: region)
         do {
             var fetched: [KaiXCityListingDTO] = []
@@ -1392,8 +1526,10 @@ struct CityListingChannelView: View {
                 fetched = page.items
                 nextCursor = page.nextCursor
             }
+            guard generation == loadGeneration else { return }   // a reload replaced the list mid-page
             let existing = Set(items.map(\.id))
             items += fetched.filter { !existing.contains($0.id) }
+            recomputeVisibleItems()
         } catch {
             // Quietly stop paging on error; pull-to-refresh recovers.
             nextCursor = nil
@@ -1418,6 +1554,7 @@ struct CityListingChannelView: View {
         scopeMode = .area
         selectedScopeArea = areaId
         selectedScopeRegionCode = ""
+        scopeAutoExpanded = true
     }
 
     private func listingScopeQuery(for region: KaiXRegionDirectory.Region) -> (citySlug: String?, regionCode: String?, regionCodes: [String], countryCode: String?) {
@@ -1581,5 +1718,43 @@ struct UserListingsView: View {
         return listings
             .filter { seen.insert($0.id).inserted }
             .sorted { ($0.updated_at ?? $0.updatedAt ?? "") > ($1.updated_at ?? $1.updatedAt ?? "") }
+    }
+}
+
+/// Per-channel first-load skeleton, split out of `CityListingChannelView` so the
+/// channel's own body stays smaller (faster to type-check / diff). Value-only
+/// inputs — no shared state — so the extraction is purely mechanical.
+private struct ChannelLoadingSkeleton: View {
+    let isWorkChannel: Bool
+    let baseType: String
+    let cardWidth: CGFloat
+    let gridSpacing: CGFloat
+
+    var body: some View {
+        // Fewer skeleton cards: only the first-screen count needs to render on
+        // the push frame; the rest arrive with real data.
+        if isWorkChannel {
+            LazyVStack(spacing: 12) {
+                ForEach(0..<3, id: \.self) { _ in KXJobSkeletonRow() }
+            }
+        } else if baseType == "secondhand" {
+            LazyVStack(spacing: 14) {
+                ForEach(0..<2, id: \.self) { _ in
+                    HStack(alignment: .top, spacing: gridSpacing) {
+                        KXSecondhandSkeletonCard(width: cardWidth)
+                        KXSecondhandSkeletonCard(width: cardWidth)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        } else if baseType == "rental" {
+            LazyVStack(spacing: 18) {
+                ForEach(0..<2, id: \.self) { _ in KXBigPhotoSkeletonCard() }
+            }
+        } else {
+            LazyVStack(spacing: 12) {
+                ForEach(0..<2, id: \.self) { _ in KXBigPhotoSkeletonCard() }
+            }
+        }
     }
 }

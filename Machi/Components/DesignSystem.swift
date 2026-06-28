@@ -12,24 +12,52 @@ enum KXSpacing {
 }
 
 enum KXRadius {
-    static let xs: CGFloat = 7
-    static let sm: CGFloat = 9
-    static let md: CGFloat = 13
+    // Rhythmic 2pt-stepped set (was 7/9/13 — "prime-number" radii with no
+    // visual logic). Same-tier surfaces should share one token, not hardcode.
+    static let xs: CGFloat = 8
+    static let sm: CGFloat = 10
+    static let md: CGFloat = 14
     static let lg: CGFloat = 20
     static let card: CGFloat = 20
-    static let sheet: CGFloat = 24
+    static let sheet: CGFloat = 26
     static let pill: CGFloat = 999
 }
 
 enum KXTypography {
-    static let largeTitle = Font.system(size: 30, weight: .semibold)
-    static let title = Font.system(size: 21, weight: .semibold)
+    // Wider type scale: pull the top end up and add a title2 so hierarchy reads
+    // through SIZE, not just weight. Titles use semibold/bold, body stays
+    // regular — `.black` is avoided on reading text (it muddies CJK glyphs).
+    static let largeTitle = Font.system(size: 32, weight: .bold)
+    static let title = Font.system(size: 22, weight: .semibold)
+    static let title2 = Font.system(size: 19, weight: .semibold)
     static let section = Font.subheadline.weight(.semibold)
     static let body = Font.callout
     static let bodyEmphasis = Font.callout.weight(.semibold)
     static let meta = Font.caption
     static let metaEmphasis = Font.caption.weight(.semibold)
     static let tiny = Font.caption2
+}
+
+/// One motion language for the whole app — same gesture, same curve, same
+/// duration. Replaces the scattered 0.16/0.18/0.2/0.24/0.26 ad-hoc timings.
+enum KXMotion {
+    static let tap = Animation.spring(response: 0.3, dampingFraction: 0.75)
+    static let select = Animation.snappy(duration: 0.22)
+    static let reveal = Animation.easeOut(duration: 0.25)
+}
+
+/// Carries the listing-stack zoom namespace down to a tab root (e.g. Discover)
+/// so an entry card there can be the zoom SOURCE and the pushed channel screen
+/// the DESTINATION — the two morph as one. nil → cards just push normally.
+private struct KXListingZoomNamespaceKey: EnvironmentKey {
+    static let defaultValue: Namespace.ID? = nil
+}
+
+extension EnvironmentValues {
+    var kxListingZoomNamespace: Namespace.ID? {
+        get { self[KXListingZoomNamespaceKey.self] }
+        set { self[KXListingZoomNamespaceKey.self] = newValue }
+    }
 }
 
 /// A fixed point-size font that *scales with Dynamic Type*. Plain
@@ -364,7 +392,7 @@ struct KXSegmentedControl<Item: Hashable, Label: View>: View {
         HStack(spacing: KXSpacing.xs) {
             ForEach(items, id: \.self) { item in
                 Button {
-                    withAnimation(.snappy(duration: 0.18)) {
+                    withAnimation(KXMotion.select) {
                         selection = item
                     }
                 } label: {
@@ -557,7 +585,7 @@ struct KXPressableStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed ? scale : 1)
             .opacity(configuration.isPressed ? dim : 1)
-            .animation(.spring(response: 0.26, dampingFraction: 0.7), value: configuration.isPressed)
+            .animation(KXMotion.tap, value: configuration.isPressed)
     }
 }
 
@@ -609,6 +637,9 @@ extension View {
         stroke: Color = KXColor.glassStroke,
         elevated: Bool = false
     ) -> some View {
+        // One clean hairline + one soft shadow. The old inset "glass highlight"
+        // second stroke was Big-Sur-era skeuomorphism that read as plasticky and
+        // cost an extra draw per card — dropped for a calmer, more premium edge.
         self
             .background {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
@@ -617,12 +648,7 @@ extension View {
             .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(stroke, lineWidth: elevated ? 0.9 : 0.75)
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(KXColor.glassHighlight.opacity(elevated ? 0.65 : 0.48), lineWidth: 0.45)
-                    .padding(0.8)
+                    .stroke(stroke.opacity(0.7), lineWidth: 0.75)
             }
             .modifier(_SurfaceShadow(elevated: elevated))
     }
@@ -653,12 +679,7 @@ extension View {
                 Capsule()
                     .stroke(isSelected ? KXColor.accent.opacity(0.55) : KXColor.glassStroke, lineWidth: isSelected ? 0.95 : 0.75)
             }
-            .overlay {
-                Capsule()
-                    .stroke(KXColor.glassHighlight.opacity(isSelected ? 0.85 : 0.62), lineWidth: 0.45)
-                    .padding(0.8)
-            }
-            .shadow(color: KXColor.glassShadow.opacity(isSelected ? 0.55 : 0.32), radius: isSelected ? 6 : 3, y: isSelected ? 2 : 1)
+            .shadow(color: KXColor.glassShadow.opacity(isSelected ? 0.4 : 0.22), radius: isSelected ? 6 : 3, y: isSelected ? 2 : 1)
     }
 
     func kxGlassCircle(isSelected: Bool = false) -> some View {
@@ -673,12 +694,7 @@ extension View {
                 Circle()
                     .stroke(isSelected ? KXColor.accent.opacity(0.56) : KXColor.glassStroke, lineWidth: isSelected ? 0.95 : 0.75)
             }
-            .overlay {
-                Circle()
-                    .stroke(KXColor.glassHighlight.opacity(isSelected ? 0.85 : 0.62), lineWidth: 0.45)
-                    .padding(0.8)
-            }
-            .shadow(color: KXColor.glassShadow.opacity(isSelected ? 0.55 : 0.32), radius: isSelected ? 6 : 3, y: isSelected ? 2 : 1)
+            .shadow(color: KXColor.glassShadow.opacity(isSelected ? 0.4 : 0.22), radius: isSelected ? 6 : 3, y: isSelected ? 2 : 1)
     }
 
     /// Translucent bar (top nav / bottom toolbar). Previously layered
@@ -744,13 +760,13 @@ extension View {
 private struct _SurfaceShadow: ViewModifier {
     let elevated: Bool
     func body(content: Content) -> some View {
-        if elevated {
-            content
-                .shadow(color: KXColor.glassShadow.opacity(0.42), radius: 7, y: 3)
-                .shadow(color: KXColor.glassShadow.opacity(0.16), radius: 1.2, y: 1)
-        } else {
-            content.shadow(color: KXColor.glassShadow.opacity(0.22), radius: 4, y: 1)
-        }
+        // A single, soft, lifted shadow. Premium reads as "one clean edge + one
+        // soft shadow", not a stack of stacked micro-shadows.
+        content.shadow(
+            color: KXColor.glassShadow.opacity(elevated ? 0.5 : 0.28),
+            radius: elevated ? 11 : 6,
+            y: elevated ? 4 : 2
+        )
     }
 }
 
@@ -871,14 +887,66 @@ struct KXCarouselDots: View {
     }
 }
 
-/// Photo-led cover that swipes between a listing's images (with dots) when
-/// there is more than one, and degrades to a single fill — or the supplied
-/// `placeholder` — otherwise. Reserves an exact aspect box with a
-/// zero-intrinsic Color.clear so an odd source photo can't warp the card.
+/// Tiny "N photos" hint shown on a static list cover — the cheap stand-in for
+/// a swipeable gallery. Signals there are more photos without the cost of a
+/// real pager in every cell.
+struct KXCoverPhotoCount: View {
+    let count: Int
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "square.stack.fill")
+                .font(.system(size: 9, weight: .bold))
+            Text("\(count)")
+                .font(.caption2.weight(.black))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(.black.opacity(0.42), in: Capsule())
+    }
+}
+
+extension View {
+    /// Opaque badge background for pills/circles that sit ON a scrolling photo
+    /// cover. Replaces `.regularMaterial`/`.ultraThinMaterial` — a live backdrop
+    /// blur that recomposites every frame as the cover scrolls underneath, the
+    /// single most expensive thing to put in a list cell — with a near-opaque
+    /// solid: one cheap blend, no offscreen blur, and reads cleaner over photos.
+    func kxCoverBadge<S: InsettableShape>(in shape: S) -> some View {
+        self
+            .background(KXColor.cardBackground.opacity(0.92), in: shape)
+            .overlay(shape.strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.7))
+            // One cheap drop shadow (NOT a live blur) so the badge always reads
+            // as floating — keeps contrast on dark covers / dark mode, where a
+            // near-black opaque badge would otherwise melt into the photo.
+            .shadow(color: .black.opacity(0.18), radius: 4, y: 1)
+    }
+
+    /// VoiceOver label/value for a favorite (heart) toggle, so it reads
+    /// "Favorite · Saved/Not saved" instead of just "Button".
+    func kxFavoriteAccessibility(_ favorited: Bool, _ language: AppLanguage) -> some View {
+        self
+            .accessibilityLabel(KXListingCopy.pickText(language, "收藏", "お気に入り", "Favorite"))
+            .accessibilityValue(favorited
+                ? KXListingCopy.pickText(language, "已收藏", "登録済み", "Saved")
+                : KXListingCopy.pickText(language, "未收藏", "未登録", "Not saved"))
+            .accessibilityAddTraits(favorited ? [.isSelected] : [])
+    }
+}
+
+/// Photo-led cover. On the detail screen (`interactive: true`) it swipes
+/// between a listing's images (with dots); in list cells (`interactive: false`,
+/// the default) it renders only the FIRST image plus an "N photos" hint — never
+/// a paged `TabView` (a UIPageViewController per cell is the biggest scroll-jank
+/// source). Reserves an exact aspect box with a zero-intrinsic Color.clear so an
+/// odd source photo can't warp the card.
 struct KXCoverCarousel<Placeholder: View>: View {
     let urls: [URL]
     var aspectRatio: CGFloat = 4.0 / 3.0
     var targetPixelSize: CGFloat = 960
+    /// `false` (default) = static first-photo cover for cheap list cells;
+    /// `true` = real swipeable gallery, for detail screens only.
+    var interactive: Bool = false
     let placeholder: Placeholder
 
     @State private var page = 0
@@ -887,11 +955,13 @@ struct KXCoverCarousel<Placeholder: View>: View {
         urls: [URL],
         aspectRatio: CGFloat = 4.0 / 3.0,
         targetPixelSize: CGFloat = 960,
+        interactive: Bool = false,
         @ViewBuilder placeholder: () -> Placeholder
     ) {
         self.urls = urls
         self.aspectRatio = aspectRatio
         self.targetPixelSize = targetPixelSize
+        self.interactive = interactive
         self.placeholder = placeholder()
     }
 
@@ -902,9 +972,16 @@ struct KXCoverCarousel<Placeholder: View>: View {
             .overlay {
                 ZStack {
                     placeholder
-                    if urls.count == 1 {
+                    if !urls.isEmpty, urls.count == 1 || !interactive {
+                        // Static first-photo cover (cheap — used in every list cell).
                         CachedMediaImageView(url: urls[0], targetPixelSize: targetPixelSize, failureMode: .transparent)
+                        if !interactive, urls.count > 1 {
+                            KXCoverPhotoCount(count: urls.count)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                                .padding(9)
+                        }
                     } else if urls.count > 1 {
+                        // Swipeable gallery — detail screens only (interactive: true).
                         TabView(selection: $page) {
                             ForEach(Array(urls.enumerated()), id: \.offset) { index, url in
                                 CachedMediaImageView(url: url, targetPixelSize: targetPixelSize, failureMode: .transparent)

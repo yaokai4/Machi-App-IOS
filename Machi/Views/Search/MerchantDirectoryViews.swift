@@ -43,6 +43,7 @@ struct KXServiceListingCard: View {
 
     @State private var favorited: Bool = false
     @State private var favoriteSeeded = false
+    @State private var openTaps = 0
 
     private var ratingAvg: Double { listing.rating_avg ?? listing.ratingAvg ?? 0 }
     private var ratingCount: Int { listing.rating_count ?? listing.ratingCount ?? 0 }
@@ -70,7 +71,10 @@ struct KXServiceListingCard: View {
     // save heart top-right, bordered verified pill top-left — so merchant
     // cards read as photo-led Airbnb listings, not boxy rectangles.
     var body: some View {
-        Button(action: onOpen) {
+        Button {
+            openTaps += 1
+            onOpen()
+        } label: {
             VStack(alignment: .leading, spacing: 10) {
                 ZStack(alignment: .topTrailing) {
                     ListingCoverArtwork(listing: listing)
@@ -78,48 +82,44 @@ struct KXServiceListingCard: View {
                     HStack(spacing: 6) {
                         if !category.isEmpty {
                             Text(KXListingCopy.categoryLabel(category, language))
-                                .font(.caption2.weight(.black))
+                                .font(.caption2.weight(.semibold))
                                 .foregroundStyle(.primary)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 5)
-                                .background(.regularMaterial, in: Capsule())
-                                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.8))
-                                .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
+                                .kxCoverBadge(in: Capsule())
                         }
                         if listing.verification_status == "verified" {
                             HStack(spacing: 4) {
                                 Image(systemName: "checkmark.seal.fill").foregroundStyle(KXColor.accent)
                                 Text(L("verifiedMerchant", language)).foregroundStyle(.primary)
                             }
-                            .font(.caption2.weight(.black))
+                            .font(.caption2.weight(.semibold))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
-                            .background(.regularMaterial, in: Capsule())
-                            .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.8))
-                            .shadow(color: .black.opacity(0.14), radius: 7, y: 2)
+                            .kxCoverBadge(in: Capsule())
                         }
                     }
                     .padding(9)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     heartButton
-                        .padding(9)
+                        .padding(3)   // 44pt frame absorbs the rest of the inset
                 }
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .top, spacing: 8) {
                         Text(KXListingCopy.displayTitle(listing))
-                            .font(.subheadline.weight(.black))
+                            .font(.system(size: 16, weight: .semibold))   // mid-size title, not 19pt
                             .foregroundStyle(.primary)
                             .lineLimit(1)
                         Spacer(minLength: 4)
                         if ratingCount > 0 {
                             HStack(spacing: 3) {
-                                Image(systemName: "star.fill").font(.caption2.weight(.black)).foregroundStyle(.orange)
-                                Text(String(format: "%.1f", ratingAvg)).font(.caption.weight(.black)).foregroundStyle(.primary)
+                                Image(systemName: "star.fill").font(.caption2.weight(.semibold)).foregroundStyle(.orange)
+                                Text(String(format: "%.1f", ratingAvg)).font(.caption.weight(.semibold)).foregroundStyle(.primary)
                                 Text("(\(ratingCount))").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                             }
                         } else {
                             Text(L("noReviews", language))
-                                .font(.caption2.weight(.black))
+                                .font(.caption2.weight(.semibold))
                                 .foregroundStyle(KXColor.livingWarm)
                                 .padding(.horizontal, 7)
                                 .padding(.vertical, 3)
@@ -127,36 +127,37 @@ struct KXServiceListingCard: View {
                         }
                     }
                     Label(listing.location_text?.isEmpty == false ? listing.location_text! : (listing.city_slug ?? ""), systemImage: "mappin.and.ellipse")
-                        .font(.caption.weight(.semibold))
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                     if !openHours.isEmpty {
                         Label(openHours, systemImage: "clock")
-                            .font(.caption.weight(.semibold))
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                     HStack(spacing: 6) {
                         Text(priceText)
-                            .font(.subheadline.weight(.black))
-                            .foregroundStyle(KXColor.livingWarm)
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundStyle(KXColor.livingWarm)   // brand-warm price accent (was neutral/dull)
                             .lineLimit(1)
                         Spacer(minLength: 8)
                         Text(ctaTitle)
-                            .font(.caption.weight(.black))
+                            .font(.caption.weight(.semibold))
                             .foregroundStyle(.white)
-                            .padding(.horizontal, 13)
-                            .frame(height: 28)
+                            .padding(.horizontal, 14)
+                            .frame(height: 30)
                             .background(KXColor.livingAccent, in: Capsule())
                     }
-                    .padding(.top, 2)
+                    .padding(.top, 4)
                 }
-                .padding(.horizontal, 2)
+                .padding(.horizontal, 4)
             }
-            .padding(8)
+            .padding(10)
             .kxLivingSurface(radius: 24, elevated: true)
         }
         .buttonStyle(KXPressableStyle())
+        .sensoryFeedback(.impact(weight: .light), trigger: openTaps)
         .onAppear {
             if !favoriteSeeded {
                 favorited = FavoritesStore.shared.contains(listing.id) || (listing.favorited ?? listing.isFavorited ?? false)
@@ -195,11 +196,12 @@ struct KXServiceListingCard: View {
                 .foregroundStyle(favorited ? KXColor.heat : .primary)
                 .symbolEffect(.bounce, value: favorited)
                 .frame(width: 32, height: 32)
-                .background(.regularMaterial, in: Circle())
-                .overlay(Circle().strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.7))
-                .shadow(color: .black.opacity(0.10), radius: 5, y: 2)
+                .kxCoverBadge(in: Circle())
+                .frame(width: 44, height: 44)        // 44pt min tap target (HIG)
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
+        .kxFavoriteAccessibility(favorited, language)
     }
 }
 

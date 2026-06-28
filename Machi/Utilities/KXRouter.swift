@@ -238,6 +238,9 @@ private struct KXRouteDestinations: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            // Share the listing-zoom namespace with the tab root (Discover) so
+            // its entry cards can zoom into the channel they push.
+            .environment(\.kxListingZoomNamespace, listingZoom)
             .navigationDestination(for: KXRoute.self) { route in
                 switch route {
                 case .postDetail(let postId):

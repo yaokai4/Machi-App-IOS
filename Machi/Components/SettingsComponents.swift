@@ -128,19 +128,14 @@ struct SettingsRowContent: View {
 
     var body: some View {
         HStack(spacing: 13) {
+            // Restrained: tinted glyph on a faint same-colour wash (was a
+            // saturated gradient square with a coloured drop-shadow — iOS-14-era
+            // "Shortcuts" look that made the settings list feel busy).
             Image(systemName: icon)
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(tint)
                 .frame(width: 36, height: 36)
-                .background {
-                    LinearGradient(
-                        colors: [tint, tint.opacity(0.78)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .shadow(color: tint.opacity(0.25), radius: 4, y: 2)
+                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: KXRadius.sm, style: .continuous))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)

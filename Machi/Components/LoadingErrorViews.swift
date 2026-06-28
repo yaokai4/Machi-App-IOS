@@ -252,16 +252,23 @@ struct KXInlineLoader: View {
 
 struct ErrorStateView: View {
     @Environment(\.appLanguage) private var language
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let message: String
+    /// Defaults to a neutral server/cloud glyph — the old fixed
+    /// `wifi.exclamationmark` told users to check their Wi-Fi even for a 500 or
+    /// a parse error. Callers can pass a more specific icon.
+    var systemImage: String = "exclamationmark.icloud"
     let retry: () -> Void
+    @State private var appeared = false
 
     var body: some View {
         VStack(spacing: KXSpacing.md) {
-            Image(systemName: "wifi.exclamationmark")
+            Image(systemName: systemImage)
                 .font(.system(size: 26, weight: .semibold))
                 .foregroundStyle(KXColor.accent)
                 .frame(width: 56, height: 56)
                 .background(KXColor.accent.opacity(0.10), in: Circle())
+                .symbolEffect(.bounce, value: appeared)
             VStack(spacing: 4) {
                 Text(L("error", language))
                     .font(.headline.weight(.semibold))
@@ -286,6 +293,7 @@ struct ErrorStateView: View {
         // it stays pinned at the top instead of drifting to mid-screen; stays
         // compact inside a ScrollView (unbounded proposal → content height).
         .frame(maxWidth: .infinity, minHeight: 170, maxHeight: .infinity)
+        .onAppear { if !reduceMotion { appeared = true } }
     }
 }
 
@@ -325,9 +333,11 @@ struct KXInlineNotice: View {
 }
 
 struct EmptyStateView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let subtitle: String
     var systemImage: String = "tray"
+    @State private var appeared = false
 
     var body: some View {
         VStack(spacing: KXSpacing.sm) {
@@ -336,6 +346,7 @@ struct EmptyStateView: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 52, height: 52)
                 .background(KXColor.softBackground, in: Circle())
+                .symbolEffect(.bounce, value: appeared)
             Text(title)
                 .font(KXTypography.section)
             Text(subtitle)
@@ -348,6 +359,7 @@ struct EmptyStateView: View {
         // above it stays pinned at the top instead of the whole block drifting to
         // mid-screen; stays compact inside a ScrollView (unbounded → content).
         .frame(maxWidth: .infinity, minHeight: 170, maxHeight: .infinity)
+        .onAppear { if !reduceMotion { appeared = true } }
     }
 }
 

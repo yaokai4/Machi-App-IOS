@@ -55,6 +55,12 @@ struct KXJobSkeletonRow: View {
                     KXSkeletonBone(width: 56, height: 22, radius: 11)
                 }
             }
+            // Match the real job row's divider + "查看详情·投递" CTA line.
+            Divider().overlay(KXColor.livingInk.opacity(0.06))
+            HStack {
+                Spacer()
+                KXSkeletonBone(width: 96, height: 12)
+            }
         }
         .padding(14)
         .kxLivingSurface(radius: 20, elevated: true)
@@ -69,10 +75,20 @@ struct KXBigPhotoSkeletonCard: View {
                 .frame(maxWidth: .infinity)
                 .aspectRatio(4.0 / 3.0, contentMode: .fit)
                 .overlay { RoundedRectangle(cornerRadius: 20, style: .continuous).fill(KXColor.softBackground) }
-            VStack(alignment: .leading, spacing: 7) {
-                KXSkeletonBone(width: 200, height: 13)
-                KXSkeletonBone(width: 150, height: 10)
-                KXSkeletonBone(width: 110, height: 13)
+            // Mirror the real stay/service card: title+rating row, station,
+            // price+CTA row — so the swap to content doesn't shift layout.
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    KXSkeletonBone(width: 160, height: 14)
+                    Spacer()
+                    KXSkeletonBone(width: 46, height: 12)
+                }
+                KXSkeletonBone(width: 120, height: 10)
+                HStack {
+                    KXSkeletonBone(width: 90, height: 14)
+                    Spacer()
+                    KXSkeletonBone(width: 72, height: 28, radius: 14)
+                }
             }
             .padding(.horizontal, 2)
         }
@@ -103,6 +119,10 @@ struct KXSecondhandListingCard: View {
     var width: CGFloat? = nil
     let onOpen: () -> Void
 
+    @State private var favorited: Bool = false
+    @State private var favoriteSeeded = false
+    @State private var openTaps = 0
+
     private var innerWidth: CGFloat? {
         width.map { max(0, $0 - 14) }
     }
@@ -112,18 +132,24 @@ struct KXSecondhandListingCard: View {
     }
 
     var body: some View {
-        Button(action: onOpen) {
+        Button {
+            openTaps += 1
+            onOpen()
+        } label: {
             VStack(alignment: .leading, spacing: 9) {
                 cover
                     .frame(width: innerWidth)
+                // Price reads through WEIGHT + position, not a loud red — the old
+                // headline/.black + heat made the price shout louder than the
+                // title. Title bumped a step so it isn't the smallest line.
                 Text(KXListingCopy.priceLabel(listing, language))
-                    .font(.headline.weight(.black))
-                    .foregroundStyle(KXColor.heat)
+                    .font(.subheadline.weight(.heavy))
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
                     .frame(width: innerWidth, alignment: .leading)
                 Text(KXListingCopy.displayTitle(listing))
-                    .font(.footnote.weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -134,7 +160,7 @@ struct KXSecondhandListingCard: View {
                     HStack(spacing: 4) {
                         ForEach(badges.prefix(2), id: \.self) { badge in
                             Text(badge)
-                                .font(.caption2.weight(.black))
+                                .font(.caption2.weight(.semibold))
                                 .foregroundStyle(KXColor.rankTeal)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.78)
@@ -164,12 +190,61 @@ struct KXSecondhandListingCard: View {
         }
         .frame(maxWidth: width ?? .infinity, alignment: .leading)
         .buttonStyle(.plain)
+        .sensoryFeedback(.impact(weight: .light), trigger: openTaps)
+        .onAppear {
+            if !favoriteSeeded {
+                favorited = FavoritesStore.shared.contains(listing.id) || (listing.favorited ?? listing.isFavorited ?? false)
+                favoriteSeeded = true
+            }
+        }
+    }
+
+    /// 右上角爱心：乐观切换，失败回滚;同时写入本地收藏。与住宿/服务卡一致。
+    private var favoriteSnapshot: FavoriteSnapshot {
+        FavoriteSnapshot(
+            id: listing.id,
+            title: KXListingCopy.displayTitle(listing),
+            priceLabel: KXListingCopy.priceLabel(listing, language),
+            coverURLString: listing.realCoverURL?.absoluteString,
+            type: listing.type,
+            locationText: listing.location_text,
+            savedAt: Date()
+        )
+    }
+
+    private var heartButton: some View {
+        Button {
+            let next = !favorited
+            favorited = next
+            FavoritesStore.shared.set(favoriteSnapshot, on: next)
+            Task {
+                do { try await KaiXAPIClient.shared.favoriteListing(listing.id, on: next) }
+                catch {
+                    favorited = !next
+                    FavoritesStore.shared.set(favoriteSnapshot, on: !next)
+                }
+            }
+        } label: {
+            Image(systemName: favorited ? "heart.fill" : "heart")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(favorited ? KXColor.heat : .primary)
+                .symbolEffect(.bounce, value: favorited)
+                .frame(width: 28, height: 28)
+                .kxCoverBadge(in: Circle())
+                .frame(width: 44, height: 44)        // 44pt min tap target (HIG)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .sensoryFeedback(.impact(weight: .light), trigger: favorited)
+        .kxFavoriteAccessibility(favorited, language)
     }
 
     private var cover: some View {
         ZStack {
             if let url = listing.coverURL {
-                MediaImageView(url: url, targetPixelSize: 720)
+                // ~160pt square cover; 480 = 160pt @3x. Was 720 (≈5x oversample
+                // on @2x) — bigger decodes + faster cache eviction for no gain.
+                MediaImageView(url: url, targetPixelSize: 480)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
             } else {
@@ -191,26 +266,20 @@ struct KXSecondhandListingCard: View {
                     .fill(KXListingCopy.statusColor(listing.status))
                     .frame(width: 6, height: 6)
                 Text(KXListingCopy.formatListingStatus(listing.status, type: listing.type, language))
-                    .font(.caption2.weight(.black))
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
             .padding(.horizontal, 8)
             .frame(height: 24)
-            .background(.regularMaterial, in: Capsule())
-            .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.7))
-            .shadow(color: .black.opacity(0.10), radius: 5, y: 2)
+            .kxCoverBadge(in: Capsule())
             .frame(maxWidth: statusBadgeMaxWidth, alignment: .leading)
             .padding(7)
         }
         .overlay(alignment: .topTrailing) {
-            Image(systemName: listing.favorited == true ? "heart.fill" : "heart")
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(listing.favorited == true ? KXColor.heat : .primary)
-                .frame(width: 28, height: 28)
-                .background(.ultraThinMaterial, in: Circle())
-                .padding(7)
+            heartButton
+                .padding(1)   // 44pt frame absorbs the rest of the inset
         }
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay {
@@ -293,6 +362,7 @@ struct KXJobListingRow: View {
     @Environment(\.appLanguage) private var language
     let listing: KaiXCityListingDTO
     let onOpen: () -> Void
+    @State private var openTaps = 0
 
     private var companyName: String {
         (KXListingCopy.attr(listing, "company_name") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -355,11 +425,14 @@ struct KXJobListingRow: View {
     }
 
     var body: some View {
-        Button(action: onOpen) {
+        Button {
+            openTaps += 1
+            onOpen()
+        } label: {
             VStack(alignment: .leading, spacing: 11) {
                 HStack(alignment: .top, spacing: 12) {
                     Text(companyInitial.isEmpty ? "M" : companyInitial)
-                        .font(.title3.weight(.black))
+                        .font(.title3.weight(.bold))
                         .foregroundStyle(KXColor.livingAccent)
                         .frame(width: 50, height: 50)
                         .background(
@@ -402,7 +475,7 @@ struct KXJobListingRow: View {
                 HStack(spacing: 14) {
                     if !salaryText.isEmpty {
                         Label(salaryText, systemImage: "yensign.circle.fill")
-                            .font(.subheadline.weight(.black))
+                            .font(.subheadline.weight(.heavy))
                             .foregroundStyle(KXColor.livingAccent)
                             .lineLimit(1)
                     }
@@ -432,9 +505,9 @@ struct KXJobListingRow: View {
                 HStack(spacing: 5) {
                     Spacer(minLength: 0)
                     Text(KXListingCopy.pickText(language, "查看详情 · 投递", "詳細を見る・応募", "View details · Apply"))
-                        .font(.caption.weight(.black))
+                        .font(.caption.weight(.semibold))
                     Image(systemName: "arrow.right")
-                        .font(.caption2.weight(.black))
+                        .font(.caption2.weight(.semibold))
                 }
                 .foregroundStyle(KXColor.livingAccent)
             }
@@ -443,6 +516,7 @@ struct KXJobListingRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(KXPressableStyle(scale: 0.985, dim: 0.9))
+        .sensoryFeedback(.impact(weight: .light), trigger: openTaps)
     }
 
     @ViewBuilder
@@ -461,9 +535,13 @@ struct KXStructuredListingRow: View {
     @Environment(\.appLanguage) private var language
     let listing: KaiXCityListingDTO
     let onOpen: () -> Void
+    @State private var openTaps = 0
 
     var body: some View {
-        Button(action: onOpen) {
+        Button {
+            openTaps += 1
+            onOpen()
+        } label: {
             HStack(alignment: .top, spacing: 12) {
                 ZStack(alignment: .bottomLeading) {
                     if let url = listing.coverURL {
@@ -493,8 +571,8 @@ struct KXStructuredListingRow: View {
                 VStack(alignment: .leading, spacing: 7) {
                     HStack(alignment: .top) {
                         Text(KXListingCopy.priceLabel(listing, language))
-                            .font(.headline.weight(.black))
-                            .foregroundStyle(KXColor.heat)
+                            .font(.headline.weight(.heavy))
+                            .foregroundStyle(.primary)   // neutral price color (unified across cards)
                             .lineLimit(2)
                         Spacer()
                         KXListingBadge(title: KXListingCopy.statusLabel(listing.status, type: listing.type, language), tint: KXListingCopy.statusColor(listing.status))
@@ -516,9 +594,10 @@ struct KXStructuredListingRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(11)
-            .kxGlassSurface(radius: 20, elevated: true)
+            .kxLivingSurface(radius: 20, elevated: true)   // unify: all listing cards share the warm surface
         }
         .buttonStyle(.plain)
+        .sensoryFeedback(.impact(weight: .light), trigger: openTaps)
     }
 }
 

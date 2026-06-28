@@ -594,8 +594,10 @@ struct SearchScreen: View {
                 viewModel.query = initialQuery
                 viewModel.updateDebouncedQuery(initialQuery)
             }
-            await load()
+            // Focus (raise the keyboard) BEFORE the network load, so opening the
+            // search screen feels instant instead of waiting on results first.
             isSearchFocused = true
+            await load()
         }
         .onChange(of: viewModel.query) { _, newValue in
             searchDebounceTask?.cancel()

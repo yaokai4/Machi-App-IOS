@@ -15,6 +15,7 @@ struct KXStayListingCard: View {
 
     @State private var favorited: Bool = false
     @State private var favoriteSeeded = false
+    @State private var openTaps = 0
 
     private var ratingAvg: Double { listing.rating_avg ?? listing.ratingAvg ?? 0 }
     private var ratingCount: Int { listing.rating_count ?? listing.ratingCount ?? 0 }
@@ -63,7 +64,10 @@ struct KXStayListingCard: View {
     }
 
     var body: some View {
-        Button(action: onOpen) {
+        Button {
+            openTaps += 1
+            onOpen()
+        } label: {
             VStack(alignment: .leading, spacing: 10) {
                 ZStack(alignment: .topTrailing) {
                     KXStayCoverArtwork(listing: listing, isStay: variant == .stay)
@@ -86,31 +90,29 @@ struct KXStayListingCard: View {
                             Text(variant == .stay ? "认证房东" : "已核验")
                                 .foregroundStyle(.primary)
                         }
-                        .font(.caption2.weight(.black))
+                        .font(.caption2.weight(.semibold))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
-                        .background(.regularMaterial, in: Capsule())
-                        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.8))
-                        .shadow(color: .black.opacity(0.14), radius: 7, y: 2)
+                        .kxCoverBadge(in: Capsule())
                         .padding(9)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     }
                     heartButton
-                        .padding(9)
+                        .padding(3)   // 44pt frame absorbs the rest of the inset
                 }
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .top, spacing: 8) {
                         Text(KXListingCopy.displayTitle(listing))
-                            .font(.subheadline.weight(.black))
+                            .font(.system(size: 16, weight: .semibold))   // mid-size title, not 19pt — no longer top-heavy
                             .foregroundStyle(.primary)
                             .lineLimit(1)
                         Spacer(minLength: 4)
                         if ratingCount > 0 {
                             HStack(spacing: 3) {
                                 Image(systemName: "star.fill")
-                                    .font(.caption2.weight(.black))
+                                    .font(.caption2.weight(.semibold))
                                 Text(String(format: "%.1f", ratingAvg))
-                                    .font(.caption.weight(.black))
+                                    .font(.caption.weight(.semibold))
                                 Text("(\(ratingCount))")
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(.secondary)
@@ -118,7 +120,7 @@ struct KXStayListingCard: View {
                             .foregroundStyle(.primary)
                         } else if variant == .stay {
                             Text(L("newlyListed", language))
-                                .font(.caption2.weight(.black))
+                                .font(.caption2.weight(.semibold))
                                 .foregroundStyle(KXColor.heat)
                                 .padding(.horizontal, 7)
                                 .padding(.vertical, 3)
@@ -127,47 +129,48 @@ struct KXStayListingCard: View {
                     }
                     if !stationOrLocation.isEmpty {
                         Label(stationOrLocation, systemImage: "tram")
-                            .font(.caption.weight(.semibold))
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                     if !subline.isEmpty {
                         Text(subline)
-                            .font(.caption.weight(.semibold))
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                     HStack(spacing: 6) {
                         Text(KXListingCopy.priceLabel(listing))
-                            .font(.subheadline.weight(.black))
-                            .foregroundStyle(.primary)
+                            .font(.system(size: 17, weight: .bold))   // price = the one accent: a touch bigger + warm
+                            .foregroundStyle(KXColor.livingWarm)
                         if variant == .home, let fee = KXListingCopy.attr(listing, "management_fee"), !fee.isEmpty {
                             Text(String(format: L("managementFeeInline", language), fee))
-                                .font(.caption2.weight(.bold))
+                                .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .padding(.top, 2)
+                    .padding(.top, 4)
                     if !homeTags.isEmpty {
                         HStack(spacing: 6) {
                             ForEach(homeTags, id: \.self) { tag in
                                 Text(tag)
-                                    .font(.caption2.weight(.black))
+                                    .font(.caption2.weight(.medium))
                                     .foregroundStyle(KXColor.livingMuted)
                                     .padding(.horizontal, 7)
-                                    .padding(.vertical, 3)
-                                    .background(KXColor.livingSoft, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                    .padding(.vertical, 4)
+                                    .background(KXColor.livingSoft, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                             }
                         }
                         .padding(.top, 2)
                     }
                 }
-                .padding(.horizontal, 2)
+                .padding(.horizontal, 4)
             }
-            .padding(8)
+            .padding(10)
             .kxLivingSurface(radius: 24, elevated: true)
         }
         .buttonStyle(KXPressableStyle())
+        .sensoryFeedback(.impact(weight: .light), trigger: openTaps)
         .onAppear {
             if !favoriteSeeded {
                 favorited = FavoritesStore.shared.contains(listing.id) || (listing.favorited ?? listing.isFavorited ?? false)
@@ -208,11 +211,12 @@ struct KXStayListingCard: View {
                 .foregroundStyle(favorited ? KXColor.heat : .primary)
                 .symbolEffect(.bounce, value: favorited)
                 .frame(width: 32, height: 32)
-                .background(.regularMaterial, in: Circle())
-                .overlay(Circle().strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.7))
-                .shadow(color: .black.opacity(0.10), radius: 5, y: 2)
+                .kxCoverBadge(in: Circle())
+                .frame(width: 44, height: 44)        // 44pt min tap target (HIG)
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
+        .kxFavoriteAccessibility(favorited, language)
     }
 }
 

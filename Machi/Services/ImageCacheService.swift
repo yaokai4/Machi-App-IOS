@@ -6,7 +6,9 @@ import UIKit
 actor ImageCacheService {
     static let shared = ImageCacheService()
 
-    private let cache = NSCache<NSString, UIImage>()
+    // NSCache is internally thread-safe, so it can be read from a nonisolated
+    // context (see `cachedImageSync`) without hopping onto the actor.
+    nonisolated(unsafe) private let cache = NSCache<NSString, UIImage>()
     private var inFlight: [NSString: Task<UIImage?, Never>] = [:]
     /// Disk trim runs once per process, lazily on first access.
     private var didScheduleDiskTrim = false
@@ -14,6 +16,23 @@ actor ImageCacheService {
     private init() {
         cache.countLimit = 220
         cache.totalCostLimit = 96 * 1024 * 1024
+        // Release the decoded-bitmap cache under memory pressure. NSCache does
+        // this on its own too, but being explicit guarantees the ~96 MB of
+        // decoded images is dropped promptly (the purgeable disk copies survive).
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            ImageCacheService.shared.clearMemory()
+        }
+    }
+
+    /// Drop only the in-memory decoded bitmaps (disk copies + in-flight decodes
+    /// are kept). `cache` is `nonisolated(unsafe)` + thread-safe, so this is safe
+    /// to call straight from the memory-warning notification.
+    nonisolated func clearMemory() {
+        cache.removeAllObjects()
     }
 
     func image(for url: URL, targetPixelSize: CGFloat = 900) async -> UIImage? {
@@ -56,6 +75,15 @@ actor ImageCacheService {
             cache.setObject(image, forKey: key, cost: cost)
         }
         return image
+    }
+
+    /// Synchronous memory-cache probe. Lets a view paint an already-decoded
+    /// image in the same runloop tick — no `await` hop, no fade-in — for the
+    /// very common case of a cell scrolling back into view. Misses (cold image)
+    /// fall back to the async `image(for:)` path.
+    nonisolated func cachedImageSync(for url: URL, targetPixelSize: CGFloat = 900) -> UIImage? {
+        let key = "\(url.absoluteString)|\(Int(targetPixelSize.rounded()))" as NSString
+        return cache.object(forKey: key)
     }
 
     func clear() {
@@ -155,7 +183,11 @@ actor ImageCacheService {
             return nil
         }
         guard let data = try? Data(contentsOf: url) else { return nil }
-        return UIImage(data: data)
+        let image = UIImage(data: data)
+        // Force the bitmap decode now, on this background task — otherwise
+        // `UIImage(data:)` defers it to the first draw, which lands on the main
+        // thread mid-scroll and shows up as a hitch on every disk-cache hit.
+        return image?.preparingForDisplay() ?? image
     }
 
     private static func saveToDisk(_ image: UIImage, diskKey: String) {
