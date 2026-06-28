@@ -704,4 +704,64 @@ extension KaiXAPIClient {
         ])
         return try decode(data)
     }
+
+    // MARK: - Machi AI (原创 in-app assistant)
+
+    func guideAIBootstrap(country: String = "jp", language: String = "zh-CN") async throws -> KaiXGuideAIBootstrapResponse {
+        let data = try await request("GET", "/api/guide/ai/bootstrap", queryItems: [
+            URLQueryItem(name: "country", value: country),
+            URLQueryItem(name: "language", value: language),
+        ])
+        return try decode(data)
+    }
+
+    func guideAIConversations(limit: Int = 30) async throws -> KaiXGuideAIConversationsResponse {
+        let data = try await request("GET", "/api/guide/ai/conversations", queryItems: [
+            URLQueryItem(name: "limit", value: String(limit)),
+        ])
+        return try decode(data)
+    }
+
+    func guideAIMessages(conversationId: String) async throws -> KaiXGuideAIMessagesResponse {
+        let id = try requirePathIdentifier(conversationId)
+        let data = try await request("GET", "/api/guide/ai/conversations/\(id.encodedPathSegment)/messages")
+        return try decode(data)
+    }
+
+    /// Send one turn to Machi AI. A nil `conversationId` starts a new thread.
+    /// Longer timeout than the default JSON budget because answering takes a
+    /// few seconds; the 429 `AI_QUOTA_EXCEEDED` surfaces as a `KaiXAPIError`.
+    func sendGuideAIMessage(conversationId: String?, message: String, country: String = "jp",
+                            language: String = "zh-CN", category: String? = nil) async throws -> KaiXGuideAIChatResponse {
+        struct Body: Encodable {
+            let conversationId: String?
+            let message: String
+            let country: String
+            let language: String
+            let category: String?
+        }
+        let data = try await request(
+            "POST", "/api/guide/ai/chat",
+            body: Body(conversationId: conversationId, message: message, country: country,
+                       language: language, category: category),
+            timeoutInterval: 40
+        )
+        return try decode(data)
+    }
+
+    func deleteGuideAIConversation(id: String) async throws {
+        let cid = try requirePathIdentifier(id)
+        _ = try await request("DELETE", "/api/guide/ai/conversations/\(cid.encodedPathSegment)")
+    }
+
+    func sendGuideAIFeedback(messageId: String, rating: String, reason: String? = nil) async throws -> KaiXGuideAIFeedbackResponse {
+        struct Body: Encodable {
+            let rating: String
+            let reason: String?
+        }
+        let mid = try requirePathIdentifier(messageId)
+        let data = try await request("POST", "/api/guide/ai/messages/\(mid.encodedPathSegment)/feedback",
+                                     body: Body(rating: rating, reason: reason))
+        return try decode(data)
+    }
 }

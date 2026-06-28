@@ -1519,3 +1519,89 @@ struct KaiXGuideLibraryOrder: Codable, Equatable, Identifiable, Hashable {
     var isTopUp: Bool { (kind ?? "") == "topup" }
 }
 
+// MARK: - Machi AI (原创 in-app assistant)
+//
+// Plain camelCase mirrors of /api/guide/ai/* responses. The underlying
+// provider/model is never present in any of these payloads — to the client
+// this is simply "Machi AI". Fields are optional so an older backend (or a
+// trimmed response) decodes without crashing.
+
+struct KaiXGuideAIRouteDTO: Codable, Equatable, Hashable {
+    let kind: String?
+    let slug: String?
+    let id: String?
+}
+
+struct KaiXGuideAISourceDTO: Codable, Equatable, Hashable, Identifiable {
+    let type: String?
+    let title: String?
+    let subtitle: String?
+    let route: KaiXGuideAIRouteDTO?
+
+    var id: String {
+        [type, title, route?.slug, route?.id].compactMap { $0 }.joined(separator: "|")
+    }
+}
+
+struct KaiXGuideAISuggestionDTO: Codable, Equatable, Hashable, Identifiable {
+    let id: String
+    let title: String
+    let category: String?
+}
+
+struct KaiXGuideAIConversationDTO: Codable, Equatable, Hashable, Identifiable {
+    let id: String
+    let title: String?
+    let lastMessagePreview: String?
+    let messageCount: Int?
+    let country: String?
+    let language: String?
+    let createdAt: String?
+    let updatedAt: String?
+}
+
+struct KaiXGuideAIMessageDTO: Codable, Equatable, Hashable, Identifiable {
+    let id: String
+    let role: String
+    let content: String
+    let createdAt: String?
+    let sources: [KaiXGuideAISourceDTO]?
+}
+
+struct KaiXGuideAIUsageDTO: Codable, Equatable, Hashable {
+    let membershipActive: Bool?
+    let remainingFreeUses: Int?
+    let upgradeSuggested: Bool?
+}
+
+struct KaiXGuideAIBootstrapResponse: Codable, Equatable {
+    let status: String?
+    let membershipActive: Bool?
+    let remainingFreeUses: Int?
+    let suggestions: [KaiXGuideAISuggestionDTO]?
+    let disclaimer: String?
+}
+
+struct KaiXGuideAIConversationsResponse: Codable, Equatable {
+    let status: String?
+    let items: [KaiXGuideAIConversationDTO]?
+}
+
+struct KaiXGuideAIMessagesResponse: Codable, Equatable {
+    let status: String?
+    let conversation: KaiXGuideAIConversationDTO?
+    let items: [KaiXGuideAIMessageDTO]?
+}
+
+struct KaiXGuideAIChatResponse: Codable, Equatable {
+    let status: String?
+    let conversationId: String?
+    let message: KaiXGuideAIMessageDTO?
+    let usage: KaiXGuideAIUsageDTO?
+}
+
+struct KaiXGuideAIFeedbackResponse: Codable, Equatable {
+    let status: String?
+    let rating: String?
+}
+

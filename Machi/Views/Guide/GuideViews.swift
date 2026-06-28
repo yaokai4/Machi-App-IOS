@@ -102,6 +102,9 @@ struct GuideHomeView: View {
                             companies: viewModel.companyResults
                         )
                     } else {
+                        // Machi AI —— 原创助手入口，放在资料库与分类网格之前。
+                        GuideAIEntryCard()
+
                         // 高价值资料库优先:学校库 / 公司库在六大指南之前。
                         GuideLibraryDualEntry()
 
@@ -1381,6 +1384,89 @@ private struct GuideCategoryGrid: View {
 
 /// 核心资料库:学校库(蓝) + 公司库(青绿)。两张高对比大卡,放在六大指南之前,
 /// 是 Guide 首屏最醒目的高价值入口(比普通指南卡更突出)。
+/// High-quality entry to Machi AI (原创助手). Sits right under the Guide hero,
+/// before the category grid. Branded accent + warm surface; never references any
+/// provider/model — to the user this is Machi's own assistant.
+private struct GuideAIEntryCard: View {
+    @Environment(\.appLanguage) private var language
+    @EnvironmentObject private var router: AppRouter
+
+    var body: some View {
+        Button {
+            router.open(.guideAI, in: .guide)
+        } label: {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle().fill(
+                            LinearGradient(
+                                colors: [KXColor.livingAccent, KXColor.livingAccent.opacity(0.82)],
+                                startPoint: .topLeading, endPoint: .bottomTrailing
+                            )
+                        )
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 21, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                    .frame(width: 46, height: 46)
+                    .shadow(color: KXColor.livingAccent.opacity(0.3), radius: 6, y: 3)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Machi AI")
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(KXColor.livingInk)
+                        Text(guideText(language,
+                                       "日本生活、升学、就职和 Machi 使用问题，都可以先问问。",
+                                       "日本生活・進学・就職や Machi の使い方、まず聞いてみよう。",
+                                       "Ask anything about life, study, work in Japan, or using Machi."))
+                            .font(.caption)
+                            .foregroundStyle(KXColor.livingMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
+                    HStack(spacing: 3) {
+                        Text(guideText(language, "开始对话", "対話を始める", "Start chat"))
+                        Image(systemName: "arrow.right")
+                    }
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(KXColor.livingAccent)
+                }
+                HStack(spacing: 8) {
+                    chip(guideText(language, "生活手续", "生活手続き", "Life admin"))
+                    chip(guideText(language, "升学规划", "進学プラン", "Study plan"))
+                    chip(guideText(language, "就职准备", "就職準備", "Job prep"))
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                LinearGradient(
+                    colors: [KXColor.livingAccentSoft, KXColor.livingSurface],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                ),
+                in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(KXColor.livingAccent.opacity(0.25), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.fullArea)
+        .contentShape(Rectangle())
+        .accessibilityIdentifier("guide.ai.entry")
+    }
+
+    private func chip(_ text: String) -> some View {
+        Text(text)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(KXColor.livingAccent)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(KXColor.livingSurface.opacity(0.9), in: Capsule())
+            .overlay(Capsule().stroke(KXColor.livingAccent.opacity(0.18), lineWidth: 0.8))
+    }
+}
+
 private struct GuideLibraryDualEntry: View {
     @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
