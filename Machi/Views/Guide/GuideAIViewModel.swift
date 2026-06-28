@@ -129,6 +129,13 @@ final class GuideAIViewModel: ObservableObject {
     func sendCurrentInput(currentUser: UserEntity) {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
+        // Keep the typed text if the guest gate is about to intercept — clearing
+        // before the guest check (the old bug) lost the message and still showed
+        // the login sheet, so after signing in the composer was empty.
+        guard !currentUser.isGuest else {
+            send(text: text, currentUser: currentUser)
+            return
+        }
         inputText = ""
         send(text: text, currentUser: currentUser)
     }
@@ -174,7 +181,7 @@ final class GuideAIViewModel: ObservableObject {
                     conversationId: conversationId, message: text,
                     country: country, language: serverLanguage, category: nil
                 )
-                applyChatResponse(resp, pendingId: pendingId, userMessageId: userMessage.id)
+                applyChatResponse(resp, pendingId: pendingId, userMessageId: userMessage.id, text: text)
             } catch let apiError as KaiXAPIError {
                 handleFailure(apiError, pendingId: pendingId, userMessageId: userMessage.id, text: text)
             } catch {
@@ -206,7 +213,7 @@ final class GuideAIViewModel: ObservableObject {
 
     // MARK: - private
 
-    private func applyChatResponse(_ resp: KaiXGuideAIChatResponse, pendingId: String, userMessageId: String) {
+    private func applyChatResponse(_ resp: KaiXGuideAIChatResponse, pendingId: String, userMessageId: String, text: String) {
         conversationId = resp.conversationId ?? conversationId
         if let usage = resp.usage {
             membershipActive = usage.membershipActive ?? membershipActive
@@ -214,7 +221,9 @@ final class GuideAIViewModel: ObservableObject {
             upgradeSuggested = usage.upgradeSuggested ?? false
         }
         guard let message = resp.message else {
-            handleFailure(nil, pendingId: pendingId, userMessageId: userMessageId, text: nil)
+            // 200 with no message → treat as failure, but thread the original text
+            // so the inline Retry button can actually resend (it was a no-op before).
+            handleFailure(nil, pendingId: pendingId, userMessageId: userMessageId, text: text)
             return
         }
         if let idx = messages.firstIndex(where: { $0.id == pendingId }) {

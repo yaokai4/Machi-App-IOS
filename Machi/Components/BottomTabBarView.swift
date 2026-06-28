@@ -98,6 +98,11 @@ struct BottomTabBarView: View {
                         .stroke(isSelected ? KXColor.accent.opacity(0.58) : KXColor.glassStroke.opacity(0.42), lineWidth: isSelected ? 1.1 : 0.45)
                 }
                 .accessibilityHidden(true)
+        } else if tab == .guide {
+            // 自有 Machi AI 标志(M + 灵光),继承上方 .foregroundStyle 的选中/未选中着色。
+            MachiAIGlyph(lineWidth: isSelected ? 2.5 : 2.0)
+                .frame(width: 28, height: 28, alignment: .center)
+                .frame(width: 30, height: 30, alignment: .center)
         } else {
             Image(systemName: tab.icon)
                 .font(.system(size: 22, weight: .semibold))

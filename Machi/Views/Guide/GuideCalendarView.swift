@@ -198,7 +198,9 @@ struct GuideCalendarView: View {
         .navigationTitle(guideOSText(language, "日历", "カレンダー", "Calendar"))
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            if !model.requireLogin() { return }
+            // Don't pop the login sheet just for opening the screen; load only
+            // when already signed in. Write actions still prompt via requireLogin().
+            guard model.isLoggedIn else { return }
             await model.loadCalendar()
         }
         .refreshable { await model.loadCalendar() }

@@ -522,7 +522,7 @@ struct GuideTodoListView: View {
         .navigationTitle(guideOSText(language, "全部待办", "すべてのタスク", "All todos"))
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: guideOSText(language, "搜索任务", "タスクを検索", "Search tasks"))
-        .task { if model.requireLogin() { await model.loadTodos(status: apiStatus, planId: planId) } }
+        .task { if model.isLoggedIn { await model.loadTodos(status: apiStatus, planId: planId) } }
         .onChange(of: filter) { _, _ in Task { await model.loadTodos(status: apiStatus, planId: planId) } }
         .refreshable { await model.loadTodos(status: apiStatus, planId: planId) }
     }

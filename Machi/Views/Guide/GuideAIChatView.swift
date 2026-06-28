@@ -342,21 +342,8 @@ private struct GuideAIAvatar: View {
     var size: CGFloat = 34
 
     var body: some View {
-        ZStack {
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [KXColor.livingAccent, KXColor.livingAccent.opacity(0.8)],
-                        startPoint: .topLeading, endPoint: .bottomTrailing
-                    )
-                )
-            Image(systemName: "sparkles")
-                .font(.system(size: size * 0.5, weight: .bold))
-                .foregroundStyle(.white)
-        }
-        .frame(width: size, height: size)
-        .shadow(color: KXColor.livingAccent.opacity(0.28), radius: 5, y: 2)
-        .accessibilityHidden(true)
+        MachiAIMark(size: size)
+            .shadow(color: KXColor.livingAccent.opacity(0.28), radius: 5, y: 2)
     }
 }
 

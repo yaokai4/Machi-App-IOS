@@ -365,7 +365,7 @@ enum AppTab: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .home: L("home", language)
         case .search: L("discover", language)
-        case .guide: L("guide", language)
+        case .guide: "Machi AI"
         case .messages: L("messages", language)
         case .profile: L("me", language)
         }

@@ -1395,49 +1395,65 @@ private struct GuideAIEntryCard: View {
         Button {
             router.open(.guideAI, in: .guide)
         } label: {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 12) {
-                    ZStack {
-                        Circle().fill(
-                            LinearGradient(
-                                colors: [KXColor.livingAccent, KXColor.livingAccent.opacity(0.82)],
-                                startPoint: .topLeading, endPoint: .bottomTrailing
-                            )
-                        )
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 21, weight: .bold))
-                            .foregroundStyle(.white)
-                    }
-                    .frame(width: 46, height: 46)
-                    .shadow(color: KXColor.livingAccent.opacity(0.3), radius: 6, y: 3)
+                    MachiAIMark(size: 52)
+                        .shadow(color: KXColor.livingAccent.opacity(0.32), radius: 7, y: 3)
 
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("Machi AI")
-                            .font(.headline.weight(.bold))
-                            .foregroundStyle(KXColor.livingInk)
+                        HStack(spacing: 6) {
+                            Text("Machi AI")
+                                .font(.title3.weight(.bold))
+                                .foregroundStyle(KXColor.livingInk)
+                            Text("Beta")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(KXColor.livingAccent)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(KXColor.livingAccent.opacity(0.14), in: Capsule())
+                        }
                         Text(guideText(language,
-                                       "日本生活、升学、就职和 Machi 使用问题，都可以先问问。",
-                                       "日本生活・進学・就職や Machi の使い方、まず聞いてみよう。",
-                                       "Ask anything about life, study, work in Japan, or using Machi."))
+                                       "日本生活、升学、就职和 Machi 使用问题，先问问 Machi AI。",
+                                       "日本生活・進学・就職や Machi の使い方、まず Machi AI に聞いてみよう。",
+                                       "Ask Machi AI anything about life, study, work in Japan, or using Machi."))
                             .font(.caption)
                             .foregroundStyle(KXColor.livingMuted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 0)
-                    HStack(spacing: 3) {
-                        Text(guideText(language, "开始对话", "対話を始める", "Start chat"))
-                        Image(systemName: "arrow.right")
-                    }
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(KXColor.livingAccent)
                 }
+
+                // 行内提问入口(整卡可点,进入 .guideAI)。视觉上像输入框,提示「先问一句」。
+                HStack(spacing: 10) {
+                    Text(guideText(language,
+                                   "问问看：在留卡到期怎么办？",
+                                   "聞いてみる：在留カードの更新は？",
+                                   "Ask: how do I renew my residence card?"))
+                        .font(.subheadline)
+                        .foregroundStyle(KXColor.livingMuted)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    Image(systemName: "paperplane.fill")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 30, height: 30)
+                        .background(KXColor.livingAccent, in: Circle())
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(KXColor.livingAccent.opacity(0.2), lineWidth: 1)
+                )
+
                 HStack(spacing: 8) {
                     chip(guideText(language, "生活手续", "生活手続き", "Life admin"))
                     chip(guideText(language, "升学规划", "進学プラン", "Study plan"))
                     chip(guideText(language, "就职准备", "就職準備", "Job prep"))
                 }
             }
-            .padding(16)
+            .padding(18)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 LinearGradient(
