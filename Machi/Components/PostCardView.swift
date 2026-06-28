@@ -306,12 +306,16 @@ struct PostCardView: View, Equatable {
     }
 
     private func officialAuthorPresentation(for post: PostEntity, author: UserEntity?) -> PostAuthorPresentation {
-        guard post.isSeedContent else {
+        // Only genuinely official seed-bot accounts get the editorial / assistant
+        // identity. Seed posts authored by real "city user" personas must show the
+        // persona's own name (they are not the editorial desk). Keying off
+        // isSeedContent alone wrongly relabelled every persona post as 编辑部.
+        guard author?.isMachiOfficialAccount == true else {
             return PostAuthorPresentation(
                 displayName: author?.displayName ?? L("unknownUser", language),
                 username: author?.username ?? L("unknownUser", language),
-                isOfficial: author?.isMachiOfficialAccount == true,
-                label: author?.isMachiOfficialAccount == true ? L("machiOfficial", language) : nil
+                isOfficial: false,
+                label: nil
             )
         }
 
