@@ -1,94 +1,93 @@
 import SwiftUI
 
-// Machi AI 自有品牌标志 —— 与 web 端 components/brand/MachiAIMark.tsx 像素级一致。
-// 复用 Machi 的「M」字标,在 M 的怀抱里嵌一颗四角星「灵光」(不是通用 sparkles)。
+// Machi AI 自有品牌标志 —— 「灵光 Spark」。与 web 端 components/brand/MachiAIMark.tsx
+// 像素级一致:品牌青绿渐变 squircle + 一颗精致的四角星灵光 + 右上一颗微光点 +
+// 玻璃高光。
 //   MachiAIMark   渐变 squircle 徽标 —— 聊天头像 / 入口卡
-//   MachiAIGlyph  单色线形字符 —— 底部 Tab / 行内,继承 .foregroundStyle 着色
+//   MachiAIGlyph  单色线形灵光 —— 底部 Tab / 行内,继承 .foregroundStyle 着色
 //
-// 几何沿用 web:徽标在 100 网格里 M 顶点 (30,72)(30,40)(50,58)(70,40)(70,72),
-// 灵光为谷底上方的四角星;线形在 24 网格里 M 顶点 (5,18)(5,8)(12,14)(19,8)(19,18)。
+// 几何沿用 web(100 网格):主灵光以 (50,50) 为心、半径 34 的四角星,四边内凹;
+// 微光点在右上 (74,28)。
 
-private let mPoints100: [CGPoint] = [
-    CGPoint(x: 30, y: 72), CGPoint(x: 30, y: 40), CGPoint(x: 50, y: 58),
-    CGPoint(x: 70, y: 40), CGPoint(x: 70, y: 72),
-]
-private let sparkPoints100: [CGPoint] = [
-    CGPoint(x: 50, y: 39.5), CGPoint(x: 52.8, y: 44.2), CGPoint(x: 57.5, y: 47),
-    CGPoint(x: 52.8, y: 49.8), CGPoint(x: 50, y: 54.5), CGPoint(x: 47.2, y: 49.8),
-    CGPoint(x: 42.5, y: 47), CGPoint(x: 47.2, y: 44.2),
-]
-private let mPoints24: [CGPoint] = [
-    CGPoint(x: 5, y: 18), CGPoint(x: 5, y: 8), CGPoint(x: 12, y: 14),
-    CGPoint(x: 19, y: 8), CGPoint(x: 19, y: 18),
-]
-private let sparkPoints24: [CGPoint] = [
-    CGPoint(x: 12, y: 8), CGPoint(x: 12.9, y: 9.7), CGPoint(x: 14.2, y: 10.6),
-    CGPoint(x: 12.9, y: 11.5), CGPoint(x: 12, y: 13.2), CGPoint(x: 11.1, y: 11.5),
-    CGPoint(x: 9.8, y: 10.6), CGPoint(x: 11.1, y: 9.7),
-]
-
-private func scaledPath(_ pts: [CGPoint], box: CGFloat, in rect: CGRect, closed: Bool) -> Path {
-    let s = min(rect.width, rect.height) / box
-    let ox = rect.minX + (rect.width - box * s) / 2
-    let oy = rect.minY + (rect.height - box * s) / 2
-    var path = Path()
-    for (i, pt) in pts.enumerated() {
-        let p = CGPoint(x: ox + pt.x * s, y: oy + pt.y * s)
-        if i == 0 { path.move(to: p) } else { path.addLine(to: p) }
-    }
-    if closed { path.closeSubpath() }
-    return path
-}
-
-private struct MachiMShape: Shape {
-    let box: CGFloat
-    let pts: [CGPoint]
-    func path(in rect: CGRect) -> Path { scaledPath(pts, box: box, in: rect, closed: false) }
-}
-
+/// 四角星「灵光」。`includeMicro` 时附带右上的微光点(徽标用);
+/// 线形 Glyph 只取主星描边。
 private struct MachiSparkShape: Shape {
-    let box: CGFloat
-    let pts: [CGPoint]
-    func path(in rect: CGRect) -> Path { scaledPath(pts, box: box, in: rect, closed: true) }
+    var includeMicro: Bool = true
+
+    func path(in rect: CGRect) -> Path {
+        let s = min(rect.width, rect.height) / 100
+        let ox = rect.minX + (rect.width - 100 * s) / 2
+        let oy = rect.minY + (rect.height - 100 * s) / 2
+        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: ox + x * s, y: oy + y * s) }
+
+        var path = Path()
+        // 主灵光(四角星,四边内凹细腰)
+        path.move(to: p(50, 16))
+        path.addCurve(to: p(84, 50), control1: p(51.5, 38), control2: p(62, 48.5))
+        path.addCurve(to: p(50, 84), control1: p(62, 51.5), control2: p(51.5, 62))
+        path.addCurve(to: p(16, 50), control1: p(48.5, 62), control2: p(38, 51.5))
+        path.addCurve(to: p(50, 16), control1: p(38, 48.5), control2: p(48.5, 38))
+        path.closeSubpath()
+
+        if includeMicro {
+            // 微光点(右上)
+            path.move(to: p(74, 21))
+            path.addCurve(to: p(81, 27.7), control1: p(74.6, 26), control2: p(75.7, 27.1))
+            path.addCurve(to: p(74, 34.4), control1: p(75.7, 28.3), control2: p(74.6, 29.4))
+            path.addCurve(to: p(67, 27.7), control1: p(73.4, 29.4), control2: p(72.3, 28.3))
+            path.addCurve(to: p(74, 21), control1: p(72.3, 27.1), control2: p(73.4, 26))
+            path.closeSubpath()
+        }
+        return path
+    }
 }
 
-/// 渐变徽标:teal squircle + 白色 M + 白色灵光。
+/// 渐变徽标:teal squircle + 玻璃高光 + 白色灵光。
 struct MachiAIMark: View {
     var size: CGFloat = 48
 
     var body: some View {
+        let corner = size * 0.28
         ZStack {
-            RoundedRectangle(cornerRadius: size * 0.27, style: .continuous)
+            RoundedRectangle(cornerRadius: corner, style: .continuous)
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color(red: 0.137, green: 0.675, blue: 0.573), // #23AC92
-                            Color(red: 0.047, green: 0.322, blue: 0.278), // #0C5247
+                            Color(red: 0.180, green: 0.745, blue: 0.624), // #2EBE9F
+                            Color(red: 0.043, green: 0.290, blue: 0.251), // #0B4A40
                         ],
                         startPoint: .topLeading, endPoint: .bottomTrailing
                     )
                 )
-            MachiMShape(box: 100, pts: mPoints100)
-                .stroke(style: StrokeStyle(lineWidth: size * 0.11, lineCap: .round, lineJoin: .round))
-                .foregroundStyle(.white)
-            MachiSparkShape(box: 100, pts: sparkPoints100)
-                .foregroundStyle(.white)
+                .overlay(
+                    // 玻璃高光,左上柔光带来体积感
+                    RoundedRectangle(cornerRadius: corner, style: .continuous)
+                        .fill(
+                            RadialGradient(
+                                gradient: Gradient(colors: [Color.white.opacity(0.24), Color.white.opacity(0)]),
+                                center: UnitPoint(x: 0.32, y: 0.26),
+                                startRadius: 0,
+                                endRadius: size * 0.7
+                            )
+                        )
+                )
+            MachiSparkShape(includeMicro: true)
+                .fill(.white)
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
     }
 }
 
-/// 单色线形:M + 灵光,继承环境 .foregroundStyle(用于底部 Tab 等)。
+/// 单色线形:四角星灵光描边,继承环境 .foregroundStyle(用于底部 Tab 等)。
 struct MachiAIGlyph: View {
     var lineWidth: CGFloat = 2.2
 
     var body: some View {
-        ZStack {
-            MachiMShape(box: 24, pts: mPoints24)
-                .stroke(style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
-            MachiSparkShape(box: 24, pts: sparkPoints24)
-        }
-        .accessibilityHidden(true)
+        // MachiSparkShape scales its 100-grid path to fill the view's frame, so
+        // lineWidth is already in the rendered point space — no grid rescale.
+        MachiSparkShape(includeMicro: false)
+            .stroke(style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
+            .accessibilityHidden(true)
     }
 }
