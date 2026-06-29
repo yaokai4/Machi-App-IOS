@@ -556,6 +556,7 @@ struct GuideOSLibraryPickerField: View {
                     }
                     .buttonStyle(.fullArea)
         .contentShape(Rectangle())
+                    .accessibilityLabel("清除")
                 }
             }
             .padding(.horizontal, 12)

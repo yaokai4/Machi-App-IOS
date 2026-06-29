@@ -1274,6 +1274,7 @@ private struct GuideLibraryHero: View {
                     .buttonStyle(.fullArea)
                     .contentShape(Rectangle())
                     .accessibilityIdentifier("guide.search.clear")
+                    .accessibilityLabel("清除")
                 }
             }
             .padding(.horizontal, 14)

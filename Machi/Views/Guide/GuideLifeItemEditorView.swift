@@ -193,6 +193,7 @@ struct GuideOSLifeItemRow: View {
                     }
                     .buttonStyle(.fullArea)
                     .contentShape(Rectangle())
+                    .accessibilityLabel(guideOSText(language, "编辑 \(item.title)", "\(item.title)を編集", "Edit \(item.title)"))
                 }
                 Button(role: .destructive) { confirming = true } label: {
                     Image(systemName: "trash")
@@ -202,6 +203,7 @@ struct GuideOSLifeItemRow: View {
                 }
                 .buttonStyle(.fullArea)
                 .contentShape(Rectangle())
+                .accessibilityLabel(guideOSText(language, "删除 \(item.title)", "\(item.title)を削除", "Delete \(item.title)"))
             }
             GuideAttachmentSection(entityType: "guide_life_item", entityId: item.id, title: guideOSText(language, "缴费附件", "支払い添付", "Payment attachments"))
         }

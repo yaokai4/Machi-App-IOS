@@ -798,6 +798,7 @@ private struct GuideContractRow: View {
                         .frame(width: 44, height: 44)
                 }
                 .contentShape(Rectangle())
+                .accessibilityLabel("更多")
             }
             GuideAttachmentSection(entityType: "guide_contract", entityId: item.id, title: guideOSText(language, "合同附件", "契約の添付", "Contract files"))
         }
@@ -975,12 +976,14 @@ private struct GuideDocumentRow: View {
                 }
                 .buttonStyle(.fullArea)
                 .contentShape(Rectangle())
+                .accessibilityLabel("编辑")
                 Button(role: .destructive) { confirmingDelete = true } label: {
                     Image(systemName: "trash")
                         .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.fullArea)
                 .contentShape(Rectangle())
+                .accessibilityLabel("删除")
             }
             GuideAttachmentSection(entityType: "guide_document", entityId: item.id, title: guideOSText(language, "可选附件", "任意の添付", "Optional files"))
         }
@@ -1261,6 +1264,7 @@ struct GuideAttachmentSection: View {
                             }
                             .buttonStyle(.fullArea)
                             .contentShape(Rectangle())
+                            .accessibilityLabel("删除")
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)

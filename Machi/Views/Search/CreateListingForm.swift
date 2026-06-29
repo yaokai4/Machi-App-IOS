@@ -871,6 +871,7 @@ struct CreateCityListingView: View {
                     .kxGlassCircle()
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("返回")
             VStack(alignment: .leading, spacing: 2) {
                 Text(isEditing ? KXListingCopy.pickText(language, "编辑发布", "投稿を編集", "Edit listing") : KXListingCopy.createTitle(for: listingType, language))
                     .font(.headline.weight(.semibold))
@@ -989,6 +990,7 @@ struct CreateCityListingView: View {
                                             .background(.ultraThinMaterial, in: Circle())
                                     }
                                     .buttonStyle(.plain)
+                                    .accessibilityLabel(L("delete", language))
                                     .padding(6)
                                 }
                             }
@@ -1035,6 +1037,7 @@ struct CreateCityListingView: View {
                                             .background(.ultraThinMaterial, in: Circle())
                                     }
                                     .buttonStyle(.plain)
+                                    .accessibilityLabel(L("delete", language))
                                     .padding(6)
                                 }
                                 .overlay(alignment: .bottom) {

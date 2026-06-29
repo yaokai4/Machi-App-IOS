@@ -603,6 +603,7 @@ private struct MessageConversationCard: View {
                 AvatarView(user: peer, size: 48)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(peer?.displayName ?? L("unknownUser", language))
 
             Button(action: onOpenThread) {
                 HStack(spacing: 11) {

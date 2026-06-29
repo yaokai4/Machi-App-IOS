@@ -133,6 +133,7 @@ struct SearchView: View {
                         .overlay(Circle().stroke(KXColor.cardBackground, lineWidth: 2))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(L("profile", language))
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(L("discover", language))
@@ -169,6 +170,7 @@ struct SearchView: View {
                         .kxGlassCircle()
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("地图")
             }
 
             Button {

@@ -166,6 +166,7 @@ struct PostDetailView: View {
                     .kxGlassCircle()
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("返回")
 
             Spacer()
 
@@ -216,6 +217,7 @@ struct PostDetailView: View {
                     .frame(width: 42, height: 42)
                     .kxGlassCircle()
             }
+            .accessibilityLabel(L("more", language))
         }
         .padding(.horizontal, KXSpacing.screen)
         .padding(.top, KXSpacing.sm)
@@ -603,6 +605,7 @@ struct PostDetailView: View {
                         Image(systemName: "xmark.circle.fill")
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(L("cancel", language))
                 }
             }
 
@@ -636,6 +639,7 @@ struct PostDetailView: View {
                 .clipShape(Circle())
                 .overlay(Circle().stroke(KXColor.glassStroke, lineWidth: 0.75))
                 .disabled(!canSendComment)
+                .accessibilityLabel(L("send", language))
             }
         }
         .padding(.horizontal, KXSpacing.screen)
@@ -820,6 +824,7 @@ private struct CommentRowView: View {
                             .background(KXColor.softBackground, in: Circle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(L("more", language))
                 }
             }
             Spacer()
@@ -852,6 +857,7 @@ private struct ReplyRowView: View {
                 AvatarView(user: author, size: KXAvatarSize.xs)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(author?.displayName ?? L("unknownUser", language))
             VStack(alignment: .leading, spacing: KXSpacing.xs) {
                 Button(action: onOpenAuthor) {
                     HStack(spacing: 5) {
@@ -894,6 +900,7 @@ private struct ReplyRowView: View {
                             .background(KXColor.cardBackground, in: Circle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(L("more", language))
                 }
             }
             Spacer()

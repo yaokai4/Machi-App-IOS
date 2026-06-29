@@ -319,6 +319,7 @@ private struct HomeHeaderView: View {
                         .overlay(Circle().stroke(KXColor.cardBackground, lineWidth: 2))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(currentUser.displayName)
 
                 Text(L("appName", language))
                     .kxScaledFont(34, relativeTo: .largeTitle, weight: .bold, design: .rounded)

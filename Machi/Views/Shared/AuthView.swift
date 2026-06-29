@@ -820,6 +820,7 @@ private struct AuthPasswordField: View {
                         .foregroundStyle(.blue.opacity(0.65))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(isVisible ? "隐藏密码" : "显示密码")
             }
             .padding(.horizontal, 16)
             .frame(height: 56)

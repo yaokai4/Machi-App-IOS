@@ -486,6 +486,7 @@ private struct GuideJourneyStepRow: View {
                 .buttonStyle(.fullArea)
         .contentShape(Rectangle())
                 .sensoryFeedback(.success, trigger: isDone)
+                .accessibilityLabel("完成")
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         Text(journeyText(language, "第 \(index) 步", "ステップ \(index)", "Step \(index)"))

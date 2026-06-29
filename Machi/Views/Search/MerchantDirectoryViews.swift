@@ -475,6 +475,7 @@ struct MerchantDirectoryView: View {
                         .kxGlassCircle()
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("返回")
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(cityName) · \(L("verifiedMerchant", language))")
                         .font(.headline.weight(.semibold))
@@ -625,6 +626,7 @@ struct BusinessPublicProfileView: View {
                         .kxGlassCircle()
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("返回")
                 VStack(alignment: .leading, spacing: 2) {
                     Text(response?.business.business_name ?? L("merchantProfileTitle", language))
                         .font(.headline.weight(.semibold))
@@ -955,6 +957,7 @@ struct ListingReviewsSectionView: View {
                                     .foregroundStyle(star <= draftRating ? Color.orange : Color.secondary.opacity(0.25))
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel("\(star) 星")
                         }
                         Text([L("poorRating", language), L("lowRating", language), L("averageRating", language), L("goodRating", language), L("excellentRating", language)][max(0, min(4, draftRating - 1))])
                             .font(.subheadline.weight(.black))

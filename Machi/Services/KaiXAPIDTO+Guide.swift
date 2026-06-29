@@ -1441,6 +1441,31 @@ struct KaiXExploreTopicsResponse: Codable {
     var orderedTopics: [KaiXTopicDTO] { topics ?? items ?? [] }
 }
 
+// N8: lightweight reputation surface (consumes /api/reputation/me).
+struct KaiXReputationProfileDTO: Codable, Equatable {
+    let level: Int?
+    let levelName: String?
+    let levelNameEn: String?
+    let levelNameJa: String?
+    let reputationLabel: String?
+    let publicTrustLabel: String?
+    let xp: Int?
+    let nextLevelXp: Int?
+    let xpToNext: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case level
+        case levelName
+        case levelNameEn = "level_name_en"
+        case levelNameJa = "level_name_ja"
+        case reputationLabel
+        case publicTrustLabel = "public_trust_label"
+        case xp
+        case nextLevelXp
+        case xpToNext = "xp_to_next"
+    }
+}
+
 struct KaiXSavedSearchDTO: Codable, Identifiable, Equatable {
     let id: String
     let vertical: String?

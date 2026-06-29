@@ -109,6 +109,7 @@ struct ContentTypePickerView: View {
                         .foregroundStyle(.tertiary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("清除")
             }
         }
         .padding(.horizontal, 14)

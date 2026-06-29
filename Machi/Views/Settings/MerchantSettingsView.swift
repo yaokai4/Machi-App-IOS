@@ -691,6 +691,7 @@ private struct MerchantField: View {
                             .foregroundStyle(.tertiary)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("清空")
                 }
             }
             .padding(.horizontal, 12)

@@ -589,6 +589,7 @@ struct CityListingDetailView: View {
                     .kxGlassCircle()
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("返回")
             VStack(alignment: .leading, spacing: 2) {
                 Text(KXListingCopy.title(for: listing?.type ?? "secondhand", language))
                     .font(.headline.weight(.semibold))
@@ -607,6 +608,7 @@ struct CityListingDetailView: View {
                     .kxGlassCircle()
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(L("like", language))
         }
         .padding(.horizontal, KaiXTheme.horizontalPadding)
         .padding(.top, 8)
@@ -1255,6 +1257,7 @@ private struct ListingInquirySuccessSheet: View {
                             .background(Color.secondary.opacity(0.10), in: Circle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(L("close", language))
                 }
 
             VStack(alignment: .leading, spacing: 10) {
@@ -1993,6 +1996,7 @@ struct ListingPublishSuccessSheet: View {
                         .background(KXColor.softBackground, in: Circle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(L("close", language))
             }
             .padding(.horizontal, KXSpacing.lg)
             .padding(.top, KXSpacing.md)

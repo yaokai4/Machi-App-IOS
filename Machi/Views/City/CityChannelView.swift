@@ -109,6 +109,7 @@ struct CityChannelView: View {
                     .kxGlassCircle()
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("返回")
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(viewModel.region.map { "\($0.countryEmoji) \(KaiXRegionDirectory.localizedMetroName(for: $0, language: language) ?? KaiXRegionDirectory.localizedShortLabel($0, language: language))" } ?? L("selectCity", language))

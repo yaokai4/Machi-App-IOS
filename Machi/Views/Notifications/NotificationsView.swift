@@ -89,6 +89,7 @@ struct NotificationsView: View {
                     .kxGlassCircle()
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(L("markAllRead", language))
         }
         .padding(.horizontal, KXSpacing.screen)
         .padding(.top, KXSpacing.xl)
@@ -227,6 +228,7 @@ private struct NotificationCard: View {
                 avatar
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(primaryActor?.displayName ?? "Machi")
 
             // The entire remaining row → opens the related content. The hit
             // shape is the full rectangle so taps land anywhere, not just on

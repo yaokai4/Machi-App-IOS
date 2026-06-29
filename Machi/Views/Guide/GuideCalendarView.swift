@@ -258,6 +258,7 @@ private struct GuideCalendarMonthGrid: View {
                     monthButton("chevron.left") {
                         cursor = Calendar.current.date(byAdding: .month, value: -1, to: cursor) ?? cursor
                     }
+                    .accessibilityLabel("上个月")
                     Button {
                         cursor = Date()
                         selectedDate = GuideOSDate.today()
@@ -273,6 +274,7 @@ private struct GuideCalendarMonthGrid: View {
                     monthButton("chevron.right") {
                         cursor = Calendar.current.date(byAdding: .month, value: 1, to: cursor) ?? cursor
                     }
+                    .accessibilityLabel("下个月")
                 }
             }
             LazyVGrid(columns: columns, spacing: 6) {
@@ -380,6 +382,7 @@ private struct GuideCalendarWeekBoard: View {
                 Spacer()
                 HStack(spacing: 8) {
                     weekButton("chevron.left") { shiftWeek(-1) }
+                        .accessibilityLabel("上一周")
                     Button {
                         cursor = Date()
                         selectedDate = GuideOSDate.today()
@@ -393,6 +396,7 @@ private struct GuideCalendarWeekBoard: View {
                     .contentShape(Rectangle())
                     .background(KXColor.livingSurface.opacity(0.78), in: Capsule())
                     weekButton("chevron.right") { shiftWeek(1) }
+                        .accessibilityLabel("下一周")
                 }
             }
 

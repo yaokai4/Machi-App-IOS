@@ -22,6 +22,7 @@ struct ProfileView: View {
     @State private var isShowingWorkbench = false
     @State private var followListKind: FollowListKind?
     @State private var mutualCount: Int?
+    @State private var reputation: KaiXReputationProfileDTO?
     @State private var isRefreshingProfile = false
     @State private var scheduledProfileRefreshTask: Task<Void, Never>?
 
@@ -158,6 +159,9 @@ struct ProfileView: View {
         .toolbar(.hidden, for: .navigationBar)
         .task(id: profileUserId) {
             await loadProfileAndContent()
+            if isCurrentUser, !currentUser.isGuest {
+                reputation = try? await KaiXAPIClient.shared.reputationMe()
+            }
         }
         .onChange(of: chrome.selectedTab) { _, tab in
             guard tracksChrome, tab == sourceTab else { return }
@@ -229,6 +233,7 @@ struct ProfileView: View {
                     profileHeader
                     if isCurrentUser {
                         personalWorkbenchEntry
+                        reputationCard
                     }
                     PersonalProfileTabPicker(tabs: availableTabs, selection: $profileTab)
                         .padding(.horizontal, 2)
@@ -289,6 +294,49 @@ struct ProfileView: View {
         .buttonStyle(.fullArea)
         .contentShape(Rectangle())
         .accessibilityIdentifier("profile.personalWorkbench")
+    }
+
+    /// N8: lightweight reputation surface — the user's own level + trust label,
+    /// directly under the workbench entry. Hidden until loaded (and for guests).
+    @ViewBuilder
+    private var reputationCard: some View {
+        if let rep = reputation, let level = rep.level {
+            let levelName = KXListingCopy.pickText(
+                language, rep.levelName ?? "", rep.levelNameJa ?? "", rep.levelNameEn ?? ""
+            )
+            let trust = rep.publicTrustLabel ?? rep.reputationLabel ?? ""
+            let detail = levelName.isEmpty ? trust : (trust.isEmpty ? levelName : "\(levelName) · \(trust)")
+            HStack(spacing: 14) {
+                Image(systemName: "rosette")
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 50, height: 50)
+                    .background(
+                        LinearGradient(colors: [KXColor.accent, KXColor.accent.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                        in: RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    )
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(KXListingCopy.pickText(language, "我的信誉", "信頼レベル", "My reputation"))
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(.primary)
+                        Text("Lv.\(level)")
+                            .font(.caption.weight(.heavy))
+                            .foregroundStyle(KXColor.accent)
+                    }
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(16)
+            .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator.opacity(0.6), lineWidth: 0.8))
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(KXListingCopy.pickText(language, "我的信誉 等级\(level) \(trust)", "信頼レベル \(level) \(trust)", "My reputation level \(level) \(trust)"))
+        }
     }
 
     private func loadProfileAndContent(showLoading: Bool = true) async {
@@ -375,6 +423,7 @@ struct ProfileView: View {
                         .kxGlassCircle()
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("返回")
             } else if isCurrentUser {
                 Button {
                     isShowingWorkbench = true
@@ -387,6 +436,7 @@ struct ProfileView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("profile.workbench")
+                .accessibilityLabel(L("workbenchTitle", language))
             } else {
                 Color.clear
                     .frame(width: 42, height: 42)
@@ -411,6 +461,7 @@ struct ProfileView: View {
                         .kxGlassCircle()
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(L("settings", language))
             } else {
                 Menu {
                     Button(L("shareProfile", language)) {
@@ -448,6 +499,7 @@ struct ProfileView: View {
                         .frame(width: 42, height: 42)
                         .kxGlassCircle()
                 }
+                .accessibilityLabel(L("more", language))
             }
         }
     }
@@ -905,6 +957,7 @@ struct ProfileView: View {
                         .kxGlassCircle()
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(L("messages", language))
 
                 Button {
                     if currentUser.isGuest { GuestGate.shared.requireLogin(); return }
@@ -1074,6 +1127,7 @@ private struct WorkbenchFullScreenView: View {
                         }
                         .buttonStyle(KXPressableStyle(scale: 0.94, dim: 0.88))
                         .accessibilityIdentifier("workbench.close")
+                        .accessibilityLabel("关闭")
                     }
                 }
                 .toolbarBackground(.hidden, for: .navigationBar)
@@ -1380,6 +1434,7 @@ private struct FollowUserCard: View {
                 AvatarView(user: user, size: 48)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(user.displayName)
 
             Button(action: onOpenProfile) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -1413,6 +1468,7 @@ private struct FollowUserCard: View {
                             .background(KXColor.accent.opacity(0.08), in: Circle())
                     }
                     .buttonStyle(KXPressableStyle(scale: 0.94))
+                    .accessibilityLabel(L("messages", language))
 
                     Button(action: onToggleFollow) {
                         Text(isFollowing ? L("followed", language) : L("follow", language))

@@ -1641,6 +1641,14 @@ final class KaiXAPIClient {
         return try decode(data)
     }
 
+    /// N8: the signed-in user's own reputation profile (level + trust label).
+    func reputationMe() async throws -> KaiXReputationProfileDTO {
+        struct Response: Decodable { let reputation: KaiXReputationProfileDTO }
+        let data = try await request("GET", "/api/reputation/me")
+        let response: Response = try decode(data)
+        return response.reputation
+    }
+
     /// Returns the server's authoritative `unread_count` after the change so the
     /// caller can calibrate the badge (instead of trusting a local count that can
     /// drift from Web / from notifications that arrived mid-action).

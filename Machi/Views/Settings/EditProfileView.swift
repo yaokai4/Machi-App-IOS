@@ -180,6 +180,7 @@ struct EditProfileView: View {
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(L("avatarStyle", language))
                 }
             }
 
@@ -196,6 +197,7 @@ struct EditProfileView: View {
                             )
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("头像颜色")
                 }
             }
         }

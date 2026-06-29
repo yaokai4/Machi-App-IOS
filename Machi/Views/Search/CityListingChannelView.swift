@@ -531,6 +531,7 @@ struct CityListingChannelView: View {
                     .kxGlassCircle()
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("返回")
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(region.map { KaiXRegionDirectory.localizedShortLabel($0, language: language) } ?? L("currentRegion", language)) · \(KXListingCopy.title(for: baseType, language))")
@@ -562,6 +563,7 @@ struct CityListingChannelView: View {
                     .shadow(color: KXColor.livingAccent.opacity(0.18), radius: 9, y: 4)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(L("compose", language))
         }
         .padding(.horizontal, KaiXTheme.horizontalPadding)
         .padding(.top, 8)
@@ -719,6 +721,7 @@ struct CityListingChannelView: View {
                         .foregroundStyle(.tertiary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(L("clear", language))
             }
         }
         .padding(.leading, 8)
@@ -1004,6 +1007,7 @@ struct CityListingChannelView: View {
                             .font(.title3)
                             .foregroundStyle(.secondary)
                     }
+                    .accessibilityLabel(L("close", language))
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -1633,6 +1637,7 @@ struct UserListingsView: View {
                     .kxGlassCircle()
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("返回")
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.headline.weight(.bold))

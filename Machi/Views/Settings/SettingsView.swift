@@ -105,6 +105,7 @@ struct SettingsView: View {
                     .kxGlassCircle()
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(L("close", language))
         }
         .padding(.top, 4)
     }

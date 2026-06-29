@@ -118,6 +118,7 @@ struct GuideOSTodoCard: View {
                         }
                         .buttonStyle(.fullArea)
                         .disabled(onUpdateSteps == nil)
+                        .accessibilityLabel("切换步骤")
                         Text(step.text)
                             .font(.caption)
                             .strikethrough(step.done)
@@ -128,6 +129,7 @@ struct GuideOSTodoCard: View {
                                 Image(systemName: "xmark").font(.caption2).foregroundStyle(.tertiary)
                             }
                             .buttonStyle(.fullArea)
+                            .accessibilityLabel("删除步骤")
                         }
                     }
                 }
@@ -231,6 +233,7 @@ struct GuideOSTodoCard: View {
             }
             .buttonStyle(.fullArea)
         .contentShape(Rectangle())
+            .accessibilityLabel("完成")
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(todo.title)
@@ -259,6 +262,7 @@ struct GuideOSTodoCard: View {
                                 .frame(width: 32, height: 32)
                         }
                         .contentShape(Rectangle())
+                        .accessibilityLabel("改期")
                     }
                     if onSetReminder != nil {
                         Button { showReminder = true } label: {
@@ -269,6 +273,7 @@ struct GuideOSTodoCard: View {
                         }
                         .buttonStyle(.fullArea)
         .contentShape(Rectangle())
+                        .accessibilityLabel("提醒")
                     }
                 }
                 if !todo.summary.isEmpty {

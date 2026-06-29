@@ -473,6 +473,7 @@ struct ComposePostView: View {
                 .buttonStyle(.plain)
                 .disabled(viewModel.topicDraft.normalizedTopicName.isEmpty)
                 .foregroundStyle(viewModel.topicDraft.normalizedTopicName.isEmpty ? .secondary : KXColor.accent)
+                .accessibilityLabel("添加话题")
             }
 
             if !viewModel.selectedTopics.isEmpty {
@@ -557,6 +558,7 @@ struct ComposePostView: View {
                                     .foregroundStyle(.white, .black.opacity(0.7))
                             }
                             .padding(6)
+                            .accessibilityLabel(L("delete", language))
                         }
                     }
                 }

@@ -146,6 +146,7 @@ struct WishlistView: View {
                             .font(.title3)
                             .foregroundStyle(.secondary)
                     }
+                    .accessibilityLabel(L("close", language))
                 }
             }
             .task { await store.syncFromServer() }
@@ -193,6 +194,7 @@ private struct WishlistRow: View {
                         .background(KXColor.livingSoft, in: Circle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(L("delete", language))
             }
             .padding(10)
             .kxLivingSurface(radius: 20, elevated: true)

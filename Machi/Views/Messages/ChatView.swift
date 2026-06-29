@@ -286,6 +286,7 @@ struct ChatView: View {
                     .kxGlassCircle()
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("返回")
 
             Button {
                 if let peer {
@@ -590,6 +591,7 @@ struct ChatView: View {
                             .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(L("delete", language))
                     .padding(4)
                 }
             }
@@ -699,6 +701,7 @@ struct KXMessageBubble: View {
                     AvatarView(user: peer, size: 32)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(peer?.displayName ?? L("profile", language))
             }
 
             VStack(alignment: isMine ? .trailing : .leading, spacing: 5) {
@@ -958,6 +961,7 @@ private struct ChatInputBar: View {
         .overlay(Circle().stroke(canSend ? Color.clear : KXColor.accent.opacity(0.12), lineWidth: 0.8))
         .shadow(color: canSend ? KXColor.accent.opacity(0.18) : .clear, radius: 10, y: 4)
         .disabled(!canSend || isSending)
+        .accessibilityLabel(L("send", language))
     }
 
     private func attachTray(remainingImageSlots: Int, imageDisabled: Bool, videoDisabled: Bool) -> some View {

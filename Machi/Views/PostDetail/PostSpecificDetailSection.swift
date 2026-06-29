@@ -219,6 +219,7 @@ struct PostSpecificDetailSection: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.primary)
+            .accessibilityLabel("举报")
         }
         .padding(.top, 4)
     }

@@ -345,6 +345,7 @@ struct DiscoverView: View {
                         .overlay(Circle().stroke(KXColor.cardBackground, lineWidth: 2))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(L("profile", language))
 
                 Text(L("discover", language))
                     .font(.title2.weight(.bold))
@@ -1892,6 +1893,7 @@ private struct DiscoverContentCard: View {
                 AvatarView(user: author, size: 36)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(author?.displayName ?? L("profile", language))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(author?.displayName ?? "@\(post.authorId.prefix(8))")

@@ -192,6 +192,7 @@ struct RegionPickerView: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("清除")
             }
         }
         .padding(.horizontal, KXSpacing.md)
