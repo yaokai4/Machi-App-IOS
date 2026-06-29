@@ -723,6 +723,10 @@ struct KaiXGuideFinanceSummaryDTO: Codable, Equatable {
     let budgets: [BudgetProgress]
     let fixedMonthly: Int
     let lastMonthExpense: Int
+    // O3: the server's single ledger currency + the count of this month's entries
+    // in OTHER currencies that were not summed into the totals.
+    let ledgerCurrency: String?
+    let otherCurrencyCount: Int?
 }
 
 struct KaiXGuideTransactionPayload: Encodable {

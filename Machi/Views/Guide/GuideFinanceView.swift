@@ -55,7 +55,15 @@ final class GuideFinanceViewModel: ObservableObject {
             async let s = KaiXAPIClient.shared.guideFinanceSummary(month: month)
             async let t = KaiXAPIClient.shared.guideTransactions(month: month)
             async let tr = KaiXAPIClient.shared.guideFinanceTrend(months: 6, month: month)
-            summary = try await s
+            let loadedSummary = try await s
+            summary = loadedSummary
+            // O3: bind display + new-entry currency to the server's authoritative
+            // ledger currency, so totals never mix currencies and entries match.
+            let ledger = loadedSummary.ledgerCurrency ?? loadedSummary.currency
+            if !ledger.isEmpty {
+                currency = ledger
+                UserDefaults.standard.set(ledger, forKey: "kx-finance-currency")
+            }
             transactions = try await t.items
             trend = (try? await tr.months) ?? []
         } catch {
@@ -275,6 +283,11 @@ struct GuideFinanceView: View {
                 if let top = s.byCategory.first {
                     Text(guideOSText(language, "· 最大支出 \(vm.label(language, code: top.category))", "· 最大 \(vm.label(language, code: top.category))", "· Top \(vm.label(language, code: top.category))"))
                         .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+                if let other = s.otherCurrencyCount, other > 0 {
+                    // O3: ledger sums a single currency; flag entries in others honestly.
+                    Text(guideOSText(language, "· \(other) 笔其他币种未计入", "· 他通貨\(other)件は未集計", "· \(other) in other currencies"))
+                        .font(.caption.weight(.semibold)).foregroundStyle(.orange).lineLimit(1)
                 }
                 Spacer(minLength: 0)
             }
@@ -554,7 +567,7 @@ private struct GuideCategoryDonut: View {
                             .rotationEffect(.degrees(-90))
                     }
                     VStack(spacing: 1) {
-                        Text(guideMoney(total, currency: "JPY")).font(.system(size: 13, weight: .black)).minimumScaleFactor(0.5).lineLimit(1)
+                        Text(money(total)).font(.system(size: 13, weight: .black)).minimumScaleFactor(0.5).lineLimit(1)
                         Text(guideOSText(language, "本月支出", "今月の支出", "Spent")).font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
                     }
                 }
