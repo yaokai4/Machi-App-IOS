@@ -302,6 +302,7 @@ struct KXInlineNotice: View {
     var systemImage: String = "exclamationmark.circle.fill"
     var tint: Color = KXColor.accent
     let onDismiss: () -> Void
+    @Environment(\.appLanguage) private var language
 
     var body: some View {
         HStack(spacing: KXSpacing.sm) {
@@ -321,9 +322,11 @@ struct KXInlineNotice: View {
                 Image(systemName: "xmark")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.secondary)
-                    .frame(width: 28, height: 28)
+                    .frame(width: 44, height: 44)   // ≥44pt HIG tap target
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(language == .ja ? "閉じる" : language == .en ? "Dismiss" : "关闭")
         }
         .padding(.horizontal, KXSpacing.md)
         .padding(.vertical, 10)

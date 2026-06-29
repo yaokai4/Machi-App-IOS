@@ -115,7 +115,11 @@ final class AppState: ObservableObject {
     /// or expired token) — safe to clear and continue as a guest.
     private static func isInvalidSessionError(_ error: Error) -> Bool {
         guard let api = error as? KaiXAPIError else { return false }
-        return ["user_not_found", "http_401", "http_403", "unauthorized",
+        // NOTE: http_403 (Forbidden) is deliberately NOT here. A 403 means the
+        // session is valid but the action isn't allowed (membership required,
+        // quota exceeded, reputation gate) — logging the user out on those was a
+        // confusing false "session expired". Only genuine auth failures count.
+        return ["user_not_found", "http_401", "unauthorized",
                 "invalid_token", "session_expired", "token_expired"].contains(api.error.code)
     }
 }

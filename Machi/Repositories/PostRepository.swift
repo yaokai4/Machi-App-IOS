@@ -63,7 +63,7 @@ final class PostRepository {
             case .following: apiMode = .following
             case .hot: apiMode = .hot
             }
-            let region = await MainActor.run { RegionStore.shared.current }
+            let region = RegionStore.shared.current  // already on the MainActor (class is @MainActor)
             let cityScoped = mode == .local || mode == .hot
             let response = try await KaiXAPIClient.shared.feed(
                 mode: apiMode,
@@ -1340,19 +1340,8 @@ final class PostRepository {
         )
     }
 
-    private static func parseDate(_ raw: String?) -> Date? {
-        guard let raw, !raw.isEmpty else { return nil }
-        let withFraction = ISO8601DateFormatter()
-        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = withFraction.date(from: raw) { return date }
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime]
-        if let date = iso.date(from: raw) { return date }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        return formatter.date(from: raw)
-    }
+    // Delegates to the cached KXDateParsing formatters (see ServerEntityFactory).
+    private static func parseDate(_ raw: String?) -> Date? { KXDateParsing.parse(raw) }
 
     private func rebuildTopics() throws {
         let topics = try context.fetch(FetchDescriptor<TopicEntity>())

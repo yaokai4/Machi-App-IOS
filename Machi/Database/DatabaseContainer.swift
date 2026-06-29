@@ -49,6 +49,15 @@ enum KaiXDatabaseContainer {
     private static var storeURL: URL {
         let dir = URL.applicationSupportDirectory.appending(path: "KaiXLocalStore", directoryHint: .isDirectory)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        // Encrypt the on-disk cache at rest — it holds DM message bodies. Complete-
+        // until-first-unlock matches the session token's accessibility: unreadable
+        // on a locked device that has never been unlocked since boot, yet still
+        // available for background refresh after the first unlock. Applied to the
+        // folder so the .store / -wal / -shm files created inside inherit it.
+        try? FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+            ofItemAtPath: dir.path
+        )
         return dir.appending(path: "KaiXLocal.store")
     }
 

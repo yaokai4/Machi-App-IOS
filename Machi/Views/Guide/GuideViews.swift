@@ -1003,8 +1003,16 @@ struct GuideProductDetailView: View {
             toastMessage = resp.message ?? guideText(language, "购买成功。", "購入が完了しました。", "Purchase complete.")
             await load()
         } catch {
-            // Most likely insufficient balance (402) — send the user to top up.
-            showTopupSheet = true
+            // Only route to top-up when the cause is genuinely insufficient
+            // balance (402 / insufficient_*). Any other failure (network, server
+            // error, already-owned) must surface its real message instead of a
+            // misleading "top up" prompt.
+            if let api = error as? KaiXAPIError,
+               api.error.code == "http_402" || api.error.code.localizedCaseInsensitiveContains("insufficient") {
+                showTopupSheet = true
+            } else {
+                toastMessage = error.kaixUserMessage
+            }
         }
     }
 

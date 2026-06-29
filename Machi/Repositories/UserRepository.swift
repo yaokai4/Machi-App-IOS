@@ -395,19 +395,9 @@ final class UserRepository {
         return String(data: data, encoding: .utf8) ?? ""
     }
 
-    private static func parseDate(_ raw: String?) -> Date? {
-        guard let raw, !raw.isEmpty else { return nil }
-        let isoWithFraction = ISO8601DateFormatter()
-        isoWithFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = isoWithFraction.date(from: raw) { return date }
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime]
-        if let date = iso.date(from: raw) { return date }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        return formatter.date(from: raw)
-    }
+    // Delegates to the cached KXDateParsing formatters (see ServerEntityFactory)
+    // — no per-call ISO8601DateFormatter/DateFormatter allocation on the hot path.
+    private static func parseDate(_ raw: String?) -> Date? { KXDateParsing.parse(raw) }
 
     func deleteAccount(user: UserEntity) async throws {
         if KaiXBackend.token != nil {

@@ -40,6 +40,9 @@ final class SearchViewModel: ObservableObject {
     @Published private(set) var topicTrendingItems: [TrendingItem] = []
     @Published private(set) var userTrendingItems: [TrendingItem] = []
     @Published private(set) var latestItems: [TrendingItem] = []
+    // O7: server-backed listing search results for the "信息/Listings" scope.
+    @Published private(set) var searchedListings: [KaiXCityListingDTO] = []
+    @Published private(set) var listingsSearchLoading = false
 
     /// `allowRemote: false` keeps the load hermetic for UI/unit fixtures
     /// without live explore data bleeding into deterministic tests.
@@ -203,6 +206,24 @@ final class SearchViewModel: ObservableObject {
 
     func updateDebouncedQuery(_ value: String) {
         debouncedQuery = value
+    }
+
+    /// O7: cross-city listing search for the "信息/Listings" scope. Mirrors Web's
+    /// search kind=listing. Empty query clears results.
+    func searchListings() async {
+        let q = debouncedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else {
+            searchedListings = []
+            return
+        }
+        listingsSearchLoading = true
+        defer { listingsSearchLoading = false }
+        do {
+            let response = try await KaiXAPIClient.shared.search(q, kind: .listing)
+            searchedListings = response.listings ?? []
+        } catch {
+            searchedListings = []
+        }
     }
 
     func trendingItems(region: KaiXRegionDirectory.Region?, contentTypes: [ContentType]? = nil, limit: Int = 8) -> [TrendingItem] {

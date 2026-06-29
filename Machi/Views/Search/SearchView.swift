@@ -14,6 +14,8 @@ struct SearchView: View {
     @State private var scope = SearchScope.hot
     @State private var recentSearchesStorage = ""
     @State private var searchDebounceTask: Task<Void, Never>?
+    @State private var savedSearchSaving = false
+    @State private var savedSearchDone = false
 
     let currentUser: UserEntity
 
@@ -76,6 +78,13 @@ struct SearchView: View {
                 }
             }
         }
+        .onChange(of: viewModel.debouncedQuery) { _, _ in
+            savedSearchDone = false
+            if scope == .listings { Task { await viewModel.searchListings() } }
+        }
+        .onChange(of: scope) { _, newScope in
+            if newScope == .listings { Task { await viewModel.searchListings() } }
+        }
     }
 
     private var content: some View {
@@ -100,6 +109,8 @@ struct SearchView: View {
                     topicGrid
                 case .users:
                     recommendedUserSection
+                case .listings:
+                    listingResults
                 }
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
@@ -448,6 +459,52 @@ struct SearchView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(lead == nil)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var listingResults: some View {
+        let q = viewModel.debouncedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        VStack(alignment: .leading, spacing: 12) {
+            if q.isEmpty {
+                EmptyStateView(title: L("listings", language), subtitle: L("searchPlaceholder", language), systemImage: "magnifyingglass")
+            } else {
+                if !currentUser.isGuest {
+                    Button {
+                        guard !savedSearchSaving, !savedSearchDone else { return }
+                        savedSearchSaving = true
+                        Task {
+                            defer { savedSearchSaving = false }
+                            do {
+                                _ = try await KaiXAPIClient.shared.createSavedSearch(keyword: q, label: q)
+                                savedSearchDone = true
+                            } catch {
+                                savedSearchDone = false
+                            }
+                        }
+                    } label: {
+                        Label(
+                            savedSearchDone ? L("subscribedSearch", language) : L("subscribeSearch", language),
+                            systemImage: savedSearchDone ? "bell.fill" : "bell.badge"
+                        )
+                        .font(.subheadline.weight(.semibold))
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(savedSearchSaving || savedSearchDone)
+                    .accessibilityIdentifier("search.subscribeListing")
+                }
+                if viewModel.listingsSearchLoading && viewModel.searchedListings.isEmpty {
+                    LoadingView()
+                } else if viewModel.searchedListings.isEmpty {
+                    EmptyStateView(title: L("listingsSearchEmpty", language), subtitle: L("searchPlaceholder", language), systemImage: "magnifyingglass")
+                } else {
+                    ForEach(viewModel.searchedListings) { item in
+                        KXStructuredListingRow(listing: item) {
+                            router.open(.cityListingDetail(listingId: item.id))
+                        }
+                    }
                 }
             }
         }
@@ -939,6 +996,7 @@ private enum SearchScope: String, CaseIterable, Identifiable {
     case news
     case topics
     case users
+    case listings
 
     var id: String { rawValue }
 
@@ -948,6 +1006,7 @@ private enum SearchScope: String, CaseIterable, Identifiable {
         case .news: L("news", language)
         case .topics: L("topics", language)
         case .users: L("users", language)
+        case .listings: L("listings", language)
         }
     }
 }

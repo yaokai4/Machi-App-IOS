@@ -1441,10 +1441,24 @@ struct KaiXExploreTopicsResponse: Codable {
     var orderedTopics: [KaiXTopicDTO] { topics ?? items ?? [] }
 }
 
+struct KaiXSavedSearchDTO: Codable, Identifiable, Equatable {
+    let id: String
+    let vertical: String?
+    let keyword: String?
+    let category: String?
+    let label: String?
+    let cadence: String?
+    let citySlug: String?
+    let matchCount: Int?
+}
+
 struct KaiXSearchResponse: Codable {
     let posts: [KaiXPostDTO]
     let users: [KaiXUserDTO]
     let topics: [KaiXTopicDTO]
+    // O7: cross-city listing hits when called with kind=listing. Optional so
+    // responses that omit it (older/posts-only) still decode.
+    let listings: [KaiXCityListingDTO]?
 }
 
 struct KaiXNotificationsResponse: Codable {

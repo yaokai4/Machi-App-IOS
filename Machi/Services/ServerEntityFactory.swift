@@ -242,17 +242,37 @@ enum ServerEntityFactory {
         parseDate(raw) ?? .now
     }
 
-    static func parseDate(_ raw: String?) -> Date? {
+    static func parseDate(_ raw: String?) -> Date? { KXDateParsing.parse(raw) }
+}
+
+/// Cached server-date parsers. ISO8601DateFormatter / DateFormatter construction
+/// does ICU/calendar setup and is measurably expensive; the feed-hydration hot
+/// path parses several dates per post AND per author for every item of every
+/// page, so these are built ONCE and reused (previously each call allocated up
+/// to three fresh formatters). Configured once then only read, which is safe for
+/// the MainActor-bound hydration callers.
+enum KXDateParsing {
+    static let isoFractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    static let iso: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+    static let plain: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return f
+    }()
+
+    static func parse(_ raw: String?) -> Date? {
         guard let raw, !raw.isEmpty else { return nil }
-        let withFraction = ISO8601DateFormatter()
-        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = withFraction.date(from: raw) { return date }
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime]
+        if let date = isoFractional.date(from: raw) { return date }
         if let date = iso.date(from: raw) { return date }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        return formatter.date(from: raw)
+        return plain.date(from: raw)
     }
 }

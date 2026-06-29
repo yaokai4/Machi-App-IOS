@@ -230,6 +230,8 @@ struct CreateCityListingView: View {
     @State private var publishedReceipt: ListingPublishReceipt?
     @State private var showMembershipSheet = false
     @State private var showMembershipGate = false
+    @State private var showQuotaExhausted = false
+    @State private var quotaExhaustedMessage: String?
 
     /// Listing types gated behind Machi membership (mirrors the server's
     /// LISTING_TYPES_REQUIRING_MEMBERSHIP). Used to prompt *before* the user
@@ -723,6 +725,20 @@ struct CreateCityListingView: View {
             Button(KXListingCopy.pickText(language, "取消", "キャンセル", "Cancel"), role: .cancel) {}
         } message: {
             Text(membershipGateMessage)
+        }
+        .confirmationDialog(
+            KXListingCopy.pickText(language, "本月免费发布已用完", "今月の無料投稿枠を使い切りました", "Monthly free listings used up"),
+            isPresented: $showQuotaExhausted,
+            titleVisibility: .visible
+        ) {
+            Button(KXListingCopy.pickText(language, "知道了", "OK", "Got it"), role: .cancel) {}
+        } message: {
+            Text(quotaExhaustedMessage ?? KXListingCopy.pickText(
+                language,
+                "你本月的免费发布次数已用完，下月 1 日自动重置。",
+                "今月の無料投稿枠を使い切りました。翌月1日に自動でリセットされます。",
+                "You've used this month's free listings. Your quota resets on the 1st of next month."
+            ))
         }
     }
 
@@ -1716,13 +1732,23 @@ struct CreateCityListingView: View {
                 locationText: location
             )
         } catch {
-            // The free first-listing allowance is used up (or membership truly
-            // required) → show the upgrade gate instead of a bottom error.
-            if let api = error as? KaiXAPIError,
-               api.error.code == "MEMBERSHIP_REQUIRED" || api.error.code == "MEMBERSHIP_LISTING_QUOTA_EXCEEDED" {
-                isSubmitting = false
-                showMembershipGate = true
-                return
+            if let api = error as? KaiXAPIError {
+                // Non-member (or free first-listing allowance used up) → show the
+                // membership upsell instead of a bottom error.
+                if api.error.code == "MEMBERSHIP_REQUIRED" {
+                    isSubmitting = false
+                    showMembershipGate = true
+                    return
+                }
+                // An ALREADY-paying member who exhausted this month's free quota.
+                // Do NOT show the "Get membership" gate (they already have it) —
+                // surface an informational notice that the quota resets next month.
+                if api.error.code == "MEMBERSHIP_LISTING_QUOTA_EXCEEDED" {
+                    isSubmitting = false
+                    quotaExhaustedMessage = error.kaixUserMessage
+                    showQuotaExhausted = true
+                    return
+                }
             }
             if let failed = mediaDrafts.first(where: {
                 if case .uploading = mediaUploadPhases[$0.id] { return true }

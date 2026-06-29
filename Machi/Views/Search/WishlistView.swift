@@ -1,10 +1,11 @@
 import Combine
 import SwiftUI
 
-/// A favorited listing snapshot persisted locally (UserDefaults) so the user
-/// gets a real, offline 收藏 page even though the backend has no
-/// favorites-list endpoint yet. Cross-device sync would need a server endpoint;
-/// this captures whatever the user hearts on this device.
+/// A favorited listing snapshot cached locally (UserDefaults) so the user gets
+/// an instant, offline 收藏 page. The server is the source of truth: heart
+/// toggles POST/DELETE /api/listings/:id/favorite (see the card heart buttons),
+/// and `syncFromServer()` reconciles from GET /api/my/favorites, so favorites
+/// sync cross-device and cross-platform. This local store is an optimistic cache.
 struct FavoriteSnapshot: Codable, Identifiable, Hashable {
     let id: String            // listingId
     var title: String

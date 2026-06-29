@@ -354,6 +354,7 @@ struct ChatView: View {
                     .frame(width: 38, height: 38)
                     .kxGlassCircle()
             }
+            .accessibilityLabel(language == .ja ? "その他" : language == .en ? "More" : "更多")
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
@@ -674,9 +675,15 @@ struct KXMessageBubble: View {
     let onRetry: () -> Void
     let onOpenPeer: () -> Void
 
-    /// Cap long text bubbles at ~74% of the screen so they read like chat
-    /// bubbles and never run edge-to-edge.
-    private var bubbleMaxWidth: CGFloat { UIScreen.main.bounds.width * 0.74 }
+    /// Cap long text bubbles at ~74% of the app's window so they read like chat
+    /// bubbles and never run edge-to-edge. Uses the active window scene width
+    /// (Split View / Stage Manager aware) rather than the full-screen bounds.
+    private var bubbleMaxWidth: CGFloat {
+        let windowWidth = UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.keyWindow?.bounds.width }
+            .first ?? UIScreen.main.bounds.width
+        return windowWidth * 0.74
+    }
 
     private var retryLabel: String { language == .ja ? "再送信" : language == .en ? "Retry" : "点击重试" }
     private var sendingLabel: String { language == .ja ? "送信中…" : language == .en ? "Sending…" : "发送中…" }

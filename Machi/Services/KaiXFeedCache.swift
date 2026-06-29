@@ -18,7 +18,7 @@ enum KaiXFeedCache {
         let items: [KaiXPostDTO]
     }
 
-    private static func fileURL(for key: String) -> URL? {
+    nonisolated private static func fileURL(for key: String) -> URL? {
         guard let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return nil }
         let folder = caches.appendingPathComponent("KaiXFeedCache", isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -47,12 +47,19 @@ enum KaiXFeedCache {
 
     /// Load the cached page if present and not older than `maxAge`. Returns an
     /// empty array on any miss so callers can treat it as "no cache".
-    static func load(key: String) -> [KaiXPostDTO] {
+    nonisolated static func load(key: String) -> [KaiXPostDTO] {
         guard let url = fileURL(for: key),
               let data = try? Data(contentsOf: url),
               let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data),
               Date().timeIntervalSince(snapshot.savedAt) < maxAge else { return [] }
         return snapshot.items
+    }
+
+    /// Off-main variant for the cold-start/refresh path: the blocking disk read +
+    /// JSON decode run on a background task instead of stalling the main actor
+    /// (the synchronous `load` used to run on the launch-critical main thread).
+    nonisolated static func loadAsync(key: String) async -> [KaiXPostDTO] {
+        await Task.detached(priority: .userInitiated) { load(key: key) }.value
     }
 
     /// Folder this cache lives in (used by the data-management screen to size /

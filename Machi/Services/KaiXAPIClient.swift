@@ -27,11 +27,16 @@ extension Notification.Name {
 /// updated from any actor without re-instantiating the client.
 final class KaiXAPIClient {
     static let shared = KaiXAPIClient()
+    // Reused coders — JSONEncoder/JSONDecoder are thread-safe after configuration
+    // and were previously allocated on every request encode / response decode (a
+    // hot path). DTOs use explicit CodingKeys, so default configuration is correct.
+    private static let jsonEncoder = JSONEncoder()
+    private static let jsonDecoder = JSONDecoder()
 
     enum FeedMode: String { case recommend, following, hot, local }
     enum CommentSort: String { case top, new }
     enum ProfileSegment: String { case posts, replies, media, likes, bookmarks }
-    enum SearchKind: String { case all, post, user, topic }
+    enum SearchKind: String { case all, post, user, topic, listing }
 
     private let session: URLSession
 
@@ -76,7 +81,7 @@ final class KaiXAPIClient {
         }
         if let body {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            req.httpBody = try JSONEncoder().encode(AnyEncodable(body))
+            req.httpBody = try Self.jsonEncoder.encode(AnyEncodable(body))
         }
         // Transient failures (mobile networks drop, gateways recycle) get a
         // couple of jittered retries — but ONLY for requests safe to replay:
@@ -115,7 +120,7 @@ final class KaiXAPIClient {
                     NotificationCenter.default.post(name: .kaiXSessionInvalidated, object: nil)
                 }
                 if http.statusCode == 429,
-                   let api = try? JSONDecoder().decode(KaiXAPIError.self, from: data),
+                   let api = try? Self.jsonDecoder.decode(KaiXAPIError.self, from: data),
                    api.error.code != "rate_limited" {
                     throw api
                 }
@@ -127,7 +132,7 @@ final class KaiXAPIClient {
                     try? await Task.sleep(nanoseconds: Self.retryBackoff(attempt, response: http))
                     continue
                 }
-                if let api = try? JSONDecoder().decode(KaiXAPIError.self, from: data) {
+                if let api = try? Self.jsonDecoder.decode(KaiXAPIError.self, from: data) {
                     throw api
                 }
                 throw KaiXAPIError(error: .init(code: "http_\(http.statusCode)", message: "HTTP \(http.statusCode)"))
@@ -169,7 +174,7 @@ final class KaiXAPIClient {
     }
 
     func decode<T: Decodable>(_ data: Data) throws -> T {
-        try JSONDecoder().decode(T.self, from: data)
+        try Self.jsonDecoder.decode(T.self, from: data)
     }
 
     func requirePathIdentifier(_ value: String) throws -> String {
@@ -871,6 +876,51 @@ final class KaiXAPIClient {
             countryCode: countryCode,
             query: query
         ).items
+    }
+
+    // MARK: - Saved-search alerts (N4)
+
+    /// The current user's saved searches.
+    func savedSearches() async throws -> [KaiXSavedSearchDTO] {
+        struct Response: Decodable { let items: [KaiXSavedSearchDTO] }
+        let data = try await request("GET", "/api/saved_searches")
+        let response: Response = try decode(data)
+        return response.items
+    }
+
+    /// Subscribe to a search; a matching new listing drops an in-app
+    /// notification (and a push once configured). Empty vertical = any type.
+    func createSavedSearch(
+        vertical: String? = nil,
+        keyword: String? = nil,
+        category: String? = nil,
+        citySlug: String? = nil,
+        regionCode: String? = nil,
+        label: String? = nil,
+        cadence: String = "instant"
+    ) async throws -> KaiXSavedSearchDTO {
+        struct Body: Encodable {
+            let vertical: String?
+            let keyword: String?
+            let category: String?
+            let city_slug: String?
+            let region_code: String?
+            let label: String?
+            let cadence: String
+        }
+        struct Response: Decodable { let item: KaiXSavedSearchDTO }
+        let body = Body(
+            vertical: vertical, keyword: keyword, category: category,
+            city_slug: citySlug, region_code: regionCode, label: label, cadence: cadence
+        )
+        let data = try await request("POST", "/api/saved_searches", body: body)
+        let response: Response = try decode(data)
+        return response.item
+    }
+
+    /// Remove a saved search.
+    func deleteSavedSearch(_ id: String) async throws {
+        _ = try await request("DELETE", "/api/saved_searches/\(id.encodedPathSegment)")
     }
 
     /// Bind this device's APNs token to the logged-in account so pushes
@@ -1775,7 +1825,7 @@ final class KaiXAPIClient {
                 if (200..<300).contains(http.statusCode) {
                     return http.value(forHTTPHeaderField: "ETag")?.replacingOccurrences(of: "\"", with: "") ?? ""
                 }
-                if let api = try? JSONDecoder().decode(KaiXAPIError.self, from: body),
+                if let api = try? Self.jsonDecoder.decode(KaiXAPIError.self, from: body),
                    http.statusCode == 409,
                    api.error.code == "invalid_upload_state" {
                     // Mobile networks can lose the PUT response after the
@@ -1788,7 +1838,7 @@ final class KaiXAPIClient {
                     try? await Task.sleep(nanoseconds: Self.retryBackoff(attempt, response: http))
                     continue
                 }
-                if let api = try? JSONDecoder().decode(KaiXAPIError.self, from: body) {
+                if let api = try? Self.jsonDecoder.decode(KaiXAPIError.self, from: body) {
                     throw api
                 }
                 throw KaiXAPIError(error: .init(code: "upload_failed", message: "Upload failed (\(http.statusCode))"))
@@ -1816,7 +1866,7 @@ final class KaiXAPIClient {
                 if (200..<300).contains(http.statusCode) {
                     return http.value(forHTTPHeaderField: "ETag")?.replacingOccurrences(of: "\"", with: "") ?? ""
                 }
-                if let api = try? JSONDecoder().decode(KaiXAPIError.self, from: body),
+                if let api = try? Self.jsonDecoder.decode(KaiXAPIError.self, from: body),
                    http.statusCode == 409,
                    api.error.code == "invalid_upload_state" {
                     return ""
@@ -1825,7 +1875,7 @@ final class KaiXAPIClient {
                     try? await Task.sleep(nanoseconds: Self.retryBackoff(attempt, response: http))
                     continue
                 }
-                if let api = try? JSONDecoder().decode(KaiXAPIError.self, from: body) {
+                if let api = try? Self.jsonDecoder.decode(KaiXAPIError.self, from: body) {
                     throw api
                 }
                 throw KaiXAPIError(error: .init(code: "upload_failed", message: "Upload failed (\(http.statusCode))"))

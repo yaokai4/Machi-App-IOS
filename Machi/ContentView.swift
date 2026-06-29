@@ -218,7 +218,10 @@ struct ContentView: View {
     /// callback (`machi://auth/...`) never reaches here — it is intercepted by
     /// the in-flight `ASWebAuthenticationSession` — but we ignore it defensively.
     private func handleDeepLink(_ url: URL) {
-        guard url.scheme == "machi", appState.currentUser != nil else { return }
+        // Public destinations open for everyone — login is enforced at the
+        // ACTION, not at navigation (guest-first). Only the private conversation
+        // target keeps a signed-in guard. (N10 / modify#5)
+        guard url.scheme == "machi" else { return }
         let identifier = url.pathComponents.first(where: { $0 != "/" }) ?? ""
         switch url.host {
         case "post":
@@ -236,6 +239,32 @@ struct ContentView: View {
             appChrome.select(.home)
             appRouter.setActiveTab(.home)
             appRouter.open(.topic(tag: identifier), in: .home)
+        case "listing", "cityListing":
+            guard !identifier.isEmpty else { return }
+            appChrome.select(.search)
+            appRouter.setActiveTab(.search)
+            appRouter.open(.cityListingDetail(listingId: identifier), in: .search)
+        case "article", "guideArticle":
+            guard !identifier.isEmpty else { return }
+            appChrome.select(.guide)
+            appRouter.setActiveTab(.guide)
+            appRouter.open(.guideArticle(slug: identifier), in: .guide)
+        case "product", "guideProduct":
+            guard !identifier.isEmpty else { return }
+            appChrome.select(.guide)
+            appRouter.setActiveTab(.guide)
+            appRouter.open(.guideProduct(slug: identifier), in: .guide)
+        case "city":
+            guard !identifier.isEmpty else { return }
+            appChrome.select(.search)
+            appRouter.setActiveTab(.search)
+            appRouter.open(.city(regionCode: identifier.lowercased()), in: .search)
+        case "conversation", "dm":
+            // Private: opening a thread needs a signed-in user.
+            guard appState.currentUser != nil, !identifier.isEmpty else { return }
+            appChrome.select(.messages)
+            appRouter.setActiveTab(.messages)
+            appRouter.open(.conversation(conversationId: identifier), in: .messages)
         default:
             break
         }

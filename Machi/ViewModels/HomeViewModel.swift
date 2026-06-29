@@ -30,8 +30,17 @@ final class HomeViewModel: ObservableObject {
     // Every post id currently in `posts` — appended pages are filtered
     // against this so a shifted local window can never show a duplicate.
     private var loadedIds = Set<String>()
+    // Re-entrancy guard: HomeTimelineView fires loadInitial from .task plus four
+    // onChange handlers (mode/refreshToken/region/language) that can overlap. The
+    // method suspends at `await syncFromRemote`, so two interleaved calls used to
+    // both reset the cursor/loadedIds and double-increment the page → mixed or
+    // duplicated feeds. Serialize: a second call while one is in flight no-ops.
+    private var isLoadingInitial = false
 
     func loadInitial(context: ModelContext, currentUser: UserEntity, postStore: PostStore, clearExisting: Bool = false) async {
+        if isLoadingInitial { return }
+        isLoadingInitial = true
+        defer { isLoadingInitial = false }
         let previousPage = currentPage
         let previousCanLoadMore = canLoadMore
         let previousCursor = remoteCursor
@@ -135,7 +144,7 @@ final class HomeViewModel: ObservableObject {
                 // refresh below replaces these posts in place once it arrives —
                 // picking up any deletes/edits — so nothing is stale for long; it
                 // just appears immediately instead of only after the round trip.
-                let cached = KaiXFeedCache.load(key: feedCacheKey())
+                let cached = await KaiXFeedCache.loadAsync(key: feedCacheKey())
                 if !cached.isEmpty {
                     let bundle = ServerEntityFactory.postBundle(from: cached)
                     authors.merge(bundle.authors) { _, fresh in fresh }
@@ -269,7 +278,7 @@ final class HomeViewModel: ObservableObject {
             // On a cold first page, fall back to the last good server snapshot
             // so an offline launch is not blank.
             if cursor == nil {
-                let cachedItems = KaiXFeedCache.load(key: feedCacheKey())
+                let cachedItems = await KaiXFeedCache.loadAsync(key: feedCacheKey())
                 pendingRemoteBundle = cachedItems.isEmpty ? nil : ServerEntityFactory.postBundle(from: cachedItems)
                 pendingRemoteBundleIsCachedSnapshot = pendingRemoteBundle != nil
             } else {

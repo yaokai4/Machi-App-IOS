@@ -144,10 +144,16 @@ struct MembershipView: View {
     }
 
     private func periodLabel(_ plan: KaiXMembershipPlanDTO) -> String {
+        // Membership is a NON-renewing one-time pass — never frame it as
+        // monthly/yearly subscription billing (that implied auto-renew). Show the
+        // access duration as a one-time pass instead.
         let period = plan.billingPeriod ?? plan.billing_period ?? plan.billing_cycle
-        if period == "yearly" { return L("membershipYearlyPlan", language) }
-        if period == "monthly" { return L("membershipMonthlyPlan", language) }
-        return L("membershipPlanFallback", language)
+        let days = period == "yearly" ? 365 : 30
+        switch language {
+        case .ja: return "\(days)日パス（一回購入・自動更新なし）"
+        case .en: return "\(days)-day pass · one-time, no auto-renew"
+        default: return "\(days) 天会员（一次性购买，非自动续费）"
+        }
     }
 
     private var activeCard: some View {

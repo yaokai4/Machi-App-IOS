@@ -7,10 +7,12 @@ import Security
 /// writes plaintext to a plist in the app sandbox. That file is
 /// included in unencrypted device backups and is readable by anyone
 /// who can mount the sandbox (jailbroken devices, leaked backups,
-/// some MDM debugging tools). Moving it into the Keychain — with the
-/// `WhenUnlockedThisDeviceOnly` accessibility — both encrypts it at
-/// rest and prevents it from migrating to a new device via iCloud /
-/// encrypted backups.
+/// some MDM debugging tools). Moving it into the Keychain — with
+/// `AfterFirstUnlockThisDeviceOnly` accessibility (see `write`) — both
+/// encrypts it at rest and prevents it from migrating to a new device via
+/// iCloud / encrypted backups. AfterFirstUnlock (not WhenUnlocked) is used so
+/// background refresh / notification handling can still read the session token
+/// while the device is locked, after the first post-boot unlock.
 ///
 /// API mirrors a tiny KV store so `KaiXBackend` can swap in without
 /// touching any call sites.

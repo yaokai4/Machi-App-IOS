@@ -814,11 +814,17 @@ struct CityListingDetailView: View {
                     }
                 }
 
-                if let actionMessage {
-                    Text(actionMessage)
+                if let msg = actionMessage {
+                    Text(msg)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(KXColor.livingAccent)
                         .padding(.horizontal, 2)
+                        .task(id: msg) {
+                            // Auto-dismiss the transient status/error line so it
+                            // doesn't linger after the action it described is done.
+                            try? await Task.sleep(for: .seconds(4))
+                            if actionMessage == msg { actionMessage = nil }
+                        }
                 }
 
                 contactPanel(listing)
@@ -1071,7 +1077,7 @@ struct CityListingDetailView: View {
             isLoading = false
             await loadRecommendations(for: loaded)
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.kaixUserMessage
             isLoading = false
         }
     }
@@ -1115,7 +1121,7 @@ struct CityListingDetailView: View {
             try await KaiXAPIClient.shared.favoriteListing(listing.id, on: !(listing.favorited ?? false))
             await load()
         } catch {
-            actionMessage = error.localizedDescription
+            actionMessage = error.kaixUserMessage
         }
     }
 
@@ -1152,7 +1158,7 @@ struct CityListingDetailView: View {
                 receipt: receiptDTO
             )
         } catch {
-            actionMessage = error.localizedDescription
+            actionMessage = error.kaixUserMessage
         }
     }
 
@@ -1164,7 +1170,7 @@ struct CityListingDetailView: View {
             try await KaiXAPIClient.shared.reportListing(listing.id, reason: "suspicious", note: "App 用户举报")
             actionMessage = KXListingCopy.pickText(language, "举报已提交，Machi 会进行审核。", "通報を送信しました。Machi が確認します。", "Report submitted. Machi will review it.")
         } catch {
-            actionMessage = error.localizedDescription
+            actionMessage = error.kaixUserMessage
         }
     }
 }
