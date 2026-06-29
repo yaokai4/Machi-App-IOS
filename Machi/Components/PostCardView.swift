@@ -165,19 +165,6 @@ struct PostCardView: View, Equatable {
 
                         Spacer(minLength: KXSpacing.xs)
 
-                        if contentPost.isBoosted && (contentPost.boostedUntil ?? .distantFuture) > .now {
-                            HStack(spacing: 3) {
-                                Image(systemName: "flame.fill")
-                                    .font(.system(size: 9, weight: .black))
-                                Text(L("boostedBadge", language))
-                                    .font(.system(size: 10, weight: .bold))
-                            }
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 7)
-                            .frame(height: 20)
-                            .background(KXColor.heat, in: Capsule())
-                        }
-
                         if showsMenu {
                             postMenuButton
                         }
