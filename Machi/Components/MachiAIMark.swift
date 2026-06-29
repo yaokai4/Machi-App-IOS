@@ -1,8 +1,8 @@
 import SwiftUI
 
 // Machi AI 自有品牌标志 —— 「灵光 Spark」。与 web 端 components/brand/MachiAIMark.tsx
-// 像素级一致:品牌青绿渐变 squircle + 一颗精致的四角星灵光 + 右上一颗微光点 +
-// 玻璃高光。
+// 像素级一致:Apple 风多彩渐变 squircle(粉→紫→蓝→青) + 一颗精致的四角星灵光 +
+// 右上一颗微光点 + 玻璃高光。
 //   MachiAIMark   渐变 squircle 徽标 —— 聊天头像 / 入口卡
 //   MachiAIGlyph  单色线形灵光 —— 底部 Tab / 行内,继承 .foregroundStyle 着色
 //
@@ -52,9 +52,11 @@ struct MachiAIMark: View {
             RoundedRectangle(cornerRadius: corner, style: .continuous)
                 .fill(
                     LinearGradient(
-                        colors: [
-                            Color(red: 0.180, green: 0.745, blue: 0.624), // #2EBE9F
-                            Color(red: 0.043, green: 0.290, blue: 0.251), // #0B4A40
+                        stops: [
+                            .init(color: Color(red: 1.000, green: 0.435, blue: 0.710), location: 0.0),  // #FF6FB5
+                            .init(color: Color(red: 0.627, green: 0.420, blue: 0.941), location: 0.38), // #A06BF0
+                            .init(color: Color(red: 0.357, green: 0.553, blue: 0.937), location: 0.72), // #5B8DEF
+                            .init(color: Color(red: 0.212, green: 0.839, blue: 0.765), location: 1.0),  // #36D6C3
                         ],
                         startPoint: .topLeading, endPoint: .bottomTrailing
                     )

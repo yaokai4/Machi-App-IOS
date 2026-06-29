@@ -1421,51 +1421,30 @@ private struct GuideAIEntryCard: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 0)
-                }
-
-                // 行内提问入口(整卡可点,进入 .guideAI)。视觉上像输入框,提示「先问一句」。
-                HStack(spacing: 10) {
-                    Text(guideText(language,
-                                   "问问看：在留卡到期怎么办？",
-                                   "聞いてみる：在留カードの更新は？",
-                                   "Ask: how do I renew my residence card?"))
-                        .font(.subheadline)
-                        .foregroundStyle(KXColor.livingMuted)
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
-                    Image(systemName: "paperplane.fill")
-                        .font(.system(size: 14, weight: .bold))
+                    // 纯入口:箭头表示「点进去」才是聊天页,不是输入框。
+                    Image(systemName: "arrow.right")
+                        .font(.subheadline.weight(.bold))
                         .foregroundStyle(.white)
-                        .frame(width: 30, height: 30)
+                        .frame(width: 34, height: 34)
                         .background(KXColor.livingAccent, in: Circle())
+                        .shadow(color: KXColor.livingAccent.opacity(0.3), radius: 5, y: 2)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(KXColor.livingAccent.opacity(0.2), lineWidth: 1)
-                )
 
                 HStack(spacing: 8) {
                     chip(guideText(language, "生活手续", "生活手続き", "Life admin"))
                     chip(guideText(language, "升学规划", "進学プラン", "Study plan"))
                     chip(guideText(language, "就职准备", "就職準備", "Job prep"))
+                    Spacer(minLength: 0)
                 }
             }
-            .padding(18)
+            .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                LinearGradient(
-                    colors: [KXColor.livingAccentSoft, KXColor.livingSurface],
-                    startPoint: .topLeading, endPoint: .bottomTrailing
-                ),
-                in: RoundedRectangle(cornerRadius: 20, style: .continuous)
-            )
+            .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(KXColor.livingAccent.opacity(0.25), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(KXColor.livingInk.opacity(0.06), lineWidth: 1)
             )
+            .shadow(color: Color.black.opacity(0.06), radius: 14, y: 6)
         }
         .buttonStyle(.fullArea)
         .contentShape(Rectangle())
