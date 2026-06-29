@@ -366,9 +366,13 @@ private struct GuideAIMessageRow: View {
                 Text(message.content)
                     .font(.body)
                     .foregroundStyle(.white)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .background(KXColor.livingAccent, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    // Cap the bubble width so very long / unbroken input (URLs, long
+                    // tokens) wraps instead of pushing content off-screen.
+                    .frame(maxWidth: maxBubbleWidth * 0.82, alignment: .trailing)
                     .opacity(message.failed ? 0.55 : 1)
                     .overlay(alignment: .bottomTrailing) {
                         if message.failed {
@@ -546,7 +550,11 @@ private struct MachiAIMarkdownText: View {
             if let heading = Self.stripHeading(line) {
                 out.append(Block(kind: .heading, content: heading, marker: nil))
             } else if line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("• ") {
-                out.append(Block(kind: .bullet, content: String(line.dropFirst(2)), marker: nil))
+                let content = String(line.dropFirst(2))
+                // A bare "- " (empty bullet) renders the raw line rather than an
+                // empty bullet row.
+                out.append(Block(kind: content.isEmpty ? .body : .bullet,
+                                 content: content.isEmpty ? line : content, marker: nil))
             } else if let range = line.range(of: #"^\d+[.)]\s"#, options: .regularExpression) {
                 let marker = line[line.startIndex..<range.upperBound].trimmingCharacters(in: .whitespaces)
                 out.append(Block(kind: .numbered, content: String(line[range.upperBound...]), marker: marker))

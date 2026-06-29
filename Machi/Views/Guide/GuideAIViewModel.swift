@@ -67,6 +67,7 @@ final class GuideAIViewModel: ObservableObject {
         guard !isLoading else { return }
         isLoading = true
         Task {
+            defer { isLoading = false }  // never get stuck loading, even if cancelled
             if let resp = try? await KaiXAPIClient.shared.guideAIBootstrap(country: country, language: serverLanguage) {
                 membershipActive = resp.membershipActive ?? false
                 remainingFreeUses = (resp.membershipActive == true) ? nil : resp.remainingFreeUses
@@ -77,7 +78,6 @@ final class GuideAIViewModel: ObservableObject {
             if let convResp = try? await KaiXAPIClient.shared.guideAIConversations() {
                 conversations = convResp.items ?? []
             }
-            isLoading = false
         }
     }
 
@@ -176,6 +176,7 @@ final class GuideAIViewModel: ObservableObject {
         isSending = true
 
         Task {
+            defer { isSending = false }  // always clears, even on cancellation
             do {
                 let resp = try await KaiXAPIClient.shared.sendGuideAIMessage(
                     conversationId: conversationId, message: text,
@@ -187,12 +188,15 @@ final class GuideAIViewModel: ObservableObject {
             } catch {
                 handleFailure(nil, pendingId: pendingId, userMessageId: userMessage.id, text: text)
             }
-            isSending = false
         }
     }
 
     func retryLastFailed() {
-        guard let text = lastFailedText, let user = lastUser else { return }
+        guard let text = lastFailedText else { return }
+        guard let user = lastUser else {
+            errorMessage = genericErrorText
+            return
+        }
         // Drop the failed user bubble; send() re-appends a fresh one.
         if let idx = messages.lastIndex(where: { $0.role == .user && $0.failed }) {
             messages.remove(at: idx)
