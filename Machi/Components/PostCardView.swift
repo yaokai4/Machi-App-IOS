@@ -293,16 +293,22 @@ struct PostCardView: View, Equatable {
     }
 
     private func officialAuthorPresentation(for post: PostEntity, author: UserEntity?) -> PostAuthorPresentation {
-        // Only genuinely official seed-bot accounts get the editorial / assistant
-        // identity. Seed posts authored by real "city user" personas must show the
-        // persona's own name (they are not the editorial desk). Keying off
-        // isSeedContent alone wrongly relabelled every persona post as 编辑部.
-        guard author?.isMachiOfficialAccount == true else {
+        let authorIsOfficial = author?.isMachiOfficialAccount == true
+        // The editorial / assistant persona override is ONLY for actual seed
+        // content authored by an official seed-bot account. Two cases must keep
+        // their own identity instead:
+        //   • Real "city user" persona seed posts (not official) → their own name.
+        //   • Genuine posts a real official account wrote by hand — e.g. the
+        //     @admin "Machi 官方" account — must NOT be relabelled to 城市助手/编辑部.
+        // A previous fix keyed off isMachiOfficialAccount alone and dropped the
+        // isSeedContent check, so every admin/official post rendered as the
+        // assistant desk with a swapped @handle. Require BOTH conditions.
+        guard post.isSeedContent, authorIsOfficial else {
             return PostAuthorPresentation(
                 displayName: author?.displayName ?? L("unknownUser", language),
                 username: author?.username ?? L("unknownUser", language),
-                isOfficial: false,
-                label: nil
+                isOfficial: authorIsOfficial,
+                label: authorIsOfficial ? L("machiOfficial", language) : nil
             )
         }
 
