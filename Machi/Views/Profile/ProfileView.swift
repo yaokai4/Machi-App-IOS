@@ -23,6 +23,7 @@ struct ProfileView: View {
     @State private var followListKind: FollowListKind?
     @State private var mutualCount: Int?
     @State private var reputation: KaiXReputationProfileDTO?
+    @State private var showReputationSheet = false
     @State private var isRefreshingProfile = false
     @State private var scheduledProfileRefreshTask: Task<Void, Never>?
 
@@ -195,8 +196,12 @@ struct ProfileView: View {
             isShowingSettings: $isShowingSettings,
             isShowingWorkbench: $isShowingWorkbench,
             followListKind: $followListKind,
+            showReputationSheet: $showReputationSheet,
             currentUser: currentUser,
             profileUser: profileUser,
+            isCurrentUser: isCurrentUser,
+            reputation: reputation,
+            language: language,
             onLogout: onLogout,
             onSwitchAccount: onSwitchAccount
         ))
@@ -237,10 +242,6 @@ struct ProfileView: View {
                     profileHeader
                     if isCurrentUser {
                         personalWorkbenchEntry
-                        reputationCard
-                    } else {
-                        // Other users get the trust-level badge too (read-only).
-                        reputationCard
                     }
                     PersonalProfileTabPicker(tabs: availableTabs, selection: $profileTab)
                         .padding(.horizontal, 2)
@@ -303,51 +304,12 @@ struct ProfileView: View {
         .accessibilityIdentifier("profile.personalWorkbench")
     }
 
-    /// N8: lightweight reputation surface — the user's own level + trust label,
-    /// directly under the workbench entry. Hidden until loaded (and for guests).
-    @ViewBuilder
-    private var reputationCard: some View {
-        if let rep = reputation, let level = rep.level {
-            let levelName = KXListingCopy.pickText(
-                language, rep.levelName ?? "", rep.levelNameJa ?? "", rep.levelNameEn ?? ""
-            )
-            let trust = rep.publicTrustLabel ?? rep.reputationLabel ?? ""
-            let detail = levelName.isEmpty ? trust : (trust.isEmpty ? levelName : "\(levelName) · \(trust)")
-            HStack(spacing: 14) {
-                Image(systemName: "rosette")
-                    .font(.title2.weight(.bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 50, height: 50)
-                    .background(
-                        LinearGradient(colors: [KXColor.accent, KXColor.accent.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                        in: RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    )
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text(isCurrentUser
-                             ? KXListingCopy.pickText(language, "我的信誉", "信頼レベル", "My reputation")
-                             : KXListingCopy.pickText(language, "信誉等级", "信頼レベル", "Reputation"))
-                            .font(.headline.weight(.bold))
-                            .foregroundStyle(.primary)
-                        Text("Lv.\(level)")
-                            .font(.caption.weight(.heavy))
-                            .foregroundStyle(KXColor.accent)
-                    }
-                    Text(detail)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(16)
-            .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator.opacity(0.6), lineWidth: 0.8))
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(isCurrentUser
-                ? KXListingCopy.pickText(language, "我的信誉 等级\(level) \(trust)", "信頼レベル \(level) \(trust)", "My reputation level \(level) \(trust)")
-                : KXListingCopy.pickText(language, "信誉等级 \(level) \(trust)", "信頼レベル \(level) \(trust)", "Reputation level \(level) \(trust)"))
-        }
+    /// Localized current-level name (zh/ja/en) for the compact reputation chip.
+    private var reputationLevelName: String {
+        guard let rep = reputation else { return "" }
+        return KXListingCopy.pickText(
+            language, rep.levelName ?? "", rep.levelNameJa ?? "", rep.levelNameEn ?? ""
+        )
     }
 
     private func loadProfileAndContent(showLoading: Bool = true) async {
@@ -650,6 +612,13 @@ struct ProfileView: View {
             // belong on their own line.
             FlowLayout(spacing: 6) {
                 ProfileRoleBadge(title: roleTitle, isOfficial: profileUser.isMachiOfficialAccount)
+                // Compact reputation chip sits right beside the role badge —
+                // tap to open the full level pathway + how-to-level-up sheet.
+                if let rep = reputation, let level = rep.level {
+                    ProfileReputationChip(level: level, name: reputationLevelName) {
+                        showReputationSheet = true
+                    }
+                }
                 if !profileUser.creatorBadge.isEmpty {
                     ProfileRoleBadge(title: profileUser.creatorBadge)
                 }
@@ -1089,9 +1058,13 @@ private struct ProfilePresentationModifier: ViewModifier {
     @Binding var isShowingSettings: Bool
     @Binding var isShowingWorkbench: Bool
     @Binding var followListKind: FollowListKind?
+    @Binding var showReputationSheet: Bool
 
     let currentUser: UserEntity
     let profileUser: UserEntity
+    let isCurrentUser: Bool
+    let reputation: KaiXReputationProfileDTO?
+    let language: AppLanguage
     let onLogout: (() -> Void)?
     let onSwitchAccount: ((UserEntity) -> Void)?
 
@@ -1109,6 +1082,12 @@ private struct ProfilePresentationModifier: ViewModifier {
                 }
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $showReputationSheet) {
+                if let rep = reputation {
+                    ReputationDetailSheet(reputation: rep, isSelf: isCurrentUser, language: language)
+                        .presentationDragIndicator(.visible)
+                }
             }
     }
 }
@@ -1263,6 +1242,262 @@ private struct ProfileCustomTagChip: View {
             .frame(height: 26)
             .background(KXColor.livingWarm.opacity(0.10), in: Capsule())
             .overlay(Capsule().strokeBorder(KXColor.livingWarm.opacity(0.32), lineWidth: 0.8))
+    }
+}
+
+/// Compact reputation pill (Lv.N · 等级名) that sits beside the role badge.
+/// Tapping opens the full reputation/level sheet.
+private struct ProfileReputationChip: View {
+    let level: Int
+    let name: String
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 5) {
+                Image(systemName: "rosette")
+                    .font(.caption2.weight(.bold))
+                Text("Lv.\(level)")
+                    .font(.caption.weight(.heavy))
+                if !name.isEmpty {
+                    Text(name)
+                        .font(.caption.weight(.bold))
+                        .lineLimit(1)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 8, weight: .black))
+                    .opacity(0.55)
+            }
+            .foregroundStyle(KXColor.accent)
+            .padding(.horizontal, 9)
+            .frame(height: 26)
+            .background(KXColor.accent.opacity(0.12), in: Capsule())
+            .overlay(Capsule().strokeBorder(KXColor.accent.opacity(0.26), lineWidth: 0.8))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Lv.\(level) \(name)")
+    }
+}
+
+/// The full reputation system, surfaced from the compact chip: current standing
+/// + XP progress, the perks unlocked at the current level, the complete 10-tier
+/// pathway, and concrete ways to level up. Makes the level system transparent
+/// instead of a one-line label.
+private struct ReputationDetailSheet: View {
+    let reputation: KaiXReputationProfileDTO
+    let isSelf: Bool
+    let language: AppLanguage
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var levels: [KaiXReputationLevelDTO] = []
+    @State private var loaded = false
+
+    private func pick(_ zh: String, _ ja: String, _ en: String) -> String {
+        KXListingCopy.pickText(language, zh, ja, en)
+    }
+
+    private var currentLevel: Int { reputation.level ?? 1 }
+    private var currentName: String {
+        KXListingCopy.pickText(language, reputation.levelName ?? "", reputation.levelNameJa ?? "", reputation.levelNameEn ?? "")
+    }
+    private var trust: String { reputation.publicTrustLabel ?? reputation.reputationLabel ?? "" }
+    private var currentLevelStartXp: Int { levels.first(where: { $0.level == currentLevel })?.xpRequired ?? 0 }
+    private var currentPrivileges: [String] { levels.first(where: { $0.level == currentLevel })?.privileges ?? [] }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    headerCard
+                    if !currentPrivileges.isEmpty {
+                        section(pick("当前等级权益", "現在のレベル特典", "Current perks")) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                ForEach(currentPrivileges, id: \.self) { perk in
+                                    HStack(alignment: .top, spacing: 9) {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.subheadline)
+                                            .foregroundStyle(KXColor.accent)
+                                        Text(perk)
+                                            .font(.subheadline)
+                                            .foregroundStyle(.primary)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                        Spacer(minLength: 0)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if !levels.isEmpty {
+                        section(pick("等级路线", "レベルの道のり", "Level pathway")) {
+                            VStack(spacing: 0) {
+                                ForEach(levels) { lv in
+                                    levelRow(lv)
+                                    if lv.level != levels.last?.level {
+                                        Divider().opacity(0.12)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    section(pick("如何提升信誉", "信頼の上げ方", "How to level up")) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(levelUpTips, id: \.text) { tip in
+                                HStack(alignment: .top, spacing: 10) {
+                                    Image(systemName: tip.icon)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(KXColor.accent)
+                                        .frame(width: 22)
+                                    Text(tip.text)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.primary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    Spacer(minLength: 0)
+                                }
+                            }
+                        }
+                    }
+                    Text(pick("信誉用于建立社区信任，等级越高可解锁更多发布与参与权益；违规会降低信誉。",
+                              "信頼はコミュニティの安心のためのもので、レベルが上がるほど投稿・参加の特典が増えます。違反すると下がります。",
+                              "Reputation builds community trust — higher levels unlock more posting and participation perks; violations lower it."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 4)
+                }
+                .padding(16)
+            }
+            .background(Color(.systemGroupedBackground).ignoresSafeArea())
+            .navigationTitle(isSelf ? pick("我的信誉", "信頼レベル", "My reputation") : pick("信誉等级", "信頼レベル", "Reputation"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(pick("完成", "完了", "Done")) { dismiss() }
+                        .font(.body.weight(.semibold))
+                }
+            }
+            .task {
+                guard !loaded else { return }
+                levels = (try? await KaiXAPIClient.shared.reputationLevels()) ?? []
+                loaded = true
+            }
+        }
+    }
+
+    private var headerCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(LinearGradient(colors: [KXColor.accent, KXColor.accent.opacity(0.78)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 56, height: 56)
+                    Image(systemName: "rosette")
+                        .font(.title.weight(.bold))
+                        .foregroundStyle(.white)
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(currentName.isEmpty ? "Lv.\(currentLevel)" : "Lv.\(currentLevel) · \(currentName)")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(.primary)
+                    if !trust.isEmpty {
+                        Text(trust)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            if isSelf { progressView }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    @ViewBuilder private var progressView: some View {
+        if let xp = reputation.xp, let nextXp = reputation.nextLevelXp, nextXp > currentLevelStartXp {
+            let denom = max(1, nextXp - currentLevelStartXp)
+            let frac = min(1.0, max(0.0, Double(xp - currentLevelStartXp) / Double(denom)))
+            VStack(alignment: .leading, spacing: 7) {
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(KXColor.accent.opacity(0.14))
+                        Capsule().fill(KXColor.accent).frame(width: max(6, geo.size.width * frac))
+                    }
+                }
+                .frame(height: 8)
+                HStack {
+                    Text("\(xp) XP")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(KXColor.accent)
+                    Spacer()
+                    if let toNext = reputation.xpToNext, toNext > 0 {
+                        Text(pick("还需 \(toNext) XP 升到 Lv.\(currentLevel + 1)", "あと \(toNext) XP で Lv.\(currentLevel + 1)", "\(toNext) XP to Lv.\(currentLevel + 1)"))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        } else if reputation.nextLevelXp == nil, reputation.xp != nil {
+            Text(pick("已达到最高等级", "最高レベルに到達", "Top level reached"))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func levelRow(_ lv: KaiXReputationLevelDTO) -> some View {
+        let name = KXListingCopy.pickText(language, lv.nameZh ?? "", lv.nameJa ?? "", lv.nameEn ?? "")
+        let isCurrent = lv.level == currentLevel
+        let reached = lv.level <= currentLevel
+        return HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(reached ? KXColor.accent : KXColor.separator.opacity(0.28))
+                    .frame(width: 30, height: 30)
+                Text("\(lv.level)")
+                    .font(.caption.weight(.heavy))
+                    .foregroundStyle(reached ? .white : .secondary)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name)
+                    .font(.subheadline.weight(isCurrent ? .bold : .semibold))
+                    .foregroundStyle(.primary)
+                Text(pick("满 \(lv.xpRequired) XP", "\(lv.xpRequired) XP", "\(lv.xpRequired) XP"))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            if isCurrent {
+                Text(pick("当前", "現在", "Now"))
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(KXColor.accent)
+                    .padding(.horizontal, 8)
+                    .frame(height: 22)
+                    .background(KXColor.accent.opacity(0.12), in: Capsule())
+            }
+        }
+        .padding(.vertical, 9)
+        .opacity(reached ? 1 : 0.7)
+    }
+
+    private var levelUpTips: [(icon: String, text: String)] {
+        [
+            ("square.and.pencil", pick("发布真实、有用的城市生活内容", "リアルで役立つ街の投稿をする", "Post genuine, useful local content")),
+            ("hand.thumbsup", pick("内容获得点赞、评论与收藏", "いいね・コメント・保存を集める", "Earn likes, comments and saves")),
+            ("checkmark.seal", pick("完善个人资料并绑定邮箱", "プロフィール完成とメール認証", "Complete your profile & verify email")),
+            ("shield.lefthalf.filled", pick("长期保持无违规记录", "違反のない状態を保つ", "Keep a clean, violation-free record")),
+        ]
+    }
+
+    @ViewBuilder private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.headline.weight(.bold))
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 4)
+            content()
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
     }
 }
 

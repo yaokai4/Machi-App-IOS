@@ -1580,12 +1580,20 @@ private struct HappeningSection: View {
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
+        HStack(alignment: .center, spacing: 10) {
             HappeningLiveDot()
-            Text(regionTitle)
-                .font(.headline.weight(.bold))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(regionTitle)
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Text(language == .ja ? "リアルタイムの話題と街の動き"
+                     : language == .en ? "Live topics and city activity"
+                     : "实时话题与城市动态")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
             Spacer(minLength: 8)
             if !posts.isEmpty {
                 Text(language == .ja ? "\(posts.count) 件" : language == .en ? "\(posts.count)" : "\(posts.count) 条")
@@ -1627,18 +1635,32 @@ private struct HappeningSection: View {
                                  : "当前都市圈暂无新动态")
                 .kxGlassSurface(radius: KXRadius.lg, elevated: true)
         } else {
-            VStack(spacing: 0) {
-                ForEach(Array(posts.enumerated()), id: \.element.id) { idx, post in
-                    Button { onOpenPost(post) } label: {
-                        HappeningRadarRow(rank: idx + 1, post: post, author: authors[post.authorId], language: language)
+            VStack(alignment: .leading, spacing: 10) {
+                // 焦点 — the hottest item leads as a prominent card, mirroring the
+                // search "正在发生" board so both surfaces feel like one product.
+                if let lead = posts.first {
+                    Button { onOpenPost(lead) } label: {
+                        HappeningFocusCard(post: lead, author: authors[lead.authorId], language: language)
                     }
-                    .buttonStyle(KXPressableStyle(scale: 0.985, dim: 0.92))
-                    if idx != posts.count - 1 {
-                        Divider().opacity(0.12).padding(.leading, 62)
+                    .buttonStyle(KXPressableStyle(scale: 0.99, dim: 0.95))
+                }
+                // Ranked rows 2…N with colored rank badges + heat pills.
+                let rest = Array(posts.dropFirst())
+                if !rest.isEmpty {
+                    VStack(spacing: 0) {
+                        ForEach(Array(rest.enumerated()), id: \.element.id) { idx, post in
+                            Button { onOpenPost(post) } label: {
+                                HappeningRankRow(rank: idx + 2, post: post, author: authors[post.authorId], language: language)
+                            }
+                            .buttonStyle(KXPressableStyle(scale: 0.985, dim: 0.92))
+                            if idx != rest.count - 1 {
+                                Divider().opacity(0.12).padding(.leading, 58)
+                            }
+                        }
                     }
+                    .kxGlassSurface(radius: KXRadius.lg, elevated: true)
                 }
             }
-            .kxGlassSurface(radius: KXRadius.lg, elevated: true)
         }
     }
 
@@ -1657,9 +1679,77 @@ private struct HappeningSection: View {
     }
 }
 
-/// One city event on the radar: type icon · what happened · who/where · how
-/// fresh. Reads at a glance, distinct from the numbered heat board.
-private struct HappeningRadarRow: View {
+/// 焦点 — the lead "正在发生" item rendered as a prominent gradient card with a
+/// heat pill, matching the search board's HappeningLeadCard so both surfaces
+/// read as one cohesive ranking system.
+private struct HappeningFocusCard: View {
+    let post: PostEntity
+    let author: UserEntity?
+    let language: AppLanguage
+
+    var body: some View {
+        let spec = post.contentType.spec
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(language == .ja ? "注目" : language == .en ? "Top" : "焦点")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(KXColor.heat)
+                    .padding(.horizontal, 9)
+                    .frame(height: 26)
+                    .background(KXColor.heat.opacity(0.14), in: Capsule())
+                    .overlay(Capsule().stroke(KXColor.heat.opacity(0.22), lineWidth: 0.7))
+                Spacer(minLength: 6)
+                HeatPill(score: post.heatScore, rank: 1, compact: true)
+            }
+
+            Text(post.discoverTitle)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(3)
+                .multilineTextAlignment(.leading)
+
+            HStack(spacing: 6) {
+                Text(L(spec.titleKey, language))
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(spec.tint)
+                if !subtitle.isEmpty {
+                    Text("·").font(.caption).foregroundStyle(.secondary)
+                    Text(subtitle)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [KXColor.rankGold.opacity(0.18), Color.orange.opacity(0.08), KXColor.cardBackground.opacity(0.95)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
+                .stroke(KXColor.rankGold.opacity(0.30), lineWidth: 0.9)
+        }
+    }
+
+    private var subtitle: String {
+        let who = author?.displayName ?? ""
+        let location = post.discoverLocationLabel
+        return [who, location].filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+}
+
+/// A ranked "正在发生" row: colored rank badge · title · type/where · heat pill.
+/// Heat (engagement) replaces the bare timestamp so the board reads as "what's
+/// hot right now", consistent with the search ranking.
+private struct HappeningRankRow: View {
     let rank: Int
     let post: PostEntity
     let author: UserEntity?
@@ -1667,7 +1757,7 @@ private struct HappeningRadarRow: View {
 
     var body: some View {
         let spec = post.contentType.spec
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .center, spacing: 12) {
             DiscoverRankBadge(rank: rank)
 
             VStack(alignment: .leading, spacing: 3) {
@@ -1680,20 +1770,19 @@ private struct HappeningRadarRow: View {
                     Text(L(spec.titleKey, language))
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(spec.tint)
-                    Text("·").foregroundStyle(.secondary)
-                    Text(subtitle)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    if !subtitle.isEmpty {
+                        Text("·").foregroundStyle(.secondary)
+                        Text(subtitle)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
                 .font(.caption2)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
 
-            Spacer(minLength: 6)
-
-            Text(DateFormatterUtils.relativeText(from: post.createdAt, language: language))
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .fixedSize()
+            HeatPill(score: post.heatScore, rank: rank, compact: true)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)

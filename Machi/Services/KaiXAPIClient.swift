@@ -1658,6 +1658,16 @@ final class KaiXAPIClient {
         return response.reputation
     }
 
+    /// The full reputation ladder (GET /api/reputation/levels) — every tier's
+    /// name, XP threshold and privileges. Public; powers the reputation sheet's
+    /// level pathway so the system's rules are transparent to the user.
+    func reputationLevels() async throws -> [KaiXReputationLevelDTO] {
+        struct Response: Decodable { let items: [KaiXReputationLevelDTO] }
+        let data = try await request("GET", "/api/reputation/levels")
+        let response: Response = try decode(data)
+        return response.items
+    }
+
     /// Returns the server's authoritative `unread_count` after the change so the
     /// caller can calibrate the badge (instead of trusting a local count that can
     /// drift from Web / from notifications that arrived mid-action).

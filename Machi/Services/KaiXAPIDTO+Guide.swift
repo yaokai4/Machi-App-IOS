@@ -1470,6 +1470,34 @@ struct KaiXReputationProfileDTO: Codable, Equatable {
     }
 }
 
+/// One tier of the reputation ladder (GET /api/reputation/levels) — used by the
+/// profile reputation sheet to show the full level pathway + per-level perks.
+struct KaiXReputationLevelDTO: Decodable, Identifiable, Equatable {
+    let level: Int
+    let xpRequired: Int
+    let nameZh: String?
+    let nameEn: String?
+    let nameJa: String?
+    let descriptionZh: String?
+    let descriptionEn: String?
+    let descriptionJa: String?
+    let privileges: [String]?
+
+    var id: Int { level }
+
+    enum CodingKeys: String, CodingKey {
+        case level
+        case xpRequired = "xp_required"
+        case nameZh = "name_zh"
+        case nameEn = "name_en"
+        case nameJa = "name_ja"
+        case descriptionZh = "description_zh"
+        case descriptionEn = "description_en"
+        case descriptionJa = "description_ja"
+        case privileges
+    }
+}
+
 struct KaiXSavedSearchDTO: Codable, Identifiable, Equatable {
     let id: String
     let vertical: String?
