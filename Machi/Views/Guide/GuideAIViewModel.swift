@@ -274,17 +274,7 @@ final class GuideAIViewModel: ObservableObject {
         )
     }
 
-    private static let isoFractional: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
-    private static let isoPlain = ISO8601DateFormatter()
-
-    private static func parseDate(_ raw: String?) -> Date {
-        guard let raw, !raw.isEmpty else { return Date() }
-        if let date = isoFractional.date(from: raw) { return date }
-        if let date = isoPlain.date(from: raw) { return date }
-        return Date()
-    }
+    // Delegate to the shared cached KXDateParsing formatters; falls back to
+    // `now` to preserve this call site's non-optional contract.
+    private static func parseDate(_ raw: String?) -> Date { KXDateParsing.parse(raw) ?? Date() }
 }

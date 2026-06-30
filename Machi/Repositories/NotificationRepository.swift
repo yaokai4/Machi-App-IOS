@@ -137,13 +137,7 @@ final class NotificationRepository {
         )
     }
 
-    private static func parseDate(_ raw: String?) -> Date? {
-        guard let raw, !raw.isEmpty else { return nil }
-        let withFraction = ISO8601DateFormatter()
-        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = withFraction.date(from: raw) { return date }
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime]
-        return iso.date(from: raw)
-    }
+    // Delegate to the cached KXDateParsing formatters instead of allocating a
+    // fresh ISO8601DateFormatter on every call (hot path during list decode).
+    private static func parseDate(_ raw: String?) -> Date? { KXDateParsing.parse(raw) }
 }

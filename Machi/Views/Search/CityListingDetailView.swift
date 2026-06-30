@@ -327,13 +327,24 @@ struct ListingBookingSection: View {
     }
 
     private func bookingErrorText(_ error: Error) -> String {
-        let msg = (error as NSError).localizedDescription
-        if msg.contains("登录") || msg.contains("401") || msg.lowercased().contains("unauthor") {
+        // Switch on the server's typed error code instead of fragile
+        // localizedDescription substring matching — the latter broke as soon
+        // as the backend returned a non-Chinese message, and silently fell
+        // through to the generic copy.
+        switch (error as? KaiXAPIError)?.error.code {
+        case "AUTH_REQUIRED":
             return KXListingCopy.pickText(language, "请先登录后再预约", "ログインしてください", "Please sign in to book")
+        case "slot_full":
+            return KXListingCopy.pickText(language, "该时段已约满", "満席です", "This slot is full")
+        case "already_booked":
+            return KXListingCopy.pickText(language, "你已预约该时段", "予約済みです", "Already booked")
+        case "slot_closed":
+            return KXListingCopy.pickText(language, "该时段已关闭", "受付を終了しました", "This slot is closed")
+        case "slot_not_found":
+            return KXListingCopy.pickText(language, "该时段不存在", "この枠は存在しません", "This slot no longer exists")
+        default:
+            return KXListingCopy.pickText(language, "预约失败，请稍后再试", "予約に失敗しました", "Booking failed, try again")
         }
-        if msg.contains("约满") { return KXListingCopy.pickText(language, "该时段已约满", "満席です", "This slot is full") }
-        if msg.contains("已预约") { return KXListingCopy.pickText(language, "你已预约该时段", "予約済みです", "Already booked") }
-        return KXListingCopy.pickText(language, "预约失败，请稍后再试", "予約に失敗しました", "Booking failed, try again")
     }
 
     // MARK: - Formatting
@@ -444,6 +455,8 @@ struct CityListingDetailView: View {
     @State private var inquiryReceipt: ListingInquiryReceipt?
     @State private var similarItems: [KaiXCityListingDTO] = []
     @State private var sellerOtherItems: [KaiXCityListingDTO] = []
+    /// 预约联系人卡里复制 LINE / 微信 ID 后的短暂提示。
+    @State private var contactCopyConfirmation: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -723,6 +736,18 @@ struct CityListingDetailView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 6) {
+                            if listing.isMachiRecommended {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "sparkles")
+                                    Text(KXListingCopy.pickText(language, "Machi推荐", "Machiおすすめ", "Machi Pick"))
+                                }
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(KXColor.rankGold, in: Capsule())
+                                .overlay(Capsule().stroke(.white.opacity(0.5), lineWidth: 0.7))
+                            }
                             Text(KXListingCopy.priceLabel(listing, language))
                                 .font(.title2.weight(.black))
                                 .foregroundStyle(listing.type == "job" || listing.type == "hiring" ? KXColor.livingAccent : KXColor.livingWarm)
@@ -755,6 +780,10 @@ struct CityListingDetailView: View {
                 }
 
                 merchantDetailSections(listing)
+
+                if let contact = listing.reservationContact {
+                    reservationContactCard(contact)
+                }
 
                 ListingBookingSection(listingId: listing.id, listingType: listing.type)
 
@@ -834,6 +863,141 @@ struct CityListingDetailView: View {
             .padding(.horizontal, KaiXTheme.horizontalPadding)
             .padding(.top, 14)
             .padding(.bottom, 24)
+        }
+    }
+
+    /// 预约联系人卡（星域东京专属房源）：姓名 + 职位，按可用渠道列出
+    /// 电话 / LINE / 微信 / WhatsApp / 邮箱 / 语言；电话邮箱可点拨打/发信，
+    /// LINE 与微信 ID 点击复制并给出短暂提示。
+    @ViewBuilder
+    private func reservationContactCard(_ contact: KaiXReservationContactDTO) -> some View {
+        let name = (contact.name ?? contact.nameJa)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        KXListingSection(title: KXListingCopy.pickText(language, "预约联系人", "予約担当", "Reservation contact"), icon: "person.crop.circle.badge.checkmark") {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    contactAvatar(contact, name: name)
+                    VStack(alignment: .leading, spacing: 3) {
+                        if !name.isEmpty {
+                            Text(name)
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(KXColor.livingInk)
+                        }
+                        if let title = contact.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
+                            Text(title)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    if let phone = cleanContactValue(contact.phone) {
+                        Link(destination: URL(string: "tel:\(phone.filter { !$0.isWhitespace })") ?? URL(string: "tel:")!) {
+                            contactRowLabel(icon: "phone.fill", value: phone, tappable: true)
+                        }
+                    }
+                    if let line = cleanContactValue(contact.lineId) {
+                        Button {
+                            copyContactValue(line, label: "LINE")
+                        } label: {
+                            contactRowLabel(icon: "message.fill", value: "LINE · \(line)", tappable: true)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    if let wechat = cleanContactValue(contact.wechatId) {
+                        Button {
+                            copyContactValue(wechat, label: KXListingCopy.pickText(language, "微信", "WeChat", "WeChat"))
+                        } label: {
+                            contactRowLabel(icon: "bubble.left.and.bubble.right.fill", value: "\(KXListingCopy.pickText(language, "微信", "WeChat", "WeChat")) · \(wechat)", tappable: true)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    if let whatsapp = cleanContactValue(contact.whatsapp) {
+                        let digits = whatsapp.filter { $0.isNumber }
+                        let url = URL(string: "https://wa.me/\(digits)") ?? URL(string: "https://wa.me")!
+                        Link(destination: url) {
+                            contactRowLabel(icon: "phone.bubble.fill", value: "WhatsApp · \(whatsapp)", tappable: true)
+                        }
+                    }
+                    if let email = cleanContactValue(contact.email) {
+                        Link(destination: URL(string: "mailto:\(email)") ?? URL(string: "mailto:")!) {
+                            contactRowLabel(icon: "envelope.fill", value: email, tappable: true)
+                        }
+                    }
+                    if let languages = cleanContactValue(contact.languages) {
+                        contactRowLabel(icon: "globe", value: languages, tappable: false)
+                    }
+                }
+
+                if let confirmation = contactCopyConfirmation {
+                    Label(confirmation, systemImage: "checkmark.circle.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(KXColor.livingAccent)
+                        .transition(.opacity)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func contactAvatar(_ contact: KaiXReservationContactDTO, name: String) -> some View {
+        if let photo = cleanContactValue(contact.photoUrl), let url = URL(string: photo) {
+            AsyncImage(url: url) { image in
+                image.resizable().scaledToFill()
+            } placeholder: {
+                Circle().fill(KXColor.livingAccentSoft)
+            }
+            .frame(width: 44, height: 44)
+            .clipShape(Circle())
+        } else {
+            Circle()
+                .fill(KXColor.livingAccentSoft)
+                .frame(width: 44, height: 44)
+                .overlay(
+                    Text(name.isEmpty ? "M" : String(name.prefix(1)))
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(KXColor.livingAccent)
+                )
+        }
+    }
+
+    private func contactRowLabel(icon: String, value: String, tappable: Bool) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(KXColor.livingAccent)
+                .frame(width: 22)
+            Text(value)
+                .font(.subheadline)
+                .foregroundStyle(tappable ? KXColor.livingAccent : .primary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 0)
+            if tappable {
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+
+    private func cleanContactValue(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else { return nil }
+        return trimmed
+    }
+
+    private func copyContactValue(_ value: String, label: String) {
+        UIPasteboard.general.string = value
+        withAnimation { contactCopyConfirmation = String(format: KXListingCopy.pickText(language, "已复制 %@", "%@をコピーしました", "Copied %@"), label) }
+        let confirmed = contactCopyConfirmation
+        Task {
+            try? await Task.sleep(for: .seconds(2.5))
+            if contactCopyConfirmation == confirmed {
+                withAnimation { contactCopyConfirmation = nil }
+            }
         }
     }
 
@@ -1117,12 +1281,19 @@ struct CityListingDetailView: View {
 
     private func favorite() async {
         guard let listing else { return }
+        let next = !(listing.favorited ?? false)
+        // Route the write through FavoritesStore (like the listing cards do) so
+        // the local wishlist cache stays consistent with the heart shown on the
+        // cards. Optimistic update + rollback on failure.
+        let snapshot = FavoritesStore.snapshot(from: listing)
+        FavoritesStore.shared.set(snapshot, on: next)
         isBusy = true
         defer { isBusy = false }
         do {
-            try await KaiXAPIClient.shared.favoriteListing(listing.id, on: !(listing.favorited ?? false))
+            try await KaiXAPIClient.shared.favoriteListing(listing.id, on: next)
             await load()
         } catch {
+            FavoritesStore.shared.set(snapshot, on: !next)
             actionMessage = error.kaixUserMessage
         }
     }

@@ -161,6 +161,10 @@ struct ProfileView: View {
             await loadProfileAndContent()
             if isCurrentUser, !currentUser.isGuest {
                 reputation = try? await KaiXAPIClient.shared.reputationMe()
+            } else if !isCurrentUser {
+                // Surface the viewed user's public trust level (badge on others'
+                // profiles), mirroring Web/admin which already show reputation.
+                reputation = try? await KaiXAPIClient.shared.reputationUser(profileUserId)
             }
         }
         .onChange(of: chrome.selectedTab) { _, tab in
@@ -233,6 +237,9 @@ struct ProfileView: View {
                     profileHeader
                     if isCurrentUser {
                         personalWorkbenchEntry
+                        reputationCard
+                    } else {
+                        // Other users get the trust-level badge too (read-only).
                         reputationCard
                     }
                     PersonalProfileTabPicker(tabs: availableTabs, selection: $profileTab)
@@ -317,7 +324,9 @@ struct ProfileView: View {
                     )
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
-                        Text(KXListingCopy.pickText(language, "我的信誉", "信頼レベル", "My reputation"))
+                        Text(isCurrentUser
+                             ? KXListingCopy.pickText(language, "我的信誉", "信頼レベル", "My reputation")
+                             : KXListingCopy.pickText(language, "信誉等级", "信頼レベル", "Reputation"))
                             .font(.headline.weight(.bold))
                             .foregroundStyle(.primary)
                         Text("Lv.\(level)")
@@ -335,7 +344,9 @@ struct ProfileView: View {
             .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator.opacity(0.6), lineWidth: 0.8))
             .accessibilityElement(children: .combine)
-            .accessibilityLabel(KXListingCopy.pickText(language, "我的信誉 等级\(level) \(trust)", "信頼レベル \(level) \(trust)", "My reputation level \(level) \(trust)"))
+            .accessibilityLabel(isCurrentUser
+                ? KXListingCopy.pickText(language, "我的信誉 等级\(level) \(trust)", "信頼レベル \(level) \(trust)", "My reputation level \(level) \(trust)")
+                : KXListingCopy.pickText(language, "信誉等级 \(level) \(trust)", "信頼レベル \(level) \(trust)", "Reputation level \(level) \(trust)"))
         }
     }
 

@@ -346,6 +346,7 @@ enum KXListingCopy {
         let en: String
         switch type {
         case "rental", "stays", "hotels": (zh, ja, en) = ("租房 · 住宿", "賃貸・宿泊", "Homes & Stays")
+        case "for_sale":      (zh, ja, en) = ("买房 · 物件", "物件購入", "Properties for sale")
         case "work":          (zh, ja, en) = ("工作", "求人", "Jobs")
         case "job":           (zh, ja, en) = ("找工作", "仕事を探す", "Find work")
         case "hiring":        (zh, ja, en) = ("招聘", "採用", "Hiring")
@@ -364,6 +365,8 @@ enum KXListingCopy {
         switch type {
         case "rental", "stays", "hotels":
             (zh, ja, en) = ("长租房源与民宿", "賃貸・民泊をまとめて探せる", "Long-term rentals and homestays")
+        case "for_sale":
+            (zh, ja, en) = ("精选在售物件、户型、面积与利回り", "厳選された販売物件・間取り・面積・利回り", "Curated properties for sale, layout, area and yield")
         case "work", "job", "hiring":
             (zh, ja, en) = ("职位库、薪资、日语要求和签证支持", "求人・給与・日本語レベル・ビザサポート", "Jobs, salary, Japanese level, visa support")
         case "local_service":
@@ -665,6 +668,7 @@ enum KXListingCopy {
     static func icon(for type: String) -> String {
         switch type {
         case "rental": "house"
+        case "for_sale": "building.2"
         case "work", "job", "hiring": "briefcase"
         case "local_service": "storefront"
         case "discount": "tag"
@@ -741,6 +745,8 @@ enum KXListingCopy {
             (zh, ja, en) = ("搜索民宿、整套房、地区关键词", "民泊・一棟貸し・エリアを検索", "Search homestays and whole-place stays")
         case "hotels":
             (zh, ja, en) = ("搜索民宿、整套房、地区关键词", "民泊・一棟貸し・エリアを検索", "Search homestays and whole-place stays")
+        case "for_sale":
+            (zh, ja, en) = ("搜索地区、车站、户型、物件关键词", "エリア・駅・間取り・物件を検索", "Search area, station, layout, property")
         case "work", "job", "hiring":
             (zh, ja, en) = ("搜索职位、公司、地点、日语要求", "職種・会社・場所・日本語レベルを検索", "Search roles, companies, locations")
         case "local_service":
@@ -756,6 +762,7 @@ enum KXListingCopy {
     static func categories(for type: String) -> [String] {
         switch type {
         case "rental": ["全部", "单人", "合租", "整租", "家具家电", "近车站"]
+        case "for_sale": ["全部", "公寓", "一户建", "投资物件", "一棟", "土地"]
         case "stays": stayChips
         case "hotels": stayChips
         case "work", "job", "hiring": ["全部", "兼职", "全职", "时给", "月给", "N3 可", "签证支持", "无经验可"]
@@ -908,6 +915,7 @@ enum KXListingCopy {
         let en: String
         switch type {
         case "rental":               (zh, ja, en) = ("这里还没有房源", "まだ物件がありません", "No rentals yet")
+        case "for_sale":             (zh, ja, en) = ("这里还没有在售物件", "まだ販売物件がありません", "No properties for sale yet")
         case "stays":                (zh, ja, en) = ("这里还没有民宿", "まだ民泊がありません", "No homestays yet")
         case "hotels":               (zh, ja, en) = ("这里还没有民宿", "まだ民泊がありません", "No homestays yet")
         case "work", "job", "hiring": (zh, ja, en) = ("这里还没有工作信息", "まだ求人がありません", "No jobs yet")
@@ -925,6 +933,8 @@ enum KXListingCopy {
         switch type {
         case "rental":
             (zh, ja, en) = ("发布房源或稍后查看新的租房信息。", "物件を掲載するか、また後で見に来てください。", "Post a rental or check back soon.")
+        case "for_sale":
+            (zh, ja, en) = ("精选在售物件审核后会展示在这里，稍后再来看看。", "厳選された販売物件が審査後に表示されます。また後で見に来てください。", "Curated properties for sale appear here after review. Check back soon.")
         case "stays":
             (zh, ja, en) = ("认证服务方可以发布民宿，审核通过后展示给同城旅客。", "認証ホストの民泊が審査後に表示されます。", "Verified homestays appear here after review.")
         case "hotels":
@@ -1375,6 +1385,24 @@ enum KXListingCopy {
                 ("短租", boolAttr(listing, "short_term_allowed") ? "可" : "未注明"),
                 ("家具家电", boolAttr(listing, "furnished") ? "有" : "未注明"),
             ]
+        case "for_sale":
+            base = [
+                ("地区", cleanText(listing.location_text)),
+                ("物件类型", attr(listing, "building_type")),
+                ("户型", attr(listing, "layout")),
+                ("面积", attr(listing, "area_sqm")),
+                ("土地面积", attr(listing, "land_area")),
+                ("楼层", attr(listing, "floor")),
+                ("築年", attr(listing, "building_age")),
+                ("構造", attr(listing, "structure")),
+                ("最寄駅", attr(listing, "nearest_station")),
+                ("徒歩分", attr(listing, "station_distance_minutes")),
+                ("沿线", attr(listing, "nearest_lines")),
+                ("管理费", attr(listing, "management_fee")),
+                ("利回り", attr(listing, "yield_rate")),
+                ("販売価格", priceLabel(listing, language)),
+                ("原始链接", attr(listing, "source_url")),
+            ]
         case "job", "hiring":
             // visa_support 历史上存过布尔（true/false），现统一为枚举
             // none/consult/available——两种 wire 值都要能读。
@@ -1711,6 +1739,18 @@ enum KXListingCopy {
         case "交易方式": pickText(language, "交易方式", "取引方法", "Handoff")
         case "取货说明": pickText(language, "取货说明", "受け渡しメモ", "Pickup notes")
         case "状态": pickText(language, "状态", "状態", "Status")
+        case "物件类型": pickText(language, "物件类型", "物件種別", "Property type")
+        case "土地面积": pickText(language, "土地面积", "土地面積", "Land area")
+        case "楼层": pickText(language, "楼层", "所在階", "Floor")
+        case "築年": pickText(language, "築年", "築年数", "Building age")
+        case "構造": pickText(language, "構造", "構造", "Structure")
+        case "最寄駅": pickText(language, "最寄駅", "最寄り駅", "Nearest station")
+        case "徒歩分": pickText(language, "徒歩分", "駅徒歩", "Walk to station")
+        case "沿线": pickText(language, "沿线", "沿線", "Train lines")
+        case "管理费": pickText(language, "管理费", "管理費", "Management fee")
+        case "利回り": pickText(language, "利回り", "利回り", "Yield")
+        case "販売価格": pickText(language, "販売价格", "販売価格", "Sale price")
+        case "原始链接": pickText(language, "原始链接", "元リンク", "Source link")
         default: key
         }
     }
@@ -1827,6 +1867,7 @@ enum KXListingCopy {
     private static func fallbackPriceLabel(for type: String, _ language: AppLanguage = .zh) -> String {
         switch type {
         case "rental": pickText(language, "租金咨询", "家賃相談", "Rent on request")
+        case "for_sale": pickText(language, "价格咨询", "価格相談", "Price on request")
         case "job", "hiring": pickText(language, "薪资面议", "給与応相談", "Pay negotiable")
         case "local_service": pickText(language, "预约咨询", "予約相談", "Booking inquiry")
         case "discount": pickText(language, "查看优惠", "特典を見る", "View deal")

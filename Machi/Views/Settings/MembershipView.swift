@@ -383,12 +383,7 @@ struct MembershipView: View {
         .background(RoundedRectangle(cornerRadius: 14).fill(KXColor.softBackground))
     }
 
-    static func parseDate(_ s: String) -> Date? {
-        guard !s.isEmpty else { return nil }
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let d = iso.date(from: s) { return d }
-        iso.formatOptions = [.withInternetDateTime]
-        return iso.date(from: s)
-    }
+    // Delegate to the cached KXDateParsing formatters instead of allocating a
+    // fresh ISO8601DateFormatter on each call.
+    static func parseDate(_ s: String) -> Date? { KXDateParsing.parse(s) }
 }

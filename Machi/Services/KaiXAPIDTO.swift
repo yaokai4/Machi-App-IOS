@@ -348,6 +348,39 @@ struct KaiXCityListingDTO: Codable, Identifiable, Equatable {
     let ratingAvg: Double?
     let rating_count: Int?
     let ratingCount: Int?
+    // 星域 partner 入驻：Machi 推荐金徽章 / 闪耀标签 / 推广权重 / 预约联系人。
+    // 服务端在 serialized listing 上用 snake_case 发这些字段（同时有 camel
+    // 重复键，这里只解 snake，避免重复声明同名属性）。全部可选 → 不破坏旧解码。
+    let machi_recommended: Bool?
+    let machi_badges: [String]?
+    let is_promoted: Bool?
+    let promotion_weight: Int?
+    let reservation_contact: KaiXReservationContactDTO?
+}
+
+/// 预约联系人（星域东京专属房源）。联系人对象内部键是 camelCase，
+/// 因此默认 CodingKeys 合成（属性名 → JSON 键）正好匹配服务端 wire。
+struct KaiXReservationContactDTO: Codable, Equatable {
+    let id: String?
+    let name: String?
+    let nameJa: String?
+    let title: String?
+    let phone: String?
+    let email: String?
+    let lineId: String?
+    let wechatId: String?
+    let whatsapp: String?
+    let languages: String?
+    let photoUrl: String?
+}
+
+extension KaiXCityListingDTO {
+    /// Machi 官方推荐：显式 machi_recommended 优先，回退到 is_promoted。
+    var isMachiRecommended: Bool { machi_recommended ?? is_promoted ?? false }
+    /// 闪耀标签列表（可能为空）。
+    var machiBadgeList: [String] { machi_badges ?? [] }
+    /// 干净的预约联系人访问器。
+    var reservationContact: KaiXReservationContactDTO? { reservation_contact }
 }
 
 extension KaiXCityListingDTO {

@@ -131,7 +131,7 @@ final class PostRepository {
             // Same-city stream. If the user hasn't picked a region yet
             // we return an empty page so the UI can prompt them — the
             // server-side `local` mode would 400 in the same case.
-            guard let region = await MainActor.run(body: { RegionStore.shared.current }) else {
+            guard let region = RegionStore.shared.current else {  // already on the MainActor (class is @MainActor)
                 return []
             }
             let regionCodes = KaiXRegionDirectory.regionCodesForMetro(region: region)

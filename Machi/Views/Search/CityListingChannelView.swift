@@ -235,11 +235,20 @@ struct CityListingChannelView: View {
 
     private var staysActive: Bool { baseType == "rental" && activeRentalTab == .stays }
     private var lodgingActive: Bool { staysActive }
+    /// 买房分区：房源频道内的独立垂类（与长租/民宿并列）。
+    private var forsaleActive: Bool { baseType == "rental" && activeRentalTab == .forsale }
 
-    /// 真正发给 API 的 listing type。
-    private var queryType: String { lodgingActive ? "local_service" : baseType }
+    /// 真正发给 API 的 listing type。买房走 for_sale，民宿走 local_service。
+    private var queryType: String {
+        forsaleActive ? "for_sale" : (lodgingActive ? "local_service" : baseType)
+    }
 
-    enum RentalTab: String { case homes, stays }
+    /// 文案/类目/空状态用的有效类型（买房=for_sale，民宿=stays，其余=baseType）。
+    private var copyType: String {
+        forsaleActive ? "for_sale" : (staysActive ? "stays" : baseType)
+    }
+
+    enum RentalTab: String { case homes, forsale, stays }
     @State private var rentalTab: RentalTab?
 
     private var activeRentalTab: RentalTab {
@@ -255,14 +264,19 @@ struct CityListingChannelView: View {
     /// Signature of every input that affects `visibleItems`; a change drives an
     /// immediate local recompute via `.onChange` in `body`.
     private var visibleFilterSignature: String {
-        "\(serviceSection)|\(selectedCategory)|\(query)|\(minimumPrice)|\(maximumPrice)|\(sortMode)|\(staysActive)|\(baseType)"
+        "\(serviceSection)|\(selectedCategory)|\(query)|\(minimumPrice)|\(maximumPrice)|\(sortMode)|\(staysActive)|\(forsaleActive)|\(baseType)"
     }
 
     private func recomputeVisibleItems() {
         let sectionCategories = Self.serviceSections.first { $0.key == serviceSection }?.categories ?? []
         let filtered = items.filter { item in
-            // 住宿新入口只展示民宿；服务频道隐藏全部住宿历史类目。
-            if staysActive {
+            // 买房分区只展示 for_sale；长租/民宿分区排除 for_sale。
+            if forsaleActive {
+                guard item.type == "for_sale" else { return false }
+            } else if item.type == "for_sale" {
+                return false
+            } else if staysActive {
+                // 住宿新入口只展示民宿；服务频道隐藏全部住宿历史类目。
                 guard KXListingCopy.isHomestayCategory(item.category) else { return false }
             } else if baseType == "local_service", KXListingCopy.isStayCategory(item.category) {
                 return false
@@ -601,10 +615,11 @@ struct CityListingChannelView: View {
         .buttonStyle(KXPressableStyle(scale: 0.95))
     }
 
-    /// 住房频道双标签：长租 / 民宿。
+    /// 住房频道三标签：长租 / 买房 / 民宿。
     private var rentalTabSwitcher: some View {
         HStack(spacing: 4) {
             rentalTabButton(.homes, title: KXListingCopy.pickText(language, "长租", "長期賃貸", "Rentals"), icon: "house")
+            rentalTabButton(.forsale, title: KXListingCopy.pickText(language, "买房", "物件購入", "Buy"), icon: "building.2")
             rentalTabButton(.stays, title: KXListingCopy.pickText(language, "民宿", "民泊", "Homestays"), icon: "bed.double")
         }
         .padding(4)
@@ -704,7 +719,7 @@ struct CityListingChannelView: View {
             Image(systemName: "magnifyingglass")
                 .font(.subheadline.weight(.heavy))
                 .foregroundStyle(KXColor.livingAccent)
-            TextField(KXListingCopy.searchPlaceholder(for: staysActive ? "stays" : baseType, language), text: $query)
+            TextField(KXListingCopy.searchPlaceholder(for: copyType, language), text: $query)
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
                 .submitLabel(.search)
@@ -975,7 +990,7 @@ struct CityListingChannelView: View {
             }
             return selectedCategory == "全部" || quick.contains(selectedCategory) ? quick : quick + [selectedCategory]
         }
-        return KXListingCopy.categories(for: staysActive ? "stays" : baseType)
+        return KXListingCopy.categories(for: copyType)
     }
 
     /// 全部细筛收进底部弹出面板，带「查看 N 个结果」固定底栏（爱彼迎式）。
@@ -1338,8 +1353,8 @@ struct CityListingChannelView: View {
                     .buttonStyle(.plain)
                 } else {
                     EmptyStateView(
-                        title: KXListingCopy.emptyTitle(for: staysActive ? "stays" : baseType, language),
-                        subtitle: KXListingCopy.emptySubtitle(for: staysActive ? "stays" : baseType, language),
+                        title: KXListingCopy.emptyTitle(for: copyType, language),
+                        subtitle: KXListingCopy.emptySubtitle(for: copyType, language),
                         systemImage: KXListingCopy.icon(for: baseType)
                     )
                     Button {
@@ -1397,7 +1412,7 @@ struct CityListingChannelView: View {
             // 照片主导卡：长租与民宿共用同一套视觉语言。
             LazyVStack(spacing: 18) {
                 ForEach(visibleItems) { item in
-                    KXStayListingCard(listing: item, variant: staysActive ? .stay : .home) {
+                    KXStayListingCard(listing: item, variant: forsaleActive ? .forsale : (staysActive ? .stay : .home)) {
                         router.open(.cityListingDetail(listingId: item.id))
                     }
                     .kxListingZoomSource("listing-\(item.id)", zoomNamespace)

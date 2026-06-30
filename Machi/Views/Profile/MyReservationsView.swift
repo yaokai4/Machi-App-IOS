@@ -56,6 +56,7 @@ struct MyReservationsView: View {
                 }
                 .padding(KXSpacing.screen)
             }
+            .refreshable { await load() }
             .kxReadableWidth()
         }
     }
