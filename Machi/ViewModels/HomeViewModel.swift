@@ -35,12 +35,45 @@ final class HomeViewModel: ObservableObject {
     // method suspends at `await syncFromRemote`, so two interleaved calls used to
     // both reset the cursor/loadedIds and double-increment the page → mixed or
     // duplicated feeds. Serialize: a second call while one is in flight no-ops.
+    // Important: a mode switch while a load is in flight must not be dropped.
+    // We queue one follow-up pass and always reload the latest selected mode.
     private var isLoadingInitial = false
+    private var pendingInitialReload = false
+    private var pendingInitialClearExisting = false
 
     func loadInitial(context: ModelContext, currentUser: UserEntity, postStore: PostStore, clearExisting: Bool = false) async {
-        if isLoadingInitial { return }
+        if isLoadingInitial {
+            pendingInitialReload = true
+            pendingInitialClearExisting = pendingInitialClearExisting || clearExisting
+            return
+        }
         isLoadingInitial = true
         defer { isLoadingInitial = false }
+        var nextClearExisting = clearExisting
+        while true {
+            pendingInitialReload = false
+            let requestedMode = mode
+            await loadInitialPass(
+                context: context,
+                currentUser: currentUser,
+                postStore: postStore,
+                mode: requestedMode,
+                clearExisting: nextClearExisting
+            )
+            let modeChangedDuringLoad = requestedMode != mode
+            nextClearExisting = pendingInitialClearExisting || modeChangedDuringLoad
+            pendingInitialClearExisting = false
+            guard pendingInitialReload || modeChangedDuringLoad else { break }
+        }
+    }
+
+    private func loadInitialPass(
+        context: ModelContext,
+        currentUser: UserEntity,
+        postStore: PostStore,
+        mode requestedMode: TimelineMode,
+        clearExisting: Bool
+    ) async {
         let previousPage = currentPage
         let previousCanLoadMore = canLoadMore
         let previousCursor = remoteCursor
@@ -58,7 +91,7 @@ final class HomeViewModel: ObservableObject {
             authors = [:]
             mediaByPostId = [:]
         }
-        let didLoad = await loadPage(context: context, currentUser: currentUser, postStore: postStore, reset: true)
+        let didLoad = await loadPage(context: context, currentUser: currentUser, mode: requestedMode, postStore: postStore, reset: true)
         if !didLoad, !clearExisting, !posts.isEmpty {
             currentPage = previousPage
             canLoadMore = previousCanLoadMore
@@ -71,7 +104,7 @@ final class HomeViewModel: ObservableObject {
     func loadMoreIfNeeded(context: ModelContext, currentUser: UserEntity, post: PostEntity?, postStore: PostStore) async {
         guard canLoadMore, !isLoadingMore else { return }
         guard post == nil || post?.id == posts.last?.id else { return }
-        _ = await loadPage(context: context, currentUser: currentUser, postStore: postStore, reset: false)
+        _ = await loadPage(context: context, currentUser: currentUser, mode: mode, postStore: postStore, reset: false)
     }
 
     func refresh(context: ModelContext, currentUser: UserEntity, postStore: PostStore) async {
@@ -135,7 +168,7 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
-    private func loadPage(context: ModelContext, currentUser: UserEntity, postStore: PostStore, reset: Bool) async -> Bool {
+    private func loadPage(context: ModelContext, currentUser: UserEntity, mode requestedMode: TimelineMode, postStore: PostStore, reset: Bool) async -> Bool {
         if reset {
             if posts.isEmpty {
                 // Stale-while-revalidate: paint the last cached feed instantly so
@@ -144,16 +177,18 @@ final class HomeViewModel: ObservableObject {
                 // refresh below replaces these posts in place once it arrives —
                 // picking up any deletes/edits — so nothing is stale for long; it
                 // just appears immediately instead of only after the round trip.
-                let cached = await KaiXFeedCache.loadAsync(key: feedCacheKey())
+                let cached = await KaiXFeedCache.loadAsync(key: feedCacheKey(for: requestedMode))
                 if !cached.isEmpty {
                     let bundle = ServerEntityFactory.postBundle(from: cached)
                     authors.merge(bundle.authors) { _, fresh in fresh }
                     mediaByPostId.merge(bundle.mediaByPostId) { _, fresh in fresh }
                     postStore.register(bundle.allPosts)
-                    posts = balanceOfficialRuns(bundle.orderedPosts)
-                    loadedIds = Set(posts.map(\.id))
-                    postStore.setFeed(posts, append: false)
-                    state = .loaded
+                    if requestedMode == mode {
+                        posts = balanceOfficialRuns(bundle.orderedPosts)
+                        loadedIds = Set(posts.map(\.id))
+                        postStore.setFeed(posts, append: false)
+                        state = .loaded
+                    }
                 } else {
                     state = .loading
                 }
@@ -176,9 +211,9 @@ final class HomeViewModel: ObservableObject {
             // failures and falls back to repository handling, so offline (and
             // a guest's empty 关注 tab) degrade gracefully.
             if reset {
-                await syncFromRemote(context: context, cursor: nil)
+                await syncFromRemote(context: context, mode: requestedMode, cursor: nil)
             } else if remoteHasMore {
-                await syncFromRemote(context: context, cursor: remoteCursor)
+                await syncFromRemote(context: context, mode: requestedMode, cursor: remoteCursor)
             }
 
             let repository = PostRepository(context: context)
@@ -202,8 +237,9 @@ final class HomeViewModel: ObservableObject {
                 }
             } else {
                 usedRemotePage = false
-                page = try await repository.fetchPage(mode: mode, currentUserId: currentUser.id, page: currentPage, pageSize: KaiXConfig.pageSize)
+                page = try await repository.fetchPage(mode: requestedMode, currentUserId: currentUser.id, page: currentPage, pageSize: KaiXConfig.pageSize)
             }
+            guard requestedMode == mode else { return true }
             // Belt-and-braces: even if the local window shifted (new posts
             // synced in above us), an id can never appear twice in the list.
             let appended = page.filter { !loadedIds.contains($0.id) }
@@ -215,7 +251,7 @@ final class HomeViewModel: ObservableObject {
             // deterministic local windows keep deeper browsing alive.
             if canLoadMore {
                 canLoadMore = usedRemotePage
-                    ? (remoteHasMore || mode == .hot)
+                    ? (remoteHasMore || requestedMode == .hot)
                     : (page.count == KaiXConfig.pageSize || remoteHasMore)
             }
             if !usedCachedSnapshotPage {
@@ -243,10 +279,10 @@ final class HomeViewModel: ObservableObject {
     /// Pull one page of the unified KaiX backend feed and advance the server
     /// cursor. Best-effort: a failure leaves the current on-screen content in
     /// place instead of interrupting scrolling.
-    private func syncFromRemote(context: ModelContext, cursor: String?) async {
+    private func syncFromRemote(context: ModelContext, mode requestedMode: TimelineMode, cursor: String?) async {
         do {
             let apiMode: KaiXAPIClient.FeedMode
-            switch mode {
+            switch requestedMode {
             case .recommend: apiMode = .recommend
             case .local:     apiMode = .local
             case .following: apiMode = .following
@@ -255,7 +291,7 @@ final class HomeViewModel: ObservableObject {
             // 热榜 now follows the selected city from the top region chip,
             // so the extra city/country/all row is no longer needed.
             let region = RegionStore.shared.current
-            let cityScoped = mode == .local || mode == .hot
+            let cityScoped = requestedMode == .local || requestedMode == .hot
             let page = try await KaiXAPIClient.shared.feed(
                 mode: apiMode,
                 cursor: cursor,
@@ -271,14 +307,14 @@ final class HomeViewModel: ObservableObject {
             // Snapshot the first page so a future offline cold launch can still
             // show something instead of a blank feed. Best-effort, never blocks.
             if cursor == nil {
-                KaiXFeedCache.save(page.items, key: feedCacheKey())
+                KaiXFeedCache.save(page.items, key: feedCacheKey(for: requestedMode))
             }
         } catch {
             // Silent — the local fallback below still produces a usable feed.
             // On a cold first page, fall back to the last good server snapshot
             // so an offline launch is not blank.
             if cursor == nil {
-                let cachedItems = await KaiXFeedCache.loadAsync(key: feedCacheKey())
+                let cachedItems = await KaiXFeedCache.loadAsync(key: feedCacheKey(for: requestedMode))
                 pendingRemoteBundle = cachedItems.isEmpty ? nil : ServerEntityFactory.postBundle(from: cachedItems)
                 pendingRemoteBundleIsCachedSnapshot = pendingRemoteBundle != nil
             } else {
@@ -290,9 +326,9 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
-    private func feedCacheKey() -> String {
+    private func feedCacheKey(for mode: TimelineMode) -> String {
         let region = RegionStore.shared.current
-        let cityScoped = mode == .local
+        let cityScoped = mode == .local || mode == .hot
         let province = cityScoped ? (region?.provinceCode.isEmpty == true ? "" : region?.provinceCode ?? "") : ""
         let city = cityScoped ? (region?.cityCode ?? "") : ""
         let regionCode = cityScoped ? (region?.regionCode ?? "") : ""

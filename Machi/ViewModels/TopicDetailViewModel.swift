@@ -13,10 +13,22 @@ final class TopicDetailViewModel: ObservableObject {
     func load(context: ModelContext, topicName: String, postStore: PostStore? = nil) async {
         state = .loading
         do {
+            let normalizedTopicName = topicName.normalizedTopicName
             let topicRepository = TopicRepository(context: context)
             let postRepository = PostRepository(context: context)
             topic = try await topicRepository.fetchTopic(name: topicName)
-            let loadedPosts = try await postRepository.fetchPosts(topic: topicName)
+            let repositoryPosts = try await postRepository.fetchPosts(topic: topicName)
+            let loadedPosts = mergeTopicPosts(
+                repositoryPosts,
+                cachedTopicPosts(from: postStore, topic: normalizedTopicName)
+            )
+            if !loadedPosts.isEmpty, (topic?.postCount ?? 0) < loadedPosts.count {
+                topic = TopicEntity(
+                    name: normalizedTopicName,
+                    postCount: loadedPosts.count,
+                    heatScore: loadedPosts.reduce(0) { $0 + $1.heatScore }
+                )
+            }
             let originalPosts = try await postRepository.fetchPosts(
                 ids: Set(loadedPosts.compactMap(\.repostOfPostId))
             )
@@ -29,6 +41,33 @@ final class TopicDetailViewModel: ObservableObject {
             state = loadedPosts.isEmpty ? .empty : .loaded
         } catch {
             state = .error(error.kaixUserMessage)
+        }
+    }
+
+    private func cachedTopicPosts(from postStore: PostStore?, topic: String) -> [PostEntity] {
+        guard let postStore else { return [] }
+        return sortTopicPosts(
+            postStore.postsById.values.filter {
+                ($0.status == .published || $0.status == .active) && $0.matchesTopic(topic)
+            }
+        )
+    }
+
+    private func mergeTopicPosts(_ primary: [PostEntity], _ cached: [PostEntity]) -> [PostEntity] {
+        guard !primary.isEmpty else { return cached }
+        var seen = Set(primary.map(\.id))
+        return primary + cached.filter { seen.insert($0.id).inserted }
+    }
+
+    private func sortTopicPosts(_ posts: [PostEntity]) -> [PostEntity] {
+        posts.sorted { lhs, rhs in
+            if lhs.heatScore != rhs.heatScore {
+                return lhs.heatScore > rhs.heatScore
+            }
+            if lhs.createdAt != rhs.createdAt {
+                return lhs.createdAt > rhs.createdAt
+            }
+            return lhs.id > rhs.id
         }
     }
 

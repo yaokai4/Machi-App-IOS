@@ -412,17 +412,31 @@ final class PostRepository {
         let normalized = topic.normalizedTopicName
         guard !normalized.isEmpty else { return [] }
         if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
-            return ServerEntityFactory.postBundle(from: try await KaiXAPIClient.shared.topic(normalized)).orderedPosts
+            let remotePosts = ServerEntityFactory.postBundle(from: try await KaiXAPIClient.shared.topic(normalized)).orderedPosts
+            if !remotePosts.isEmpty || !KaiXRuntimeFlags.allowLocalStoreFallback {
+                return remotePosts
+            }
+            return try fetchLocalPosts(topic: normalized)
         }
+        return try fetchLocalPosts(topic: normalized)
+    }
+
+    private func fetchLocalPosts(topic normalized: String) throws -> [PostEntity] {
         let published = PostStatus.published.rawValue
         let active = PostStatus.active.rawValue
         var descriptor = FetchDescriptor<PostEntity>(
-            predicate: #Predicate { ($0.statusRaw == published || $0.statusRaw == active) && $0.hashtagsRaw.contains(normalized) },
-            sortBy: [SortDescriptor(\.heatScore, order: .reverse), SortDescriptor(\.createdAt, order: .reverse)]
+            predicate: #Predicate {
+                ($0.statusRaw == published || $0.statusRaw == active)
+                && ($0.hashtagsRaw.contains(normalized) || $0.content.contains("#"))
+            },
+            sortBy: [
+                SortDescriptor(\.heatScore, order: .reverse),
+                SortDescriptor(\.createdAt, order: .reverse),
+                SortDescriptor(\.id, order: .reverse)
+            ]
         )
-        descriptor.fetchLimit = 300
-        return try context.fetch(descriptor)
-            .filter { $0.hashtags.contains(normalized) || $0.content.localizedCaseInsensitiveContains("#\(topic)") }
+        descriptor.fetchLimit = 500
+        return try context.fetch(descriptor).filter { $0.matchesTopic(normalized) }
     }
 
     func fetchRepliedPosts(authorId: String) async throws -> [PostEntity] {

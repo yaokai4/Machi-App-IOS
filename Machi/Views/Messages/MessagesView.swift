@@ -590,7 +590,25 @@ private struct MessageConversationCard: View {
     let onOpenProfile: (String) -> Void
 
     var body: some View {
-        HStack(spacing: 11) {
+        Button(action: onOpenThread) {
+            HStack(spacing: 11) {
+                Color.clear
+                    .frame(width: 48, height: 48)
+                    .accessibilityHidden(true)
+
+                conversationSummary
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
+            .kxGlassSurface(radius: KXRadius.lg)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityTitle)
+        .accessibilityHint(text("打开会话", "会話を開く", "Open conversation"))
+        .overlay(alignment: .leading) {
             Button {
                 if let id = peer?.id {
                     onOpenProfile(id)
@@ -603,59 +621,68 @@ private struct MessageConversationCard: View {
                 AvatarView(user: peer, size: 48)
             }
             .buttonStyle(.plain)
+            .padding(.leading, 14)
             .accessibilityLabel(peer?.displayName ?? L("unknownUser", language))
+        }
+    }
 
-            Button(action: onOpenThread) {
-                HStack(spacing: 11) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack(spacing: 5) {
-                            Text(peer?.displayName ?? L("unknownUser", language))
-                                .font(.subheadline.weight(.bold))
-                                .foregroundStyle(.primary)
-                                .lineLimit(1)
-                            KXUserBadge(user: peer)
-                            Spacer()
-                            Text(DateFormatterUtils.conversationTimestamp(thread.lastMessageAt, language: language))
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(isUnread ? KXColor.accent : .secondary)
-                                .monospacedDigit()
-                                .lineLimit(1)
-                                .layoutPriority(1)
-                        }
+    private var conversationSummary: some View {
+        HStack(spacing: 11) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 5) {
+                    Text(peer?.displayName ?? L("unknownUser", language))
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    KXUserBadge(user: peer)
+                    Spacer()
+                    Text(DateFormatterUtils.conversationTimestamp(thread.lastMessageAt, language: language))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(isUnread ? KXColor.accent : .secondary)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .layoutPriority(1)
+                }
 
-                        HStack(spacing: 5) {
-                            if let previewIcon {
-                                Image(systemName: previewIcon)
-                                    .font(.caption2)
-                                    .foregroundStyle(isUnread ? KXColor.accent : .secondary)
-                            }
-                            Text(previewText)
-                                .font(.subheadline.weight(isUnread ? .medium : .regular))
-                                .foregroundStyle(isUnread ? .primary : .secondary)
-                                .lineLimit(1)
-                        }
+                HStack(spacing: 5) {
+                    if let previewIcon {
+                        Image(systemName: previewIcon)
+                            .font(.caption2)
+                            .foregroundStyle(isUnread ? KXColor.accent : .secondary)
                     }
-
-                    if thread.unreadCount > 0 {
-                        let unreadText = thread.unreadCount > 99 ? "99+" : "\(thread.unreadCount)"
-                        Text(unreadText)
-                            .font(.caption2.weight(.black))
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
-                            .frame(minWidth: 20, minHeight: 20)
-                            .padding(.horizontal, unreadText.count > 1 ? 5 : 0)
-                            .background(KXColor.accent, in: Capsule())
-                            .overlay(Capsule().stroke(Color.white.opacity(0.82), lineWidth: 1))
-                            .shadow(color: KXColor.accent.opacity(0.18), radius: 4, y: 1.5)
-                    }
+                    Text(previewText)
+                        .font(.subheadline.weight(isUnread ? .medium : .regular))
+                        .foregroundStyle(isUnread ? .primary : .secondary)
+                        .lineLimit(1)
                 }
             }
-            .buttonStyle(.plain)
+
+            if thread.unreadCount > 0 {
+                let unreadText = thread.unreadCount > 99 ? "99+" : "\(thread.unreadCount)"
+                Text(unreadText)
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .frame(minWidth: 20, minHeight: 20)
+                    .padding(.horizontal, unreadText.count > 1 ? 5 : 0)
+                    .background(KXColor.accent, in: Capsule())
+                    .overlay(Capsule().stroke(Color.white.opacity(0.82), lineWidth: 1))
+                    .shadow(color: KXColor.accent.opacity(0.18), radius: 4, y: 1.5)
+            }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .kxGlassSurface(radius: KXRadius.lg)
+    }
+
+    private var accessibilityTitle: String {
+        let name = peer?.displayName ?? L("unknownUser", language)
+        if thread.unreadCount > 0 {
+            return "\(name), \(thread.unreadCount) \(text("条未读消息", "件の未読メッセージ", "unread messages")), \(previewText)"
+        }
+        return "\(name), \(previewText)"
+    }
+
+    private func text(_ zh: String, _ ja: String, _ en: String) -> String {
+        KXListingCopy.pickText(language, zh, ja, en)
     }
 
     private var isUnread: Bool { thread.unreadCount > 0 }

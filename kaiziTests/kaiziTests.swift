@@ -1169,6 +1169,34 @@ struct kaiziTests {
         #expect(try await repository.fetchPosts(topic: "launch").map(\.id) == [published.id])
     }
 
+    @Test func topicFetchFindsContentHashtagWhenStoredIndexIsMissing() async throws {
+        let context = try makeContext()
+        let user = UserEntity(id: "topic-user", username: "topic", displayName: "Topic")
+        let tokyoPost = PostEntity(
+            id: "tokyo-topic-post",
+            authorId: user.id,
+            content: "今天在 #东京 发现一家很好吃的小店",
+            heatScore: 12,
+            status: .published,
+            hashtags: []
+        )
+        let draftPost = PostEntity(
+            id: "tokyo-topic-draft",
+            authorId: user.id,
+            content: "草稿也有 #东京",
+            status: .draft,
+            hashtags: []
+        )
+        context.insert(user)
+        context.insert(tokyoPost)
+        context.insert(draftPost)
+        try context.save()
+
+        let repository = PostRepository(context: context)
+
+        #expect(try await repository.fetchPosts(topic: "东京").map(\.id) == [tokyoPost.id])
+    }
+
     @Test func mediaOnlyDraftCanBePublishedWithoutText() async throws {
         let context = try makeContext()
         let user = UserEntity(id: "draft-user", username: "draft", displayName: "Draft")

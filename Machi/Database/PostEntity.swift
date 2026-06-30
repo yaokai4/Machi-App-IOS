@@ -144,6 +144,15 @@ extension PostEntity {
         }
     }
 
+    func matchesTopic(_ topic: String) -> Bool {
+        let normalized = topic.normalizedTopicName
+        guard !normalized.isEmpty else { return false }
+        if hashtags.contains(where: { $0.normalizedTopicName == normalized }) {
+            return true
+        }
+        return content.extractedHashtags.contains(normalized)
+    }
+
     var syncStatus: SyncStatus {
         get { SyncStatus(rawValue: syncStatusRaw) ?? .local }
         set {
