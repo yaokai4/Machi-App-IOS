@@ -394,7 +394,11 @@ private enum GuideFallbackContent {
             progressPercent: nil,
             readingProgress: nil,
             publishedAt: nil,
-            updatedAt: nil
+            updatedAt: nil,
+            sourceUrl: nil,
+            sourceLabel: nil,
+            verifiedAt: nil,
+            staleAfterDays: nil
         )
     }
 }

@@ -130,7 +130,9 @@ final class NotificationStore: ObservableObject {
     }
 
     func setUnreadCount(_ count: Int) {
-        unreadCount = max(0, count)
+        let next = max(0, count)
+        guard unreadCount != next else { return }
+        unreadCount = next
     }
 
     func setLoadingState(_ state: ScreenState) {

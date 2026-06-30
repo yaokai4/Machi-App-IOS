@@ -26,9 +26,11 @@ final class KaiXCacheManager: ObservableObject {
 
     func refresh() async {
         let dbURL = KaiXDatabaseContainer.storeFolderURL
+        let mediaFolders = Self.mediaFolders
+        let dataFolders = Self.dataFolders
         let sizes = await Task.detached(priority: .utility) {
-            (media: Self.size(ofCachesFolders: Self.mediaFolders),
-             data: Self.size(ofCachesFolders: Self.dataFolders),
+            (media: Self.size(ofCachesFolders: mediaFolders),
+             data: Self.size(ofCachesFolders: dataFolders),
              db: Self.folderSize(dbURL))
         }.value
         mediaBytes = sizes.media

@@ -10,10 +10,10 @@ import Foundation
 /// missing, stale or unreadable, callers simply get an empty array and fall
 /// back to the live server.
 enum KaiXFeedCache {
-    private static let maxAge: TimeInterval = 60 * 60 * 24 * 3   // 3 days
-    private static let maxItems = 40
+    nonisolated private static let maxAge: TimeInterval = 60 * 60 * 24 * 3   // 3 days
+    nonisolated private static let maxItems = 40
 
-    private struct Snapshot: Codable {
+    nonisolated private struct Snapshot: Codable {
         let savedAt: Date
         let items: [KaiXPostDTO]
     }

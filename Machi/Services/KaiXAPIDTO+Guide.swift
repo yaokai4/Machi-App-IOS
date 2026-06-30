@@ -92,12 +92,12 @@ struct KaiXGuideArticleDTO: Codable, Equatable, Identifiable, Hashable {
     let updatedAt: String?
     // G3: article provenance / freshness — kept in sync with the web client and
     // the server serializer (sourceUrl/sourceLabel/verifiedAt/staleAfterDays).
-    // Optional (default nil) so older API responses still decode AND local
-    // editorial placeholders can omit them.
-    let sourceUrl: String? = nil
-    let sourceLabel: String? = nil
-    let verifiedAt: String? = nil
-    let staleAfterDays: Int? = nil
+    // Optional so older API responses still decode AND local editorial
+    // placeholders can omit them.
+    let sourceUrl: String?
+    let sourceLabel: String?
+    let verifiedAt: String?
+    let staleAfterDays: Int?
 }
 
 struct KaiXGuideArticleProgressDTO: Codable, Equatable, Hashable {
@@ -1675,4 +1675,3 @@ struct KaiXGuideAIFeedbackResponse: Codable, Equatable {
     let status: String?
     let rating: String?
 }
-

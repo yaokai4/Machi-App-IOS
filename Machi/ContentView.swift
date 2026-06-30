@@ -23,6 +23,7 @@ struct ContentView: View {
     @StateObject private var connectivityMonitor = ConnectivityMonitor()
     @ObservedObject private var guestGate = GuestGate.shared
     @State private var displayedDatabaseNoticeKey: String?
+    @State private var isSyncingSystemNotifications = false
 
     private var language: AppLanguage {
         AppLanguage.resolved(from: appLanguageCode)
@@ -293,14 +294,19 @@ struct ContentView: View {
     /// in-app store/badge, and banner anything new.
     private func syncSystemNotifications() async {
         guard KaiXBackend.token != nil, let user = appState.currentUser, !user.isGuest else { return }
+        guard !isSyncingSystemNotifications else { return }
+        isSyncingSystemNotifications = true
+        defer { isSyncingSystemNotifications = false }
         do {
             if let conversations = try? await MessageRepository(context: modelContext).fetchThreads(currentUserId: user.id) {
                 let previousLastMessageDates = messageStore.conversationsById.mapValues(\.lastMessageAt)
                 messageStore.setConversations(conversations)
-                await warmChangedMessageThreads(
-                    conversations,
-                    previousLastMessageDates: previousLastMessageDates
-                )
+                if shouldWarmChangedMessageThreads {
+                    await warmChangedMessageThreads(
+                        conversations,
+                        previousLastMessageDates: previousLastMessageDates
+                    )
+                }
                 syncAppBadge()
             }
             let response = try await KaiXAPIClient.shared.notifications(kind: "all")
@@ -337,6 +343,10 @@ struct ContentView: View {
     /// The notification poll is lightweight, but when it observes a new/unread
     /// conversation we also prefetch that conversation's messages so opening the
     /// chat never shows stale content behind a fresh banner.
+    private var shouldWarmChangedMessageThreads: Bool {
+        appChrome.selectedTab == .messages || appChrome.hiddenReasons.contains(.conversation)
+    }
+
     private func warmChangedMessageThreads(
         _ conversations: [MessageThreadEntity],
         previousLastMessageDates: [String: Date]
@@ -348,7 +358,7 @@ struct ContentView: View {
                 guard let previous = previousLastMessageDates[conversation.id] else { return true }
                 return conversation.lastMessageAt > previous.addingTimeInterval(0.25)
             }
-            .prefix(8)
+            .prefix(4)
         guard !changed.isEmpty else { return }
         let repository = MessageRepository(context: modelContext)
         for conversation in changed {

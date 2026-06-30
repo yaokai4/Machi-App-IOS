@@ -439,6 +439,382 @@ final class MachiWalkthroughUITests: XCTestCase {
         }
     }
 
+    // MARK: - App Store 宣传图采集（真实模拟器界面 → /tmp/machi_shots/PROMO_*）
+
+    private func dismissSystemAlerts() {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        for label in ["允许一次", "使用App时允许", "不允许", "允许", "Allow Once", "Allow While Using App", "Don't Allow", "Allow", "稍后", "好"] {
+            let b = springboard.buttons[label]
+            if b.waitForExistence(timeout: 2) { b.tap(); break }
+        }
+    }
+
+    /// 游客 + 生产数据：采集面向用户的公开核心界面（首页社区流 / 发现 / 四频道 /
+    /// 地图 / 帖子详情 / Machi AI 入口）。全程软处理，单个元素缺失不影响整轮。
+    @MainActor
+    func testAppStorePromo() throws {
+        let app = XCUIApplication()
+        app.launchArguments += ["-appLanguageCode", "zh"]
+        app.launch()
+        dismissSystemAlerts()
+        let guest = app.buttons["auth.browseAsGuest"].firstMatch
+        if guest.waitForExistence(timeout: 20) { forceTap(guest) }
+        _ = app.buttons["tabbar.home"].waitForExistence(timeout: 40)
+        pause(4)
+        dismissSystemAlerts()
+        pause(2)
+
+        // 1) 首页社区流（社交）
+        tapTab(app, "tabbar.home"); pause(4)
+        snap("PROMO_01_home")
+        app.swipeUp(); pause(1.5); snap("PROMO_01b_home_scroll")
+
+        // 2) 发现页（城市入口 + 频道 + 正在发生）
+        tapTab(app, "tabbar.search"); pause(3)
+        snap("PROMO_02_discover")
+        app.swipeUp(); pause(1.5); snap("PROMO_02b_happening")
+        app.swipeUp(); pause(1.2); snap("PROMO_02c_happening2")
+
+        // 3) 四频道列表 + 地图 + 筛选
+        let channels: [(label: String, key: String)] = [
+            ("租房 · 住宿", "rental"),
+            ("二手市场", "secondhand"),
+            ("工作", "work"),
+            ("商家与服务", "service"),
+        ]
+        for ch in channels {
+            tapTab(app, "tabbar.search"); pause(1.5)
+            let card = app.staticTexts[ch.label].firstMatch
+            guard card.waitForExistence(timeout: 8) else { continue }
+            forceTap(card); pause(3.5)
+            snap("PROMO_ch_\(ch.key)")
+            app.swipeUp(); pause(1.2); snap("PROMO_ch_\(ch.key)_scroll")
+            app.swipeDown(); pause(1)
+            if ch.key == "rental" {
+                let mapBtn = app.buttons["地图"].firstMatch
+                if mapBtn.waitForExistence(timeout: 4) {
+                    forceTap(mapBtn); pause(8); snap("PROMO_map")
+                    let listBtn = app.buttons["列表"].firstMatch
+                    if listBtn.exists { forceTap(listBtn); pause(1) }
+                }
+            }
+            if ch.key == "service" {
+                let filters = app.buttons["筛选"].firstMatch
+                if filters.waitForExistence(timeout: 4) {
+                    forceTap(filters); pause(2); snap("PROMO_filters")
+                    app.swipeDown(velocity: .fast); pause(1)
+                }
+            }
+            tapBack(app); pause(1.5)
+        }
+
+        // 4) 帖子详情（社交内容）
+        tapTab(app, "tabbar.home"); pause(3)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)).tap()
+        pause(3)
+        snap("PROMO_post_detail")
+        tapBack(app); pause(1)
+
+        // 5) Machi AI 入口（指南 tab → AI 卡 → 聊天页 intro）
+        tapTab(app, "tabbar.guide"); pause(3)
+        let ai = app.buttons["guide.ai.entry"].firstMatch
+        if ai.waitForExistence(timeout: 8) {
+            forceTap(ai); pause(3)
+            snap("PROMO_ai_intro")
+        }
+    }
+
+    /// 登录态（本地 fixtures，绕过登录墙）：私信列表 / 聊天 / 我的 / Machi AI 对话。
+    @MainActor
+    func testAppStorePromoSignedIn() throws {
+        let app = launchSignedIn()
+        _ = app.buttons["tabbar.home"].waitForExistence(timeout: 40)
+        pause(4)
+
+        // 私信列表 + 聊天
+        tapTab(app, "tabbar.messages"); pause(3)
+        snap("PROMO_messages")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.30)).tap()
+        pause(2.5)
+        snap("PROMO_chat")
+
+        // 我的
+        tapTab(app, "tabbar.profile"); pause(3)
+        snap("PROMO_profile")
+
+        // Machi AI 对话（登录态可发送；尝试捕捉真实回答气泡）
+        tapTab(app, "tabbar.guide"); pause(2)
+        let ai = app.buttons["guide.ai.entry"].firstMatch
+        if ai.waitForExistence(timeout: 8) {
+            forceTap(ai); pause(2)
+            snap("PROMO_ai_intro_signed")
+            let field: XCUIElement = app.textViews.firstMatch.exists ? app.textViews.firstMatch : app.textFields.firstMatch
+            if field.waitForExistence(timeout: 4) {
+                field.tap(); pause(0.5)
+                field.typeText("在留卡快到期了，续签需要准备哪些材料？")
+                pause(0.5)
+                let send = app.buttons["发送"].firstMatch
+                if send.exists { forceTap(send) }
+                else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.915)).tap() }
+                pause(7)
+                snap("PROMO_ai_chat")
+            }
+        }
+    }
+
+    /// 修正版：游客 + 生产，专采四频道列表 / 地图 / 筛选 / 真实帖子详情。
+    /// 不在发现页预滚动（否则频道卡滚出可视区导致找不到），频道标签用真实文案。
+    @MainActor
+    func testAppStorePromoChannels() throws {
+        let app = XCUIApplication()
+        app.launchArguments += ["-appLanguageCode", "zh"]
+        app.launch()
+        dismissSystemAlerts()
+        let guest = app.buttons["auth.browseAsGuest"].firstMatch
+        if guest.waitForExistence(timeout: 20) { forceTap(guest) }
+        _ = app.buttons["tabbar.search"].waitForExistence(timeout: 40)
+        pause(4)
+        dismissSystemAlerts(); pause(1)
+
+        let channels: [(label: String, key: String)] = [
+            ("租房·住宿", "rental"),
+            ("二手市场", "secondhand"),
+            ("工作", "work"),
+            ("商家与服务", "service"),
+        ]
+        for ch in channels {
+            tapTab(app, "tabbar.search"); pause(2.5)
+            let card = app.staticTexts[ch.label].firstMatch
+            guard card.waitForExistence(timeout: 8) else { snap("PROMO_ch_\(ch.key)_MISS"); continue }
+            forceTap(card); pause(4)
+            snap("PROMO_ch_\(ch.key)")
+            app.swipeUp(); pause(1.3); snap("PROMO_ch_\(ch.key)_scroll")
+            app.swipeDown(); pause(1.2)
+            if ch.key == "rental" {
+                let mapBtn = app.buttons["地图"].firstMatch
+                if mapBtn.waitForExistence(timeout: 4) {
+                    forceTap(mapBtn); pause(8); snap("PROMO_map")
+                    let lb = app.buttons["列表"].firstMatch
+                    if lb.exists { forceTap(lb); pause(1) }
+                }
+            }
+            if ch.key == "secondhand" {
+                let filters = app.buttons["筛选"].firstMatch
+                if filters.waitForExistence(timeout: 4) {
+                    forceTap(filters); pause(2); snap("PROMO_filters")
+                    app.swipeDown(velocity: .fast); pause(1)
+                }
+            }
+            tapBack(app); pause(1.5)
+        }
+
+        // 真实帖子详情：首页第一条帖子正文（游客可浏览）
+        tapTab(app, "tabbar.home"); pause(3.5)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.33)).tap()
+        pause(3.5)
+        snap("PROMO_post_detail2")
+    }
+
+    /// 补采：租房频道 + 地图（中点字符不确定，改用 BEGINSWITH "租房" + 坐标兜底）。
+    @MainActor
+    func testAppStorePromoRentalMap() throws {
+        let app = XCUIApplication()
+        app.launchArguments += ["-appLanguageCode", "zh"]
+        app.launch()
+        dismissSystemAlerts()
+        let guest = app.buttons["auth.browseAsGuest"].firstMatch
+        if guest.waitForExistence(timeout: 20) { forceTap(guest) }
+        _ = app.buttons["tabbar.search"].waitForExistence(timeout: 40)
+        pause(4); dismissSystemAlerts(); pause(1)
+        tapTab(app, "tabbar.search"); pause(2.5)
+
+        let card = app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "租房")).firstMatch
+        if card.waitForExistence(timeout: 8) {
+            forceTap(card)
+        } else {
+            // 兜底：发现页「生活功能入口」2×2 网格右上角即租房·住宿。
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.74, dy: 0.30)).tap()
+        }
+        pause(4)
+        snap("PROMO_ch_rental")
+        app.swipeUp(); pause(1.3); snap("PROMO_ch_rental_scroll")
+        app.swipeDown(); pause(1.2)
+        let mapBtn = app.buttons["地图"].firstMatch
+        if mapBtn.waitForExistence(timeout: 5) {
+            forceTap(mapBtn); pause(9); snap("PROMO_map")
+        }
+    }
+
+    /// 终版：单次游客会话内顺序采集全部 10 张（搭配 simctl 状态栏 9:41 覆盖）。
+    /// 顺序经过设计：先发现页 + 四频道（不预滚动），再正在发生 / 首页 / 帖子 / AI。
+    @MainActor
+    func testAppStoreFinal() throws {
+        let app = XCUIApplication()
+        app.launchArguments += ["-appLanguageCode", "zh"]
+        app.launch()
+        dismissSystemAlerts()
+        let guest = app.buttons["auth.browseAsGuest"].firstMatch
+        if guest.waitForExistence(timeout: 20) { forceTap(guest) }
+        _ = app.buttons["tabbar.search"].waitForExistence(timeout: 40)
+        pause(4); dismissSystemAlerts(); pause(1)
+
+        // 1) 发现页
+        tapTab(app, "tabbar.search"); pause(3)
+        snap("FINAL_discover")
+
+        // 2) 租房 + 地图
+        openRentalCard(app); pause(4)
+        snap("FINAL_rental")
+        let mapBtn = app.buttons["地图"].firstMatch
+        if mapBtn.waitForExistence(timeout: 4) {
+            forceTap(mapBtn); pause(9); snap("FINAL_map")
+            let lb = app.buttons["列表"].firstMatch; if lb.exists { forceTap(lb); pause(1) }
+        }
+        tapBack(app); pause(1.5)
+
+        // 3) 二手 + 筛选
+        openCard(app, "二手市场"); pause(4); snap("FINAL_secondhand")
+        let filters = app.buttons["筛选"].firstMatch
+        if filters.waitForExistence(timeout: 4) {
+            forceTap(filters); pause(2); snap("FINAL_filters"); app.swipeDown(velocity: .fast); pause(1)
+        }
+        tapBack(app); pause(1.5)
+
+        // 4) 工作
+        openCard(app, "工作"); pause(4); snap("FINAL_work"); tapBack(app); pause(1.5)
+
+        // 5) 商家与服务
+        openCard(app, "商家与服务"); pause(4); snap("FINAL_service"); tapBack(app); pause(1.5)
+
+        // 6) 正在发生 / 热榜
+        tapTab(app, "tabbar.search"); pause(2)
+        app.swipeUp(); pause(1.2); app.swipeUp(); pause(1.4)
+        snap("FINAL_happening")
+
+        // 7) 首页社区流
+        tapTab(app, "tabbar.home"); pause(3.5)
+        snap("FINAL_home")
+
+        // 8) 帖子详情
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.33)).tap(); pause(3.5)
+        snap("FINAL_post"); tapBack(app); pause(1.5)
+
+        // 9) Machi AI 入口（中心 tab → AI 卡 → 聊天 intro）
+        tapTab(app, "tabbar.guide"); pause(3)
+        let ai = app.buttons["guide.ai.entry"].firstMatch
+        if ai.waitForExistence(timeout: 8) { forceTap(ai); pause(3); snap("FINAL_ai") }
+    }
+
+    /// iPad 终版：同一导航逻辑，截到 IPAD_* （搭配 iPad 模拟器 9:41 覆盖）。
+    @MainActor
+    func testAppStoreFinalIPad() throws {
+        let app = XCUIApplication()
+        app.launchArguments += ["-appLanguageCode", "zh"]
+        app.launch()
+        dismissSystemAlerts()
+        let guest = app.buttons["auth.browseAsGuest"].firstMatch
+        if guest.waitForExistence(timeout: 20) { forceTap(guest) }
+        _ = app.buttons["tabbar.search"].waitForExistence(timeout: 40)
+        pause(5); dismissSystemAlerts(); pause(1)
+
+        tapTab(app, "tabbar.search"); pause(3); snap("IPAD_discover")
+        openRentalCard(app); pause(4); snap("IPAD_rental")
+        let mapBtn = app.buttons["地图"].firstMatch
+        if mapBtn.waitForExistence(timeout: 4) {
+            forceTap(mapBtn); pause(9); snap("IPAD_map")
+            let lb = app.buttons["列表"].firstMatch; if lb.exists { forceTap(lb); pause(1) }
+        }
+        tapBack(app); pause(1.5)
+        openCard(app, "二手市场"); pause(4); snap("IPAD_secondhand"); tapBack(app); pause(1.5)
+        openCard(app, "工作"); pause(4); snap("IPAD_work"); tapBack(app); pause(1.5)
+        openCard(app, "商家与服务"); pause(4); snap("IPAD_service"); tapBack(app); pause(1.5)
+        tapTab(app, "tabbar.search"); pause(2); app.swipeUp(); pause(1.2); app.swipeUp(); pause(1.4); snap("IPAD_happening")
+        tapTab(app, "tabbar.home"); pause(3.5); snap("IPAD_home")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.26)).tap(); pause(3.5); snap("IPAD_post"); tapBack(app); pause(1.5)
+        tapTab(app, "tabbar.guide"); pause(3)
+        let ai = app.buttons["guide.ai.entry"].firstMatch
+        if ai.waitForExistence(timeout: 8) { forceTap(ai); pause(3); snap("IPAD_ai") }
+    }
+
+    /// iPad 第二轮：iPad 专用坐标（底部胶囊居中 + 左上返回）+ 充分加载等待，
+    /// 补采 首页 / 发现 / 二手 / 工作 / 商家 / Machi AI。
+    @MainActor
+    func testAppStoreFinalIPad2() throws {
+        let app = XCUIApplication()
+        app.launchArguments += ["-appLanguageCode", "zh"]
+        app.launch()
+        dismissSystemAlerts()
+        let guest = app.buttons["auth.browseAsGuest"].firstMatch
+        if guest.waitForExistence(timeout: 20) { forceTap(guest) }
+        _ = app.buttons["tabbar.home"].waitForExistence(timeout: 40)
+        pause(8); dismissSystemAlerts(); pause(2)
+
+        let xs: [CGFloat] = [0.325, 0.421, 0.5, 0.578, 0.675]  // home / 发现 / Machi AI / 消息 / 我的
+        func ipadTab(_ i: Int) { app.coordinate(withNormalizedOffset: CGVector(dx: xs[i], dy: 0.956)).tap() }
+        func ipadBack() { app.coordinate(withNormalizedOffset: CGVector(dx: 0.03, dy: 0.038)).tap() }
+
+        // 首页社区流（充分加载）
+        ipadTab(0); pause(6); snap("IPAD2_home")
+        app.swipeUp(); pause(2); snap("IPAD2_home2")
+
+        // 发现
+        ipadTab(1); pause(6); snap("IPAD2_discover")
+
+        // 频道列表：二手 / 工作 / 商家
+        for (label, key) in [("二手市场","secondhand"), ("工作","work"), ("商家与服务","service")] {
+            ipadTab(1); pause(3)
+            let card = app.staticTexts[label].firstMatch
+            if card.waitForExistence(timeout: 8) {
+                forceTap(card); pause(6); snap("IPAD2_\(key)")
+                ipadBack(); pause(2)
+            }
+        }
+
+        // Machi AI（中心 tab → AI 卡 → 聊天 intro）
+        ipadTab(2); pause(5)
+        let ai = app.buttons["guide.ai.entry"].firstMatch
+        if ai.waitForExistence(timeout: 8) { forceTap(ai); pause(4); snap("IPAD2_ai") }
+        else { snap("IPAD2_guide") }
+    }
+
+    /// iPad 补缺：商家与服务 + Machi AI。
+    @MainActor
+    func testAppStoreIPadAIService() throws {
+        let app = XCUIApplication()
+        app.launchArguments += ["-appLanguageCode", "zh"]
+        app.launch()
+        dismissSystemAlerts()
+        let guest = app.buttons["auth.browseAsGuest"].firstMatch
+        if guest.waitForExistence(timeout: 20) { forceTap(guest) }
+        _ = app.buttons["tabbar.home"].waitForExistence(timeout: 40)
+        pause(7); dismissSystemAlerts(); pause(2)
+        let xs: [CGFloat] = [0.325, 0.421, 0.5, 0.578, 0.675]
+        func ipadTab(_ i: Int) { app.coordinate(withNormalizedOffset: CGVector(dx: xs[i], dy: 0.956)).tap() }
+        func ipadBack() { app.coordinate(withNormalizedOffset: CGVector(dx: 0.03, dy: 0.038)).tap() }
+
+        ipadTab(1); pause(5)
+        let svc = app.staticTexts["商家与服务"].firstMatch
+        if svc.waitForExistence(timeout: 8) { forceTap(svc); pause(6); snap("IPAD2_service"); ipadBack(); pause(2) }
+
+        ipadTab(2); pause(5)
+        let ai = app.buttons["guide.ai.entry"].firstMatch
+        if ai.waitForExistence(timeout: 8) { forceTap(ai); pause(4); snap("IPAD2_ai") }
+        else { snap("IPAD2_ai") }
+    }
+
+    private func openRentalCard(_ app: XCUIApplication) {
+        tapTab(app, "tabbar.search"); pause(2.5)
+        let card = app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "租房")).firstMatch
+        if card.waitForExistence(timeout: 8) { forceTap(card) }
+        else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.74, dy: 0.30)).tap() }
+    }
+
+    private func openCard(_ app: XCUIApplication, _ label: String) {
+        tapTab(app, "tabbar.search"); pause(2.5)
+        let card = app.staticTexts[label].firstMatch
+        if card.waitForExistence(timeout: 8) { forceTap(card) }
+    }
+
     private func forceTap(_ element: XCUIElement) {
         element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
