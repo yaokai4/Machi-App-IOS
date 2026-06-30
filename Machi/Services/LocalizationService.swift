@@ -478,6 +478,7 @@ struct LocalizationService {
         "mediaVideoOnlyOne": [.zh: "只能添加 1 个视频，视频不能和图片一起发布。", .ja: "動画は1本のみ追加できます。画像とは同時に添付できません。", .en: "You can add only one video, and it cannot be mixed with photos."],
         "mediaUploadFailed": [.zh: "媒体上传失败", .ja: "メディアのアップロードに失敗しました", .en: "Media upload failed"],
         "mediaTooLarge": [.zh: "媒体文件超过当前类型的大小限制。", .ja: "メディアファイルがサイズ上限を超えています。", .en: "This media file exceeds the size limit."],
+        "mediaVideoIncomplete": [.zh: "视频文件读取为空，可能尚未从 iCloud 下载完成，请在相册中下载后重试。", .ja: "動画が空でした。iCloudからの読み込みが完了していない可能性があります。写真アプリでダウンロードしてから再度お試しください。", .en: "The video came back empty — it may still be downloading from iCloud. Download it in Photos and try again."],
         "messageVideoDurationLimit": [.zh: "私信视频最长 2 分钟，请裁剪后再发送。", .ja: "DM動画は最大2分です。短く編集してから送信してください。", .en: "DM videos can be up to 2 minutes. Trim the video and try again."],
         "markAllRead": [.zh: "全部已读", .ja: "すべて既読", .en: "Mark all read"],
         "markRead": [.zh: "标记已读", .ja: "既読にする", .en: "Mark read"],

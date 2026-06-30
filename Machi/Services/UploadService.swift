@@ -13,6 +13,7 @@ actor UploadService {
         case writeFailed
         case thumbnailFailed
         case mediaTooLarge
+        case emptyMedia
         case uploadFailed
     }
 
@@ -136,6 +137,14 @@ actor UploadService {
             fileName = capped.lastPathComponent
         }
         let uploadFileSize = fileSize(at: videoURL)
+        guard uploadFileSize > 0 else {
+            // A 0-byte file here means the source never fully materialized — most
+            // often an iCloud video that hasn't finished downloading to the device,
+            // or a transcode that produced no output. Stop now with a clear, retry-
+            // able error instead of building a broken draft that only fails later
+            // at upload time with an opaque message.
+            throw UploadError.emptyMedia
+        }
         guard uploadFileSize <= Self.postVideoUploadLimitBytes else {
             throw UploadError.mediaTooLarge
         }
@@ -187,7 +196,15 @@ actor UploadService {
             return nil
         }
         guard let export = AVAssetExportSession(asset: asset, presetName: AVAssetExportPreset1920x1080) else { return nil }
-        let outURL = directory.appendingPathComponent("\(id).mp4")
+        // CRITICAL: the output must never share the source's own path. An mp4
+        // source is stored as "<id>.mp4"; using "<id>.mp4" here collided with it,
+        // so the removeItem below deleted the very file we were transcoding. The
+        // export then read a missing file and failed, and finalize fell back to a
+        // now-0-byte "original" — which surfaced as "操作失败，请稍后重试" at upload
+        // time and broke every mp4 video. Use a distinct suffix and bail if it
+        // would ever still collide.
+        let outURL = directory.appendingPathComponent("\(id)-1080p.mp4")
+        guard outURL != sourceURL else { return nil }
         try? FileManager.default.removeItem(at: outURL)
         export.outputURL = outURL
         export.outputFileType = .mp4

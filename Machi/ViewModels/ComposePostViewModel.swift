@@ -352,6 +352,9 @@ final class ComposePostViewModel: ObservableObject {
         } catch UploadService.UploadError.mediaTooLarge {
             errorMessage = L("mediaTooLarge", language)
             state = .error(errorMessage ?? L("mediaFailed", language))
+        } catch UploadService.UploadError.emptyMedia {
+            errorMessage = L("mediaVideoIncomplete", language)
+            state = .error(errorMessage ?? L("mediaFailed", language))
         } catch {
             errorMessage = L("mediaFailed", language)
             state = .error(errorMessage ?? L("mediaFailed", language))
@@ -386,6 +389,9 @@ final class ComposePostViewModel: ObservableObject {
             startUpload(for: draft, language: language)
         } catch UploadService.UploadError.mediaTooLarge {
             errorMessage = L("mediaTooLarge", language)
+            state = .error(errorMessage ?? L("mediaFailed", language))
+        } catch UploadService.UploadError.emptyMedia {
+            errorMessage = L("mediaVideoIncomplete", language)
             state = .error(errorMessage ?? L("mediaFailed", language))
         } catch {
             errorMessage = L("mediaFailed", language)
