@@ -11,6 +11,9 @@ final class GuideViewModel: ObservableObject {
     // just articles — the hero search box is the single entry into everything.
     @Published private(set) var schoolResults: [KaiXGuideSchoolDTO] = []
     @Published private(set) var companyResults: [KaiXGuideCompanyDTO] = []
+    @Published private(set) var productResults: [KaiXGuideProductDTO] = []
+    @Published private(set) var faqResults: [KaiXGuideFaqDTO] = []
+    @Published private(set) var journeyResults: [KaiXGuideJourneyDTO] = []
     @Published private(set) var isSearching = false
     @Published private(set) var guideOS: KaiXGuideActivePlanResponse?
     @Published private(set) var isGuideOSLoading = false
@@ -18,7 +21,12 @@ final class GuideViewModel: ObservableObject {
     @Published var searchText = ""
 
     var hasAnySearchResult: Bool {
-        !searchResults.isEmpty || !schoolResults.isEmpty || !companyResults.isEmpty
+        !searchResults.isEmpty
+            || !schoolResults.isEmpty
+            || !companyResults.isEmpty
+            || !productResults.isEmpty
+            || !faqResults.isEmpty
+            || !journeyResults.isEmpty
     }
 
     private var loadedCountry = ""
@@ -152,6 +160,11 @@ final class GuideViewModel: ObservableObject {
         let q = (keyword ?? searchText).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else {
             searchResults = []
+            schoolResults = []
+            companyResults = []
+            productResults = []
+            faqResults = []
+            journeyResults = []
             return
         }
         isSearching = true
@@ -167,8 +180,34 @@ final class GuideViewModel: ObservableObject {
             searchResults = response.groups.articles ?? []
             schoolResults = response.groups.schools ?? []
             companyResults = response.groups.companies ?? []
+            productResults = response.groups.products ?? []
+            faqResults = response.groups.faq ?? []
+            journeyResults = response.groups.journeys ?? []
+            await enrichSparseSearch(country: normalizedCountry, q: q)
         } catch {
             await legacySearch(country: normalizedCountry, q: q)
+        }
+    }
+
+    private func enrichSparseSearch(country: String, q: String) async {
+        if schoolResults.isEmpty {
+            let response = try? await KaiXAPIClient.shared.guideSchools(country: country, keyword: q, pageSize: 8)
+            schoolResults = mergeSchools(response?.items ?? [], localSchoolsMatching(q, country: country))
+        }
+        if companyResults.isEmpty {
+            let response = try? await KaiXAPIClient.shared.guideCompanies(country: country, keyword: q, pageSize: 8)
+            companyResults = mergeCompanies(response?.items ?? [], localCompaniesMatching(q, country: country))
+        }
+        if productResults.isEmpty {
+            let response = try? await KaiXAPIClient.shared.guideProducts(country: country, keyword: q, pageSize: 8)
+            productResults = mergeProducts(response?.items ?? [], localProductsMatching(q))
+        }
+        if faqResults.isEmpty {
+            faqResults = localFaqMatching(q)
+        }
+        if journeyResults.isEmpty {
+            let response = try? await KaiXAPIClient.shared.guideJourneys(country: country, language: currentGuideLanguage())
+            journeyResults = (response?.journeys ?? home?.journeys ?? []).filter { journeyMatches($0, q) }
         }
     }
 
@@ -189,8 +228,13 @@ final class GuideViewModel: ObservableObject {
         }
         let schoolsResponse = try? await KaiXAPIClient.shared.guideSchools(country: country, keyword: q, pageSize: 8)
         let companiesResponse = try? await KaiXAPIClient.shared.guideCompanies(country: country, keyword: q, pageSize: 8)
-        schoolResults = schoolsResponse?.items ?? []
-        companyResults = companiesResponse?.items ?? []
+        let productsResponse = try? await KaiXAPIClient.shared.guideProducts(country: country, keyword: q, pageSize: 8)
+        schoolResults = mergeSchools(schoolsResponse?.items ?? [], localSchoolsMatching(q, country: country))
+        companyResults = mergeCompanies(companiesResponse?.items ?? [], localCompaniesMatching(q, country: country))
+        productResults = mergeProducts(productsResponse?.items ?? [], localProductsMatching(q))
+        faqResults = localFaqMatching(q)
+        let journeysResponse = try? await KaiXAPIClient.shared.guideJourneys(country: country, language: currentGuideLanguage())
+        journeyResults = (journeysResponse?.journeys ?? home?.journeys ?? []).filter { journeyMatches($0, q) }
     }
 
     func clearSearch() {
@@ -198,6 +242,97 @@ final class GuideViewModel: ObservableObject {
         searchResults = []
         schoolResults = []
         companyResults = []
+        productResults = []
+        faqResults = []
+        journeyResults = []
+    }
+
+    private func localSchoolsMatching(_ q: String, country: String) -> [KaiXGuideSchoolDTO] {
+        let cached = KaiXSnapshotCache.load([KaiXGuideSchoolDTO].self, key: "guide-schools-\(country)") ?? []
+        return mergeSchools(home?.featuredSchools ?? [], cached).filter { schoolMatches($0, q) }
+    }
+
+    private func localCompaniesMatching(_ q: String, country: String) -> [KaiXGuideCompanyDTO] {
+        let cached = KaiXSnapshotCache.load([KaiXGuideCompanyDTO].self, key: "guide-companies-\(country)") ?? []
+        return mergeCompanies(home?.companyHighlights ?? [], cached).filter { companyMatches($0, q) }
+    }
+
+    private func localProductsMatching(_ q: String) -> [KaiXGuideProductDTO] {
+        mergeProducts(home?.featuredProducts ?? [], home?.featuredServices ?? []).filter { productMatches($0, q) }
+    }
+
+    private func localFaqMatching(_ q: String) -> [KaiXGuideFaqDTO] {
+        (home?.faq ?? []).filter { faq in
+            guideSearchBlob([faq.question, faq.answer, faq.categoryKey], matches: q)
+        }
+    }
+
+    private func schoolMatches(_ school: KaiXGuideSchoolDTO, _ q: String) -> Bool {
+        guideSearchBlob(
+            [
+                school.schoolName, school.schoolNameJp, school.schoolNameEn, school.schoolType,
+                school.prefecture, school.city, school.description, school.shortDescription,
+                school.requiredJapaneseLevel, school.requiredEnglishLevel
+            ] + school.fieldsOfStudy + (school.departments ?? []) + (school.faculties ?? []) + (school.graduateSchools ?? []) + (school.tags ?? []),
+            matches: q
+        )
+    }
+
+    private func companyMatches(_ company: KaiXGuideCompanyDTO, _ q: String) -> Bool {
+        var values: [String] = [
+            company.companyName,
+            company.companyNameJp,
+            company.companyNameEn ?? "",
+            company.industry,
+            company.subIndustry ?? "",
+            company.prefecture ?? "",
+            company.city,
+            company.description,
+            company.shortDescription ?? "",
+            company.requiredJapaneseLevel ?? "",
+            company.requiredEnglishLevel ?? ""
+        ]
+        values.append(contentsOf: company.employmentTypes ?? [])
+        return guideSearchBlob(values, matches: q)
+    }
+
+    private func productMatches(_ product: KaiXGuideProductDTO, _ q: String) -> Bool {
+        guideSearchBlob(
+            [
+                product.title, product.subtitle, product.description, product.categoryKey,
+                product.subCategoryKey, product.productType, product.targetAudience,
+                product.deliveryMethod, product.previewContent ?? ""
+            ] + product.tags,
+            matches: q
+        )
+    }
+
+    private func journeyMatches(_ journey: KaiXGuideJourneyDTO, _ q: String) -> Bool {
+        guideSearchBlob(
+            [journey.title, journey.subtitle, journey.audience, journey.heroTitle, journey.heroSubtitle, journey.key],
+            matches: q
+        )
+    }
+
+    private func guideSearchBlob(_ values: [String], matches q: String) -> Bool {
+        let needle = q.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return false }
+        return values.joined(separator: " ").localizedCaseInsensitiveContains(needle)
+    }
+
+    private func mergeSchools(_ primary: [KaiXGuideSchoolDTO], _ secondary: [KaiXGuideSchoolDTO]) -> [KaiXGuideSchoolDTO] {
+        var seen = Set<String>()
+        return (primary + secondary).filter { seen.insert($0.id).inserted }
+    }
+
+    private func mergeCompanies(_ primary: [KaiXGuideCompanyDTO], _ secondary: [KaiXGuideCompanyDTO]) -> [KaiXGuideCompanyDTO] {
+        var seen = Set<String>()
+        return (primary + secondary).filter { seen.insert($0.id).inserted }
+    }
+
+    private func mergeProducts(_ primary: [KaiXGuideProductDTO], _ secondary: [KaiXGuideProductDTO]) -> [KaiXGuideProductDTO] {
+        var seen = Set<String>()
+        return (primary + secondary).filter { seen.insert($0.id).inserted }
     }
 
     private func currentGuideLanguage() -> String {

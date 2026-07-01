@@ -1378,29 +1378,49 @@ enum KXListingCopy {
                 ("月租", priceLabel(listing, language)),
                 ("地区", cleanText(listing.location_text)),
                 ("最近车站", attr(listing, "nearest_station")),
+                ("沿线", attr(listing, "nearest_lines")),
                 ("户型", attr(listing, "layout")),
                 ("面积", attr(listing, "area_sqm")),
+                ("物件类型", attr(listing, "building_type")),
+                ("所在楼层", attr(listing, "room_no")),
+                ("总层数", attr(listing, "total_floors")),
+                ("築年", attr(listing, "building_age")),
                 ("入住时间", attr(listing, "move_in_date")),
                 ("合租", boolAttr(listing, "share_allowed") ? "可" : "未注明"),
                 ("短租", boolAttr(listing, "short_term_allowed") ? "可" : "未注明"),
                 ("家具家电", boolAttr(listing, "furnished") ? "有" : "未注明"),
+                ("设备设施", attr(listing, "amenities")),
+                ("周边设施", attr(listing, "nearby_facilities")),
+                ("物件番号", attr(listing, "property_no")),
+                ("状态", attr(listing, "availability_status")),
+                ("最新确认", attr(listing, "confirmed_at")),
+                ("原始链接", attr(listing, "source_url")),
             ]
         case "for_sale":
             base = [
+                ("販売価格", priceLabel(listing, language)),
+                ("首付", attr(listing, "down_payment")),
+                ("利回り", attr(listing, "yield_rate")),
                 ("地区", cleanText(listing.location_text)),
                 ("物件类型", attr(listing, "building_type")),
                 ("户型", attr(listing, "layout")),
                 ("面积", attr(listing, "area_sqm")),
                 ("土地面积", attr(listing, "land_area")),
+                ("所在楼层", attr(listing, "room_no")),
                 ("楼层", attr(listing, "floor")),
+                ("总层数", attr(listing, "total_floors")),
                 ("築年", attr(listing, "building_age")),
                 ("構造", attr(listing, "structure")),
                 ("最寄駅", attr(listing, "nearest_station")),
                 ("徒歩分", attr(listing, "station_distance_minutes")),
                 ("沿线", attr(listing, "nearest_lines")),
                 ("管理费", attr(listing, "management_fee")),
-                ("利回り", attr(listing, "yield_rate")),
-                ("販売価格", priceLabel(listing, language)),
+                ("设备设施", attr(listing, "amenities")),
+                ("周边设施", attr(listing, "nearby_facilities")),
+                ("物件番号", attr(listing, "property_no")),
+                ("需要改造", attr(listing, "needs_renovation")),
+                ("状态", attr(listing, "availability_status")),
+                ("最新确认", attr(listing, "confirmed_at")),
                 ("原始链接", attr(listing, "source_url")),
             ]
         case "job", "hiring":
@@ -1751,6 +1771,14 @@ enum KXListingCopy {
         case "利回り": pickText(language, "利回り", "利回り", "Yield")
         case "販売価格": pickText(language, "販売价格", "販売価格", "Sale price")
         case "原始链接": pickText(language, "原始链接", "元リンク", "Source link")
+        case "所在楼层": pickText(language, "所在楼层", "所在階", "Floor")
+        case "总层数": pickText(language, "总层数", "総階数", "Total floors")
+        case "设备设施": pickText(language, "设备设施", "設備・共用施設", "Amenities")
+        case "周边设施": pickText(language, "周边设施", "周辺施設", "Nearby")
+        case "物件番号": pickText(language, "物件番号", "物件番号", "Property no.")
+        case "最新确认": pickText(language, "最新确认", "最新確認日", "Last confirmed")
+        case "首付": pickText(language, "首付", "頭金", "Down payment")
+        case "需要改造": pickText(language, "需要改造", "リフォーム要否", "Renovation")
         default: key
         }
     }

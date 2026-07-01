@@ -343,6 +343,8 @@ struct GuideOSTodoCard: View {
                     onArchive: onArchive,
                     onDelete: onDelete
                 )
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
             }
         }
     }
@@ -502,18 +504,22 @@ struct GuideTodoListView: View {
                                     .font(.subheadline.weight(.bold))
                                     .foregroundStyle(section.2 ? Color.orange : Color.primary)
                                 ForEach(section.1) { todo in
-                                    GuideOSTodoCard(
-                                        todo: todo,
-                                        onComplete: { Task { await model.complete(todo) } },
-                                        onSetReminder: { at in await model.setReminder(todoId: todo.id, reminderAt: at) },
-                                        onReschedule: { date in Task { await model.reschedule(todo, to: date) } },
-                                        onUpdateSteps: { steps in Task { await model.updateTodoSteps(todo, steps: steps) } },
-                                        onUpdateNotes: { notes in Task { await model.updateTodoNotes(todo, notes: notes) } },
-                                        onUpdate: { payload in await model.updateTodo(todo, payload: payload) },
-                                        onDuplicate: { await model.duplicateTodo(todo) },
-                                        onArchive: { await model.archiveTodo(todo) },
-                                        onDelete: { await model.deleteTodo(todo) }
-                                    )
+                                    GuideSwipeDeleteTodoRow(onDelete: {
+                                        await model.deleteTodo(todo)
+                                    }) {
+                                        GuideOSTodoCard(
+                                            todo: todo,
+                                            onComplete: { Task { await model.complete(todo) } },
+                                            onSetReminder: { at in await model.setReminder(todoId: todo.id, reminderAt: at) },
+                                            onReschedule: { date in Task { await model.reschedule(todo, to: date) } },
+                                            onUpdateSteps: { steps in Task { await model.updateTodoSteps(todo, steps: steps) } },
+                                            onUpdateNotes: { notes in Task { await model.updateTodoNotes(todo, notes: notes) } },
+                                            onUpdate: { payload in await model.updateTodo(todo, payload: payload) },
+                                            onDuplicate: { await model.duplicateTodo(todo) },
+                                            onArchive: { await model.archiveTodo(todo) },
+                                            onDelete: { await model.deleteTodo(todo) }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -530,6 +536,201 @@ struct GuideTodoListView: View {
         .task { if model.isLoggedIn { await model.loadTodos(status: apiStatus, planId: planId) } }
         .onChange(of: filter) { _, _ in Task { await model.loadTodos(status: apiStatus, planId: planId) } }
         .refreshable { await model.loadTodos(status: apiStatus, planId: planId) }
+    }
+}
+
+private struct GuideSwipeDeleteTodoRow<Content: View>: View {
+    @Environment(\.appLanguage) private var language
+    let onDelete: () async -> Bool
+    let content: Content
+    @State private var offset: CGFloat = 0
+    @State private var dragBaseOffset: CGFloat?
+    @State private var isDeleting = false
+
+    private let revealWidth: CGFloat = 92
+
+    init(onDelete: @escaping () async -> Bool, @ViewBuilder content: () -> Content) {
+        self.onDelete = onDelete
+        self.content = content()
+    }
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            Button(role: .destructive) {
+                delete()
+            } label: {
+                VStack(spacing: 5) {
+                    Image(systemName: isDeleting ? "hourglass" : "trash.fill")
+                        .font(.system(size: 18, weight: .bold))
+                    Text(isDeleting ? guideOSText(language, "删除中", "削除中", "Deleting") : guideOSText(language, "删除", "削除", "Delete"))
+                        .font(.caption2.weight(.black))
+                }
+                .foregroundStyle(.white)
+                .frame(width: revealWidth)
+                .frame(maxHeight: .infinity)
+                .background(
+                    LinearGradient(colors: [Color.red, Color.red.opacity(0.78)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                    in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(isDeleting)
+
+            content
+                .offset(x: offset)
+                .gesture(
+                    DragGesture(minimumDistance: 18, coordinateSpace: .local)
+                        .onChanged { value in
+                            guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                            if dragBaseOffset == nil {
+                                dragBaseOffset = offset
+                            }
+                            let next = min(0, max(-revealWidth, value.translation.width + (dragBaseOffset ?? 0)))
+                            offset = next
+                        }
+                        .onEnded { value in
+                            guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                            let projectedOffset = value.translation.width + (dragBaseOffset ?? offset)
+                            dragBaseOffset = nil
+                            if projectedOffset < -revealWidth * 1.35 {
+                                delete()
+                            } else {
+                                withAnimation(.spring(response: 0.28, dampingFraction: 0.84)) {
+                                    offset = projectedOffset < -36 ? -revealWidth : 0
+                                }
+                            }
+                        }
+                )
+                .accessibilityAction(named: Text(guideOSText(language, "删除 Todo", "Todo を削除", "Delete todo"))) {
+                    delete()
+                }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private func delete() {
+        guard !isDeleting else { return }
+        GuideHaptics.tap()
+        isDeleting = true
+        Task {
+            let ok = await onDelete()
+            if ok {
+                GuideHaptics.success()
+            } else {
+                await MainActor.run {
+                    isDeleting = false
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.84)) {
+                        offset = 0
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct GuideTodoDetailHeroCard: View {
+    @Environment(\.appLanguage) private var language
+    let todo: KaiXGuideTodoDTO
+    let title: String
+    let priority: String
+    let hasPlannedDate: Bool
+    let plannedDate: Date
+    let hasDueDate: Bool
+    let dueDate: Date
+    let listName: String
+    let tagsText: String
+
+    private var tint: Color {
+        switch priority {
+        case "high": return .orange
+        case "low": return .secondary
+        default: return KXColor.accent
+        }
+    }
+
+    private var titleText: String {
+        let value = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? todo.title : value
+    }
+
+    private var normalizedTags: [String] {
+        tagsText
+            .split(whereSeparator: { $0 == "," || $0 == "，" })
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: todo.isDone ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 30, weight: .semibold))
+                    .foregroundStyle(todo.isDone ? KXColor.accent : tint.opacity(0.75))
+                    .frame(width: 44, height: 44)
+                    .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(titleText)
+                        .font(.title3.weight(.black))
+                        .foregroundStyle(KXColor.livingInk)
+                        .lineLimit(3)
+                        .multilineTextAlignment(.leading)
+                    Text(guideOSText(language, "把任务、时间、资料和整理方式放在一个地方。", "タスク・日付・資料・整理方法を一か所にまとめます。", "Task, dates, resources, and organization in one place."))
+                        .font(.caption)
+                        .foregroundStyle(KXColor.livingMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+
+            FlowLayout(spacing: 7) {
+                GuideTodoDetailPill(
+                    icon: priority == "high" ? "flame.fill" : "flag.fill",
+                    text: priorityLabel,
+                    tint: tint
+                )
+                if hasPlannedDate {
+                    GuideTodoDetailPill(icon: "calendar", text: guideOSText(language, "计划 \(GuideOSDate.short(GuideOSDate.iso(plannedDate)))", "予定 \(GuideOSDate.short(GuideOSDate.iso(plannedDate)))", "Planned \(GuideOSDate.short(GuideOSDate.iso(plannedDate)))"), tint: KXColor.rankSky)
+                }
+                if hasDueDate {
+                    GuideTodoDetailPill(icon: "timer", text: guideOSText(language, "截止 \(GuideOSDate.short(GuideOSDate.iso(dueDate)))", "締切 \(GuideOSDate.short(GuideOSDate.iso(dueDate)))", "Due \(GuideOSDate.short(GuideOSDate.iso(dueDate)))"), tint: .orange)
+                }
+                if !listName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    GuideTodoDetailPill(icon: "tray.full.fill", text: listName, tint: KXColor.accent)
+                }
+                ForEach(normalizedTags.prefix(3), id: \.self) { tag in
+                    GuideTodoDetailPill(icon: "number", text: tag, tint: KXColor.livingAccent)
+                }
+            }
+        }
+        .padding(16)
+        .kxLivingSurface(radius: 26)
+        .padding(.horizontal, 2)
+    }
+
+    private var priorityLabel: String {
+        switch priority {
+        case "high":
+            return guideOSText(language, "高优先级", "高優先度", "High priority")
+        case "low":
+            return guideOSText(language, "低优先级", "低優先度", "Low priority")
+        default:
+            return guideOSText(language, "普通优先级", "通常優先度", "Normal priority")
+        }
+    }
+}
+
+private struct GuideTodoDetailPill: View {
+    let icon: String
+    let text: String
+    let tint: Color
+
+    var body: some View {
+        Label(text, systemImage: icon)
+            .font(.caption2.weight(.black))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 9)
+            .frame(height: 28)
+            .background(tint.opacity(0.12), in: Capsule())
     }
 }
 
@@ -591,6 +792,22 @@ private struct GuideTodoDetailSheet: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    GuideTodoDetailHeroCard(
+                        todo: todo,
+                        title: title,
+                        priority: priority,
+                        hasPlannedDate: hasPlannedDate,
+                        plannedDate: plannedDate,
+                        hasDueDate: hasDueDate,
+                        dueDate: dueDate,
+                        listName: listName,
+                        tagsText: tagsText
+                    )
+                }
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+
                 if restoredDraft {
                     Section {
                         HStack(alignment: .top, spacing: 10) {
@@ -639,6 +856,9 @@ private struct GuideTodoDetailSheet: View {
                 Section(guideOSText(language, "备注", "メモ", "Notes")) {
                     TextEditor(text: $notes)
                         .frame(minHeight: 110)
+                        .scrollContentBackground(.hidden)
+                        .padding(8)
+                        .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
                 Section(guideOSText(language, "附件", "添付ファイル", "Attachments")) {
                     GuideAttachmentSection(entityType: "guide_task", entityId: todo.id, title: guideOSText(language, "任务附件", "タスクの添付ファイル", "Task attachments"))
@@ -702,6 +922,9 @@ private struct GuideTodoDetailSheet: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(GuideBackground())
+            .tint(KXColor.accent)
             .navigationTitle(guideOSText(language, "Todo 详情", "Todo の詳細", "Todo detail"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

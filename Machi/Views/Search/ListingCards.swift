@@ -293,6 +293,8 @@ struct ListingMediaPage: View {
     let media: KaiXListingMediaDTO
     let index: Int
     let total: Int
+    /// 详情相册自己在 TabView 上叠了不会被圆角裁掉的计数器,故可关掉页内角标。
+    var showsCounter: Bool = true
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -306,7 +308,7 @@ struct ListingMediaPage: View {
             } else {
                 ListingMediaPlaceholder(type: media.normalizedType)
             }
-            if total > 1 {
+            if showsCounter, total > 1 {
                 Text("\(index + 1)/\(total)")
                     .font(.caption2.weight(.black))
                     .foregroundStyle(.white)

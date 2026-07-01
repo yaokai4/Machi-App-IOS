@@ -50,6 +50,7 @@ private enum ListingScopeMode: String, Identifiable {
     case city
     case country
     case area
+    case province
     case selectedCity
 
     var id: String { rawValue }
@@ -128,13 +129,14 @@ struct CityListingChannelView: View {
     @State private var serviceSection = "all"
     @State private var sortMode: ListingSortMode = .newest
     @State private var filtersOpen = false
-    @State private var scopeMode: ListingScopeMode = .city
+    /// 默认「全国」不做地域预筛——进频道先看到全部内容(尤其合作商同步的房源),
+    /// 再由用户主动收窄到都市圈/都道府县/本市。曾经一进来自动扩到关东圈(且只认
+    /// 5 个城市 region_code),导致大量内容被静默隐藏。
+    @State private var scopeMode: ListingScopeMode = .country
     @State private var selectedScopeArea = ""
     @State private var selectedScopeRegionCode = ""
-    /// Default to the metro circle (关东圈/关西圈…) on first open: a single city
-    /// usually has too few listings, so the都市圈 view is the useful default.
-    /// Users can still switch to their exact city from the scope menu.
-    @State private var didApplyDefaultScope = false
+    /// 选中的都道府县(省/州)code,scopeMode == .province 时生效。
+    @State private var selectedProvinceCode = ""
     @State private var minimumPrice = ""
     @State private var maximumPrice = ""
     /// 属性级筛选（key → 值，布尔用 "true"，人数下限用 gte_ 前缀），
@@ -313,26 +315,31 @@ struct CityListingChannelView: View {
         case .city:
             return region.map { KaiXRegionDirectory.localizedShortLabel($0, language: language) } ?? L("currentRegion", language)
         case .country:
-            return region.map {
-                KaiXRegionDirectory.localizedCountryName(
-                    .init(code: $0.countryCode, name: $0.countryName, emoji: $0.countryEmoji, tier: 1, hasProvinces: !$0.provinceCode.isEmpty),
-                    language: language
-                )
-            } ?? KXListingCopy.pickText(language, "当前国家", "現在の国", "Current country")
+            // 默认范围:直呼「全国」,比国家名(日本)更贴合「看全部」的语义。
+            return KXListingCopy.pickText(language, "全国", "全国", "Nationwide")
         case .area:
             return selectedArea?.localizedTitle(language) ?? KXListingCopy.pickText(language, "城市圈", "都市圏", "Metro area")
+        case .province:
+            return selectedProvinceLabel
         case .selectedCity:
             return selectedScopeRegion.map { KaiXRegionDirectory.localizedShortLabel($0, language: language) } ?? ListingFilterLocalizer.text("热门城市", language)
         }
     }
 
+    /// 选中都道府县的本地化名(找不到时回退到通用「都道府县」)。
+    private var selectedProvinceLabel: String {
+        let country = region?.countryCode ?? "jp"
+        guard let province = KaiXRegionDirectory.provinces(for: country).first(where: { $0.code == selectedProvinceCode }) else {
+            return KXListingCopy.pickText(language, "都道府县", "都道府県", "Prefecture")
+        }
+        return KaiXRegionDirectory.localizedProvinceName(countryCode: country, province: province, language: language)
+    }
+
     private var activeFilterCount: Int {
         var count = 0
         if selectedCategory != "全部" { count += 1 }
-        // The metro-circle scope the app auto-expanded into on first open is NOT
-        // a user filter — don't count it, or the empty state wrongly offers
-        // "clear filters" when the user set none.
-        if scopeMode != .city && !scopeAutoExpanded { count += 1 }
+        // 默认范围是「全国」;任何收窄(本市/都市圈/都道府县/热门城市)才算用户筛选。
+        if scopeMode != .country { count += 1 }
         if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { count += 1 }
         if !minimumPrice.isEmpty { count += 1 }
         if !maximumPrice.isEmpty { count += 1 }
@@ -490,7 +497,6 @@ struct CityListingChannelView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .task(id: "\(regionCode)-\(listingType)-\(activeRentalTab.rawValue)") {
-            applyDefaultScopeIfNeeded()
             await load()
         }
         .onChange(of: minimumPrice) { _, _ in Task { await load(quiet: true) } }
@@ -758,12 +764,7 @@ struct CityListingChannelView: View {
             Button {
                 selectScope(.country)
             } label: {
-                Label(region.map {
-                    KaiXRegionDirectory.localizedCountryName(
-                        .init(code: $0.countryCode, name: $0.countryName, emoji: $0.countryEmoji, tier: 1, hasProvinces: !$0.provinceCode.isEmpty),
-                        language: language
-                    )
-                } ?? KXListingCopy.pickText(language, "全国", "全国", "Whole country"), systemImage: scopeMode == .country ? "checkmark" : "globe.asia.australia")
+                Label(KXListingCopy.pickText(language, "全国", "全国", "Nationwide"), systemImage: scopeMode == .country ? "checkmark" : "globe.asia.australia")
             }
             Section(KXListingCopy.pickText(language, "都市圈", "都市圏", "Metro areas")) {
                 ForEach(listingScopeAreas) { area in
@@ -795,10 +796,12 @@ struct CityListingChannelView: View {
         }
     }
 
-    private func selectScope(_ mode: ListingScopeMode, area: String = "", cityCode: String = "") {
+    private func selectScope(_ mode: ListingScopeMode, area: String = "", cityCode: String = "", provinceCode: String = "") {
         scopeMode = mode
         selectedScopeArea = area
         selectedScopeRegionCode = cityCode
+        selectedProvinceCode = provinceCode
+        scopeAutoExpanded = false
         Task { await load() }
     }
 
@@ -947,9 +950,10 @@ struct CityListingChannelView: View {
     private func clearAllFilters() {
         query = ""
         selectedCategory = "全部"
-        scopeMode = .city
+        scopeMode = .country
         selectedScopeArea = ""
         selectedScopeRegionCode = ""
+        selectedProvinceCode = ""
         minimumPrice = ""
         maximumPrice = ""
         attrFilters = [:]
@@ -961,7 +965,7 @@ struct CityListingChannelView: View {
         var count = 0
         if !minimumPrice.isEmpty { count += 1 }
         if !maximumPrice.isEmpty { count += 1 }
-        if scopeMode == .area || scopeMode == .selectedCity { count += 1 }
+        if scopeMode == .area || scopeMode == .province || scopeMode == .selectedCity { count += 1 }
         if baseType == "local_service", selectedCategory != "全部" { count += 1 }
         count += attrFilters.values.filter { !$0.isEmpty }.count
         return count
@@ -1152,36 +1156,21 @@ struct CityListingChannelView: View {
                 Text(ListingFilterLocalizer.text("城市范围", language))
                     .font(.caption.weight(.black))
                     .foregroundStyle(.secondary)
+                scopeAreaRow(
+                    title: KXListingCopy.pickText(language, "全国", "全国", "Nationwide"),
+                    subtitle: KXListingCopy.pickText(language, "不限地区,查看全部", "地域を限定せず全件", "No area filter — everything"),
+                    selected: scopeMode == .country
+                ) { selectScope(.country) }
                 ForEach(listingScopeAreas) { area in
-                    Button {
-                        scopeMode = .area
-                        selectedScopeArea = area.id
-                        selectedScopeRegionCode = ""
-                        scopeAutoExpanded = false   // user chose this scope explicitly
-                        Task { await load() }
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: selectedScopeArea == area.id && scopeMode == .area ? "checkmark.circle.fill" : "circle")
-                                .font(.subheadline.weight(.bold))
-                                .foregroundStyle(selectedScopeArea == area.id && scopeMode == .area ? KXColor.accent : .secondary)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(area.localizedTitle(language))
-                                    .font(.subheadline.weight(.bold))
-                                    .foregroundStyle(.primary)
-                                Text(area.localizedSubtitle(language))
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                            Spacer(minLength: 0)
-                        }
-                        .padding(.horizontal, 12)
-                        .frame(height: 54)
-                        .background(KXColor.softBackground.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
+                    scopeAreaRow(
+                        title: area.localizedTitle(language),
+                        subtitle: area.localizedSubtitle(language),
+                        selected: scopeMode == .area && selectedScopeArea == area.id
+                    ) { selectScope(.area, area: area.id) }
                 }
             }
+
+            prefecturePickerSection
 
             VStack(alignment: .leading, spacing: 7) {
                 Text(ListingFilterLocalizer.text("热门城市", language))
@@ -1191,11 +1180,7 @@ struct CityListingChannelView: View {
                     ForEach(listingScopeHotCityCodes, id: \.self) { code in
                         if let city = KaiXRegionDirectory.resolve(regionCode: code) {
                             Button {
-                                scopeMode = .selectedCity
-                                selectedScopeRegionCode = city.regionCode
-                                selectedScopeArea = ""
-                                scopeAutoExpanded = false   // user chose this scope explicitly
-                                Task { await load() }
+                                selectScope(.selectedCity, cityCode: city.regionCode)
                             } label: {
                                 Text(KaiXRegionDirectory.localizedShortLabel(city, language: language))
                                     .font(.caption.weight(.bold))
@@ -1214,6 +1199,84 @@ struct CityListingChannelView: View {
         }
         .padding(12)
         .background(KXColor.softBackground.opacity(0.58), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    /// 「城市范围」单行选项(全国 / 都市圈),统一视觉。
+    private func scopeAreaRow(title: String, subtitle: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(selected ? KXColor.accent : .secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.primary)
+                    Text(subtitle)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 54)
+            .background(KXColor.softBackground.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// 47 都道府县选择:按都市圈分组(关东/关西/中部…),点一个县 = 看该县全部城市
+    /// (服务端按 region_code 前缀匹配,覆盖客户端城市表之外的城市)。
+    private var prefecturePickerSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(KXListingCopy.pickText(language, "都道府县", "都道府県", "Prefecture"))
+                .font(.caption.weight(.black))
+                .foregroundStyle(.secondary)
+            ForEach(KaiXRegionDirectory.jpMetroCircles) { circle in
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(metroCircleTitle(circle.code))
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.tertiary)
+                    FlowLayout(spacing: 8) {
+                        ForEach(circle.provinceCodes, id: \.self) { pc in
+                            if let prov = KaiXRegionDirectory.provinces(for: "jp").first(where: { $0.code == pc }) {
+                                provinceChip(prov)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func provinceChip(_ province: KaiXRegionDirectory.Province) -> some View {
+        let selected = scopeMode == .province && selectedProvinceCode == province.code
+        return Button {
+            selectScope(.province, provinceCode: province.code)
+        } label: {
+            Text(KaiXRegionDirectory.localizedProvinceName(countryCode: "jp", province: province, language: language))
+                .font(.caption.weight(.bold))
+                .foregroundStyle(selected ? Color.white : .primary)
+                .padding(.horizontal, 12)
+                .frame(height: 32)
+                .background(selected ? KXColor.accent : KXColor.softBackground.opacity(0.88), in: Capsule())
+                .overlay(Capsule().stroke(KXColor.separator.opacity(0.55), lineWidth: 0.7))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func metroCircleTitle(_ code: String) -> String {
+        switch code {
+        case "hokkaido_tohoku": return KXListingCopy.pickText(language, "北海道・东北", "北海道・東北", "Hokkaido & Tohoku")
+        case "kanto":           return KXListingCopy.pickText(language, "关东", "関東", "Kanto")
+        case "chubu":           return KXListingCopy.pickText(language, "中部", "中部", "Chubu")
+        case "kansai":          return KXListingCopy.pickText(language, "关西", "関西", "Kansai")
+        case "chugoku":         return KXListingCopy.pickText(language, "中国地区", "中国地方", "Chugoku")
+        case "shikoku":         return KXListingCopy.pickText(language, "四国", "四国", "Shikoku")
+        case "kyushu_okinawa":  return KXListingCopy.pickText(language, "九州・冲绳", "九州・沖縄", "Kyushu & Okinawa")
+        default:                return code
+        }
     }
 
     private var serviceCategoryFilterOptions: [(value: String, label: String)] {
@@ -1468,8 +1531,8 @@ struct CityListingChannelView: View {
         do {
             let scope = listingScopeQuery(for: region)
             if isWorkChannel {
-                async let jobs = KaiXAPIClient.shared.listingsPage(type: "job", citySlug: scope.citySlug, regionCode: scope.regionCode, regionCodes: scope.regionCodes, countryCode: scope.countryCode, query: query, minPrice: Double(minimumPrice), maxPrice: Double(maximumPrice), sort: serverSort, attributes: attrFilters)
-                async let hiring = KaiXAPIClient.shared.listingsPage(type: "hiring", citySlug: scope.citySlug, regionCode: scope.regionCode, regionCodes: scope.regionCodes, countryCode: scope.countryCode, query: query, minPrice: Double(minimumPrice), maxPrice: Double(maximumPrice), sort: serverSort, attributes: attrFilters)
+                async let jobs = KaiXAPIClient.shared.listingsPage(type: "job", citySlug: scope.citySlug, regionCode: scope.regionCode, regionCodes: scope.regionCodes, provinceCodes: scope.provinceCodes, countryCode: scope.countryCode, query: query, minPrice: Double(minimumPrice), maxPrice: Double(maximumPrice), sort: serverSort, attributes: attrFilters)
+                async let hiring = KaiXAPIClient.shared.listingsPage(type: "hiring", citySlug: scope.citySlug, regionCode: scope.regionCode, regionCodes: scope.regionCodes, provinceCodes: scope.provinceCodes, countryCode: scope.countryCode, query: query, minPrice: Double(minimumPrice), maxPrice: Double(maximumPrice), sort: serverSort, attributes: attrFilters)
                 let jobPage = try await jobs
                 let hiringPage = try await hiring
                 guard generation == loadGeneration else { return }   // superseded by a newer load
@@ -1482,6 +1545,7 @@ struct CityListingChannelView: View {
                     citySlug: scope.citySlug,
                     regionCode: scope.regionCode,
                     regionCodes: scope.regionCodes,
+                    provinceCodes: scope.provinceCodes,
                     countryCode: scope.countryCode,
                     query: query,
                     category: serverCategory,
@@ -1517,12 +1581,12 @@ struct CityListingChannelView: View {
             var fetched: [KaiXCityListingDTO] = []
             if isWorkChannel {
                 if let cursor = nextCursor {
-                    let page = try await KaiXAPIClient.shared.listingsPage(type: "job", citySlug: scope.citySlug, regionCode: scope.regionCode, regionCodes: scope.regionCodes, countryCode: scope.countryCode, query: query, minPrice: Double(minimumPrice), maxPrice: Double(maximumPrice), sort: serverSort, attributes: attrFilters, cursor: cursor)
+                    let page = try await KaiXAPIClient.shared.listingsPage(type: "job", citySlug: scope.citySlug, regionCode: scope.regionCode, regionCodes: scope.regionCodes, provinceCodes: scope.provinceCodes, countryCode: scope.countryCode, query: query, minPrice: Double(minimumPrice), maxPrice: Double(maximumPrice), sort: serverSort, attributes: attrFilters, cursor: cursor)
                     fetched += page.items
                     nextCursor = page.nextCursor
                 }
                 if let cursor = nextHiringCursor {
-                    let page = try await KaiXAPIClient.shared.listingsPage(type: "hiring", citySlug: scope.citySlug, regionCode: scope.regionCode, regionCodes: scope.regionCodes, countryCode: scope.countryCode, query: query, minPrice: Double(minimumPrice), maxPrice: Double(maximumPrice), sort: serverSort, attributes: attrFilters, cursor: cursor)
+                    let page = try await KaiXAPIClient.shared.listingsPage(type: "hiring", citySlug: scope.citySlug, regionCode: scope.regionCode, regionCodes: scope.regionCodes, provinceCodes: scope.provinceCodes, countryCode: scope.countryCode, query: query, minPrice: Double(minimumPrice), maxPrice: Double(maximumPrice), sort: serverSort, attributes: attrFilters, cursor: cursor)
                     fetched += page.items
                     nextHiringCursor = page.nextCursor
                 }
@@ -1532,6 +1596,7 @@ struct CityListingChannelView: View {
                     citySlug: scope.citySlug,
                     regionCode: scope.regionCode,
                     regionCodes: scope.regionCodes,
+                    provinceCodes: scope.provinceCodes,
                     countryCode: scope.countryCode,
                     query: query,
                     category: serverCategory,
@@ -1556,37 +1621,23 @@ struct CityListingChannelView: View {
         }
     }
 
-    /// The metro area whose member cities share the current region's province
-    /// (关东圈 contains jp.chiba.*, so 千叶/柏 → kanto). nil when the current
-    /// region isn't part of a known metro circle.
-    private func defaultMetroAreaId(for region: KaiXRegionDirectory.Region) -> String? {
-        let provincePrefix = "\(region.countryCode).\(region.provinceCode)."
-        return listingScopeAreas.first { area in
-            area.regionCodes.contains { $0.hasPrefix(provincePrefix) }
-        }?.id
-    }
-
-    private func applyDefaultScopeIfNeeded() {
-        guard !didApplyDefaultScope else { return }
-        didApplyDefaultScope = true
-        guard scopeMode == .city, let region, let areaId = defaultMetroAreaId(for: region) else { return }
-        scopeMode = .area
-        selectedScopeArea = areaId
-        selectedScopeRegionCode = ""
-        scopeAutoExpanded = true
-    }
-
-    private func listingScopeQuery(for region: KaiXRegionDirectory.Region) -> (citySlug: String?, regionCode: String?, regionCodes: [String], countryCode: String?) {
+    private func listingScopeQuery(for region: KaiXRegionDirectory.Region) -> (citySlug: String?, regionCode: String?, regionCodes: [String], provinceCodes: [String], countryCode: String?) {
         switch scopeMode {
         case .city:
-            return (region.cityCode, region.regionCode, [], nil)
+            return (region.cityCode, region.regionCode, [], [], nil)
         case .country:
-            return (nil, nil, [], region.countryCode)
+            return (nil, nil, [], [], region.countryCode)
         case .area:
-            return (nil, nil, selectedArea?.regionCodes ?? [], nil)
+            // 都市圈按整组都道府县全覆盖(关东圈=7 县所有城市),交给服务端按
+            // region_code 前缀匹配——不再依赖那份只有 5 个城市的旧硬编码列表。
+            let provinces = KaiXRegionDirectory.jpMetroCircles
+                .first { $0.code == selectedScopeArea }?.provinceCodes ?? []
+            return (nil, nil, [], provinces, region.countryCode)
+        case .province:
+            return (nil, nil, [], selectedProvinceCode.isEmpty ? [] : [selectedProvinceCode], region.countryCode)
         case .selectedCity:
             let selected = selectedScopeRegion ?? region
-            return (selected.cityCode, selected.regionCode, [], nil)
+            return (selected.cityCode, selected.regionCode, [], [], nil)
         }
     }
 

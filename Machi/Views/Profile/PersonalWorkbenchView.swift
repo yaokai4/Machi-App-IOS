@@ -34,17 +34,14 @@ struct PersonalWorkbenchView: View {
                     // 1) 今日摘要:今日待办 / 即将到期 / 最近重要日期 + 「继续下一步」。
                     todaySummaryCard
 
-                    // 2) 快捷操作:四个最高频入口(快捷层,与下方完整目录分层)。
-                    quickActions
-
-                    // 3) 本月要点 — finance digest (账单/解约窗口/预算/证件到期). Hidden
+                    // 2) 本月要点 — finance digest (账单/解约窗口/预算/证件到期). Hidden
                     //    for guests by the card itself.
                     GuideDigestCardView(isGuest: isGuest)
 
-                    // 4) 我的事务 — the canonical 8-entry directory.
+                    // 3) 我的事务 — the canonical action directory.
                     affairsSection
 
-                    // 5) 我的资料与服务 — purchased library / service requests / orders.
+                    // 4) 我的资料与服务 — purchased library / service requests / orders.
                     //    These are inherently personal + login-only, so hide them
                     //    for guests (who already see the login CTA above) rather
                     //    than pushing views that 401.
@@ -203,51 +200,6 @@ struct PersonalWorkbenchView: View {
         return iso
     }
 
-    // MARK: 快捷操作
-
-    private struct QuickAction: Identifiable {
-        let id = UUID()
-        let title: String
-        let icon: String
-        let tint: Color
-        let route: KXRoute
-    }
-
-    private var quickActionItems: [QuickAction] {
-        [
-            .init(title: guideText(language, "添加 Todo", "Todo追加", "Add todo"), icon: "plus.circle.fill", tint: KXColor.accent, route: .guidePlan),
-            .init(title: guideText(language, "日历", "カレンダー", "Calendar"), icon: "calendar", tint: .blue, route: .guideCalendar),
-            .init(title: guideText(language, "新建申请", "申請を追加", "New application"), icon: "briefcase.fill", tint: .pink, route: .guideApplications),
-            .init(title: guideText(language, "记一笔", "記帳", "Add expense"), icon: "yensign.circle.fill", tint: .green, route: .guideFinance),
-        ]
-    }
-
-    private var quickActions: some View {
-        HStack(spacing: 10) {
-            ForEach(quickActionItems) { item in
-                Button {
-                    router.open(item.route)
-                } label: {
-                    VStack(spacing: 7) {
-                        Image(systemName: item.icon)
-                            .font(.system(size: 19, weight: .bold))
-                            .foregroundStyle(item.tint)
-                            .frame(width: 46, height: 46)
-                            .background(item.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-                        Text(item.title)
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.fullArea)
-                .contentShape(Rectangle())
-            }
-        }
-    }
-
     // MARK: 我的事务
 
     private struct Affair: Identifiable {
@@ -261,11 +213,6 @@ struct PersonalWorkbenchView: View {
 
     private var affairs: [Affair] {
         [
-            .init(
-                title: guideText(language, "今日待办", "今日のTodo", "Today's tasks"),
-                subtitle: guideText(language, "我的一天、重要、计划中和已完成", "今日・重要・予定・完了", "Today, important, planned, done"),
-                icon: "checklist", tint: KXColor.accent, route: .guidePlan
-            ),
             .init(
                 title: guideText(language, "日历", "カレンダー", "Calendar"),
                 subtitle: guideText(language, "月 / 周 / 日程与未来 30 天提醒", "月・週・日程と今後30日", "Month / week / agenda & next 30 days"),

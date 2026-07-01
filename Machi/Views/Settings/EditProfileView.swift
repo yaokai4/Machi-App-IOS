@@ -384,7 +384,9 @@ struct EditProfileView: View {
             let draft = try await UploadService.shared.prepareImage(data: data)
             switch target {
             case .avatar:
-                avatarURL = draft.thumbnailURL.path
+                // 头像不再压成 640px 小图(以前上传的是缩略图,放大就糊)。
+                // 与封面一致上传接近全分辨率的原图,清晰无损。
+                avatarURL = draft.localURL.path
             case .cover:
                 coverURL = draft.localURL.path
             }

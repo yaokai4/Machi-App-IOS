@@ -457,6 +457,10 @@ struct CityListingDetailView: View {
     @State private var sellerOtherItems: [KaiXCityListingDTO] = []
     /// 预约联系人卡里复制 LINE / 微信 ID 后的短暂提示。
     @State private var contactCopyConfirmation: String?
+    /// 相册:当前页 + 全屏查看器(可缩放/保存)。
+    @State private var galleryIndex = 0
+    @State private var photoViewerPresented = false
+    @State private var photoViewerStart = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1013,22 +1017,47 @@ struct CityListingDetailView: View {
         } else {
             mediaItems = []
         }
+        // 全屏查看器只放图片(视频在原地播放)。
+        let imageMedia = mediaItems.filter { $0.normalizedType != "video" }
         return Group {
             if mediaItems.isEmpty {
                 ListingMediaPlaceholder(type: listing.type)
             } else {
-                TabView {
+                TabView(selection: $galleryIndex) {
                     ForEach(Array(mediaItems.enumerated()), id: \.offset) { index, media in
-                        ListingMediaPage(media: media, index: index, total: mediaItems.count)
+                        ListingMediaPage(media: media, index: index, total: mediaItems.count, showsCounter: false)
+                            .tag(index)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                guard media.normalizedType != "video" else { return }
+                                photoViewerStart = imageMedia.firstIndex(where: { $0.id == media.id }) ?? 0
+                                photoViewerPresented = true
+                            }
                     }
                 }
-                .tabViewStyle(.page(indexDisplayMode: mediaItems.count > 1 ? .automatic : .never))
+                // 自带 .page 圆点会被圆角裁掉「往下隐藏」——改用不会被裁的角标计数器。
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .overlay(alignment: .bottomTrailing) {
+                    if mediaItems.count > 1 {
+                        let shown = min(max(galleryIndex, 0), mediaItems.count - 1) + 1
+                        Text("\(shown)/\(mediaItems.count)")
+                            .font(.caption2.weight(.black))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 8)
+                            .frame(height: 24)
+                            .background(.black.opacity(0.55), in: Capsule())
+                            .padding(10)
+                    }
+                }
             }
         }
         .aspectRatio(16.0 / 10.0, contentMode: .fit)
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .background(KXColor.livingSoft, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .shadow(color: Color.black.opacity(0.07), radius: 16, y: 7)
+        .fullScreenCover(isPresented: $photoViewerPresented) {
+            ListingPhotoViewer(media: imageMedia, startIndex: photoViewerStart)
+        }
     }
 
     private func contactPanel(_ listing: KaiXCityListingDTO) -> some View {

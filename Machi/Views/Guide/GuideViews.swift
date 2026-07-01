@@ -99,7 +99,10 @@ struct GuideHomeView: View {
                             isSearching: viewModel.isSearching,
                             articles: viewModel.searchResults,
                             schools: viewModel.schoolResults,
-                            companies: viewModel.companyResults
+                            companies: viewModel.companyResults,
+                            products: viewModel.productResults,
+                            faq: viewModel.faqResults,
+                            journeys: viewModel.journeyResults
                         )
                     } else {
                         // Machi AI —— 原创助手入口，放在资料库与分类网格之前。
@@ -1317,18 +1320,25 @@ private struct GuideSearchResultsSection: View {
     let articles: [KaiXGuideArticleDTO]
     let schools: [KaiXGuideSchoolDTO]
     let companies: [KaiXGuideCompanyDTO]
+    let products: [KaiXGuideProductDTO]
+    let faq: [KaiXGuideFaqDTO]
+    let journeys: [KaiXGuideJourneyDTO]
 
-    private var total: Int { articles.count + schools.count + companies.count }
+    private var total: Int {
+        articles.count + schools.count + companies.count + products.count + faq.count + journeys.count
+    }
 
     var body: some View {
         GuideSectionHeader(
             title: guideText(language, "搜索结果", "検索結果", "Search results"),
-            subtitle: isSearching ? guideText(language, "正在查找学校、公司和指南", "学校・会社・ガイドを検索中", "Searching schools, companies, and guides") : guideText(language, "共 \(total) 条 · 学校 / 公司 / 指南都已包含", "合計 \(total) 件 · 学校 / 会社 / ガイドを含む", "\(total) total · schools / companies / guides included")
+            subtitle: isSearching
+                ? guideText(language, "正在查找学校、公司、资料、FAQ 和指南路径", "学校・会社・資料・FAQ・ガイドパスを検索中", "Searching schools, companies, resources, FAQ, and paths")
+                : guideText(language, "共 \(total) 条 · Guide 所有内容都已包含", "合計 \(total) 件 · Guide 内の全コンテンツを含む", "\(total) total · all Guide content included")
         )
         if isSearching {
             LoadingView()
         } else if total == 0 {
-            EmptyStateView(title: guideText(language, "没有找到相关内容", "関連内容が見つかりません", "No matching content"), subtitle: guideText(language, "换个关键词试试，可以搜学校、公司名和任意指南内容。", "別のキーワードを試してください。学校名、会社名、ガイド内容で検索できます。", "Try another keyword. You can search school names, company names, or guide content."), systemImage: "magnifyingglass")
+            EmptyStateView(title: guideText(language, "没有找到相关内容", "関連内容が見つかりません", "No matching content"), subtitle: guideText(language, "换个关键词试试，可以搜学校、公司、资料、FAQ、路径和任意指南内容。", "別のキーワードを試してください。学校、会社、資料、FAQ、パス、ガイド内容で検索できます。", "Try another keyword. Search schools, companies, resources, FAQ, paths, and guide content."), systemImage: "magnifyingglass")
         } else {
             if !schools.isEmpty {
                 groupLabel(icon: "graduationcap.fill", title: guideText(language, "学校", "学校", "Schools"), count: schools.count)
@@ -1338,9 +1348,31 @@ private struct GuideSearchResultsSection: View {
                 groupLabel(icon: "building.2.fill", title: guideText(language, "就职公司", "就職企業", "Companies"), count: companies.count)
                 ForEach(companies) { GuideCompanyCard(company: $0) }
             }
+            if !journeys.isEmpty {
+                groupLabel(icon: "map.fill", title: guideText(language, "行动路径", "アクションパス", "Action paths"), count: journeys.count)
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                    ForEach(journeys) { journey in
+                        GuideSearchJourneyCard(journey: journey)
+                    }
+                }
+            }
+            if !products.isEmpty {
+                groupLabel(icon: "shippingbox.fill", title: guideText(language, "资料与服务", "資料・サービス", "Resources & services"), count: products.count)
+                ForEach(products) { product in
+                    GuideProductCard(product: product)
+                }
+            }
             if !articles.isEmpty {
                 groupLabel(icon: "doc.text.fill", title: guideText(language, "指南文章", "ガイド記事", "Guide articles"), count: articles.count)
                 ForEach(articles) { GuideArticleCard(article: $0, compact: true) }
+            }
+            if !faq.isEmpty {
+                groupLabel(icon: "questionmark.bubble.fill", title: "FAQ", count: faq.count)
+                VStack(spacing: 9) {
+                    ForEach(faq) { item in
+                        GuideSearchFAQCard(item: item)
+                    }
+                }
             }
         }
     }
@@ -1362,6 +1394,43 @@ private struct GuideSearchResultsSection: View {
             Spacer(minLength: 0)
         }
         .padding(.top, 4)
+    }
+}
+
+private struct GuideSearchJourneyCard: View {
+    @EnvironmentObject private var router: AppRouter
+    let journey: KaiXGuideJourneyDTO
+
+    var body: some View {
+        GuideJourneyCard(journey: journey, doneCount: 0) {
+            router.open(.guideJourney(key: journey.key))
+        }
+    }
+}
+
+private struct GuideSearchFAQCard: View {
+    let item: KaiXGuideFaqDTO
+
+    var body: some View {
+        DisclosureGroup {
+            Text(item.answer)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .lineSpacing(3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 6)
+        } label: {
+            HStack(spacing: 10) {
+                GuideIconBubble(icon: "questionmark.bubble.fill", color: KXColor.rankGold, size: 36)
+                Text(item.question)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(14)
+        .kxLivingSurface(radius: 18)
     }
 }
 

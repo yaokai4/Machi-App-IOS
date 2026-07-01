@@ -808,6 +808,7 @@ final class KaiXAPIClient {
         citySlug: String? = nil,
         regionCode: String? = nil,
         regionCodes: [String] = [],
+        provinceCodes: [String] = [],
         countryCode: String? = nil,
         query: String? = nil,
         category: String? = nil,
@@ -827,6 +828,9 @@ final class KaiXAPIClient {
         if let citySlug, !citySlug.isEmpty { q.append(URLQueryItem(name: "city_slug", value: citySlug)) }
         if let regionCode, !regionCode.isEmpty { q.append(URLQueryItem(name: "region_code", value: regionCode)) }
         if !regionCodes.isEmpty { q.append(URLQueryItem(name: "region_codes", value: regionCodes.joined(separator: ","))) }
+        // 都道府县级过滤(如 province_codes=tokyo,chiba),服务端按 region_code 前缀
+        // 匹配该县全部城市,覆盖客户端城市表缺失的城市。
+        if !provinceCodes.isEmpty { q.append(URLQueryItem(name: "province_codes", value: provinceCodes.joined(separator: ","))) }
         if let countryCode, !countryCode.isEmpty { q.append(URLQueryItem(name: "country_code", value: countryCode)) }
         if let query, !query.isEmpty { q.append(URLQueryItem(name: "q", value: query)) }
         if let category, !category.isEmpty { q.append(URLQueryItem(name: "category", value: category)) }

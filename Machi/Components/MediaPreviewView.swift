@@ -142,8 +142,8 @@ struct MediaPreviewView: View {
 }
 
 /// Full-screen image with pinch-zoom, drag-pan and double-tap toggle so long
-/// screenshots can actually be read.
-private struct ZoomableMediaImage: View {
+/// screenshots can actually be read. Reused by the listing photo viewer.
+struct ZoomableMediaImage: View {
     let url: URL
     let targetPixelSize: CGFloat
 
