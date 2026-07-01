@@ -120,11 +120,16 @@ final class ChatViewModel: ObservableObject {
         }
         do {
             let repository = MessageRepository(context: context)
-            messages = try await repository.fetchMessages(
+            let fetched = try await repository.fetchMessages(
                 threadId: thread.id,
                 query: searchQuery,
                 day: selectedDay.map(Self.serverDayString)
             )
+            // Preserve any local `.failed` send the server has no record of, so
+            // this wholesale refresh — the 3s poll, scene-phase / notification
+            // pulls — never silently drops a failed bubble and its tap-to-retry
+            // affordance (which would re-manifest the original silent-send bug).
+            messages = Self.mergePreservingFailed(fetched, into: messages)
             messageStore?.setMessages(messages, conversationId: thread.id)
             let ids = Set(messages.map(\.id))
             mediaByMessageId = try await repository.fetchMedia(threadId: thread.id, messageIds: ids)
@@ -404,6 +409,28 @@ final class ChatViewModel: ObservableObject {
         return formatter.string(from: date)
     }
 
+    /// Merge freshly-fetched server messages with any local `.failed` sends
+    /// the server has no record of, keeping them visible (and retryable) after
+    /// a wholesale refresh. A failed send has a client-generated id that never
+    /// appears in the server payload, so without this a background refresh would
+    /// delete the bubble before the user could tap retry. Only `.failed` is
+    /// preserved: an in-flight `.sending` bubble is transient — the 3s poll is
+    /// `isSending`-guarded, and if a scene-phase / notification pull drops it,
+    /// `send`/`retryMessage` reconcile the server row by id with an append
+    /// fallback, so nothing is lost. Preserving `.sending` here would instead
+    /// risk a client-id/server-id duplicate.
+    private static func mergePreservingFailed(
+        _ fetched: [MessageEntity],
+        into current: [MessageEntity]
+    ) -> [MessageEntity] {
+        let failedLocal = current.filter { $0.status == .failed }
+        guard !failedLocal.isEmpty else { return fetched }
+        let fetchedIds = Set(fetched.map(\.id))
+        let survivors = failedLocal.filter { !fetchedIds.contains($0.id) }
+        guard !survivors.isEmpty else { return fetched }
+        return (fetched + survivors).sorted { $0.createdAt < $1.createdAt }
+    }
+
     private func refreshFromServer(
         repository: MessageRepository,
         thread: MessageThreadEntity,
@@ -413,14 +440,17 @@ final class ChatViewModel: ObservableObject {
         guard !hasActiveFilters else { return }
         do {
             let latestMessages = try await repository.fetchMessages(threadId: thread.id)
+            // Same failed-send preservation as `load`: a later successful send
+            // must not wipe an earlier, still-failed bubble off the screen.
+            let mergedMessages = Self.mergePreservingFailed(latestMessages, into: messages)
             let latestMedia = try await repository.fetchMedia(
                 threadId: thread.id,
-                messageIds: Set(latestMessages.map(\.id))
+                messageIds: Set(mergedMessages.map(\.id))
             )
-            messages = latestMessages
+            messages = mergedMessages
             mediaByMessageId = latestMedia
-            state = latestMessages.isEmpty ? .empty : .loaded
-            messageStore?.setMessages(latestMessages, conversationId: thread.id)
+            state = mergedMessages.isEmpty ? .empty : .loaded
+            messageStore?.setMessages(mergedMessages, conversationId: thread.id)
             if let latestThread = try await repository.fetchThreads(currentUserId: currentUser.id).first(where: { $0.id == thread.id }) {
                 messageStore?.upsertConversation(latestThread)
             }
