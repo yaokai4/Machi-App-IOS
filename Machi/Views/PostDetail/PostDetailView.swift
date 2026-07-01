@@ -620,7 +620,10 @@ struct PostDetailView: View {
 
                 Button {
                     if currentUser.isGuest { GuestGate.shared.requireLogin(); return }
-                    let parentId = replyingTo?.id
+                    // Keep every reply at depth-1: replying to a reply attaches
+                    // to its root ancestor, since the comment UI only renders
+                    // one level of replies (a grandchild would silently vanish).
+                    let parentId = replyingTo.map { $0.parentCommentId ?? $0.id }
                     Task {
                         await viewModel.sendComment(context: modelContext, currentUser: currentUser, postStore: postStore, commentStore: commentStore, parentCommentId: parentId)
                         replyingTo = nil

@@ -524,7 +524,15 @@ struct PostCardView: View, Equatable {
             }
 
             Button(role: .destructive) {
-                cardMessage = L("reportRecorded", language)
+                let reportedPostId = post.id
+                Task {
+                    do {
+                        try await KaiXAPIClient.shared.reportPost(reportedPostId, reason: "other")
+                        cardMessage = L("reportRecorded", language)
+                    } catch {
+                        cardMessage = error.kaixUserMessage
+                    }
+                }
             } label: {
                 Label(L("reportPost", language), systemImage: "flag")
             }

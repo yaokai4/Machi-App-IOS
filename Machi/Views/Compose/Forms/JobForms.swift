@@ -19,6 +19,7 @@ struct JobSeekFormView: View {
 
 struct JobPostFormView: View {
     @ObservedObject var viewModel: ComposePostViewModel
+    @Environment(\.appLanguage) private var language
 
     var body: some View {
         TypedFormSection(titleKey: "ct_jobpost", icon: "building.2") {
@@ -40,7 +41,7 @@ struct JobPostFormView: View {
             TypedTextField("fld_work_location", text: viewModel.stringBinding(PostAttributeKeys.workLocation), isRequired: true)
             TypedTextField("fld_contact_method", text: viewModel.stringBinding(PostAttributeKeys.contactMethod))
             Toggle(isOn: viewModel.boolBinding(PostAttributeKeys.companyVerified)) {
-                Text("companyVerified")
+                Text(L("companyVerified", language))
                     .font(.subheadline.weight(.semibold))
             }
             .toggleStyle(.switch)

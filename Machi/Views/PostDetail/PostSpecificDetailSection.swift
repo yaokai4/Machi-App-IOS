@@ -204,13 +204,27 @@ struct PostSpecificDetailSection: View {
             .background(KXColor.accent, in: Capsule())
 
             Button {
-                toastManager.show(.custom(
-                    title: L("reportRecorded", language),
-                    message: "",
-                    systemImage: "checkmark.circle.fill",
-                    tint: .green,
-                    technicalDetails: nil,
-                ), duration: 2)
+                let reportedPostId = post.id
+                Task {
+                    do {
+                        try await KaiXAPIClient.shared.reportPost(reportedPostId, reason: "other")
+                        toastManager.show(.custom(
+                            title: L("reportRecorded", language),
+                            message: "",
+                            systemImage: "checkmark.circle.fill",
+                            tint: .green,
+                            technicalDetails: nil,
+                        ), duration: 2)
+                    } catch {
+                        toastManager.show(.custom(
+                            title: error.kaixUserMessage,
+                            message: "",
+                            systemImage: "exclamationmark.triangle.fill",
+                            tint: .orange,
+                            technicalDetails: nil,
+                        ), duration: 2)
+                    }
+                }
             } label: {
                 Image(systemName: "flag")
                     .font(.subheadline.weight(.semibold))
