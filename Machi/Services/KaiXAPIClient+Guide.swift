@@ -715,6 +715,14 @@ extension KaiXAPIClient {
         return try decode(data)
     }
 
+    func guideJLPTZone(country: String = "jp", language: String = "zh-CN") async throws -> KaiXGuideJLPTZoneResponse {
+        let data = try await request("GET", "/api/guide/jlpt", queryItems: [
+            URLQueryItem(name: "country", value: country),
+            URLQueryItem(name: "language", value: language),
+        ])
+        return try decode(data)
+    }
+
     func guideAIConversations(limit: Int = 30) async throws -> KaiXGuideAIConversationsResponse {
         let data = try await request("GET", "/api/guide/ai/conversations", queryItems: [
             URLQueryItem(name: "limit", value: String(limit)),

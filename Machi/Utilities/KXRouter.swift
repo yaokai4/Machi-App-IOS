@@ -280,7 +280,11 @@ private struct KXRouteDestinations: ViewModifier {
                 case .businessProfile(let businessId):
                     BusinessPublicProfileView(businessId: businessId, currentUser: currentUser)
                 case .guideCategory(let categoryKey):
-                    GuideCategoryView(categoryKey: categoryKey)
+                    if categoryKey == "jlpt" {
+                        GuideJLPTZoneView()  // #4 JLPT 备考专区取代通用分类视图
+                    } else {
+                        GuideCategoryView(categoryKey: categoryKey)
+                    }
                 case .guideJourney(let key):
                     GuideJourneyDetailView(journeyKey: key)
                 case .guidePlan:

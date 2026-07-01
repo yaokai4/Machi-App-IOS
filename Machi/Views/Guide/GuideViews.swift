@@ -2005,7 +2005,7 @@ private struct GuideCategoryCard: View {
     }
 }
 
-private struct GuideArticleCard: View {
+struct GuideArticleCard: View {
     @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     let article: KaiXGuideArticleDTO
@@ -2058,7 +2058,7 @@ private struct GuideArticleCard: View {
     }
 }
 
-private struct GuideProductCard: View {
+struct GuideProductCard: View {
     @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     let product: KaiXGuideProductDTO

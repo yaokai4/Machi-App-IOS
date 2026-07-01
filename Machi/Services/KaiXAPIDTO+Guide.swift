@@ -1628,6 +1628,38 @@ struct KaiXGuideAIAbilityDTO: Codable, Equatable, Hashable, Identifiable {
     var id: String { key }
 }
 
+// MARK: - JLPT 备考专区 (#4)
+
+struct KaiXGuideJLPTLevelDTO: Codable, Equatable, Hashable, Identifiable {
+    let key: String
+    let label: String
+    let summary: String
+    var id: String { key }
+}
+
+struct KaiXGuideJLPTHeroDTO: Codable, Equatable, Hashable {
+    let title: String?
+    let subtitle: String?
+}
+
+struct KaiXGuideJLPTStudyPlanDTO: Codable, Equatable, Hashable {
+    let title: String?
+    let subtitle: String?
+    let route: String?
+}
+
+struct KaiXGuideJLPTZoneResponse: Codable, Equatable {
+    let status: String?
+    let country: String?
+    let hero: KaiXGuideJLPTHeroDTO?
+    let levels: [KaiXGuideJLPTLevelDTO]?
+    let articles: [KaiXGuideArticleDTO]?
+    let resources: [KaiXGuideProductDTO]?
+    let faq: [KaiXGuideFaqDTO]?
+    let studyPlan: KaiXGuideJLPTStudyPlanDTO?
+    let disclaimer: String?
+}
+
 struct KaiXGuideAIConversationDTO: Codable, Equatable, Hashable, Identifiable {
     let id: String
     let title: String?
