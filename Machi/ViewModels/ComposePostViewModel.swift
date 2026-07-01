@@ -257,15 +257,13 @@ final class ComposePostViewModel: ObservableObject {
 
     private func isAttributeFilled(_ key: String) -> Bool {
         guard let value = attributes[key] else { return false }
-        if let s = value.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty {
-            return true
+        if let s = value.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) {
+            return !s.isEmpty
         }
-        if let d = value.doubleValue, d != 0 || (value.stringValue?.isEmpty == false) {
-            return true
-        }
-        if value.boolValue != nil {
-            return true
-        }
+        // A numeric value counts as filled even when it is 0 (e.g. a free /
+        // ¥0 price), and any explicit boolean counts as filled too.
+        if value.doubleValue != nil { return true }
+        if value.boolValue != nil { return true }
         return false
     }
 

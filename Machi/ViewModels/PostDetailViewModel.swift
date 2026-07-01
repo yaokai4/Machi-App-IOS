@@ -205,37 +205,48 @@ final class PostDetailViewModel: ObservableObject {
         }
     }
 
+    /// The post the on-screen interaction bar and counts refer to. For a
+    /// plain (non-quote) repost, PostCardView renders the ORIGINAL, so
+    /// like/bookmark/repost must target the original too — otherwise taps
+    /// toggle the wrapper while the visible counts belong to the original.
+    var interactionTarget: PostEntity? {
+        if let original = originalPost, let post, post.previewText.isEmpty {
+            return original
+        }
+        return post
+    }
+
     func toggleLike(context: ModelContext, currentUser: UserEntity, postStore: PostStore) async {
-        guard let post else { return }
+        guard let target = interactionTarget else { return }
         do {
-            try await postStore.toggleLike(context: context, postId: post.id, currentUser: currentUser)
+            try await postStore.toggleLike(context: context, postId: target.id, currentUser: currentUser)
         } catch {
             transientPostError = error.kaixUserMessage
         }
     }
 
     func toggleBookmark(context: ModelContext, currentUser: UserEntity, postStore: PostStore) async {
-        guard let post else { return }
+        guard let target = interactionTarget else { return }
         do {
-            try await postStore.toggleBookmark(context: context, postId: post.id, currentUser: currentUser)
+            try await postStore.toggleBookmark(context: context, postId: target.id, currentUser: currentUser)
         } catch {
             transientPostError = error.kaixUserMessage
         }
     }
 
     func repost(context: ModelContext, currentUser: UserEntity, postStore: PostStore) async {
-        guard let post else { return }
+        guard let target = interactionTarget else { return }
         do {
-            try await postStore.toggleRepost(context: context, postId: post.id, currentUser: currentUser)
+            try await postStore.toggleRepost(context: context, postId: target.id, currentUser: currentUser)
         } catch {
             transientPostError = error.kaixUserMessage
         }
     }
 
     func quoteRepost(context: ModelContext, currentUser: UserEntity, content: String, postStore: PostStore) async {
-        guard let post else { return }
+        guard let target = interactionTarget else { return }
         do {
-            _ = try await postStore.quoteRepost(context: context, postId: post.id, currentUser: currentUser, content: content)
+            _ = try await postStore.quoteRepost(context: context, postId: target.id, currentUser: currentUser, content: content)
         } catch {
             transientPostError = error.kaixUserMessage
         }

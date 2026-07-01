@@ -24,11 +24,13 @@ final class PostStore: ObservableObject {
 
     func register(_ posts: [PostEntity]) {
         guard !posts.isEmpty else { return }
-        var updated = postsById
+        // Mutate in place instead of snapshotting the whole dictionary — the
+        // old `var updated = postsById` copied the growing cache on every
+        // pagination page (O(N²) over a long scroll). Subscript writes on the
+        // @Published dict coalesce into a single view update per run loop.
         for post in posts {
-            updated[post.id] = post
+            postsById[post.id] = post
         }
-        postsById = updated
     }
 
     func post(id: String) -> PostEntity? {
@@ -82,22 +84,23 @@ final class PostStore: ObservableObject {
     }
 
     func refreshDerivedIds() {
-        likedPostIds = postsById.values
-            .filter(\.isLikedByCurrentUser)
-            .sorted { $0.updatedAt > $1.updatedAt }
-            .map(\.id)
-        bookmarkedPostIds = postsById.values
-            .filter(\.isBookmarkedByCurrentUser)
-            .sorted { $0.updatedAt > $1.updatedAt }
-            .map(\.id)
-        repostedPostIds = postsById.values
-            .filter(\.isRepostedByCurrentUser)
-            .sorted { $0.updatedAt > $1.updatedAt }
-            .map(\.id)
-        draftIds = postsById.values
-            .filter { $0.status == .draft }
-            .sorted { $0.updatedAt > $1.updatedAt }
-            .map(\.id)
+        // Single pass over the cache instead of four filter+sort sweeps —
+        // this runs on every like/bookmark/repost tap, so keep it lean.
+        var liked: [PostEntity] = []
+        var bookmarked: [PostEntity] = []
+        var reposted: [PostEntity] = []
+        var drafts: [PostEntity] = []
+        for post in postsById.values {
+            if post.isLikedByCurrentUser { liked.append(post) }
+            if post.isBookmarkedByCurrentUser { bookmarked.append(post) }
+            if post.isRepostedByCurrentUser { reposted.append(post) }
+            if post.status == .draft { drafts.append(post) }
+        }
+        let byRecency: (PostEntity, PostEntity) -> Bool = { $0.updatedAt > $1.updatedAt }
+        likedPostIds = liked.sorted(by: byRecency).map(\.id)
+        bookmarkedPostIds = bookmarked.sorted(by: byRecency).map(\.id)
+        repostedPostIds = reposted.sorted(by: byRecency).map(\.id)
+        draftIds = drafts.sorted(by: byRecency).map(\.id)
     }
 
     func likePost(context: ModelContext, postId: String, currentUser: UserEntity) async throws {

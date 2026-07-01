@@ -129,7 +129,10 @@ final class SearchViewModel: ObservableObject {
             suggestedUsers = (try? await userRepository.fetchRecommendedUsers(excluding: currentUser.id, limit: 12)) ?? []
             followingIds = (try? await userRepository.followingIds(for: currentUser.id)) ?? []
             rebuildTrendingItems()
-            state = .loaded
+            // Emit .empty (not .loaded) when there's genuinely nothing to show,
+            // so Discover/Search render a real empty state instead of a page of
+            // "no content" fallbacks.
+            state = (trendingItems.isEmpty && topicTrendingItems.isEmpty && userTrendingItems.isEmpty) ? .empty : .loaded
             searchStore?.setTrending(trendingItems + topicTrendingItems + userTrendingItems)
             searchStore?.setResults(trendingItems + topicTrendingItems + userTrendingItems)
             searchStore?.setLoadingState(state)

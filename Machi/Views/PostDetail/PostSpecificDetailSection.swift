@@ -271,7 +271,7 @@ struct PostSpecificDetailSection: View {
 
         case .housing:
             return [
-                ("fld_rent", "\(attr(PostAttributeKeys.currency)) \(attr(PostAttributeKeys.rent))".trimmingCharacters(in: .whitespaces)),
+                ("fld_rent", attr(PostAttributeKeys.rent).isEmpty ? "" : "\(attr(PostAttributeKeys.currency)) \(attr(PostAttributeKeys.rent))".trimmingCharacters(in: .whitespaces)),
                 ("fld_room_type", attr(PostAttributeKeys.roomType)),
                 ("fld_area", attr(PostAttributeKeys.area, fallback: regionLabel)),
                 ("fld_nearest_station", attr(PostAttributeKeys.nearestStation)),

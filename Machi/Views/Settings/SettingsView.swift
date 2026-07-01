@@ -146,7 +146,7 @@ struct SettingsView: View {
                 MyOrdersView()
             }
             SettingsDivider()
-            SettingsRowLink(icon: "globe.asia.australia", tint: .teal, title: L("regionAndLanguage", language), value: AppAppearance.from(appAppearance).title(language), subtitle: L("regionAndLanguageSubtitle", language)) {
+            SettingsRowLink(icon: "globe.asia.australia", tint: .teal, title: L("regionAndLanguage", language), value: regionDisplayLabel, subtitle: L("regionAndLanguageSubtitle", language)) {
                 RegionLanguageSettingsView(currentUser: currentUser)
             }
             SettingsDivider()

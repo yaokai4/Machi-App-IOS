@@ -1,6 +1,18 @@
 import Foundation
 import SwiftData
 
+/// Parsed-attribute cache keyed by the raw JSON string. Decoding the
+/// `attributesRaw` blob used to happen on every `stringAttribute(_:)` /
+/// `intAttribute(_:)` call — 4–15 synchronous `JSONSerialization` parses per
+/// card during scroll. Caching by the JSON content (identical blobs share a
+/// result) removes that cost without storing observable state on the model,
+/// so there is no "modifying state during view update" risk. Thread-safe.
+private let _postAttributeParseCache: NSCache<NSString, NSDictionary> = {
+    let cache = NSCache<NSString, NSDictionary>()
+    cache.countLimit = 500
+    return cache
+}()
+
 @Model
 final class PostEntity {
     @Attribute(.unique) var id: String
@@ -178,11 +190,16 @@ extension PostEntity {
     /// (`stringAttribute(_:)` etc.) so view code never has to
     /// touch `Any`.
     var attributes: [String: Any] {
-        guard !attributesRaw.isEmpty,
-              let data = attributesRaw.data(using: .utf8),
+        guard !attributesRaw.isEmpty else { return [:] }
+        let key = attributesRaw as NSString
+        if let cached = _postAttributeParseCache.object(forKey: key) {
+            return cached as? [String: Any] ?? [:]
+        }
+        guard let data = attributesRaw.data(using: .utf8),
               let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
             return [:]
         }
+        _postAttributeParseCache.setObject(dict as NSDictionary, forKey: key)
         return dict
     }
 
