@@ -33,6 +33,10 @@ final class GuideAIViewModel: ObservableObject {
     @Published var quotaMessage: String?
     @Published var conversations: [KaiXGuideAIConversationDTO] = []
     @Published var suggestions: [KaiXGuideAISuggestionDTO] = []
+    @Published var abilities: [KaiXGuideAIAbilityDTO] = []
+    /// Selected member-only ability (resume polish / mock interview), or nil for
+    /// general chat. Server-authoritative — the gate is re-checked server-side.
+    @Published var activeAbility: String?
     @Published var conversationId: String?
     @Published var membershipActive: Bool = false
     @Published var remainingFreeUses: Int?
@@ -72,6 +76,7 @@ final class GuideAIViewModel: ObservableObject {
                 membershipActive = resp.membershipActive ?? false
                 remainingFreeUses = (resp.membershipActive == true) ? nil : resp.remainingFreeUses
                 suggestions = resp.suggestions ?? []
+                abilities = resp.abilities ?? []
                 if let text = resp.disclaimer, !text.isEmpty { disclaimer = text }
                 quotaReached = (membershipActive == false) && (remainingFreeUses ?? 1) <= 0
             }
@@ -121,6 +126,7 @@ final class GuideAIViewModel: ObservableObject {
         quotaMessage = nil
         quotaReached = (membershipActive == false) && (remainingFreeUses ?? 1) <= 0
         errorMessage = nil
+        activeAbility = nil
         lastFailedText = nil
     }
 
@@ -180,7 +186,8 @@ final class GuideAIViewModel: ObservableObject {
             do {
                 let resp = try await KaiXAPIClient.shared.sendGuideAIMessage(
                     conversationId: conversationId, message: text,
-                    country: country, language: serverLanguage, category: nil
+                    country: country, language: serverLanguage, category: nil,
+                    ability: activeAbility
                 )
                 applyChatResponse(resp, pendingId: pendingId, userMessageId: userMessage.id, text: text)
             } catch let apiError as KaiXAPIError {
@@ -258,11 +265,34 @@ final class GuideAIViewModel: ObservableObject {
                 remainingFreeUses = 0
                 upgradeSuggested = true
             }
+        case "AI_MEMBER_ABILITY_REQUIRED":
+            // Members-only ability requested without membership: drop back to
+            // general chat and surface the upgrade prompt.
+            activeAbility = nil
+            errorMessage = apiError?.error.message ?? genericErrorText
+            upgradeSuggested = true
         case "AI_UNAVAILABLE":
             errorMessage = apiError?.error.message ?? genericErrorText
         default:
             errorMessage = apiError?.error.message ?? genericErrorText
         }
+    }
+
+    /// Toggle a Machi AI ability. Non-members tapping a members-only ability get
+    /// an upgrade prompt instead of activating it (the server re-checks anyway).
+    func selectAbility(_ ability: KaiXGuideAIAbilityDTO) {
+        if (ability.memberOnly ?? false) && !membershipActive {
+            errorMessage = guideText(
+                language,
+                "「\(ability.title)」是 Machi 会员专属能力，开通会员即可使用。",
+                "「\(ability.title)」は Machi メンバー限定機能です。メンバーになると利用できます。",
+                "“\(ability.title)” is a Machi members-only ability. Become a member to use it."
+            )
+            upgradeSuggested = true
+            return
+        }
+        errorMessage = nil
+        activeAbility = (activeAbility == ability.key) ? nil : ability.key
     }
 
     private var genericErrorText: String {

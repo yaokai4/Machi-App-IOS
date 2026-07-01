@@ -239,12 +239,44 @@ struct GuideAIChatView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
+            if !viewModel.abilities.isEmpty && !viewModel.quotaReached {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(viewModel.abilities) { ability in
+                            let on = viewModel.activeAbility == ability.key
+                            let locked = (ability.memberOnly ?? false) && !viewModel.membershipActive
+                            Button {
+                                viewModel.selectAbility(ability)
+                            } label: {
+                                HStack(spacing: 4) {
+                                    if locked {
+                                        Image(systemName: "lock.fill").font(.system(size: 10))
+                                    } else if on {
+                                        Image(systemName: "checkmark").font(.system(size: 10, weight: .bold))
+                                    }
+                                    Text(ability.title).font(.caption.weight(.semibold))
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
+                                .foregroundStyle(on ? KXColor.livingAccent : KXColor.livingMuted)
+                                .background(
+                                    Capsule().fill(on ? KXColor.livingAccent.opacity(0.14) : KXColor.livingSurface)
+                                )
+                                .overlay(
+                                    Capsule().stroke(on ? KXColor.livingAccent.opacity(0.5) : KXColor.livingInk.opacity(0.08),
+                                                     lineWidth: on ? 1.2 : 0.8)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 2)
+                }
+            }
+
             HStack(alignment: .bottom, spacing: 9) {
                 TextField(
-                    guideText(language,
-                              "问问日本生活、升学、就职或 Machi 使用问题…",
-                              "日本生活・進学・就職や Machi の使い方を質問…",
-                              "Ask about life, study, work in Japan, or using Machi…"),
+                    inputPlaceholder,
                     text: $viewModel.inputText,
                     axis: .vertical
                 )
@@ -285,6 +317,27 @@ struct GuideAIChatView: View {
     private var canSend: Bool {
         !viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !viewModel.isSending && !viewModel.quotaReached
+    }
+
+    /// Composer placeholder adapts to the active member ability.
+    private var inputPlaceholder: String {
+        switch viewModel.activeAbility {
+        case "resume_polish":
+            return guideText(language,
+                             "粘贴你的履历书 / 职务経歴書 / 自己PR / 志望动机…",
+                             "履歴書・職務経歴書・自己PR・志望動機を貼り付け…",
+                             "Paste your resume / shokumu-keirekisho / PR to polish…")
+        case "mock_interview":
+            return guideText(language,
+                             "告诉我你应聘的行业 / 职位，开始模拟面试…",
+                             "応募する業界・職種を教えて、模擬面接を開始…",
+                             "Tell me the role you're applying for to start the mock interview…")
+        default:
+            return guideText(language,
+                             "问问日本生活、升学、就职或 Machi 使用问题…",
+                             "日本生活・進学・就職や Machi の使い方を質問…",
+                             "Ask about life, study, work in Japan, or using Machi…")
+        }
     }
 
     private var sendButton: some View {

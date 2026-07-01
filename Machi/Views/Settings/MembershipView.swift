@@ -17,6 +17,7 @@ struct MembershipView: View {
     let currentUser: UserEntity
 
     private let benefitKeys = [
+        "membershipBenefitAI",
         "membershipBenefitBadge",
         "membershipBenefitPublish",
         "membershipBenefitPriority",

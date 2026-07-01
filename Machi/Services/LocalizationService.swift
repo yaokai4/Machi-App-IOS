@@ -924,6 +924,7 @@ struct LocalizationService {
         "membershipSubtitle": [.zh: "让你的发布更可信，也让更多人看见你。", .ja: "あなたの投稿をより信頼され、より多くの人に届けます。", .en: "Make your posts more trusted — and seen by more people."],
         "membershipPriceUnit": [.zh: "/ 月", .ja: "/ 月", .en: "/ month"],
         "membershipBenefitsTitle": [.zh: "会员权益", .ja: "メンバー特典", .en: "What you get"],
+        "membershipBenefitAI": [.zh: "Machi AI 会员额度 + Pro 深度模型", .ja: "Machi AI メンバー枠 + Pro 深思考モデル", .en: "Higher Machi AI limit + Pro model"],
         "membershipBenefitBadge": [.zh: "昵称旁显示认证标识", .ja: "名前の横に認証バッジを表示", .en: "A verified badge next to your name"],
         "membershipBenefitPublish": [.zh: "可发布招聘、租房、本地服务等高信任内容", .ja: "求人・住まい・地域サービスなど信頼性の高い投稿が可能", .en: "Post jobs, housing, local services and other high-trust content"],
         "membershipBenefitPriority": [.zh: "内容获得轻微优先展示", .ja: "表示順がわずかに優遇", .en: "A gentle boost in ranking"],

@@ -1620,6 +1620,14 @@ struct KaiXGuideAISuggestionDTO: Codable, Equatable, Hashable, Identifiable {
     let category: String?
 }
 
+struct KaiXGuideAIAbilityDTO: Codable, Equatable, Hashable, Identifiable {
+    let key: String
+    let title: String
+    let description: String?
+    let memberOnly: Bool?
+    var id: String { key }
+}
+
 struct KaiXGuideAIConversationDTO: Codable, Equatable, Hashable, Identifiable {
     let id: String
     let title: String?
@@ -1650,6 +1658,7 @@ struct KaiXGuideAIBootstrapResponse: Codable, Equatable {
     let membershipActive: Bool?
     let remainingFreeUses: Int?
     let suggestions: [KaiXGuideAISuggestionDTO]?
+    let abilities: [KaiXGuideAIAbilityDTO]?
     let disclaimer: String?
 }
 

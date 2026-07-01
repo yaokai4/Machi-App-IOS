@@ -732,18 +732,20 @@ extension KaiXAPIClient {
     /// Longer timeout than the default JSON budget because answering takes a
     /// few seconds; the 429 `AI_QUOTA_EXCEEDED` surfaces as a `KaiXAPIError`.
     func sendGuideAIMessage(conversationId: String?, message: String, country: String = "jp",
-                            language: String = "zh-CN", category: String? = nil) async throws -> KaiXGuideAIChatResponse {
+                            language: String = "zh-CN", category: String? = nil,
+                            ability: String? = nil) async throws -> KaiXGuideAIChatResponse {
         struct Body: Encodable {
             let conversationId: String?
             let message: String
             let country: String
             let language: String
             let category: String?
+            let ability: String?
         }
         let data = try await request(
             "POST", "/api/guide/ai/chat",
             body: Body(conversationId: conversationId, message: message, country: country,
-                       language: language, category: category),
+                       language: language, category: category, ability: ability),
             timeoutInterval: 40
         )
         return try decode(data)
