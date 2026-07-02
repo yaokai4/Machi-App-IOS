@@ -23,20 +23,38 @@ struct MessagesView: View {
         VStack(spacing: 0) {
             MessagesHeaderView(
                 title: L("messages", language),
-                unreadCount: notificationStore.unreadCount,
-                onNewDirect: { isShowingNewConversation = true },
+                // Bell reflects social (like/comment/follow/message) unread only,
+                // not every notification kind — matches what tapping it opens.
+                unreadCount: notificationStore.socialUnreadCount,
+                onNewDirect: {
+                    // Starting a DM requires an account: gate the "+" for guests.
+                    if currentUser.isGuest {
+                        GuestGate.shared.requireLogin(guestMessagesReason)
+                    } else {
+                        isShowingNewConversation = true
+                    }
+                },
                 onOpenNotifications: { isShowingNotifications = true }
             )
 
-            inboxModePicker
+            if currentUser.isGuest {
+                GuestMessagesPanel(language: language) {
+                    GuestGate.shared.requireLogin(guestMessagesReason)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                inboxModePicker
 
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .kxPageBackground()
         .toolbar(.hidden, for: .navigationBar)
         .task(id: currentUser.id) {
+            // Guests have no inbox to load or poll — the panel is a static CTA.
+            guard !currentUser.isGuest else { return }
             await refreshInbox()
             await pollInboxLoop()
         }
@@ -93,6 +111,15 @@ struct MessagesView: View {
         }
     }
 
+    private var guestMessagesReason: String {
+        KXListingCopy.pickText(
+            language,
+            "登录后可以私信房东、卖家和朋友",
+            "ログインすると大家さん・出品者・友だちにメッセージを送れます",
+            "Log in to message landlords, sellers and friends"
+        )
+    }
+
     private func refreshInbox() async {
         await viewModel.load(context: modelContext, currentUser: currentUser, messageStore: messageStore)
     }
@@ -126,8 +153,19 @@ struct MessagesView: View {
     private var conversationContent: some View {
         switch viewModel.state {
         case .loading, .idle:
-            LoadingView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Conversation-shaped skeleton (avatar + two lines) instead of a bare
+            // centre spinner, so the inbox reads as "filling in".
+            ScrollView {
+                LazyVStack(spacing: KXSpacing.sm) {
+                    ForEach(0..<5, id: \.self) { _ in
+                        ConversationSkeletonRow()
+                            .kxGlassSurface(radius: KXRadius.lg)
+                    }
+                }
+                .padding(.horizontal, KXSpacing.screen)
+                .padding(.top, KXSpacing.md)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         case .empty:
             emptyContent
         case .error(let message):
@@ -295,11 +333,11 @@ struct MessagesView: View {
 
     private var emptyContent: some View {
         ScrollView {
-            KXStatePanel(
+            EmptyStateView(
                 title: L("emptyMessages", language),
                 subtitle: L("newConversationsHere", language),
                 systemImage: "envelope.open",
-                accent: KXColor.accent
+                illustration: .messages
             )
             .padding(.horizontal, KaiXTheme.horizontalPadding)
             .padding(.top, 34)
@@ -372,6 +410,74 @@ private enum MessageInboxMode: String, CaseIterable, Identifiable {
     }
 }
 
+/// Conversation-row skeleton (avatar + two text lines) shown while the inbox
+/// loads its first page — mirrors DiscoverView's HotBoardSkeletonRow style.
+private struct ConversationSkeletonRow: View {
+    var body: some View {
+        HStack(spacing: 11) {
+            Circle().fill(KXColor.softBackground).frame(width: 48, height: 48)
+            VStack(alignment: .leading, spacing: 7) {
+                RoundedRectangle(cornerRadius: 4).fill(KXColor.softBackground).frame(width: 150, height: 13)
+                RoundedRectangle(cornerRadius: 4).fill(KXColor.softBackground).frame(width: 210, height: 10)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .redacted(reason: .placeholder)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Guest-mode panel for the messages tab: DMs need an account, so instead of an
+/// empty inbox we show a clear, three-language CTA that routes to login.
+private struct GuestMessagesPanel: View {
+    let language: AppLanguage
+    let onLogin: () -> Void
+
+    private func text(_ zh: String, _ ja: String, _ en: String) -> String {
+        KXListingCopy.pickText(language, zh, ja, en)
+    }
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            Image(systemName: "bubble.left.and.bubble.right")
+                .font(.system(size: 44, weight: .light))
+                .foregroundStyle(KXColor.accent.opacity(0.85))
+            Text(text("登录后即可开始私信", "ログインしてメッセージを始めよう", "Log in to start messaging"))
+                .font(.title3.weight(.bold))
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.center)
+            Text(text(
+                "登录后可以私信房东、卖家和朋友，第一时间收到回复。",
+                "ログインすると、大家さん・出品者・友だちにメッセージを送り、返信をすぐに受け取れます。",
+                "Log in to message landlords, sellers and friends and get replies right away."
+            ))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 8)
+            Button(action: onLogin) {
+                Text(L("login", language))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 30)
+                    .frame(height: 46)
+                    .background(KXColor.accent, in: Capsule())
+                    .shadow(color: KXColor.accent.opacity(0.24), radius: 10, y: 4)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 4)
+            Spacer()
+            Spacer()
+        }
+        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
 private struct MessagesHeaderView: View {
     @Environment(\.appLanguage) private var language
     let title: String
@@ -382,7 +488,7 @@ private struct MessagesHeaderView: View {
     var body: some View {
         HStack(spacing: 10) {
             Text(title)
-                .font(.system(size: 32, weight: .semibold))
+                .kxScaledFont(32, relativeTo: .largeTitle, weight: .semibold)
             Spacer()
             Button(action: onNewDirect) {
                 Image(systemName: "plus")
@@ -402,11 +508,11 @@ private struct MessagesHeaderView: View {
                         .kxGlassCircle()
                     if unreadCount > 0 {
                         Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
-                            .font(.system(size: unreadCount > 9 ? 7.5 : 8.5, weight: .black))
+                            .font(.system(size: unreadCount > 9 ? 9 : 10, weight: .black))
                             .foregroundStyle(.white)
                             .frame(minWidth: 16, minHeight: 16)
                             .padding(.horizontal, unreadCount > 9 ? 3 : 0)
-                            .background(Color(red: 0.93, green: 0.16, blue: 0.34), in: Capsule())
+                            .background(KXColor.badge, in: Capsule())
                             .overlay(Capsule().stroke(Color.white.opacity(0.92), lineWidth: 1.1))
                             .offset(x: 4, y: -3)
                     }

@@ -92,7 +92,7 @@ struct GuideSchoolListView: View {
                     .buttonStyle(.borderedProminent)
                     .buttonBorderShape(.capsule)
                 }
-                .padding(11)
+                .padding(12)
                 .background(KXColor.softBackground.opacity(0.8), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
         }
@@ -278,7 +278,7 @@ struct GuideCompanyListView: View {
                     .buttonStyle(.borderedProminent)
                     .buttonBorderShape(.capsule)
                 }
-                .padding(11)
+                .padding(12)
                 .background(KXColor.softBackground.opacity(0.8), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
         }
@@ -576,7 +576,7 @@ struct GuideSchoolDetailView: View {
                 TextField(guideText(language, "发现官网、招生信息有误？在这里提交纠错", "公式サイトや入試情報の誤りを見つけたら、ここから修正を送信", "Found an error in the website or admissions info? Submit a correction here"), text: $correctionText, axis: .vertical)
                     .font(.footnote)
                     .lineLimit(2...4)
-                    .padding(11)
+                    .padding(12)
                     .background(KXColor.softBackground.opacity(0.82), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
                 Button(guideText(language, "提交纠错", "修正を送信", "Submit correction")) {
                     Task { await submitCorrection(school) }
@@ -908,7 +908,7 @@ struct GuideCompanyDetailView: View {
                 TextField(guideText(language, "发现招聘页、签证信息有误？在这里提交纠错", "採用ページやビザ情報の誤りを見つけたら、ここから修正を送信", "Found an error in careers or visa info? Submit a correction here"), text: $correctionText, axis: .vertical)
                     .font(.footnote)
                     .lineLimit(2...4)
-                    .padding(11)
+                    .padding(12)
                     .background(KXColor.softBackground.opacity(0.82), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
                 Button(guideText(language, "提交纠错", "修正を送信", "Submit correction")) {
                     Task { await submitCorrection(company) }

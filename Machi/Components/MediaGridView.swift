@@ -24,6 +24,7 @@ struct MediaGridView: View {
                     } label: {
                         ZStack {
                             if item.type == .video, let posterURL = item.displayURL {
+                                // Video poster is a public CDN URL — no stable key.
                                 MediaImageView(
                                     url: posterURL,
                                     targetPixelSize: count == 1 ? 960 : 640,
@@ -37,7 +38,9 @@ struct MediaGridView: View {
                                 MediaImageView(
                                     url: url,
                                     targetPixelSize: count == 1 ? 960 : 640,
-                                    contentMode: .fill
+                                    contentMode: .fill,
+                                    stableKey: item.stableCacheKey,
+                                    onResign: resignHandler(for: item)
                                 )
                                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                                     .clipped()
@@ -94,6 +97,19 @@ struct MediaGridView: View {
     private func durationText(_ duration: Double) -> String {
         let total = max(0, Int(duration.rounded()))
         return String(format: "%02d:%02d", total / 60, total % 60)
+    }
+
+    /// Re-sign handler for a private DM attachment (identified by a non-empty
+    /// stable cache key). Nil for public post/listing media. `postId` = message
+    /// id, `remoteId`/`id` = attachment id.
+    private func resignHandler(for media: MediaEntity) -> (() async -> URL?)? {
+        guard media.stableCacheKey != nil, !media.postId.isEmpty else { return nil }
+        let messageId = media.postId
+        let attachmentId = media.remoteId ?? media.id
+        return {
+            guard let fresh = await MessageRepository.resignAttachmentURL(messageId: messageId, attachmentId: attachmentId) else { return nil }
+            return URL(string: fresh)
+        }
     }
 
     private func tileAspectRatio(for item: MediaEntity, count: Int) -> CGFloat {

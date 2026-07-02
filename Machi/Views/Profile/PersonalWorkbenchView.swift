@@ -89,7 +89,7 @@ struct PersonalWorkbenchView: View {
             .foregroundStyle(KXColor.accent)
 
             Text(guideText(language, "我的工作台", "マイワークベンチ", "My Workbench"))
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .kxScaledFont(28, relativeTo: .largeTitle, weight: .bold, design: .rounded)
                 .foregroundStyle(.primary)
 
             Text(guideText(
@@ -206,14 +206,14 @@ struct PersonalWorkbenchView: View {
             .accessibilityIdentifier("workbench.continue")
         }
         .padding(16)
-        .kxGlassSurface(radius: 22, elevated: true)
+        .kxGlassSurface(radius: KXRadius.hero, elevated: true)
     }
 
     private func summaryStat(_ value: String, _ label: String, tint: Color, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: 4) {
                 Text(value)
-                    .font(.system(size: 22, weight: .black, design: .rounded))
+                    .kxScaledFont(22, relativeTo: .title2, weight: .black, design: .rounded)
                     .foregroundStyle(tint)
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)

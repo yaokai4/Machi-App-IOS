@@ -27,6 +27,9 @@ struct ContentView: View {
     @StateObject private var connectivityMonitor = ConnectivityMonitor()
     @ObservedObject private var guestGate = GuestGate.shared
     @State private var displayedDatabaseNoticeKey: String?
+    /// Which tab the logged-out entry AuthView opens on. Onboarding's explicit
+    /// "登录 / 注册" tap sets `.register`; the default cold entry stays `.login`.
+    @State private var entryAuthMode: AuthViewModel.Mode = .login
     @State private var isSyncingSystemNotifications = false
     /// A system-notification tap that arrived while `currentUser` was still nil
     /// (cold start from a killed app: the tap lands before bootstrap finishes).
@@ -46,6 +49,15 @@ struct ContentView: View {
         guard !didEmitFirstHomeRender else { return }
         didEmitFirstHomeRender = true
         KXPerf.event("home.firstRender")
+    }
+
+    /// Count this cold launch exactly once per process so the review prompt can
+    /// fire on the third genuine launch (not on every scene reactivation).
+    private static var didCountColdLaunch = false
+    private static func markColdLaunchForReview() {
+        guard !didCountColdLaunch else { return }
+        didCountColdLaunch = true
+        ReviewPromptService.shared.noteColdLaunch()
     }
 
     /// A coarse, Equatable launch phase so the splash → main / auth swap can
@@ -83,7 +95,10 @@ struct ContentView: View {
                         // Launch-profiling marker: the home/main UI is now on
                         // screen. Pairs with `app.launch` / `database.ready` /
                         // `app.bootstrap` to bracket cold launch in Instruments.
-                        .onAppear { Self.markFirstHomeRender() }
+                        .onAppear {
+                            Self.markFirstHomeRender()
+                            Self.markColdLaunchForReview()
+                        }
                 } else {
                     entryView
                         .transition(.opacity)
@@ -115,6 +130,9 @@ struct ContentView: View {
         // of the 120 Hz regression guardrail.
         .kxFrameRateMonitored()
         .toastHost(toastManager)
+        // Surfaces the App Store rating sheet when a ReviewPromptService trigger
+        // fires (3rd cold launch / first post engagement / consultation reply).
+        .kxReviewPrompts()
         // Login prompt for guests: any gated action calls
         // GuestGate.shared.requireLogin(); we present the auth flow here and
         // upgrade the guest to the real account on success.
@@ -127,7 +145,7 @@ struct ContentView: View {
                 // the login sheet with no obvious way out (the prompt is shown for
                 // optional actions — saving a Todo, a reminder — not a hard wall).
                 guestGate.dismiss()
-            })
+            }, contextReason: guestGate.reason)
             .environment(\.appLanguage, language)
             .presentationDragIndicator(.visible)
         }
@@ -142,7 +160,16 @@ struct ContentView: View {
             }
             #endif
             if let user = appState.currentUser {
-                RegionStore.shared.applyUserRegion(user)
+                // Signed-in accounts always sync their declared home region.
+                // Guests must NOT: applyUserRegion would overwrite the city the
+                // guest picked by hand (persisted in UserDefaults, restored into
+                // RegionStore.current on launch) with the guest's default Tokyo.
+                // Only seed a region for a guest that genuinely has none yet.
+                if !user.isGuest {
+                    RegionStore.shared.applyUserRegion(user)
+                } else if RegionStore.shared.current == nil {
+                    RegionStore.shared.applyUserRegion(user)
+                }
             }
             // First-run auto-locate: when no browsing region is set yet, fill it
             // from the device's current city so the user never has to pick one by
@@ -235,6 +262,62 @@ struct ContentView: View {
         .onOpenURL { url in
             handleDeepLink(url)
         }
+        .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+            guard let url = activity.webpageURL else { return }
+            handleUniversalLink(url)
+        }
+    }
+
+    /// Route an inbound Universal Link (`https://machicity.com/...`,
+    /// `https://www.machicity.com/...`) tapped in Safari / Mail / another app.
+    /// Rather than duplicate the routing switch, this maps the web path onto the
+    /// equivalent `machi://` deep link and hands it to `handleDeepLink`, so the
+    /// two entry points can never drift apart. Web-only paths (marketing pages,
+    /// unknown routes) fall through and open nothing.
+    private func handleUniversalLink(_ url: URL) {
+        guard let host = url.host?.lowercased(),
+              host == "machicity.com" || host == "www.machicity.com" else { return }
+        let parts = url.pathComponents.filter { $0 != "/" }
+        guard let first = parts.first else { return }
+
+        func route(_ machiURL: String) {
+            guard let mapped = URL(string: machiURL) else { return }
+            handleDeepLink(mapped)
+        }
+
+        // Percent-encode path segments so slugs with CJK / spaces survive the
+        // round-trip through a fresh URL string.
+        func enc(_ s: String) -> String {
+            s.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? s
+        }
+
+        switch first {
+        case "p":
+            // /p/<id> → post
+            guard parts.count >= 2 else { return }
+            route("machi://post/\(enc(parts[1]))")
+        case "listings":
+            // /listings/<id> → listing
+            guard parts.count >= 2 else { return }
+            route("machi://listing/\(enc(parts[1]))")
+        case "c":
+            // /c/<code> → city
+            guard parts.count >= 2 else { return }
+            route("machi://city/\(enc(parts[1]))")
+        case "guide":
+            // /guide/articles/<slug> → article
+            if parts.count >= 3, parts[1] == "articles" {
+                route("machi://article/\(enc(parts[2]))")
+            } else if parts.count >= 3, parts[1] == "journey" {
+                route("machi://guide/journey/\(enc(parts[2]))")
+            }
+        case "u", "users":
+            // /u/<id> or /users/<id> → profile
+            guard parts.count >= 2 else { return }
+            route("machi://profile/\(enc(parts[1]))")
+        default:
+            break
+        }
     }
 
     /// Route an inbound `machi://` deep link (the scheme the "copy link" actions
@@ -292,7 +375,15 @@ struct ContentView: View {
             appRouter.open(.guideJourney(key: parts[1]), in: .guide)
         case "conversation", "dm":
             // Private: opening a thread needs a signed-in user.
-            guard appState.currentUser != nil, !identifier.isEmpty else { return }
+            guard !identifier.isEmpty else { return }
+            guard appState.currentUser != nil else {
+                // Cold start from a killed app: the deep link can arrive before
+                // bootstrap resolves the session. Stash it (reusing the
+                // notification replay mechanism) and route once currentUser
+                // becomes non-nil, instead of silently dropping it.
+                pendingNotificationPayload = ["conversationId": identifier]
+                return
+            }
             appChrome.select(.messages)
             appRouter.setActiveTab(.messages)
             appRouter.open(.conversation(conversationId: identifier), in: .messages)
@@ -315,6 +406,8 @@ struct ContentView: View {
     }
 
     private func routeNotificationPayload(_ userInfo: [AnyHashable: Any]?) {
+        let type = (userInfo?["type"] as? String).flatMap(NotificationType.init(rawValue:))
+        let actorId = userInfo?["actorId"] as? String
         let conversationId = userInfo?["conversationId"] as? String
         let postId = userInfo?["postId"] as? String
         let listingId = userInfo?["listingId"] as? String
@@ -324,12 +417,26 @@ struct ContentView: View {
             appRouter.open(.conversation(conversationId: conversationId), in: .messages)
             return
         }
-        // Saved-search match banners land on the listing itself (same
-        // destination as the machi://listing deep link).
+        // Saved-search / favorite (price drop, closed) banners land on the
+        // listing itself (same destination as the machi://listing deep link).
         if let listingId, !listingId.isEmpty {
             appChrome.select(.search)
             appRouter.setActiveTab(.search)
             appRouter.open(.cityListingDetail(listingId: listingId), in: .search)
+            return
+        }
+        // Follow / follow-digest banners open the actor's profile, matching the
+        // in-app NotificationsView.route(for:) behavior.
+        if (type == .follow || type == .followDigest), let actorId, !actorId.isEmpty {
+            appChrome.select(.home)
+            appRouter.setActiveTab(.home)
+            appRouter.open(.profile(userId: actorId), in: .home)
+            return
+        }
+        // City digest with no specific post routes to the discover/home tab.
+        if type == .cityDigest, postId == nil {
+            appChrome.select(.home)
+            appRouter.setActiveTab(.home)
             return
         }
         appChrome.select(.home)
@@ -363,6 +470,22 @@ struct ContentView: View {
             notificationStore.setNotifications(all)
             notificationStore.setUnreadCount(response.unread_count)
             syncAppBadge()
+            // Rating-prompt delight moments (each internally gated to at most one
+            // prompt per app version, so firing here is safe every sync):
+            //   • an unread like / comment / reply on the user's own content
+            //     → "people like my thing" (first-engagement, once per install)
+            //   • an unread reply inside a consultation the user started
+            //     → "the app worked for me"
+            for note in all where !note.isRead {
+                switch note.type {
+                case .like, .comment, .reply:
+                    ReviewPromptService.shared.noteFirstPostEngagement()
+                case .message where ReviewPromptService.shared.isInquiryConversation(note.targetConversationId):
+                    ReviewPromptService.shared.noteConsultationReply()
+                default:
+                    break
+                }
+            }
             let wanted = all.filter {
                 !$0.isRead && NotificationPreferenceService.isEnabled($0.type, recipientUserId: user.id)
             }
@@ -459,7 +582,7 @@ struct ContentView: View {
     @ViewBuilder
     private var entryView: some View {
         if hasSeenOnboarding {
-            AuthView(onAuthenticated: completeLogin, onBrowseAsGuest: enterAsGuest)
+            AuthView(onAuthenticated: completeLogin, onBrowseAsGuest: enterAsGuest, initialMode: entryAuthMode)
         } else {
             OnboardingView(
                 onBrowseAsGuest: {
@@ -467,7 +590,12 @@ struct ContentView: View {
                     enterAsGuest()
                     routeOnboardingPersonaJourney()
                 },
-                onContinueToAuth: { hasSeenOnboarding = true }
+                onContinueToAuth: {
+                    // Someone tapping "登录 / 注册" from onboarding is here to make an
+                    // account — open the AuthView on the register tab.
+                    entryAuthMode = .register
+                    hasSeenOnboarding = true
+                }
             )
         }
     }
@@ -565,12 +693,16 @@ struct ContentView: View {
 
     private func logout() {
         AuthService.shared.logout()
+        // Post-logout the auth screen defaults to login (register is only the
+        // default when arriving via onboarding's explicit "登录 / 注册").
+        entryAuthMode = .login
         currentUserID = ""
         appState.currentUser = nil
         appRouter.resetAll()
         appChrome.reset()
         sessionStore.invalidate()
         userStore.setCurrentUser(nil)
+        resetPerAccountState()
         appState.state = .empty
     }
 
@@ -580,8 +712,28 @@ struct ContentView: View {
         appState.currentUser = user
         appRouter.resetAll()
         appChrome.reset()
+        // Wipe the outgoing account's cached content before the incoming account
+        // loads — otherwise account B briefly renders A's feed / DMs / badge.
+        resetPerAccountState()
         sessionStore.setCurrentUser(user.id)
         userStore.setCurrentUser(user)
         appState.state = .loaded
+    }
+
+    /// Tear down every per-account in-memory + on-disk cache so a logout or
+    /// account switch never leaks one account's feed, messages, notifications,
+    /// comments, search results or unread badge into the next.
+    private func resetPerAccountState() {
+        messageStore.reset()
+        notificationStore.reset()
+        postStore.reset()
+        commentStore.reset()
+        searchStore.reset()
+        composeStore.clear()
+        MessageRepository.clearCaches()
+        KaiXFeedCache.clearAll()
+        // Zero the app-icon badge immediately; the next account's sync repopulates
+        // it. Leaving the previous count up until the first poll looks like a bug.
+        SystemNotificationService.shared.syncBadge(unreadCount: 0)
     }
 }

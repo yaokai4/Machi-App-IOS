@@ -106,6 +106,16 @@ final class CommentStore: ObservableObject {
             loadedComments: commentsByPostId[postId] ?? []
         )
     }
+
+    /// Drop every cached comment thread + reply draft on logout / account
+    /// switch so drafts and comments never bleed across accounts.
+    func reset() {
+        commentsByPostId = [:]
+        commentCountsByPostId = [:]
+        loadingStateByPostId = [:]
+        focusedCommentId = nil
+        replyDrafts = [:]
+    }
 }
 
 @MainActor
@@ -151,6 +161,16 @@ final class NotificationStore: ObservableObject {
 
     func setLoadingState(_ state: ScreenState) {
         loadingState = state
+    }
+
+    /// Wipe all notification state so a logout / account switch never leaks the
+    /// previous account's notifications (and its unread badge) into the next.
+    func reset() {
+        notificationsById = [:]
+        groupedNotificationIds = []
+        unreadCount = 0
+        filterState = "all"
+        loadingState = .idle
     }
 }
 
@@ -208,6 +228,16 @@ final class MessageStore: ObservableObject {
     func removeUpload(_ draftId: String) {
         uploadQueue.removeAll { $0.id == draftId }
     }
+
+    /// Wipe every conversation, message, unread count and pending queue so the
+    /// next account never sees the previous account's DMs or unread badge.
+    func reset() {
+        conversationsById = [:]
+        messagesByConversationId = [:]
+        unreadCounts = [:]
+        sendingQueue = []
+        uploadQueue = []
+    }
 }
 
 @MainActor
@@ -239,6 +269,19 @@ final class SearchStore: ObservableObject {
 
     func setLoadingState(_ state: ScreenState) {
         loadingState = state
+    }
+
+    /// Clear the search query, recent history, trending cache and results so a
+    /// logout / account switch starts search from a clean slate.
+    func reset() {
+        query = ""
+        recentSearches = []
+        trendingIds = []
+        trendingById = [:]
+        postResultIds = []
+        userResultIds = []
+        topicResultIds = []
+        loadingState = .idle
     }
 }
 

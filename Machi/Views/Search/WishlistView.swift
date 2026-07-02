@@ -118,7 +118,8 @@ struct WishlistView: View {
                         EmptyStateView(
                             title: KXListingCopy.pickText(language, "还没有收藏", "お気に入りはまだありません", "Nothing saved yet"),
                             subtitle: KXListingCopy.pickText(language, "在房源、商家或商品上点 ❤ 即可收藏，方便随时回看。", "物件・店舗・商品の ❤ で保存できます。", "Tap ❤ on any listing to save it here."),
-                            systemImage: "heart"
+                            systemImage: "heart",
+                            illustration: .saved
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
@@ -233,7 +234,7 @@ private struct WishlistRow: View {
                 .accessibilityLabel(L("delete", language))
             }
             .padding(10)
-            .kxLivingSurface(radius: 20, elevated: true)
+            .kxLivingSurface(radius: KXRadius.card, elevated: true)
         }
         .buttonStyle(KXPressableStyle())
     }

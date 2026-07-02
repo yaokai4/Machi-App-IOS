@@ -143,7 +143,7 @@ struct ListingMapView: View {
                     .foregroundStyle(.tertiary)
             }
             .padding(10)
-            .kxLivingSurface(radius: 20, elevated: true)
+            .kxLivingSurface(radius: KXRadius.card, elevated: true)
         }
         .buttonStyle(KXPressableStyle())
     }

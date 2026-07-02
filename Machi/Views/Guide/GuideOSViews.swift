@@ -23,7 +23,7 @@ struct GuidePlannerFormShell<Fields: View, Saved: View>: View {
                     GuideOSHeaderRow(title: title, subtitle: subtitle)
                     VStack(spacing: 12) { fields() }
                         .padding(15)
-                        .kxGlassSurface(radius: 22)
+                        .kxGlassSurface(radius: KXRadius.hero)
                     if let message = model.message { GuideOSNotice(message: message) }
                     savedSection()
                     if model.todos.isEmpty && !model.isLoading {
@@ -445,7 +445,7 @@ struct GuideOSEmptyPanel: View {
         }
         .padding(18)
         .frame(maxWidth: .infinity)
-        .kxGlassSurface(radius: 20)
+        .kxGlassSurface(radius: KXRadius.card)
     }
 }
 
@@ -716,7 +716,7 @@ struct GuideContractsView: View {
             .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isSaving)
         }
         .padding(15)
-        .kxGlassSurface(radius: 22)
+        .kxGlassSurface(radius: KXRadius.hero)
     }
 
     private func currentPayload() -> KaiXGuideContractPayload {
@@ -839,11 +839,11 @@ private struct GuideContractRow: View {
                         .frame(width: 44, height: 44)
                 }
                 .contentShape(Rectangle())
-                .accessibilityLabel("更多")
+                .accessibilityLabel(guideOSText(language, "更多", "もっと見る", "More"))
             }
             GuideAttachmentSection(entityType: "guide_contract", entityId: item.id, title: guideOSText(language, "合同附件", "契約の添付", "Contract files"))
         }
-        .padding(13)
+        .padding(12)
         .kxGlassSurface(radius: 18)
         .confirmationDialog(guideOSText(language, "删除该合同及关联提醒？", "この契約と関連リマインダーを削除しますか？", "Delete this contract and its reminders?"), isPresented: $confirmingDelete, titleVisibility: .visible) {
             Button(guideOSText(language, "删除", "削除", "Delete"), role: .destructive, action: onDelete)
@@ -962,7 +962,7 @@ struct GuideDocumentsView: View {
             .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isSaving)
         }
         .padding(15)
-        .kxGlassSurface(radius: 22)
+        .kxGlassSurface(radius: KXRadius.hero)
     }
 
     private func beginEditing(_ item: KaiXGuideDocumentDTO) {
@@ -1020,18 +1020,18 @@ private struct GuideDocumentRow: View {
                 }
                 .buttonStyle(.fullArea)
                 .contentShape(Rectangle())
-                .accessibilityLabel("编辑")
+                .accessibilityLabel(guideOSText(language, "编辑", "編集", "Edit"))
                 Button(role: .destructive) { confirmingDelete = true } label: {
                     Image(systemName: "trash")
                         .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.fullArea)
                 .contentShape(Rectangle())
-                .accessibilityLabel("删除")
+                .accessibilityLabel(guideOSText(language, "删除", "削除", "Delete"))
             }
             GuideAttachmentSection(entityType: "guide_document", entityId: item.id, title: guideOSText(language, "可选附件", "任意の添付", "Optional files"))
         }
-        .padding(13)
+        .padding(12)
         .kxGlassSurface(radius: 18)
         .confirmationDialog(guideOSText(language, "删除该证件提醒？", "この証明書リマインダーを削除しますか？", "Delete this document reminder?"), isPresented: $confirmingDelete, titleVisibility: .visible) {
             Button(guideOSText(language, "删除", "削除", "Delete"), role: .destructive, action: onDelete)
@@ -1107,7 +1107,7 @@ struct GuideGoalsView: View {
                             .disabled(goalTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isSaving)
                         }
                         .padding(15)
-                        .kxGlassSurface(radius: 20)
+                        .kxGlassSurface(radius: KXRadius.card)
                     }
 
                     if let message = model.message {
@@ -1239,7 +1239,7 @@ struct GuideAttachmentSection: View {
                     .font(.subheadline.weight(.black))
                     .foregroundStyle(KXColor.accent)
                 Text(title ?? guideOSText(language, "附件", "添付", "Attachments"))
-                    .font(.subheadline.weight(.black))
+                    .font(.subheadline.weight(.bold))
                 if !files.isEmpty {
                     Text("\(files.count)")
                         .font(.caption.weight(.black))
@@ -1308,7 +1308,7 @@ struct GuideAttachmentSection: View {
                             }
                             .buttonStyle(.fullArea)
                             .contentShape(Rectangle())
-                            .accessibilityLabel("删除")
+                            .accessibilityLabel(guideOSText(language, "删除", "削除", "Delete"))
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)

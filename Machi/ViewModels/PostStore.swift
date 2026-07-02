@@ -18,6 +18,24 @@ final class PostStore: ObservableObject {
 
     private var pendingActions = Set<String>()
 
+    /// Wipe every cached post + derived id list on logout / account switch so
+    /// the next account's feeds, likes, bookmarks, drafts and per-user liked
+    /// state can never be seeded from the previous account's cache.
+    func reset() {
+        postsById = [:]
+        feedIds = []
+        followingFeedIds = []
+        hotIds = []
+        searchResultIds = []
+        profilePostIds = [:]
+        likedPostIds = []
+        bookmarkedPostIds = []
+        repostedPostIds = []
+        mediaPostIds = []
+        draftIds = []
+        pendingActions = []
+    }
+
     func register(_ post: PostEntity) {
         postsById[post.id] = post
     }

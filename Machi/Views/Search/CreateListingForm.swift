@@ -232,6 +232,9 @@ struct CreateCityListingView: View {
     @State private var showMembershipGate = false
     @State private var showQuotaExhausted = false
     @State private var quotaExhaustedMessage: String?
+    // #6: this month's remaining high-trust publish quota for a member on a gated
+    // type. nil = unknown / not loaded / endpoint unavailable (row stays hidden).
+    @State private var listingQuotaRemaining: Int?
 
     /// Listing types gated behind Machi membership (mirrors the server's
     /// LISTING_TYPES_REQUIRING_MEMBERSHIP). Used to prompt *before* the user
@@ -241,6 +244,26 @@ struct CreateCityListingView: View {
 
     private var needsMembership: Bool {
         Self.membershipGatedTypes.contains(listingType) && !currentUser.isVerifiedMember && !isEditing
+    }
+
+    /// A member publishing a gated type is the only case the monthly quota row is
+    /// relevant to.
+    private var showsListingQuota: Bool {
+        Self.membershipGatedTypes.contains(listingType) && currentUser.isVerifiedMember && !isEditing
+    }
+
+    /// Load the member's remaining monthly high-trust publish quota. Silent on any
+    /// failure (404 on an older server, network) — the row simply stays hidden.
+    private func loadListingQuota() async {
+        guard showsListingQuota else {
+            listingQuotaRemaining = nil
+            return
+        }
+        guard let resp = try? await KaiXAPIClient.shared.membershipListingQuota() else {
+            listingQuotaRemaining = nil
+            return
+        }
+        listingQuotaRemaining = resp.remaining(forGroup: listingType)
     }
 
     private var region: KaiXRegionDirectory.Region? {
@@ -625,6 +648,7 @@ struct CreateCityListingView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     createHero
                     if needsMembership { membershipBanner }
+                    if showsListingQuota, let remaining = listingQuotaRemaining { listingQuotaBanner(remaining) }
                     publishRegionCard
                     photoSection
                     basicInfoSection
@@ -661,6 +685,9 @@ struct CreateCityListingView: View {
         }
         .task(id: taxonomyRequestType) {
             await loadListingTaxonomy()
+        }
+        .task(id: listingType) {
+            await loadListingQuota()
         }
         .onAppear {
             // Seed 发布地区 from the editing listing, the passed citySlug, or the
@@ -791,6 +818,34 @@ struct CreateCityListingView: View {
         .buttonStyle(.plain)
     }
 
+    /// #6: shown to a member on a gated type — this month's remaining high-trust
+    /// publish allowance for the current group. A depleted count reads as a clear
+    /// "used up, resets next month" instead of a silent failure at submit.
+    private func listingQuotaBanner(_ remaining: Int) -> some View {
+        let depleted = remaining <= 0
+        return HStack(spacing: 10) {
+            Image(systemName: depleted ? "calendar.badge.exclamationmark" : "checkmark.seal.fill")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(depleted ? KXColor.heat : KXColor.accent)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(depleted
+                     ? KXListingCopy.pickText(language, "本月该类型发布额度已用完", "今月のこのカテゴリの投稿枠を使い切りました", "This month's quota for this type is used up")
+                     : KXListingCopy.pickText(language, "本月还可发布 \(remaining) 条", "今月はあと \(remaining) 件投稿できます", "\(remaining) posts left this month"))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.primary)
+                Text(KXListingCopy.pickText(language, "高信任发布额度每组每月 3 条，次月 1 日重置。", "高信頼投稿枠は各カテゴリ月3件、翌月1日にリセットされます。", "High-trust posting is 3 per group each month, resetting on the 1st."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background((depleted ? KXColor.heat : KXColor.accent).opacity(0.07), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke((depleted ? KXColor.heat : KXColor.accent).opacity(0.25), lineWidth: 0.8))
+    }
+
     /// Clears the per-listing fields so the user can immediately publish another
     /// in the same region (keeps 发布地区 + media-less form).
     private func resetFormForAnother() {
@@ -871,7 +926,7 @@ struct CreateCityListingView: View {
                     .kxGlassCircle()
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("返回")
+            .accessibilityLabel(KXListingCopy.pickText(language, "返回", "戻る", "Back"))
             VStack(alignment: .leading, spacing: 2) {
                 Text(isEditing ? KXListingCopy.pickText(language, "编辑发布", "投稿を編集", "Edit listing") : KXListingCopy.createTitle(for: listingType, language))
                     .font(.headline.weight(.semibold))
@@ -918,7 +973,7 @@ struct CreateCityListingView: View {
             }
         }
         .padding(KXSpacing.lg)
-        .kxGlassSurface(radius: 24, elevated: true)
+        .kxGlassSurface(radius: KXRadius.hero, elevated: true)
     }
 
     private var photoSection: some View {

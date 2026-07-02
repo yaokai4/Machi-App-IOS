@@ -35,8 +35,14 @@ actor ImageCacheService {
         cache.removeAllObjects()
     }
 
-    func image(for url: URL, targetPixelSize: CGFloat = 900) async -> UIImage? {
-        let key = "\(url.absoluteString)|\(Int(targetPixelSize.rounded()))" as NSString
+    /// `stableKey`, when provided, replaces the full URL as the cache identity —
+    /// use it for private/signed attachments whose URL rotates on every re-sign
+    /// (a URL-based key would miss on every rotation and re-download the same
+    /// bytes). Pass the attachmentId / objectKey. Public URLs pass nil and keep
+    /// the URL-based key.
+    func image(for url: URL, targetPixelSize: CGFloat = 900, stableKey: String? = nil) async -> UIImage? {
+        let identity = stableKey ?? url.absoluteString
+        let key = "\(identity)|\(Int(targetPixelSize.rounded()))" as NSString
         if let cached = cache.object(forKey: key) {
             return cached
         }
@@ -46,7 +52,7 @@ actor ImageCacheService {
 
         scheduleDiskTrimIfNeeded()
 
-        let diskKey = Self.diskKey(url: url, targetPixelSize: targetPixelSize)
+        let diskKey = Self.diskKey(identity: identity, targetPixelSize: targetPixelSize)
         let task = Task(priority: .utility) { () -> UIImage? in
             // Disk read-through: a downsampled copy survives memory eviction and
             // cold launches, so a covered feed/avatar paints from local storage
@@ -81,8 +87,9 @@ actor ImageCacheService {
     /// image in the same runloop tick — no `await` hop, no fade-in — for the
     /// very common case of a cell scrolling back into view. Misses (cold image)
     /// fall back to the async `image(for:)` path.
-    nonisolated func cachedImageSync(for url: URL, targetPixelSize: CGFloat = 900) -> UIImage? {
-        let key = "\(url.absoluteString)|\(Int(targetPixelSize.rounded()))" as NSString
+    nonisolated func cachedImageSync(for url: URL, targetPixelSize: CGFloat = 900, stableKey: String? = nil) -> UIImage? {
+        let identity = stableKey ?? url.absoluteString
+        let key = "\(identity)|\(Int(targetPixelSize.rounded()))" as NSString
         return cache.object(forKey: key)
     }
 
@@ -164,8 +171,8 @@ actor ImageCacheService {
         return folder
     }()
 
-    private static func diskKey(url: URL, targetPixelSize: CGFloat) -> String {
-        let raw = "\(url.absoluteString)|\(Int(targetPixelSize.rounded()))"
+    private static func diskKey(identity: String, targetPixelSize: CGFloat) -> String {
+        let raw = "\(identity)|\(Int(targetPixelSize.rounded()))"
         let digest = SHA256.hash(data: Data(raw.utf8))
         return digest.map { String(format: "%02x", $0) }.joined()
     }

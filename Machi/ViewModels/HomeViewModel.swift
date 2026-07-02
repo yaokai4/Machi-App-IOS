@@ -109,7 +109,10 @@ final class HomeViewModel: ObservableObject {
     }
 
     func loadMoreIfNeeded(context: ModelContext, currentUser: UserEntity, post: PostEntity?, postStore: PostStore) async {
-        guard canLoadMore, !isLoadingMore else { return }
+        // Never page while an initial load / reload is in flight: it resets the
+        // cursor + loadedIds mid-stream, so a concurrent append would double-count
+        // the page or interleave two feeds.
+        guard canLoadMore, !isLoadingMore, !isLoadingInitial else { return }
         guard post == nil || post?.id == posts.last?.id else { return }
         _ = await loadPage(context: context, currentUser: currentUser, mode: mode, postStore: postStore, reset: false)
     }
@@ -353,8 +356,16 @@ final class HomeViewModel: ObservableObject {
         let province = cityScoped ? (region?.provinceCode.isEmpty == true ? "" : region?.provinceCode ?? "") : ""
         let city = cityScoped ? (region?.cityCode ?? "") : ""
         let regionCode = cityScoped ? (region?.regionCode ?? "") : ""
+        // Scope the on-disk feed snapshot to the current account (the guest
+        // sentinel gets its own stable bucket): the 关注 tab and per-user
+        // like/bookmark state differ by account, so one account's cached feed
+        // must never be painted for the next after a logout / switch. logout
+        // also clears the folder; this is belt-and-braces for any snapshot
+        // written before the wipe.
+        let userScope = AuthService.shared.currentUserId.isEmpty ? "guest" : AuthService.shared.currentUserId
         return [
             "home",
+            userScope,
             mode.rawValue,
             region?.countryCode ?? "",
             province,

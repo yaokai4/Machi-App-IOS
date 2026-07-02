@@ -259,6 +259,11 @@ struct ChatView: View {
             }
             Button(L("cancel", language), role: .cancel) {}
         }
+        // A send failure (bubble flipped to `.failed`, or a compose error)
+        // buzzes an error haptic so the user notices without watching the screen.
+        .sensoryFeedback(.error, trigger: viewModel.errorMessage) { _, new in
+            new != nil
+        }
     }
 
     private func loadAndMarkRead() async {
@@ -298,7 +303,7 @@ struct ChatView: View {
                     .kxGlassCircle()
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("返回")
+            .accessibilityLabel(KXListingCopy.pickText(language, "返回", "戻る", "Back"))
 
             Button {
                 if let peer {
@@ -380,7 +385,7 @@ struct ChatView: View {
 
     private func reportPeer() {
         guard let peer else { return }
-        if currentUser.isGuest { GuestGate.shared.requireLogin(); return }
+        if currentUser.isGuest { GuestGate.shared.requireLogin(L("guestReasonMessage", language)); return }
         Task {
             do {
                 try await KaiXAPIClient.shared.reportUser(peer.id, reason: "harassment")
@@ -393,7 +398,7 @@ struct ChatView: View {
 
     private func blockPeer() {
         guard let peer else { return }
-        if currentUser.isGuest { GuestGate.shared.requireLogin(); return }
+        if currentUser.isGuest { GuestGate.shared.requireLogin(L("guestReasonMessage", language)); return }
         Task {
             do {
                 try await KaiXAPIClient.shared.setBlock(peer.id, true)
@@ -452,6 +457,21 @@ struct ChatView: View {
                                 }
                             )
                             .id(message.id)
+                            // New bubbles slide up from the bottom (anchored to
+                            // the sender's side) and fade + scale in; removed
+                            // ones fade out. Gives sending/receiving a natural
+                            // "message arrives" feel instead of a hard pop.
+                            .transition(
+                                .asymmetric(
+                                    insertion: .move(edge: .bottom)
+                                        .combined(with: .opacity)
+                                        .combined(with: .scale(
+                                            scale: 0.97,
+                                            anchor: message.senderId == currentUser.id ? .bottomTrailing : .bottomLeading
+                                        )),
+                                    removal: .opacity
+                                )
+                            )
                         }
                     }
                     // The bottom input bar is attached via .safeAreaInset, which
@@ -467,6 +487,9 @@ struct ChatView: View {
                 .padding(.top, 10)
                 .padding(.bottom, 12)
                 .kxReadableWidth()
+                // Drive the bubble insertion/removal transitions off the message
+                // count so appends/deletes animate rather than snap.
+                .animation(KXMotion.tap, value: viewModel.messages.count)
             }
             .scrollDismissesKeyboard(.interactively)
             .onAppear {
@@ -746,13 +769,15 @@ struct KXMessageBubble: View {
                         )
                         .compositingGroup()
                         .shadow(color: KXColor.glassShadow.opacity(isMine ? 0.14 : 0.22), radius: 8, y: 3)
-                        .accessibilityLabel(contentType == .video ? "视频消息" : "图片消息")
+                        .accessibilityLabel(contentType == .video
+                            ? KXListingCopy.pickText(language, "视频消息", "動画メッセージ", "Video message")
+                            : KXListingCopy.pickText(language, "图片消息", "画像メッセージ", "Image message"))
                 }
 
                 if let visibleContent = message.visibleContent {
                     Text(visibleContent)
                         .font(.body)
-                        .foregroundStyle(isMine ? .white : .primary)
+                        .foregroundStyle(isMine ? KXColor.onAccent : .primary)
                         .padding(.horizontal, 13)
                         .padding(.vertical, 9)
                         .background {
@@ -820,6 +845,7 @@ private struct ChatInputBar: View {
 
     @State private var isShowingAttachTray = false
     @State private var isShowingEmoji = false
+    @State private var sendTapCount = 0
     @FocusState private var inputFocused: Bool
 
     var body: some View {
@@ -955,17 +981,18 @@ private struct ChatInputBar: View {
     private var sendButton: some View {
         Button {
             guard canSend, !isSending else { return }
+            sendTapCount &+= 1
             send()
         } label: {
             if isSending {
-                KXSpinner(size: 18, lineWidth: 2.2, tint: canSend ? .white : KXColor.accent)
+                KXSpinner(size: 18, lineWidth: 2.2, tint: canSend ? KXColor.onAccent : KXColor.accent)
             } else {
                 Image(systemName: "paperplane.fill")
                     .font(.subheadline.weight(.bold))
             }
         }
         .frame(width: 44, height: 44)
-        .foregroundStyle(canSend ? .white : KXColor.accent.opacity(0.38))
+        .foregroundStyle(canSend ? KXColor.onAccent : KXColor.accent.opacity(0.38))
         .background {
             Circle()
                 .fill(canSend ? KXColor.accent : KXColor.accent.opacity(0.08))
@@ -974,6 +1001,8 @@ private struct ChatInputBar: View {
         .overlay(Circle().stroke(canSend ? Color.clear : KXColor.accent.opacity(0.12), lineWidth: 0.8))
         .shadow(color: canSend ? KXColor.accent.opacity(0.18) : .clear, radius: 10, y: 4)
         .disabled(!canSend || isSending)
+        // A light tap when a send fires — a subtle "it went" confirmation.
+        .sensoryFeedback(.impact(weight: .light), trigger: sendTapCount)
         .accessibilityLabel(L("send", language))
     }
 

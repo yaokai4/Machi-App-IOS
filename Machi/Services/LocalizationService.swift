@@ -493,6 +493,10 @@ struct LocalizationService {
         "notifFollowed": [.zh: "关注了你", .ja: "があなたをフォローしました", .en: "followed you"],
         "notifBookmarked": [.zh: "收藏了你的帖子", .ja: "があなたの投稿を保存しました", .en: "bookmarked your post"],
         "notifSavedSearch": [.zh: "你订阅的搜索有新匹配", .ja: "保存した検索に新着があります", .en: "New match for your saved search"],
+        "notifFavoritePriceDrop": [.zh: "你收藏的房源降价了", .ja: "お気に入りの物件が値下げされました", .en: "A listing you saved dropped its price"],
+        "notifFavoriteClosed": [.zh: "你收藏的房源已下架", .ja: "お気に入りの物件が掲載終了しました", .en: "A listing you saved was taken down"],
+        "notifFollowDigest": [.zh: "有新的粉丝关注了你", .ja: "新しいフォロワーが増えました", .en: "You have new followers"],
+        "notifCityDigest": [.zh: "你所在城市有新动态", .ja: "あなたの街に新しい動きがあります", .en: "New activity in your city"],
         "systemNotification": [.zh: "系统通知", .ja: "システム通知", .en: "System notification"],
         "guide": [.zh: "指南", .ja: "ガイド", .en: "Guide"],
         "guideOpenFailed": [.zh: "指南暂时无法打开。", .ja: "ガイドを開けません。", .en: "Guide cannot be opened right now."],
@@ -937,7 +941,7 @@ struct LocalizationService {
         "membershipBenefitsTitle": [.zh: "会员权益", .ja: "メンバー特典", .en: "What you get"],
         "membershipBenefitAI": [.zh: "Machi AI 会员额度 + Pro 深度模型", .ja: "Machi AI メンバー枠 + Pro 深思考モデル", .en: "Higher Machi AI limit + Pro model"],
         "membershipBenefitBadge": [.zh: "昵称旁显示认证标识", .ja: "名前の横に認証バッジを表示", .en: "A verified badge next to your name"],
-        "membershipBenefitPublish": [.zh: "可发布招聘、租房、本地服务等高信任内容", .ja: "求人・住まい・地域サービスなど信頼性の高い投稿が可能", .en: "Post jobs, housing, local services and other high-trust content"],
+        "membershipBenefitPublish": [.zh: "可发布招聘、租房、本地服务等高信任内容（每组每月 3 条，次月重置）", .ja: "求人・住まい・地域サービスなど信頼性の高い投稿が可能（各カテゴリ月3件、翌月リセット）", .en: "Post jobs, housing, local services and other high-trust content (3 per group each month, resets next month)"],
         "membershipBenefitPriority": [.zh: "内容获得轻微优先展示", .ja: "表示順がわずかに優遇", .en: "A gentle boost in ranking"],
         "membershipBenefitData": [.zh: "查看基础内容数据", .ja: "投稿の基本データを閲覧", .en: "Basic stats on your posts"],
         "membershipBenefitQuota": [.zh: "更高每日发布额度", .ja: "1日の投稿上限がアップ", .en: "A higher daily posting limit"],
@@ -977,7 +981,62 @@ struct LocalizationService {
         "membershipInsightsViews": [.zh: "浏览", .ja: "閲覧", .en: "Views"],
         "membershipInsightsLikes": [.zh: "点赞", .ja: "いいね", .en: "Likes"],
         "membershipInsightsBookmarks": [.zh: "收藏", .ja: "保存", .en: "Saves"],
-        "membershipInsightsComments": [.zh: "评论", .ja: "コメント", .en: "Comments"]
+        "membershipInsightsComments": [.zh: "评论", .ja: "コメント", .en: "Comments"],
+
+        // MARK: - I3: forgot password (native three-step reset)
+        "authForgotPassword": [.zh: "忘记密码？", .ja: "パスワードをお忘れですか？", .en: "Forgot password?"],
+        "authResetTitle": [.zh: "重置密码", .ja: "パスワードを再設定", .en: "Reset password"],
+        "authResetEmailStep": [.zh: "填写账号绑定的邮箱，我们会发送重置验证码。", .ja: "アカウントのメールアドレスを入力すると、確認コードを送信します。", .en: "Enter your account email and we'll send a reset code."],
+        "authResetCodeStep": [.zh: "输入邮箱验证码并设置新密码。", .ja: "確認コードを入力し、新しいパスワードを設定してください。", .en: "Enter the code and set a new password."],
+        "authResetSendCode": [.zh: "发送重置验证码", .ja: "確認コードを送信", .en: "Send reset code"],
+        "authResetNewPassword": [.zh: "新密码", .ja: "新しいパスワード", .en: "New password"],
+        "authResetConfirmPassword": [.zh: "确认新密码", .ja: "新しいパスワード（確認）", .en: "Confirm new password"],
+        "authResetSubmit": [.zh: "重置密码", .ja: "パスワードを再設定", .en: "Reset password"],
+        "authResetCodeSent": [.zh: "验证码已发送，请查收邮箱。", .ja: "確認コードを送信しました。メールをご確認ください。", .en: "A reset code was sent to your email."],
+        "authResetSuccess": [.zh: "密码已重置，请用新密码登录。", .ja: "パスワードを再設定しました。新しいパスワードでログインしてください。", .en: "Password reset. Please sign in with your new password."],
+        "authResetPasswordMismatch": [.zh: "两次输入的密码不一致。", .ja: "パスワードが一致しません。", .en: "Passwords do not match."],
+        "authResetResend": [.zh: "没收到？重新发送", .ja: "届かない場合は再送信", .en: "Didn't get it? Resend"],
+        "authResetBackToEmail": [.zh: "换个邮箱", .ja: "メールを変更", .en: "Change email"],
+
+        // MARK: - I3: guest gate context reasons
+        "guestReasonLike": [.zh: "登录后即可点赞、转发和收藏。", .ja: "ログインするといいね・リポスト・保存ができます。", .en: "Sign in to like, repost, and save."],
+        "guestReasonCompose": [.zh: "登录后即可发布内容。", .ja: "ログインすると投稿できます。", .en: "Sign in to post."],
+        "guestReasonMessage": [.zh: "登录后即可管理私信。", .ja: "ログインするとメッセージを管理できます。", .en: "Sign in to manage messages."],
+
+        // MARK: - I3: register missing-fields hint
+        "authMissingPrefix": [.zh: "还差：", .ja: "あと少し：", .en: "Still needed: "],
+        "authMissingUsername": [.zh: "用户名", .ja: "ユーザー名", .en: "username"],
+        "authMissingDisplayName": [.zh: "昵称", .ja: "表示名", .en: "display name"],
+        "authMissingEmail": [.zh: "有效邮箱", .ja: "有効なメール", .en: "a valid email"],
+        "authMissingCode": [.zh: "邮箱验证码", .ja: "確認コード", .en: "email code"],
+        "authMissingPasswordRule": [.zh: "密码需 8 位以上且含字母和数字", .ja: "パスワードは8文字以上・英字と数字を含む", .en: "password (8+ chars with letters & numbers)"],
+        "authMissingRegion": [.zh: "所在地区", .ja: "地域", .en: "region"],
+
+        // MARK: - I3: publish feedback + media badges
+        "composePublishedToast": [.zh: "已发布", .ja: "投稿しました", .en: "Published"],
+        "composePublishedView": [.zh: "查看", .ja: "表示", .en: "View"],
+        "composeMediaCompressing": [.zh: "压缩中", .ja: "圧縮中", .en: "Compressing"],
+        "composeMediaUploading": [.zh: "上传", .ja: "アップロード", .en: "Uploading"],
+        "composeMediaUploaded": [.zh: "完成", .ja: "完了", .en: "Done"],
+        "composeMediaFailed": [.zh: "失败", .ja: "失敗", .en: "Failed"],
+        "composeAddTopic": [.zh: "添加话题", .ja: "トピックを追加", .en: "Add topic"],
+
+        // MARK: - I3: home search entry + favorites hub
+        "homeSearchEntry": [.zh: "搜索", .ja: "検索", .en: "Search"],
+        "profileFavorites": [.zh: "我的收藏", .ja: "お気に入り", .en: "My saved"],
+        "profileFavoritesSubtitle": [.zh: "房源收藏与帖子收藏", .ja: "物件と投稿の保存", .en: "Saved listings & posts"],
+        "favoritesListingsTab": [.zh: "房源", .ja: "物件", .en: "Listings"],
+        "favoritesPostsTab": [.zh: "帖子", .ja: "投稿", .en: "Posts"],
+
+        // MARK: - I3: RepositoryError code localization
+        "errNetwork": [.zh: "网络连接不稳定，请稍后重试。", .ja: "接続が不安定です。しばらくしてからもう一度お試しください。", .en: "Network is unstable. Please try again shortly."],
+        "errRateLimited": [.zh: "操作过于频繁，请稍后再试。", .ja: "操作が多すぎます。しばらくしてからお試しください。", .en: "Too many attempts. Please try again later."],
+        "errNotFound": [.zh: "内容不存在或已被删除。", .ja: "コンテンツが存在しないか削除されました。", .en: "This content doesn't exist or was removed."],
+        "errBlocked": [.zh: "对方限制了此操作。", .ja: "相手がこの操作を制限しています。", .en: "This action is restricted."],
+        "errForbidden": [.zh: "权限不足，无法完成此操作。", .ja: "権限が不足しています。", .en: "You don't have permission for this."],
+        "errMembershipRequired": [.zh: "此功能需要开通 Machi 认证会员。", .ja: "この機能には Machi 認証メンバーが必要です。", .en: "This feature requires Machi Verified membership."],
+        "errListingQuotaExceeded": [.zh: "已达当前套餐的发布上限。", .ja: "現在のプランの投稿上限に達しました。", .en: "You've reached your plan's listing limit."],
+        "errGeneric": [.zh: "操作失败，请稍后重试。", .ja: "操作に失敗しました。しばらくしてからお試しください。", .en: "Something went wrong. Please try again."]
     ]
 
     func localized(_ key: String, language: AppLanguage) -> String {

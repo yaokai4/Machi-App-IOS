@@ -144,7 +144,7 @@ struct KXStayListingCard: View {
                             .kxCoverBadge(in: Capsule())
                         }
                     }
-                    .padding(9)
+                    .padding(8)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     heartButton
                         .padding(3)   // 44pt frame absorbs the rest of the inset
@@ -152,7 +152,7 @@ struct KXStayListingCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .top, spacing: 8) {
                         Text(KXListingCopy.displayTitle(listing))
-                            .font(.system(size: 16, weight: .semibold))   // mid-size title, not 19pt — no longer top-heavy
+                            .kxScaledFont(16, relativeTo: .subheadline, weight: .semibold)   // mid-size title, not 19pt — no longer top-heavy
                             .foregroundStyle(.primary)
                             .lineLimit(1)
                         Spacer(minLength: 4)
@@ -190,8 +190,10 @@ struct KXStayListingCard: View {
                     }
                     HStack(spacing: 6) {
                         Text(KXListingCopy.priceLabel(listing))
-                            .font(.system(size: 17, weight: .bold))   // price = the one accent: a touch bigger + warm
+                            .kxScaledFont(17, relativeTo: .headline, weight: .bold)   // price = the one accent: a touch bigger + warm
                             .foregroundStyle(KXColor.livingWarm)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
                         if variant == .home || variant == .forsale, let fee = KXListingCopy.attr(listing, "management_fee"), !fee.isEmpty {
                             Text(String(format: L("managementFeeInline", language), fee))
                                 .font(.caption2)
@@ -226,7 +228,7 @@ struct KXStayListingCard: View {
                 .padding(.horizontal, 4)
             }
             .padding(10)
-            .kxLivingSurface(radius: 24, elevated: true)
+            .kxLivingSurface(radius: KXRadius.hero, elevated: true)
         }
         .buttonStyle(KXPressableStyle())
         .sensoryFeedback(.impact(weight: .light), trigger: openTaps)

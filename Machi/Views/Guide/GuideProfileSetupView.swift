@@ -79,7 +79,7 @@ struct GuideProfileSetupView: View {
                             .foregroundStyle(.secondary)
                     }
                     .padding(15)
-                    .kxGlassSurface(radius: 22)
+                    .kxGlassSurface(radius: KXRadius.hero)
 
                     // City stays available but de-emphasised under "更多（可选）".
                     VStack(alignment: .leading, spacing: 10) {
@@ -102,7 +102,7 @@ struct GuideProfileSetupView: View {
                         Toggle(guideOSText(language, "目前在日本", "現在日本にいる", "Currently in Japan"), isOn: $isInJapan)
                     }
                     .padding(15)
-                    .kxGlassSurface(radius: 22)
+                    .kxGlassSurface(radius: KXRadius.hero)
 
                     Button {
                         Task {
@@ -224,7 +224,7 @@ private struct GuideReminderDateCard: View {
             }
         }
         .padding(15)
-        .kxGlassSurface(radius: 22)
+        .kxGlassSurface(radius: KXRadius.hero)
     }
 }
 

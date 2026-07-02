@@ -186,7 +186,10 @@ struct NotificationsView: View {
            let conversationId = item.targetConversationId {
             return .conversation(conversationId: conversationId)
         }
-        if item.type == .savedSearch, let listingId = item.targetListingId {
+        // Saved-search + favorite (price drop / closed) rows all deep-link to
+        // the listing they carry.
+        if item.type == .savedSearch || item.type == .favoritePriceDrop || item.type == .favoriteClosed,
+           let listingId = item.targetListingId {
             return .cityListingDetail(listingId: listingId)
         }
         if let postId = item.targetPostId {
@@ -197,7 +200,8 @@ struct NotificationsView: View {
                 return .postDetail(postId: postId)
             }
         }
-        if item.type == .follow, let actorId = item.actorIds.first {
+        // A follow or batched follow digest opens the (primary) actor's profile.
+        if item.type == .follow || item.type == .followDigest, let actorId = item.actorIds.first {
             return .profile(userId: actorId)
         }
         return nil
@@ -359,6 +363,10 @@ private struct NotificationCard: View {
         case .listingInquiry: return "\(actorText) \(L("notifInquired", language))"
         // No meaningful actor — the "actor" is just the listing's seller.
         case .savedSearch: return L("notifSavedSearch", language)
+        case .favoritePriceDrop: return L("notifFavoritePriceDrop", language)
+        case .favoriteClosed: return L("notifFavoriteClosed", language)
+        case .followDigest: return L("notifFollowDigest", language)
+        case .cityDigest: return L("notifCityDigest", language)
         case .system: return L("systemNotification", language)
         }
     }
@@ -387,6 +395,10 @@ private struct NotificationCard: View {
         case .message: "envelope.fill"
         case .listingInquiry: "tag.fill"
         case .savedSearch: "sparkle.magnifyingglass"
+        case .favoritePriceDrop: "arrow.down.circle.fill"
+        case .favoriteClosed: "xmark.circle.fill"
+        case .followDigest: "person.2.fill"
+        case .cityDigest: "building.2.fill"
         case .system: "bell.fill"
         }
     }
@@ -403,6 +415,10 @@ private struct NotificationCard: View {
         case .message: .teal
         case .listingInquiry: .mint
         case .savedSearch: .yellow
+        case .favoritePriceDrop: .green
+        case .favoriteClosed: .red
+        case .followDigest: .purple
+        case .cityDigest: .blue
         case .system: .secondary
         }
     }
@@ -432,8 +448,10 @@ private enum NotificationFilter: String, CaseIterable, Identifiable {
         case .all: true
         case .interactions: [.like, .repost, .bookmark, .mention].contains(type)
         case .comments: [.comment, .reply].contains(type)
-        case .follows: type == .follow
-        case .system: type == .system
+        case .follows: type == .follow || type == .followDigest
+        // Favorite/city digests are non-social announcements — group them with
+        // system so they still surface under a filter (and not just "all").
+        case .system: [.system, .favoritePriceDrop, .favoriteClosed, .cityDigest].contains(type)
         }
     }
 }

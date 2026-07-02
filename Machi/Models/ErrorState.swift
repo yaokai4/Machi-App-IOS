@@ -8,6 +8,9 @@ enum ErrorState {
     case syncDelayed
     case requestFailed(message: String, technicalDetails: String?)
     case custom(title: String, message: String, systemImage: String, tint: Color, technicalDetails: String?)
+    /// Post-publish success banner. `actionTitle` labels the tap-through button
+    /// (e.g. "查看") whose closure is supplied via `ToastManager.show(retry:)`.
+    case publishedSuccess(title: String, actionTitle: String)
 
     var title: String {
         switch self {
@@ -27,6 +30,8 @@ enum ErrorState {
             "操作未完成"
         case .custom(let title, _, _, _, _):
             title
+        case .publishedSuccess(let title, _):
+            title
         }
     }
 
@@ -44,6 +49,8 @@ enum ErrorState {
             message
         case .custom(_, let message, _, _, _):
             message
+        case .publishedSuccess:
+            ""
         }
     }
 
@@ -61,6 +68,8 @@ enum ErrorState {
             "xmark.octagon"
         case .custom(_, _, let systemImage, _, _):
             systemImage
+        case .publishedSuccess:
+            "checkmark.circle.fill"
         }
     }
 
@@ -78,6 +87,8 @@ enum ErrorState {
             .red
         case .custom(_, _, _, let tint, _):
             tint
+        case .publishedSuccess:
+            .green
         }
     }
 
@@ -91,12 +102,14 @@ enum ErrorState {
             nil
         case .custom:
             "重试"
+        case .publishedSuccess(_, let actionTitle):
+            actionTitle
         }
     }
 
     var technicalDetails: String? {
         switch self {
-        case .offline, .syncDelayed:
+        case .offline, .syncDelayed, .publishedSuccess:
             nil
         case .databaseRecovered(_, let details),
              .databaseRecoveryMode(_, let details),

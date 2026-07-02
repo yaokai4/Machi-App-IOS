@@ -511,16 +511,18 @@ struct PostCardView: View, Equatable {
                 Divider()
             }
 
+            ShareLink(
+                item: postShareURL,
+                subject: Text(postShareTitle),
+                preview: SharePreview(postShareTitle)
+            ) {
+                Label(L("sharePost", language), systemImage: "square.and.arrow.up")
+            }
+
             Button {
                 copyPostLink()
             } label: {
                 Label(L("copyLink", language), systemImage: "link")
-            }
-
-            Button {
-                copyPostLink(successMessage: L("shareLinkReady", language))
-            } label: {
-                Label(L("sharePost", language), systemImage: "square.and.arrow.up")
             }
 
             Button(role: .destructive) {
@@ -619,6 +621,22 @@ struct PostCardView: View, Equatable {
         cardMessage = successMessage ?? L("linkCopied", language)
     }
 
+    /// Public web URL used by the system share sheet (a real link a recipient can
+    /// open in any browser and that resolves back into the app via Universal
+    /// Links). Falls back to the machicity.com root if the id is somehow empty.
+    private var postShareURL: URL {
+        URL(string: "https://machicity.com/p/\(menuTargetPost.id)") ?? URL(string: "https://machicity.com")!
+    }
+
+    /// Short human title for the share preview — the first line of the post,
+    /// clipped, with a Machi-branded fallback for media-only posts.
+    private var postShareTitle: String {
+        let text = menuTargetPost.previewText
+        if text.isEmpty { return "Machi" }
+        let firstLine = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? text
+        return firstLine.count > 60 ? String(firstLine.prefix(60)) + "…" : firstLine
+    }
+
     private func handleRepostTap() {
         if (originalPost ?? post).isRepostedByCurrentUser {
             isShowingRepostOptions = true
@@ -628,9 +646,16 @@ struct PostCardView: View, Equatable {
     }
 
     /// Wrap a write action so a guest gets a login prompt instead. Reading /
-    /// navigation actions (open comments, open profile) are NOT wrapped.
+    /// navigation actions (open comments, open profile) are NOT wrapped. The
+    /// prompt carries a reason so the auth sheet explains why it appeared.
     private func guestGated(_ action: @escaping () -> Void) -> () -> Void {
-        { if currentUser?.isGuest == true { GuestGate.shared.requireLogin() } else { action() } }
+        {
+            if currentUser?.isGuest == true {
+                GuestGate.shared.requireLogin(L("guestReasonLike", language))
+            } else {
+                action()
+            }
+        }
     }
 }
 
@@ -797,7 +822,7 @@ private struct MetricButton: View {
                     .symbolEffect(.bounce, options: .speed(1.5), value: isActive)
                     .frame(width: 17, height: 17)
                 Text(NumberFormatterUtils.compact(value))
-                    .font(.system(size: 12, weight: .medium))
+                    .kxScaledFont(12, relativeTo: .caption, weight: .medium)
                     .monospacedDigit()
                     .contentTransition(.numericText(value: Double(value)))
                     .lineLimit(1)
@@ -827,7 +852,7 @@ private struct MetricLabel: View {
                 .font(.system(size: 15, weight: .regular))
                 .frame(width: 17, height: 17)
             Text(NumberFormatterUtils.compact(value))
-                .font(.system(size: 12, weight: .medium))
+                .kxScaledFont(12, relativeTo: .caption, weight: .medium)
                 .monospacedDigit()
                 .contentTransition(.numericText(value: Double(value)))
                 .lineLimit(1)

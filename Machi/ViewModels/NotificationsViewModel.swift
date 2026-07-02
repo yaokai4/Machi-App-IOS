@@ -227,10 +227,14 @@ struct AggregatedNotification: Identifiable {
             // One row per conversation, so parallel chats never collapse
             // into each other.
             return "\(notification.typeRaw)|\(notification.targetConversationId ?? notification.id)"
-        case .savedSearch:
-            // One row per matched listing (server dedupes per user+listing).
+        case .savedSearch, .favoritePriceDrop, .favoriteClosed:
+            // One row per matched/affected listing (server dedupes per
+            // user+listing).
             return "\(notification.typeRaw)|\(notification.targetListingId ?? notification.id)"
-        case .system:
+        case .followDigest:
+            // Batched follow summary — collapse all into one digest row.
+            return notification.typeRaw
+        case .cityDigest, .system:
             return "\(notification.typeRaw)|\(notification.id)"
         }
     }

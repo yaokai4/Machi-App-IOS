@@ -197,7 +197,7 @@ struct EditProfileView: View {
                             )
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("头像颜色")
+                    .accessibilityLabel(KXListingCopy.pickText(language, "头像颜色", "アバターの色", "Avatar color"))
                 }
             }
         }

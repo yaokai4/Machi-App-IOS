@@ -74,13 +74,17 @@ struct SearchScreen: View {
             Group {
                 switch viewModel.state {
                 case .loading, .idle:
-                    LoadingView()
+                    ScrollView {
+                        KXFeedSkeleton()
+                            .padding(.horizontal, KXSpacing.screen)
+                            .padding(.top, KXSpacing.md)
+                    }
                 case .empty:
                     // The preloaded hot/topic pool can be empty (fresh region,
                     // guest) — server search must still work, so an active
                     // query renders the results content, not a dead end.
                     if trimmedQuery.isEmpty {
-                        KXEmptyState(title: L("emptySearch", language), subtitle: L("searchPlaceholder", language), systemImage: "magnifyingglass")
+                        KXEmptyState(title: L("emptySearch", language), subtitle: L("searchPlaceholder", language), systemImage: "magnifyingglass", illustration: .search)
                     } else {
                         resultsContent
                     }

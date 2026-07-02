@@ -73,7 +73,7 @@ struct GuideHomeView: View {
         if country != "jp" {
             GuideComingSoonView()
         } else if viewModel.isLoading && viewModel.home == nil {
-            LoadingView()
+            ScrollView { KXGuideListSkeleton() }
         } else if let message = viewModel.errorMessage, viewModel.home == nil {
             ErrorStateView(message: message) {
                 Task { await viewModel.load(country: country, force: true) }
@@ -146,7 +146,7 @@ struct GuideHomeView: View {
                 .kxReadableWidth()
             }
         } else {
-            LoadingView()
+            ScrollView { KXGuideListSkeleton() }
         }
     }
 }
@@ -189,7 +189,7 @@ struct GuideCategoryView: View {
             if country != "jp" {
                 GuideComingSoonView()
             } else if isLoading && !hasLoadedContent {
-                LoadingView()
+                ScrollView { KXGuideListSkeleton() }
             } else if let errorMessage, !hasLoadedContent {
                 ErrorStateView(message: errorMessage) {
                     Task { await load() }
@@ -286,7 +286,7 @@ struct GuideCategoryView: View {
             }
         }
         .padding(18)
-        .kxLivingSurface(radius: 24, elevated: true)
+        .kxGlassSurface(radius: KXRadius.hero, elevated: true)
     }
 
     @ViewBuilder
@@ -386,6 +386,12 @@ struct GuideArticleDetailView: View {
     @State private var isMarkingRead = false
     @State private var errorMessage: String?
     @State private var toastMessage: String?
+    // #9: live reading progress. `scrollProgress` (0…100) is driven by the scroll
+    // offset; `reportedProgress` remembers the last value pushed to the server so
+    // we only PATCH on meaningful (10%+) jumps, throttled.
+    @State private var scrollProgress: Int = 0
+    @State private var reportedProgress: Int = 0
+    @State private var lastProgressReport: Date = .distantPast
 
     let slug: String
     private var country: String { (regionStore.current?.countryCode ?? "jp").lowercased() }
@@ -397,27 +403,55 @@ struct GuideArticleDetailView: View {
             if country != "jp" {
                 GuideComingSoonView()
             } else if isLoading {
-                LoadingView()
+                ScrollView { KXGuideListSkeleton() }
             } else if let errorMessage {
                 ErrorStateView(message: errorMessage) {
                     Task { await load() }
                 }
             } else if let article = response?.article {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        articleHeader(article)
-                        articleActionBar(article)
-                        articleBody(article)
-                        GuideNotePanel(text: guideText(language, "本内容由 \(article.authorName) 整理，仅供参考。涉及签证、入管、考试等官方流程时，请同时以官方最新公告为准。", "本コンテンツは \(article.authorName) が整理した参考情報です。ビザ、入管、試験などの公式手続きは必ず最新の公式発表も確認してください。", "This content was curated by \(article.authorName) for reference only. For visas, immigration, exams, and other official processes, always check the latest official notices."))
-                        if let related = response?.related, !related.isEmpty {
-                            GuideArticleSection(title: guideText(language, "相关指南", "関連ガイド", "Related guides"), subtitle: nil, articles: related, compact: true)
+                GeometryReader { outer in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 16) {
+                            articleHeader(article)
+                            articleTrustPanel(article)
+                            articleActionBar(article)
+                            articleBody(article)
+                            GuideNotePanel(text: guideText(language, "本内容由 \(article.authorName) 整理，仅供参考。涉及签证、入管、考试等官方流程时，请同时以官方最新公告为准。", "本コンテンツは \(article.authorName) が整理した参考情報です。ビザ、入管、試験などの公式手続きは必ず最新の公式発表も確認してください。", "This content was curated by \(article.authorName) for reference only. For visas, immigration, exams, and other official processes, always check the latest official notices."))
+                            if let related = response?.related, !related.isEmpty {
+                                GuideArticleSection(title: guideText(language, "相关指南", "関連ガイド", "Related guides"), subtitle: nil, articles: related, compact: true)
+                            }
+                            // "Next step": route from this article into the matching
+                            // action path so reading turns into doing.
+                            GuideJourneyNextStepCard(categoryKey: article.categoryKey)
                         }
-                        // "Next step": route from this article into the matching
-                        // action path so reading turns into doing.
-                        GuideJourneyNextStepCard(categoryKey: article.categoryKey)
+                        .padding(KXSpacing.screen)
+                        .guideBottomInset()
+                        .background(
+                            // Track how far the content has scrolled inside the
+                            // named space; the min-Y (negative once scrolled) plus
+                            // the viewport height tells us the read fraction.
+                            GeometryReader { inner in
+                                Color.clear.preference(
+                                    key: GuideScrollProgressKey.self,
+                                    value: readFraction(inner: inner, viewportHeight: outer.size.height)
+                                )
+                            }
+                        )
                     }
-                    .padding(KXSpacing.screen)
-                    .guideBottomInset()
+                    .coordinateSpace(name: GuideArticleDetailView.scrollSpace)
+                    .onPreferenceChange(GuideScrollProgressKey.self) { fraction in
+                        updateReadingProgress(fraction, article: article)
+                    }
+                    // A slim reading-progress bar pinned to the very top of the view.
+                    .overlay(alignment: .top) {
+                        GeometryReader { bar in
+                            Capsule()
+                                .fill(KXColor.accent)
+                                .frame(width: bar.size.width * CGFloat(scrollProgress) / 100, height: 3)
+                        }
+                        .frame(height: 3)
+                        .allowsHitTesting(false)
+                    }
                 }
             } else {
                 EmptyStateView(title: guideText(language, "指南内容不存在", "ガイドが見つかりません", "Guide not found"), subtitle: guideText(language, "它可能已被移动或下线。", "移動または非公開になった可能性があります。", "It may have been moved or unpublished."), systemImage: "book.closed")
@@ -450,7 +484,7 @@ struct GuideArticleDetailView: View {
                     .foregroundStyle(.secondary)
             }
             Text(article.title)
-                .font(.system(size: 27, weight: .bold))
+                .kxScaledFont(27, relativeTo: .title2, weight: .bold)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
             if !article.summary.isEmpty {
@@ -471,7 +505,87 @@ struct GuideArticleDetailView: View {
             }
         }
         .padding(18)
-        .kxGlassSurface(radius: 24)
+        .kxGlassSurface(radius: KXRadius.hero)
+    }
+
+    /// G3: a compact provenance / freshness row — update date, verification date,
+    /// and a tappable source label. When the content has passed its stale window
+    /// (verifiedAt + staleAfterDays < now) a yellow "may be out of date" warning
+    /// shows so users know to double-check official pages. Renders nothing when
+    /// none of the fields are present (older payloads / plain editorial).
+    @ViewBuilder
+    private func articleTrustPanel(_ article: KaiXGuideArticleDTO) -> some View {
+        let updated = GuideCopy.shortDate(article.updatedAt)
+        let verified = GuideCopy.shortDate(article.verifiedAt)
+        let sourceURL = GuideCopy.url(article.sourceUrl)
+        let sourceLabel = (article.sourceLabel?.isEmpty == false) ? article.sourceLabel! : nil
+        let hasAny = updated != nil || verified != nil || sourceURL != nil || sourceLabel != nil
+        if hasAny {
+            VStack(alignment: .leading, spacing: 8) {
+                if isStale(article) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.caption2)
+                            .foregroundStyle(KXColor.rankGold)
+                        Text(guideText(language, "内容可能已过期，请以官方最新信息为准。", "内容が古くなっている可能性があります。最新の公式情報をご確認ください。", "This content may be out of date — check the latest official info."))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(KXColor.rankGold)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(KXColor.rankGold.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                FlowLayout(spacing: 10) {
+                    if let updated {
+                        trustChip(icon: "calendar", text: guideText(language, "更新于 \(updated)", "更新日 \(updated)", "Updated \(updated)"))
+                    }
+                    if let verified {
+                        trustChip(icon: "checkmark.shield", text: guideText(language, "核验于 \(verified)", "確認日 \(verified)", "Verified \(verified)"))
+                    }
+                    if let sourceURL {
+                        Link(destination: sourceURL) {
+                            HStack(spacing: 5) {
+                                Image(systemName: "link").font(.caption2)
+                                Text(sourceLabel ?? guideText(language, "来源", "出典", "Source"))
+                                    .font(.caption.weight(.semibold))
+                                    .lineLimit(1)
+                                Image(systemName: "arrow.up.right").font(.system(size: 9, weight: .bold))
+                            }
+                            .foregroundStyle(KXColor.accent)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background(KXColor.accentSoft, in: Capsule())
+                        }
+                    } else if let sourceLabel {
+                        trustChip(icon: "text.book.closed", text: sourceLabel)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .kxGlassSurface(radius: 18)
+        }
+    }
+
+    private func trustChip(icon: String, text: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon).font(.caption2)
+            Text(text).font(.caption.weight(.semibold)).lineLimit(1)
+        }
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
+        .background(KXColor.softBackground, in: Capsule())
+    }
+
+    /// True once the article is past `verifiedAt + staleAfterDays`.
+    private func isStale(_ article: KaiXGuideArticleDTO) -> Bool {
+        guard let days = article.staleAfterDays, days > 0,
+              let verified = KXDateParsing.parse(article.verifiedAt ?? "") else { return false }
+        guard let cutoff = Calendar.current.date(byAdding: .day, value: days, to: verified) else { return false }
+        return cutoff < Date()
     }
 
     private func articleActionBar(_ article: KaiXGuideArticleDTO) -> some View {
@@ -494,9 +608,11 @@ struct GuideArticleDetailView: View {
                 .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .disabled(isSaving)
 
-                Button {
-                    share(article)
-                } label: {
+                ShareLink(
+                    item: URL(string: "https://machicity.com/guide/articles/\(article.slug)") ?? URL(string: "https://machicity.com")!,
+                    subject: Text(article.title),
+                    preview: SharePreview(article.title)
+                ) {
                     Label(guideText(language, "分享", "共有", "Share"), systemImage: "square.and.arrow.up")
                         .frame(maxWidth: .infinity)
                 }
@@ -542,26 +658,19 @@ struct GuideArticleDetailView: View {
             .frame(height: 7)
         }
         .padding(14)
-        .kxGlassSurface(radius: 20)
+        .kxGlassSurface(radius: KXRadius.card)
     }
 
     private func articleBody(_ article: KaiXGuideArticleDTO) -> some View {
-        let paragraphs = (article.body ?? article.summary)
-            .components(separatedBy: "\n\n")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
-        return VStack(alignment: .leading, spacing: 14) {
-            ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, paragraph in
-                Text(paragraph)
-                    .font(.body)
-                    .lineSpacing(5)
-                    .foregroundStyle(.primary.opacity(0.92))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+        // markdown-lite: ## / ### headings, - / 1. lists, | tables |, **bold**,
+        // [links](url). Legacy plain-paragraph articles (no markers) still render
+        // as before because unmarked lines fall back to paragraphs.
+        VStack(alignment: .leading, spacing: 14) {
+            GuideMarkdownLite(text: (article.body ?? article.summary))
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(18)
-        .kxGlassSurface(radius: 22)
+        .kxGlassSurface(radius: KXRadius.hero)
     }
 
     private func load() async {
@@ -618,9 +727,54 @@ struct GuideArticleDetailView: View {
         }
     }
 
-    private func share(_ article: KaiXGuideArticleDTO) {
-        UIPasteboard.general.string = "https://machicity.com/guide/articles/\(article.slug)"
-        toastMessage = guideText(language, "链接已复制", "リンクをコピーしました", "Link copied")
+    // MARK: - #9 reading progress
+
+    static let scrollSpace = "guide-article-scroll"
+
+    /// Fraction (0…1) of the article that has been scrolled past. `inner.minY` in
+    /// the scroll coordinate space is the content's top offset (0 at rest, more
+    /// negative as it scrolls up); dividing the scrolled distance by the
+    /// scrollable range gives the read fraction.
+    private func readFraction(inner: GeometryProxy, viewportHeight: CGFloat) -> CGFloat {
+        let contentHeight = inner.size.height
+        let scrollable = contentHeight - viewportHeight
+        guard scrollable > 1 else { return 1 } // shorter than the screen → fully read
+        let scrolledUp = -inner.frame(in: .named(GuideArticleDetailView.scrollSpace)).minY
+        return max(0, min(1, scrolledUp / scrollable))
+    }
+
+    /// Update the local progress bar and, when signed in, throttle-report to the
+    /// server. We never regress the reported value and only PATCH on a 10%+ gain
+    /// at most once every 4s (or immediately when the reader reaches the end).
+    private func updateReadingProgress(_ fraction: CGFloat, article: KaiXGuideArticleDTO) {
+        let percent = max(0, min(100, Int((fraction * 100).rounded())))
+        // The stored/marked-read value is a floor — a read article stays read.
+        let baseline = max(article.progressPercent ?? article.readingProgress?.progressPercent ?? 0, reportedProgress)
+        let display = max(percent, baseline)
+        if display != scrollProgress { scrollProgress = display }
+
+        guard isSignedIn else { return }
+        let now = Date()
+        let reachedEnd = percent >= 98 && reportedProgress < 98
+        let bigJump = percent - reportedProgress >= 10
+        let throttled = now.timeIntervalSince(lastProgressReport) >= 4
+        guard percent > reportedProgress, reachedEnd || (bigJump && throttled) else { return }
+
+        reportedProgress = percent
+        lastProgressReport = now
+        Task {
+            // Best-effort: a dropped progress ping is harmless, so failures are
+            // swallowed (no toast, no state change).
+            _ = try? await KaiXAPIClient.shared.updateGuideArticleProgress(article.slug, country: country, progressPercent: percent)
+        }
+    }
+}
+
+/// Carries the article scroll read-fraction up to the detail view.
+private struct GuideScrollProgressKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 
@@ -824,7 +978,7 @@ struct GuideMemberResourcesView: View {
                         .textInputAutocapitalization(.never)
                         .onSubmit { Task { await load() } }
                 }
-                .padding(11)
+                .padding(12)
                 .background(KXColor.softBackground.opacity(0.8), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
         }
@@ -866,6 +1020,7 @@ struct GuideMemberResourcesView: View {
 
 struct GuideProductDetailView: View {
     @Environment(\.appLanguage) private var language
+    @EnvironmentObject private var userStore: UserStore
     @ObservedObject private var regionStore = RegionStore.shared
     @State private var product: KaiXGuideProductDTO?
     @State private var isLoading = true
@@ -873,9 +1028,21 @@ struct GuideProductDetailView: View {
     @State private var errorMessage: String?
     @State private var toastMessage: String?
     @State private var showTopupSheet = false
+    @State private var showMembershipSheet = false
 
     let slug: String
     private var country: String { (regionStore.current?.countryCode ?? "jp").lowercased() }
+
+    /// Current signed-in member state, read from the shared user store. Used to
+    /// decide whether the member price shows as a "you save" line (member) or a
+    /// tappable upsell (non-member).
+    private var currentUser: UserEntity? {
+        guard let id = userStore.currentUserId else { return nil }
+        return userStore.usersById[id]
+    }
+    private var isMember: Bool {
+        currentUser?.isVerifiedMember == true || product?.access?.memberUnlocked == true
+    }
 
     var body: some View {
         ZStack {
@@ -920,6 +1087,11 @@ struct GuideProductDetailView: View {
         .sheet(isPresented: $showTopupSheet, onDismiss: { Task { await load() } }) {
             NavigationStack { WalletView() }
         }
+        .sheet(isPresented: $showMembershipSheet, onDismiss: { Task { await load() } }) {
+            if let currentUser {
+                NavigationStack { MembershipView(currentUser: currentUser) }
+            }
+        }
     }
 
     private func productHero(_ product: KaiXGuideProductDTO) -> some View {
@@ -942,6 +1114,15 @@ struct GuideProductDetailView: View {
                         }
                     }
                 }
+
+                // #1: member price — strikethrough original + member price for
+                // members; a tappable "会员价 ¥xx" upsell for everyone else.
+                GuideMemberPriceRow(
+                    product: product,
+                    isMember: isMember,
+                    language: language,
+                    onUpgrade: { if currentUser != nil { showMembershipSheet = true } }
+                )
 
                 HStack(spacing: 10) {
                     Text(price)
@@ -1045,7 +1226,7 @@ struct GuideProductDetailView: View {
             GuideMetaRow(title: guideText(language, "内容类型", "コンテンツ種別", "Content type"), value: product.isService ? guideText(language, "人工服务", "人的サービス", "Human service") : guideText(language, "数字内容", "デジタル内容", "Digital content"))
         }
         .padding(18)
-        .kxGlassSurface(radius: 22)
+        .kxGlassSurface(radius: KXRadius.hero)
     }
 
     // Web purchases / membership sync to iOS: when the signed-in account owns the
@@ -1279,7 +1460,7 @@ private struct GuideLibraryHero: View {
             .background(KXColor.livingAccentSoft, in: Capsule())
 
             Text(guideText(language, "日本指南", "日本ガイド", "Japan Guide"))
-                .font(.system(size: 30, weight: .bold, design: .rounded))
+                .kxScaledFont(30, relativeTo: .largeTitle, weight: .bold, design: .rounded)
                 .foregroundStyle(KXColor.livingInk)
             Text(guideText(
                 language,
@@ -1308,7 +1489,7 @@ private struct GuideLibraryHero: View {
                     .buttonStyle(.fullArea)
                     .contentShape(Rectangle())
                     .accessibilityIdentifier("guide.search.clear")
-                    .accessibilityLabel("清除")
+                    .accessibilityLabel(guideOSText(language, "清除", "クリア", "Clear"))
                 }
             }
             .padding(.horizontal, 14)
@@ -1414,7 +1595,7 @@ private struct GuideSearchResultsSection: View {
                 .font(.caption.weight(.bold))
                 .foregroundStyle(KXColor.livingAccent)
             Text(title)
-                .font(.subheadline.weight(.black))
+                .font(.subheadline.weight(.bold))
                 .foregroundStyle(KXColor.livingInk)
             Text("\(count)")
                 .font(.caption2.weight(.black))
@@ -1461,7 +1642,7 @@ private struct GuideSearchFAQCard: View {
             }
         }
         .padding(14)
-        .kxLivingSurface(radius: 18)
+        .kxGlassSurface(radius: 18)
     }
 }
 
@@ -1876,7 +2057,7 @@ private struct GuideDualEntrySection: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .kxGlassSurface(radius: 20)
+            .kxGlassSurface(radius: KXRadius.card)
             .contentShape(Rectangle())
         }
         .buttonStyle(.fullArea)
@@ -2028,8 +2209,8 @@ private struct GuideCategoryCard: View {
                 }
             }
             .frame(maxWidth: .infinity, minHeight: 122, alignment: .topLeading)
-            .padding(13)
-            .kxLivingSurface(radius: 22)
+            .padding(12)
+            .kxGlassSurface(radius: KXRadius.hero)
         }
         .buttonStyle(.fullArea)
         .contentShape(Rectangle())
@@ -2082,10 +2263,107 @@ struct GuideArticleCard: View {
             }
             .padding(compact ? 14 : 16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .kxLivingSurface(radius: 20)
+            .kxGlassSurface(radius: KXRadius.card)
         }
         .buttonStyle(.fullArea)
         .contentShape(Rectangle())
+    }
+}
+
+/// #1: member-price surface for Guide resources.
+///
+/// - No member price on the product → renders nothing (older payloads / free /
+///   coming-soon items just show the normal price elsewhere).
+/// - Member → strikethrough original price + the member price, framed as savings.
+/// - Non-member → a tappable "会员价 ¥xx" chip that opens the membership page.
+struct GuideMemberPriceRow: View {
+    let product: KaiXGuideProductDTO
+    let isMember: Bool
+    let language: AppLanguage
+    var onUpgrade: () -> Void = {}
+
+    /// The member price label to show. Prefers the server-formatted
+    /// `memberPriceLabel`; falls back to formatting `memberPrice`.
+    private var memberLabel: String? {
+        if let label = product.memberPriceLabel, !label.isEmpty { return label }
+        if let mp = product.memberPrice, mp >= 0, product.isMemberDiscount == true || product.isMemberIncluded == true {
+            return mp == 0 ? guideText(language, "免费", "無料", "Free")
+                           : KaiXPriceFormatter.format(Double(mp), currency: product.currency)
+        }
+        return nil
+    }
+
+    /// The regular price, shown struck-through when a member price undercuts it.
+    private var originalLabel: String {
+        if !product.priceLabel.isEmpty { return product.priceLabel }
+        let base = product.originalPrice ?? product.price
+        return KaiXPriceFormatter.format(Double(base), currency: product.currency)
+    }
+
+    private var isMemberIncludedFree: Bool {
+        product.isMemberIncluded == true && (product.memberPrice ?? -1) == 0
+    }
+
+    var body: some View {
+        // Nothing to show for free / coming-soon / appointment items or when
+        // there simply is no member price.
+        if product.isFree || product.isComingSoon || product.isAppointmentOnly == true || product.isPriceHidden == true {
+            EmptyView()
+        } else if let memberLabel {
+            if isMember {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.caption)
+                        .foregroundStyle(.blue)
+                    Text(guideText(language, "会员价", "会員価格", "Member price"))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Text(memberLabel)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(KXColor.accent)
+                    Text(originalLabel)
+                        .font(.caption)
+                        .strikethrough()
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            } else {
+                Button(action: onUpgrade) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.caption)
+                            .foregroundStyle(.blue)
+                        (Text(guideText(language, "会员价 ", "会員価格 ", "Member price "))
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(.secondary)
+                         + Text(memberLabel)
+                            .font(.subheadline.weight(.bold))
+                            .foregroundColor(KXColor.accent))
+                        Spacer(minLength: 0)
+                        Text(isMemberIncludedFree
+                             ? guideText(language, "开通会员免费看", "会員なら無料", "Free for members")
+                             : guideText(language, "开通会员", "会員登録", "Get membership"))
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(KXColor.accent, in: Capsule())
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        } else {
+            EmptyView()
+        }
     }
 }
 
@@ -2093,6 +2371,16 @@ struct GuideProductCard: View {
     @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     let product: KaiXGuideProductDTO
+
+    /// Whether the browsing user is a member — read from the shared store so the
+    /// card can show member savings inline.
+    @EnvironmentObject private var userStore: UserStore
+    private var isMember: Bool {
+        guard let id = userStore.currentUserId, let user = userStore.usersById[id] else {
+            return product.access?.memberUnlocked == true
+        }
+        return user.isVerifiedMember || product.access?.memberUnlocked == true
+    }
 
     var body: some View {
         Button {
@@ -2126,6 +2414,10 @@ struct GuideProductCard: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
+                if let memberChip = memberPriceChip {
+                    Spacer(minLength: 0)
+                    memberChip
+                }
             }
             .padding(14)
             .frame(maxWidth: .infinity, minHeight: 138, alignment: .topLeading)
@@ -2134,6 +2426,36 @@ struct GuideProductCard: View {
         }
         .buttonStyle(.fullArea)
         .contentShape(Rectangle())
+    }
+
+    /// Compact member-price line on the card (informational — the whole card is a
+    /// tap target to the detail page where the upsell/upgrade CTA lives). Nil when
+    /// there is no member price or the item is free/coming-soon.
+    @ViewBuilder
+    private var memberPriceChip: (some View)? {
+        let label: String? = {
+            if let l = product.memberPriceLabel, !l.isEmpty { return l }
+            if let mp = product.memberPrice, product.isMemberDiscount == true || product.isMemberIncluded == true {
+                return mp == 0 ? guideText(language, "免费", "無料", "Free")
+                               : KaiXPriceFormatter.format(Double(mp), currency: product.currency)
+            }
+            return nil
+        }()
+        if let label,
+           !(product.isFree || product.isComingSoon || product.isAppointmentOnly == true || product.isPriceHidden == true) {
+            HStack(spacing: 4) {
+                Image(systemName: "checkmark.seal.fill").font(.system(size: 9)).foregroundStyle(.blue)
+                Text(isMember
+                     ? guideText(language, "会员价 \(label)", "会員価格 \(label)", "Member \(label)")
+                     : guideText(language, "会员价 \(label)", "会員価格 \(label)", "Member price \(label)"))
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(KXColor.accent)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(KXColor.accentSoft, in: Capsule())
+        }
     }
 }
 
@@ -2640,6 +2962,21 @@ enum GuideCopy {
             raw = "https://\(raw)"
         }
         return URL(string: raw)
+    }
+
+    private static let shortDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        return f
+    }()
+
+    /// Parse an ISO/date string and render it in a short, localized style. Returns
+    /// nil for empty/unparseable input so callers can skip the row entirely.
+    static func shortDate(_ raw: String?) -> String? {
+        guard let raw, !raw.trimmingCharacters(in: .whitespaces).isEmpty,
+              let date = KXDateParsing.parse(raw) else { return nil }
+        return shortDateFormatter.string(from: date)
     }
 
     static func productTypeLabel(_ type: String, language: AppLanguage = .zh) -> String {

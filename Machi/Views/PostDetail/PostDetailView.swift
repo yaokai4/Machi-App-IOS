@@ -89,8 +89,12 @@ struct PostDetailView: View {
             Group {
                 switch viewModel.state {
                 case .loading, .idle:
-                    LoadingView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    ScrollView {
+                        KXFeedSkeleton(count: 3)
+                            .padding(.horizontal, KXSpacing.screen)
+                            .padding(.top, KXSpacing.md)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 case .error(let message):
                     ErrorStateView(message: message) {
                         Task { await viewModel.load(context: modelContext, postId: postId, currentUser: currentUser, postStore: postStore, commentStore: commentStore) }
@@ -166,7 +170,7 @@ struct PostDetailView: View {
                     .kxGlassCircle()
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("返回")
+            .accessibilityLabel(KXListingCopy.pickText(language, "返回", "戻る", "Back"))
 
             Spacer()
 
@@ -193,16 +197,18 @@ struct PostDetailView: View {
                     .disabled(isPostMutationInFlight)
                 }
 
+                ShareLink(
+                    item: postShareURL,
+                    subject: Text(postShareTitle),
+                    preview: SharePreview(postShareTitle)
+                ) {
+                    Label(L("sharePost", language), systemImage: "square.and.arrow.up")
+                }
+
                 Button {
                     copyPostLink()
                 } label: {
                     Label(L("copyLink", language), systemImage: "link")
-                }
-
-                Button {
-                    copyPostLink(successMessage: L("shareLinkReady", language))
-                } label: {
-                    Label(L("sharePost", language), systemImage: "square.and.arrow.up")
                 }
 
                 Button(role: .destructive) {
@@ -303,6 +309,22 @@ struct PostDetailView: View {
         }
         UIPasteboard.general.string = "machi://post/\(post.id)"
         localActionMessage = successMessage ?? L("linkCopied", language)
+    }
+
+    /// Public web URL for the system share sheet. Uses the currently loaded post
+    /// id and falls back to the route's `postId` if the model isn't loaded yet.
+    private var postShareURL: URL {
+        let id = viewModel.post?.id ?? postId
+        return URL(string: "https://machicity.com/p/\(id)") ?? URL(string: "https://machicity.com")!
+    }
+
+    /// Short human title for the share preview — first line of the post body,
+    /// clipped, with a branded fallback for media-only posts.
+    private var postShareTitle: String {
+        let text = (viewModel.post?.previewText ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty { return "Machi" }
+        let firstLine = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? text
+        return firstLine.count > 60 ? String(firstLine.prefix(60)) + "…" : firstLine
     }
 
     /// C3: file a REAL report (the buttons used to only show a confirmation toast

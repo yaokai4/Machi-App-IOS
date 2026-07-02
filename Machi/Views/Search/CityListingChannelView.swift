@@ -566,7 +566,7 @@ struct CityListingChannelView: View {
                     .kxGlassCircle()
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("返回")
+            .accessibilityLabel(KXListingCopy.pickText(language, "返回", "戻る", "Back"))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(region.map { KaiXRegionDirectory.localizedShortLabel($0, language: language) } ?? L("currentRegion", language)) · \(KXListingCopy.title(for: baseType, language))")
@@ -1851,7 +1851,6 @@ struct UserListingsView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .kxPageBackground()
-        .background(KXColor.livingBackground)
         .toolbar(.hidden, for: .navigationBar)
         .task(id: "\(userId)-\(listingType)") { await load() }
     }
@@ -1866,7 +1865,7 @@ struct UserListingsView: View {
                     .kxGlassCircle()
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("返回")
+            .accessibilityLabel(KXListingCopy.pickText(language, "返回", "戻る", "Back"))
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.headline.weight(.bold))

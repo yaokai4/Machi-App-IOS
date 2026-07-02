@@ -574,7 +574,7 @@ struct GuideOSLibraryPickerField: View {
                     }
                     .buttonStyle(.fullArea)
         .contentShape(Rectangle())
-                    .accessibilityLabel("清除")
+                    .accessibilityLabel(guideOSText(language, "清除", "クリア", "Clear"))
                 }
             }
             .padding(.horizontal, 12)

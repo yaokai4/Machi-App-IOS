@@ -102,7 +102,7 @@ struct GuideDigestCardView: View {
     private func digestStat(_ label: String, _ value: Int, tone: Color) -> some View {
         VStack(spacing: 3) {
             Text(label).font(.caption2.weight(.bold)).foregroundStyle(.secondary)
-            Text(guideMoney(value)).font(.system(size: 15, weight: .black)).foregroundStyle(tone)
+            Text(guideMoney(value)).kxScaledFont(15, relativeTo: .subheadline, weight: .black).foregroundStyle(tone)
                 .minimumScaleFactor(0.6).lineLimit(1)
         }
         .frame(maxWidth: .infinity)

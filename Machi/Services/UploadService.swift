@@ -98,6 +98,10 @@ actor UploadService {
         } catch {
             throw UploadError.writeFailed
         }
+        // The PhotosPicker transfer already made its own tmp copy under
+        // MachiPickedVideos; now that we've re-staged it into KaiXMedia, drop
+        // that intermediate so picked-video scratch doesn't pile up.
+        cleanupPickedVideoSource(sourceURL)
 
         return try await finalizeVideoDraft(
             id: id,
@@ -291,9 +295,80 @@ actor UploadService {
     private func mediaDirectory() throws -> URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
-        let directory = base.appendingPathComponent("KaiXMedia", isDirectory: true)
+        var directory = base.appendingPathComponent("KaiXMedia", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // Staged upload copies are reproducible scratch — never back them up to
+        // iCloud (they'd bloat the backup and can't be restored usefully).
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? directory.setResourceValues(values)
         return directory
+    }
+
+    /// Directory where staged media copies live (best-effort; nil if it can't be
+    /// located). Used by the startup trim + draft cleanup.
+    private func mediaDirectoryURL() -> URL? {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return base.appendingPathComponent("KaiXMedia", isDirectory: true)
+    }
+
+    /// Delete a draft's staged files (the upload copy + its poster/thumbnail)
+    /// once they're no longer needed — after a successful send, or when the user
+    /// removes the draft. Best-effort; a missing file is fine.
+    func cleanupDraftFiles(_ draft: MediaDraft) {
+        for url in [draft.localURL, draft.thumbnailURL] where url.isFileURL {
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+
+    /// Remove the temporary copy PickedVideoFile made under
+    /// tmp/MachiPickedVideos once the video has been re-staged into KaiXMedia,
+    /// so the picked-file scratch doesn't accumulate.
+    private func cleanupPickedVideoSource(_ url: URL) {
+        guard url.isFileURL else { return }
+        let pickedDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MachiPickedVideos", isDirectory: true)
+            .standardizedFileURL.path
+        guard url.standardizedFileURL.path.hasPrefix(pickedDir) else { return }
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    /// Startup housekeeping for the staged-media directory: drop files older
+    /// than 48h, then, if the directory is still over 500 MB, evict oldest-first
+    /// until under budget. Mirrors ImageCacheService.trimDisk. Idempotent and
+    /// safe to call once per launch.
+    func trimStagedMedia() {
+        guard let dir = mediaDirectoryURL(),
+              FileManager.default.fileExists(atPath: dir.path) else { return }
+        let maxAge: TimeInterval = 48 * 60 * 60
+        let maxBytes = 500 * 1024 * 1024
+        let keys: [URLResourceKey] = [.contentModificationDateKey, .fileAllocatedSizeKey]
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: dir,
+            includingPropertiesForKeys: keys,
+            options: [.skipsHiddenFiles]
+        ) else { return }
+
+        let now = Date()
+        var living: [(url: URL, date: Date, size: Int)] = []
+        for file in files {
+            let values = try? file.resourceValues(forKeys: Set(keys))
+            let date = values?.contentModificationDate ?? .distantPast
+            if now.timeIntervalSince(date) >= maxAge {
+                try? FileManager.default.removeItem(at: file)
+                continue
+            }
+            living.append((file, date, values?.fileAllocatedSize ?? 0))
+        }
+
+        var total = living.reduce(0) { $0 + $1.size }
+        guard total > maxBytes else { return }
+        for file in living.sorted(by: { $0.date < $1.date }) {
+            try? FileManager.default.removeItem(at: file.url)
+            total -= file.size
+            if total <= maxBytes { break }
+        }
     }
 
     private func loadFileData(at url: URL) async throws -> Data {

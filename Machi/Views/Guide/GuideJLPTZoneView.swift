@@ -52,7 +52,7 @@ struct GuideJLPTZoneView: View {
                     .font(.caption2.weight(.black))
                     .foregroundStyle(KXColor.livingAccent)
                 if let title = z.hero?.title {
-                    Text(title).font(.title2.weight(.black)).foregroundStyle(.primary)
+                    Text(title).font(.title2.weight(.bold)).foregroundStyle(.primary)
                 }
                 if let subtitle = z.hero?.subtitle {
                     Text(subtitle).font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
@@ -65,7 +65,7 @@ struct GuideJLPTZoneView: View {
                 } label: {
                     HStack(spacing: 10) {
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(title).font(.subheadline.weight(.black)).foregroundStyle(KXColor.livingAccent)
+                            Text(title).font(.subheadline.weight(.bold)).foregroundStyle(KXColor.livingAccent)
                             if let s = plan.subtitle {
                                 Text(s).font(.caption).foregroundStyle(.secondary)
                             }
@@ -98,7 +98,7 @@ struct GuideJLPTZoneView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .padding(12)
-                        .kxLivingSurface(radius: 14)
+                        .kxLivingSurface(radius: KXRadius.md)
                     }
                 }
             }
@@ -134,7 +134,7 @@ struct GuideJLPTZoneView: View {
                         }
                         .tint(KXColor.livingAccent)
                         .padding(12)
-                        .kxLivingSurface(radius: 14)
+                        .kxLivingSurface(radius: KXRadius.md)
                     }
                 }
             }
@@ -152,7 +152,7 @@ struct GuideJLPTZoneView: View {
     }
 
     private func sectionHeader(_ text: String) -> some View {
-        Text(text).font(.headline.weight(.black)).foregroundStyle(.primary)
+        Text(text).font(.headline.weight(.bold)).foregroundStyle(.primary)
     }
 
     private func load() async {

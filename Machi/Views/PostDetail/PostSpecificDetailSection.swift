@@ -228,7 +228,7 @@ struct PostSpecificDetailSection: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.primary)
-            .accessibilityLabel("举报")
+            .accessibilityLabel(KXListingCopy.pickText(language, "举报", "通報", "Report"))
         }
         .padding(.top, 4)
     }

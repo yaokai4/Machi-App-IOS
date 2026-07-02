@@ -109,7 +109,7 @@ struct ContentTypePickerView: View {
                         .foregroundStyle(.tertiary)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("清除")
+                .accessibilityLabel(KXListingCopy.pickText(language, "清除", "クリア", "Clear"))
             }
         }
         .padding(.horizontal, 14)
@@ -191,7 +191,7 @@ struct ContentTypePickerView: View {
                     .minimumScaleFactor(0.72)
 
                 Text(L(spec.subtitleKey, language))
-                    .font(.system(size: 10))
+                    .kxScaledFont(10, relativeTo: .caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)

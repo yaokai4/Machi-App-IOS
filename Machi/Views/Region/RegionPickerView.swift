@@ -192,7 +192,7 @@ struct RegionPickerView: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("清除")
+                .accessibilityLabel(KXListingCopy.pickText(language, "清除", "クリア", "Clear"))
             }
         }
         .padding(.horizontal, KXSpacing.md)

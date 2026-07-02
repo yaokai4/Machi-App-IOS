@@ -22,6 +22,15 @@ final class CityChannelViewModel: ObservableObject {
     private var pendingRemoteBundle: ServerEntityFactory.PostBundle?
     // Ids already in `posts`, so an appended page can never repeat a row.
     private var loadedIds = Set<String>()
+    // Re-entrancy guard, identical in spirit to HomeViewModel: the channel view
+    // fires loadInitial from .task plus onChange(channel/region) handlers that
+    // can overlap. loadPage suspends at `await syncFromRemote`, so two
+    // interleaved calls both reset the cursor/loadedIds and mix pages. Serialize:
+    // a second call while one is in flight queues a single follow-up pass that
+    // always reloads the latest selected channel.
+    private var isLoadingInitial = false
+    private var pendingInitialReload = false
+    private var pendingInitialClearExisting = false
 
     func configure(regionCode: String, channel: CityChannel = .recommend) {
         region = KaiXRegionDirectory.resolve(regionCode: regionCode)
@@ -29,6 +38,42 @@ final class CityChannelViewModel: ObservableObject {
     }
 
     func loadInitial(context: ModelContext, currentUser: UserEntity, postStore: PostStore, clearExisting: Bool = false) async {
+        guard region != nil else {
+            state = .empty
+            return
+        }
+        if isLoadingInitial {
+            pendingInitialReload = true
+            pendingInitialClearExisting = pendingInitialClearExisting || clearExisting
+            return
+        }
+        isLoadingInitial = true
+        defer { isLoadingInitial = false }
+        var nextClearExisting = clearExisting
+        while true {
+            pendingInitialReload = false
+            let requestedChannel = channel
+            await loadInitialPass(
+                context: context,
+                currentUser: currentUser,
+                postStore: postStore,
+                channel: requestedChannel,
+                clearExisting: nextClearExisting
+            )
+            let channelChangedDuringLoad = requestedChannel != channel
+            nextClearExisting = pendingInitialClearExisting || channelChangedDuringLoad
+            pendingInitialClearExisting = false
+            guard pendingInitialReload || channelChangedDuringLoad else { break }
+        }
+    }
+
+    private func loadInitialPass(
+        context: ModelContext,
+        currentUser: UserEntity,
+        postStore: PostStore,
+        channel requestedChannel: CityChannel,
+        clearExisting: Bool
+    ) async {
         guard let region else {
             state = .empty
             return
@@ -44,13 +89,13 @@ final class CityChannelViewModel: ObservableObject {
             authors = [:]
             mediaByPostId = [:]
         }
-        await loadPage(context: context, currentUser: currentUser, postStore: postStore, region: region, reset: true)
+        await loadPage(context: context, currentUser: currentUser, postStore: postStore, region: region, channel: requestedChannel, reset: true)
     }
 
     func loadMoreIfNeeded(context: ModelContext, currentUser: UserEntity, post: PostEntity?, postStore: PostStore) async {
-        guard let region, canLoadMore, !isLoadingMore else { return }
+        guard let region, canLoadMore, !isLoadingMore, !isLoadingInitial else { return }
         guard post == nil || post?.id == posts.last?.id else { return }
-        await loadPage(context: context, currentUser: currentUser, postStore: postStore, region: region, reset: false)
+        await loadPage(context: context, currentUser: currentUser, postStore: postStore, region: region, channel: channel, reset: false)
     }
 
     func refresh(context: ModelContext, currentUser: UserEntity, postStore: PostStore) async {
@@ -102,6 +147,7 @@ final class CityChannelViewModel: ObservableObject {
         currentUser: UserEntity,
         postStore: PostStore,
         region: KaiXRegionDirectory.Region,
+        channel requestedChannel: CityChannel,
         reset: Bool
     ) async {
         if reset {
@@ -120,8 +166,12 @@ final class CityChannelViewModel: ObservableObject {
             // channel sees real content instead of an empty page. Best-effort
             // — falls back to the local cache on any failure.
             if reset || remoteHasMore {
-                await syncFromRemote(context: context, region: region, cursor: reset ? nil : remoteCursor)
+                await syncFromRemote(context: context, region: region, channel: requestedChannel, cursor: reset ? nil : remoteCursor)
             }
+            // The user switched channels while this request was in flight — the
+            // serialized loadInitial will reload the new channel, so drop this
+            // page instead of writing another channel's posts into `posts`.
+            guard requestedChannel == channel else { return }
             let repository = PostRepository(context: context)
             let page: [PostEntity]
             let usedRemotePage: Bool
@@ -136,12 +186,15 @@ final class CityChannelViewModel: ObservableObject {
                 usedRemotePage = false
                 page = try await repository.fetchCityPage(
                     region: region,
-                    channel: channel,
+                    channel: requestedChannel,
                     currentUserId: currentUser.id,
                     page: currentPage,
                     pageSize: KaiXConfig.pageSize
                 )
             }
+            // Re-check after the local fallback's await too — the channel could
+            // have flipped during fetchCityPage.
+            guard requestedChannel == channel else { return }
             let appended = page.filter { !loadedIds.contains($0.id) }
             posts = reset ? page : posts + appended
             loadedIds = Set(posts.map(\.id))
@@ -150,32 +203,38 @@ final class CityChannelViewModel: ObservableObject {
             // Hot has no server cursor (single ranked page) — after it,
             // deterministic local windows keep deeper browsing alive.
             canLoadMore = usedRemotePage
-                ? (remoteHasMore || channel == .hot)
+                ? (remoteHasMore || requestedChannel == .hot)
                 : page.count == KaiXConfig.pageSize
             try await hydrate(context: context, repository: repository, currentUser: currentUser, postStore: postStore)
+            guard requestedChannel == channel else { return }
             state = posts.isEmpty ? .empty : .loaded
         } catch {
+            guard requestedChannel == channel else { return }
             state = posts.isEmpty ? .error(error.kaixUserMessage) : .loaded
         }
     }
 
     /// Pull one server page for this city/channel and remember its ids +
     /// cursor. Best-effort: on failure the local cache keeps the view alive.
-    private func syncFromRemote(context: ModelContext, region: KaiXRegionDirectory.Region, cursor: String?) async {
+    private func syncFromRemote(context: ModelContext, region: KaiXRegionDirectory.Region, channel requestedChannel: CityChannel, cursor: String?) async {
         do {
             let page = try await KaiXAPIClient.shared.feed(
-                mode: channel == .hot ? .hot : .recommend,
+                mode: requestedChannel == .hot ? .hot : .recommend,
                 cursor: cursor,
                 regionCode: region.regionCode,
                 country: region.countryCode,
                 province: region.provinceCode.isEmpty ? nil : region.provinceCode,
                 city: region.cityCode,
-                contentTypes: channel.contentTypes
+                contentTypes: requestedChannel.contentTypes
             )
+            // A late-arriving response for a channel the user already left must
+            // not clobber the new channel's cursor / pending bundle.
+            guard requestedChannel == channel else { return }
             remoteCursor = page.next_cursor
             remoteHasMore = page.next_cursor != nil && !page.items.isEmpty
             pendingRemoteBundle = page.items.isEmpty ? nil : ServerEntityFactory.postBundle(from: page.items)
         } catch {
+            guard requestedChannel == channel else { return }
             pendingRemoteBundle = nil
         }
     }

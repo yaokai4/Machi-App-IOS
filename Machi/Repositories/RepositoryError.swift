@@ -84,18 +84,59 @@ enum AppError: Equatable, LocalizedError {
 }
 
 extension Error {
+    /// User-facing message for an error. For server (`KaiXAPIError`) failures we
+    /// first try to localize by the error *code* against the app's current
+    /// language (high-frequency codes are hand-translated zh/ja/en), and only
+    /// fall back to the raw server `message` when the code is unknown. The app
+    /// language is resolved from `UserDefaults` (mirrors AppRouter) so this stays
+    /// a plain, call-site-agnostic `Error` extension.
     var kaixUserMessage: String {
+        let language = AppLanguage.resolved(
+            from: UserDefaults.standard.string(forKey: "appLanguageCode") ?? AppLanguage.system.rawValue
+        )
         if let apiError = self as? KaiXAPIError {
-            return apiError.error.message
+            if let key = Self.localizationKey(forAPICode: apiError.error.code) {
+                return L(key, language)
+            }
+            // Unknown code: prefer the server's own (already localized) message,
+            // but never surface an empty string.
+            let serverMessage = apiError.error.message.trimmingCharacters(in: .whitespacesAndNewlines)
+            return serverMessage.isEmpty ? L("errGeneric", language) : serverMessage
         }
         if let urlError = self as? URLError {
             switch urlError.code {
-            case .notConnectedToInternet, .networkConnectionLost, .timedOut:
-                return "网络连接不稳定，请稍后重试。"
+            case .notConnectedToInternet, .networkConnectionLost, .timedOut,
+                 .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed:
+                return L("errNetwork", language)
             default:
                 break
             }
         }
         return AppError(self).userMessage
+    }
+
+    /// Map a high-frequency server error `code` to a localization table key.
+    /// Returns nil for codes we don't hand-translate (caller falls back to the
+    /// server message). `http_401`/`http_403`/`http_404` variants are folded in
+    /// alongside their semantic aliases.
+    private static func localizationKey(forAPICode code: String) -> String? {
+        switch code {
+        case "rate_limited":
+            return "errRateLimited"
+        case "network_error", "timeout":
+            return "errNetwork"
+        case "not_found", "http_404":
+            return "errNotFound"
+        case "blocked", "user_blocked":
+            return "errBlocked"
+        case "forbidden", "http_403":
+            return "errForbidden"
+        case "MEMBERSHIP_REQUIRED", "membership_required":
+            return "errMembershipRequired"
+        case "MEMBERSHIP_LISTING_QUOTA_EXCEEDED", "listing_quota_exceeded":
+            return "errListingQuotaExceeded"
+        default:
+            return nil
+        }
     }
 }

@@ -85,7 +85,7 @@ struct MyWorkbenchView: View {
             Spacer(minLength: 0)
         }
         .padding(16)
-        .kxGlassSurface(radius: 22, elevated: true)
+        .kxGlassSurface(radius: KXRadius.hero, elevated: true)
     }
 
     /// 经营概览 / 今日待处理 — all counts from /api/my/workbench/summary.

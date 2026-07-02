@@ -36,6 +36,11 @@ final class GuideViewModel: ObservableObject {
 
     private var loadedCountry = ""
     private var loadedLanguage = ""
+    // Monotonic search token (mirrors SearchViewModel.serverSearchGeneration):
+    // only the newest search may write searchResults / errorMessage, so a
+    // slow predecessor unwinding late — or a cancelled task — can't overwrite
+    // fresher results or flash a stale error.
+    private var searchGeneration = 0
 
     var isComingSoon: Bool {
         home?.status == "coming_soon"
@@ -183,6 +188,8 @@ final class GuideViewModel: ObservableObject {
 
     func search(country: String, keyword: String? = nil) async {
         let q = (keyword ?? searchText).trimmingCharacters(in: .whitespacesAndNewlines)
+        searchGeneration += 1
+        let generation = searchGeneration
         guard !q.isEmpty else {
             searchResults = []
             schoolResults = []
@@ -194,7 +201,13 @@ final class GuideViewModel: ObservableObject {
         }
         isSearching = true
         errorMessage = nil
-        defer { isSearching = false }
+        defer {
+            // Only the newest search may clear the spinner — a cancelled
+            // predecessor unwinding late must not hide the in-flight one.
+            if generation == searchGeneration {
+                isSearching = false
+            }
+        }
         let normalizedCountry = country.isEmpty ? "jp" : country
         // Prefer the unified search endpoint so iOS and Web search the same set
         // (articles + schools + companies + products + faq + journeys). Fall
@@ -202,47 +215,70 @@ final class GuideViewModel: ObservableObject {
         // unavailable, so an older backend or a dropped connection still works.
         do {
             let response = try await KaiXAPIClient.shared.guideSearch(country: normalizedCountry, language: currentGuideLanguage(), keyword: q)
+            // Stale/cancelled guard: the user kept typing (or the task was
+            // cancelled) while this was in flight — drop the write.
+            guard generation == searchGeneration else { return }
             searchResults = response.groups.articles ?? []
             schoolResults = response.groups.schools ?? []
             companyResults = response.groups.companies ?? []
             productResults = response.groups.products ?? []
             faqResults = response.groups.faq ?? []
             journeyResults = response.groups.journeys ?? []
-            await enrichSparseSearch(country: normalizedCountry, q: q)
+            await enrichSparseSearch(country: normalizedCountry, q: q, generation: generation)
         } catch {
-            await legacySearch(country: normalizedCountry, q: q)
+            // A cancelled request is not a real failure: the debouncer replaced
+            // this search with a newer one (or the view went away). Don't fall
+            // back / show an error — just yield to the newest search.
+            if isCancellation(error) || generation != searchGeneration { return }
+            await legacySearch(country: normalizedCountry, q: q, generation: generation)
         }
     }
 
-    private func enrichSparseSearch(country: String, q: String) async {
+    /// True for the "the caller replaced/tore down this task" family of errors,
+    /// which must never surface as a user-facing search error.
+    private func isCancellation(_ error: Error) -> Bool {
+        if Task.isCancelled { return true }
+        if error is CancellationError { return true }
+        if let urlError = error as? URLError, urlError.code == .cancelled { return true }
+        return false
+    }
+
+    private func enrichSparseSearch(country: String, q: String, generation: Int) async {
         if schoolResults.isEmpty {
             let response = try? await KaiXAPIClient.shared.guideSchools(country: country, keyword: q, pageSize: 8)
+            guard generation == searchGeneration else { return }
             schoolResults = mergeSchools(response?.items ?? [], localSchoolsMatching(q, country: country))
         }
         if companyResults.isEmpty {
             let response = try? await KaiXAPIClient.shared.guideCompanies(country: country, keyword: q, pageSize: 8)
+            guard generation == searchGeneration else { return }
             companyResults = mergeCompanies(response?.items ?? [], localCompaniesMatching(q, country: country))
         }
         if productResults.isEmpty {
             let response = try? await KaiXAPIClient.shared.guideProducts(country: country, keyword: q, pageSize: 8)
+            guard generation == searchGeneration else { return }
             productResults = mergeProducts(response?.items ?? [], localProductsMatching(q))
         }
         if faqResults.isEmpty {
+            guard generation == searchGeneration else { return }
             faqResults = localFaqMatching(q)
         }
         if journeyResults.isEmpty {
             let response = try? await KaiXAPIClient.shared.guideJourneys(country: country, language: currentGuideLanguage())
+            guard generation == searchGeneration else { return }
             journeyResults = (response?.journeys ?? home?.journeys ?? []).filter { journeyMatches($0, q) }
         }
     }
 
-    private func legacySearch(country: String, q: String) async {
+    private func legacySearch(country: String, q: String, generation: Int) async {
         // Schools + companies are best-effort after the article query: a
         // failure there must never blank the article results.
         do {
             let response = try await KaiXAPIClient.shared.guideArticles(country: country, language: currentGuideLanguage(), keyword: q, pageSize: 20)
+            guard generation == searchGeneration else { return }
             searchResults = response.items
         } catch {
+            if isCancellation(error) || generation != searchGeneration { return }
             let fallbackArticles = GuideFallbackContent.articles(language: currentGuideLanguage())
             searchResults = fallbackArticles.filter { article in
                 ([article.title, article.summary, article.categoryKey, article.subCategoryKey] + article.tags)
@@ -254,15 +290,19 @@ final class GuideViewModel: ObservableObject {
         let schoolsResponse = try? await KaiXAPIClient.shared.guideSchools(country: country, keyword: q, pageSize: 8)
         let companiesResponse = try? await KaiXAPIClient.shared.guideCompanies(country: country, keyword: q, pageSize: 8)
         let productsResponse = try? await KaiXAPIClient.shared.guideProducts(country: country, keyword: q, pageSize: 8)
+        let journeysResponse = try? await KaiXAPIClient.shared.guideJourneys(country: country, language: currentGuideLanguage())
+        guard generation == searchGeneration else { return }
         schoolResults = mergeSchools(schoolsResponse?.items ?? [], localSchoolsMatching(q, country: country))
         companyResults = mergeCompanies(companiesResponse?.items ?? [], localCompaniesMatching(q, country: country))
         productResults = mergeProducts(productsResponse?.items ?? [], localProductsMatching(q))
         faqResults = localFaqMatching(q)
-        let journeysResponse = try? await KaiXAPIClient.shared.guideJourneys(country: country, language: currentGuideLanguage())
         journeyResults = (journeysResponse?.journeys ?? home?.journeys ?? []).filter { journeyMatches($0, q) }
     }
 
     func clearSearch() {
+        // Bump the token so any in-flight search resolving after this clear is
+        // treated as stale and can't repopulate the results we just wiped.
+        searchGeneration += 1
         searchText = ""
         searchResults = []
         schoolResults = []

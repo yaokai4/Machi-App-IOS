@@ -168,8 +168,8 @@ struct GuideJourneyCard: View {
                 }
             }
             .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
-            .padding(13)
-            .kxGlassSurface(radius: 20)
+            .padding(12)
+            .kxGlassSurface(radius: KXRadius.card)
         }
         .buttonStyle(.fullArea)
         .contentShape(Rectangle())
@@ -551,7 +551,7 @@ struct GuideJourneyDetailView: View {
             }
         }
         .padding(18)
-        .kxGlassSurface(radius: 24)
+        .kxGlassSurface(radius: KXRadius.hero)
     }
 
     /// 完成时刻:恭喜卡 + 引导写攻略帮后来人。主按钮通过 ComposeStore 打开
@@ -610,7 +610,7 @@ struct GuideJourneyDetailView: View {
         }
         .padding(15)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .kxGlassSurface(radius: 20)
+        .kxGlassSurface(radius: KXRadius.card)
     }
 }
 
@@ -643,7 +643,7 @@ private struct GuideJourneyStepRow: View {
                 .buttonStyle(.fullArea)
         .contentShape(Rectangle())
                 .sensoryFeedback(.success, trigger: isDone)
-                .accessibilityLabel("完成")
+                .accessibilityLabel(guideOSText(language, "完成", "完了", "Done"))
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         Text(journeyText(language, "第 \(index) 步", "ステップ \(index)", "Step \(index)"))
@@ -846,7 +846,7 @@ struct GuideJourneyNextStepCard: View {
                     Image(systemName: "chevron.right").font(.footnote.weight(.bold)).foregroundStyle(.tertiary)
                 }
                 .padding(15)
-                .kxGlassSurface(radius: 20)
+                .kxGlassSurface(radius: KXRadius.card)
             }
             .buttonStyle(.fullArea)
         .contentShape(Rectangle())

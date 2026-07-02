@@ -13,17 +13,21 @@ struct MembershipView: View {
     @StateObject private var store = MembershipStore()
     @State private var insights: KaiXMembershipInsightsTotals?
     @State private var remoteBenefits: [KaiXMembershipBenefitDTO] = []
+    @State private var scrollProxy: ScrollViewProxy?
+
+    static let purchaseAnchor = "membership-purchase-controls"
 
     let currentUser: UserEntity
 
+    // Fallback benefit list (shown only when the server benefits endpoint is
+    // unavailable). Kept honest and aligned with what membership actually grants:
+    // priority/quota/review were dropped (over-promised), Machi AI's higher daily
+    // limit + Pro model leads.
     private let benefitKeys = [
         "membershipBenefitAI",
         "membershipBenefitBadge",
         "membershipBenefitPublish",
-        "membershipBenefitPriority",
         "membershipBenefitData",
-        "membershipBenefitQuota",
-        "membershipBenefitReview",
         "membershipBenefitSync",
         "membershipBenefitAudience",
     ]
@@ -46,26 +50,31 @@ struct MembershipView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                hero
-                if isActive { activeCard }
-                if isExpired { expiredCard }
-                if isActive, let ins = insights { insightsCard(ins) }
-                if !store.plans.isEmpty { planCards }
-                benefits
-                memberLibraryEntry
-                // Always shown: active members can renew/extend (the server
-                // simply extends the validity period), expired members can
-                // buy again. Membership is a one-time pass, not auto-renew,
-                // so hiding the buy button from active members was a dead end.
-                purchaseControls
-                purchaseDisclosure
-                safetyNotice
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    hero
+                    if isActive { activeCard }
+                    if isExpired { expiredCard }
+                    if isActive, let ins = insights { insightsCard(ins) }
+                    if !isActive { lockedInsightsPreview }
+                    if !store.plans.isEmpty { planCards }
+                    benefits
+                    memberLibraryEntry
+                    // Always shown: active members can renew/extend (the server
+                    // simply extends the validity period), expired members can
+                    // buy again. Membership is a one-time pass, not auto-renew,
+                    // so hiding the buy button from active members was a dead end.
+                    purchaseControls
+                        .id(MembershipView.purchaseAnchor)
+                    purchaseDisclosure
+                    safetyNotice
+                }
+                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.top, KaiXTheme.horizontalPadding)
+                .kxTabBarSafeBottomPadding()
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
-            .padding(.top, KaiXTheme.horizontalPadding)
-            .kxTabBarSafeBottomPadding()
+            .onAppear { scrollProxy = proxy }
         }
         .kxPageBackground()
         .navigationTitle(L("membershipTitle", language))
@@ -262,6 +271,65 @@ struct MembershipView: View {
         .padding(16)
         .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.cardBackground))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(KXColor.separator, lineWidth: 0.7))
+    }
+
+    /// #3: a locked "content stats" teaser for non-members. Shows blurred sample
+    /// numbers behind a lock so the value of the member-only insights is visible
+    /// before purchase; tapping scrolls down to the purchase controls.
+    private var lockedInsightsPreview: some View {
+        let sampleItems: [(String, String)] = [
+            ("membershipInsightsViews", "1,280"),
+            ("membershipInsightsLikes", "342"),
+            ("membershipInsightsComments", "56"),
+            ("membershipInsightsBookmarks", "88"),
+            ("membershipInsightsPosts", "24"),
+        ]
+        return Button {
+            withAnimation(.easeInOut(duration: 0.35)) {
+                scrollProxy?.scrollTo(MembershipView.purchaseAnchor, anchor: .center)
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Text(L("membershipInsightsTitle", language)).font(.headline).foregroundStyle(.primary)
+                    Image(systemName: "lock.fill").font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Text(ml("会员专属", "Members only", "会員限定"))
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(KXColor.accent)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(KXColor.accentSoft))
+                }
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    ForEach(sampleItems, id: \.0) { item in
+                        VStack(spacing: 2) {
+                            Text(item.1)
+                                .font(.title3.weight(.heavy))
+                                .foregroundStyle(.primary)
+                                .blur(radius: 5)
+                            Text(L(item.0, language)).font(.caption2).foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(KXColor.softBackground))
+                    }
+                }
+                Text(ml("开通会员后可查看你发布内容的浏览、点赞、评论和收藏数据。",
+                        "Membership unlocks views, likes, comments and saves on your posts.",
+                        "会員になると、あなたの投稿の閲覧・いいね・コメント・保存の統計を見られます。"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.cardBackground))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(KXColor.separator, lineWidth: 0.7))
+            .contentShape(RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
     }
 
     private var benefits: some View {

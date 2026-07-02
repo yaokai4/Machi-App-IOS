@@ -458,6 +458,50 @@ struct KaiXMembershipInsightsResponse: Codable {
     let totals: KaiXMembershipInsightsTotals
 }
 
+/// This month's remaining high-trust publish quota for a member. The server may
+/// return either an overall `remaining`/`limit`, or a per-group breakdown. All
+/// fields optional so a trimmed/older payload still decodes; the client shows
+/// whatever it can resolve for the current listing type.
+struct KaiXMembershipListingQuotaResponse: Codable {
+    let membershipActive: Bool?
+    let limit: Int?
+    let used: Int?
+    let remaining: Int?
+    let periodResetAt: String?
+    let groups: [KaiXMembershipListingQuotaGroup]?
+
+    /// Remaining count for a specific listing group (e.g. "rental"), falling back
+    /// to the overall `remaining`. Returns nil when nothing is resolvable.
+    func remaining(forGroup group: String?) -> Int? {
+        if let group, let match = groups?.first(where: { $0.matches(group) }) {
+            return match.remaining ?? match.derivedRemaining
+        }
+        return remaining ?? {
+            guard let limit else { return nil }
+            return max(0, limit - (used ?? 0))
+        }()
+    }
+}
+
+struct KaiXMembershipListingQuotaGroup: Codable {
+    let key: String?
+    let group: String?
+    let type: String?
+    let limit: Int?
+    let used: Int?
+    let remaining: Int?
+
+    var derivedRemaining: Int? {
+        guard let limit else { return nil }
+        return max(0, limit - (used ?? 0))
+    }
+
+    func matches(_ listingType: String) -> Bool {
+        let ids = [key, group, type].compactMap { $0?.lowercased() }
+        return ids.contains(listingType.lowercased())
+    }
+}
+
 struct KaiXMediaDTO: Codable, Equatable {
     let id: String
     let owner_id: String?

@@ -47,9 +47,16 @@ struct MediaPreviewView: View {
         } else if let url = imageURL(for: media) {
             ZoomableMediaImage(
                 url: url,
-                targetPixelSize: originalImageIDs.contains(media.id) ? 4096 : 1800
+                targetPixelSize: originalImageIDs.contains(media.id) ? 4096 : 1800,
+                stableKey: media.stableCacheKey,
+                onResign: resignHandler(for: media)
             )
-            .id("\(media.id)-\(url.absoluteString)-\(originalImageIDs.contains(media.id))")
+            // Anchor identity on the media (and the original-vs-preview toggle),
+            // NOT the URL: a signed-URL rotation then swaps the image source in
+            // place instead of tearing the view down and resetting the pan/zoom
+            // the user set up. Switching to the original still rebuilds (its
+            // target pixel size genuinely changes).
+            .id("\(media.id)-\(originalImageIDs.contains(media.id))")
         } else {
             VStack(spacing: 16) {
                 Image(systemName: media.placeholderSymbol.isEmpty ? "photo.fill" : media.placeholderSymbol)
@@ -139,6 +146,21 @@ struct MediaPreviewView: View {
         }
         return media.mediumSourceURL ?? media.displayURL ?? media.sourceURL
     }
+
+    /// Re-sign handler for a private DM attachment (identified by a non-empty
+    /// stable cache key). `postId` carries the message id and `id` the
+    /// attachment id. Public media (posts, listings) returns nil — nothing to
+    /// re-sign. Rebuilds the entity's URLs isn't needed here; the loader just
+    /// needs a fresh live URL to retry with.
+    private func resignHandler(for media: MediaEntity) -> (() async -> URL?)? {
+        guard media.stableCacheKey != nil, !media.postId.isEmpty else { return nil }
+        let messageId = media.postId
+        let attachmentId = media.remoteId ?? media.id
+        return {
+            guard let fresh = await MessageRepository.resignAttachmentURL(messageId: messageId, attachmentId: attachmentId) else { return nil }
+            return URL(string: fresh)
+        }
+    }
 }
 
 /// Full-screen image with pinch-zoom, drag-pan and double-tap toggle so long
@@ -146,6 +168,8 @@ struct MediaPreviewView: View {
 struct ZoomableMediaImage: View {
     let url: URL
     let targetPixelSize: CGFloat
+    var stableKey: String? = nil
+    var onResign: (() async -> URL?)? = nil
 
     @State private var scale: CGFloat = 1
     @State private var lastScale: CGFloat = 1
@@ -161,7 +185,7 @@ struct ZoomableMediaImage: View {
 
     @ViewBuilder
     private func zoomableImage(in size: CGSize) -> some View {
-        let base = MediaImageView(url: url, targetPixelSize: targetPixelSize, contentMode: .fit)
+        let base = MediaImageView(url: url, targetPixelSize: targetPixelSize, contentMode: .fit, stableKey: stableKey, onResign: onResign)
             .frame(width: size.width, height: size.height)
             .scaleEffect(scale)
             .offset(offset)

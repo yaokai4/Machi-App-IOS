@@ -492,7 +492,6 @@ struct CityListingDetailView: View {
             }
         }
         .kxPageBackground()
-        .background(KXColor.livingBackground)
         .kxListingZoomDestination("listing-\(listingId)", zoomNamespace)
         .toolbar(.hidden, for: .navigationBar)
         .task(id: listingId) { await load() }
@@ -629,6 +628,19 @@ struct CityListingDetailView: View {
         }
     }
 
+    /// Public web URL for the system share sheet — resolves back into the app
+    /// via Universal Links (`/listings/<id>` → listing detail).
+    private var listingShareURL: URL {
+        URL(string: "https://machicity.com/listings/\(listingId)") ?? URL(string: "https://machicity.com")!
+    }
+
+    /// Share-sheet title: the listing's display title, with a branded fallback.
+    private var listingShareTitle: String {
+        guard let listing else { return "Machi" }
+        let title = KXListingCopy.displayTitle(listing).trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? "Machi" : title
+    }
+
     private var detailHeader: some View {
         HStack(spacing: KXSpacing.sm) {
             Button { dismiss() } label: {
@@ -639,7 +651,7 @@ struct CityListingDetailView: View {
                     .kxGlassCircle()
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("返回")
+            .accessibilityLabel(KXListingCopy.pickText(language, "返回", "戻る", "Back"))
             VStack(alignment: .leading, spacing: 2) {
                 Text(KXListingCopy.title(for: listing?.type ?? "secondhand", language))
                     .font(.headline.weight(.semibold))
@@ -649,6 +661,19 @@ struct CityListingDetailView: View {
                     .foregroundStyle(KXColor.livingMuted)
             }
             Spacer()
+            ShareLink(
+                item: listingShareURL,
+                subject: Text(listingShareTitle),
+                preview: SharePreview(listingShareTitle)
+            ) {
+                Image(systemName: "square.and.arrow.up")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 42, height: 42)
+                    .kxGlassCircle()
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(KXListingCopy.pickText(language, "分享", "共有", "Share"))
             Button { Task { await favorite() } } label: {
                 Image(systemName: isFavoritedNow ? "heart.fill" : "heart")
                     .font(.headline.weight(.semibold))
@@ -803,7 +828,7 @@ struct CityListingDetailView: View {
                     }
                 }
                 .padding(KXSpacing.lg)
-                .kxLivingSurface(radius: 24, elevated: true)
+                .kxLivingSurface(radius: KXRadius.hero, elevated: true)
 
                 KXListingAttributeSection(listing: listing)
 
@@ -1417,6 +1442,9 @@ struct CityListingDetailView: View {
             )
             intakeOpen = false
             actionMessage = receiptDTO.resolvedSuccessTitle
+            // Remember this conversation so a later reply reads as a
+            // "consultation got a reply" delight moment for the rating prompt.
+            ReviewPromptService.shared.rememberInquiryConversation(receiptDTO.resolvedConversationId)
             try? await Task.sleep(for: .milliseconds(220))
             inquiryReceipt = ListingInquiryReceipt(
                 listingTitle: KXListingCopy.displayTitle(listing),
@@ -2061,7 +2089,7 @@ private struct ListingIntakeSheet: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(14)
-                    .kxGlassSurface(radius: 20)
+                    .kxGlassSurface(radius: KXRadius.card)
 
                     ForEach(spec.fields) { field in
                         intakeField(field)

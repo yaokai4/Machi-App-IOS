@@ -258,7 +258,7 @@ private struct GuideCalendarMonthGrid: View {
                     monthButton("chevron.left") {
                         cursor = Calendar.current.date(byAdding: .month, value: -1, to: cursor) ?? cursor
                     }
-                    .accessibilityLabel("上个月")
+                    .accessibilityLabel(guideOSText(language, "上个月", "先月", "Previous month"))
                     Button {
                         cursor = Date()
                         selectedDate = GuideOSDate.today()
@@ -274,7 +274,7 @@ private struct GuideCalendarMonthGrid: View {
                     monthButton("chevron.right") {
                         cursor = Calendar.current.date(byAdding: .month, value: 1, to: cursor) ?? cursor
                     }
-                    .accessibilityLabel("下个月")
+                    .accessibilityLabel(guideOSText(language, "下个月", "翌月", "Next month"))
                 }
             }
             LazyVGrid(columns: columns, spacing: 6) {
@@ -290,7 +290,7 @@ private struct GuideCalendarMonthGrid: View {
             }
         }
         .padding(14)
-        .kxGlassSurface(radius: 22, elevated: true)
+        .kxGlassSurface(radius: KXRadius.hero, elevated: true)
     }
 
     private func monthButton(_ icon: String, action: @escaping () -> Void) -> some View {
@@ -382,7 +382,7 @@ private struct GuideCalendarWeekBoard: View {
                 Spacer()
                 HStack(spacing: 8) {
                     weekButton("chevron.left") { shiftWeek(-1) }
-                        .accessibilityLabel("上一周")
+                        .accessibilityLabel(guideOSText(language, "上一周", "先週", "Previous week"))
                     Button {
                         cursor = Date()
                         selectedDate = GuideOSDate.today()
@@ -396,7 +396,7 @@ private struct GuideCalendarWeekBoard: View {
                     .contentShape(Rectangle())
                     .background(KXColor.livingSurface.opacity(0.78), in: Capsule())
                     weekButton("chevron.right") { shiftWeek(1) }
-                        .accessibilityLabel("下一周")
+                        .accessibilityLabel(guideOSText(language, "下一周", "翌週", "Next week"))
                 }
             }
 
@@ -409,7 +409,7 @@ private struct GuideCalendarWeekBoard: View {
             }
         }
         .padding(14)
-        .kxGlassSurface(radius: 22, elevated: true)
+        .kxGlassSurface(radius: KXRadius.hero, elevated: true)
     }
 
     private func shiftWeek(_ delta: Int) {
@@ -707,7 +707,7 @@ private struct GuideCalendarEventComposer: View {
             }
         }
         .padding(14)
-        .kxGlassSurface(radius: 20)
+        .kxGlassSurface(radius: KXRadius.card)
     }
 
     private static let timeFormatter: DateFormatter = {

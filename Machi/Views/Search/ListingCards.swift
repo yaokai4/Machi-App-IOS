@@ -63,7 +63,7 @@ struct KXJobSkeletonRow: View {
             }
         }
         .padding(14)
-        .kxLivingSurface(radius: 20, elevated: true)
+        .kxLivingSurface(radius: KXRadius.card, elevated: true)
         .kxShimmer()
     }
 }
@@ -93,7 +93,7 @@ struct KXBigPhotoSkeletonCard: View {
             .padding(.horizontal, 2)
         }
         .padding(8)
-        .kxLivingSurface(radius: 24, elevated: true)
+        .kxLivingSurface(radius: KXRadius.hero, elevated: true)
         .kxShimmer()
     }
 }
@@ -184,7 +184,7 @@ struct KXSecondhandListingCard: View {
             }
             .padding(7)
             .padding(.bottom, 2)
-            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .frame(maxWidth: width ?? .infinity, alignment: .leading)
             .kxLivingSurface(radius: 18)
         }
@@ -515,7 +515,7 @@ struct KXJobListingRow: View {
                 .foregroundStyle(KXColor.livingAccent)
             }
             .padding(14)
-            .kxLivingSurface(radius: 20, elevated: true)
+            .kxLivingSurface(radius: KXRadius.card, elevated: true)
             .contentShape(Rectangle())
         }
         .buttonStyle(KXPressableStyle(scale: 0.985, dim: 0.9))
@@ -596,8 +596,8 @@ struct KXStructuredListingRow: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(11)
-            .kxLivingSurface(radius: 20, elevated: true)   // unify: all listing cards share the warm surface
+            .padding(12)
+            .kxLivingSurface(radius: KXRadius.card, elevated: true)   // unify: all listing cards share the warm surface
         }
         .buttonStyle(.plain)
         .sensoryFeedback(.impact(weight: .light), trigger: openTaps)
@@ -643,7 +643,7 @@ struct KXListingSection<Content: View>: View {
             content
         }
         .padding(KXSpacing.lg)
-        .kxLivingSurface(radius: 22)
+        .kxLivingSurface(radius: KXRadius.hero)
     }
 }
 

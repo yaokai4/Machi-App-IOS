@@ -7,6 +7,10 @@ final class MessageRepository {
     private static var cachedPeersById: [String: UserEntity] = [:]
     private static var cachedMediaByConversationId: [String: [String: [MediaEntity]]] = [:]
     private static var signedAttachmentURLCache: [String: SignedAttachmentURLCacheItem] = [:]
+    /// Draft id → already-uploaded file id, so a DM resend after a failure that
+    /// happened *after* the S3 upload finished reuses the uploaded bytes instead
+    /// of re-transferring them (mirrors ComposePostViewModel.uploadedMediaByDraftID).
+    private static var uploadedFileIdByDraftId: [String: String] = [:]
     /// Hard ceiling so a long messaging session that opens many distinct
     /// attachments can't grow this in-memory cache without bound.
     private static let signedAttachmentCacheCap = 200
@@ -25,6 +29,16 @@ final class MessageRepository {
             .sorted { $0.value.expiresAt > $1.value.expiresAt }
             .prefix(signedAttachmentCacheCap)
         signedAttachmentURLCache = Dictionary(uniqueKeysWithValues: freshest.map { ($0.key, $0.value) })
+    }
+
+    /// Drop every process-global DM cache. Called on logout / account switch so
+    /// the next account never resolves a previous account's cached peers, media,
+    /// signed attachment URLs or in-flight upload bookkeeping.
+    static func clearCaches() {
+        cachedPeersById = [:]
+        cachedMediaByConversationId = [:]
+        signedAttachmentURLCache = [:]
+        uploadedFileIdByDraftId = [:]
     }
 
     init(context: ModelContext) {
@@ -70,6 +84,51 @@ final class MessageRepository {
             predicate: #Predicate { $0.threadId == threadId },
             sortBy: [SortDescriptor(\.createdAt)]
         ))
+    }
+
+    /// Text-first fetch: decodes message bubbles immediately (no attachment
+    /// signing) so the thread paints the conversation right away, and returns
+    /// the raw attachment-bearing DTOs so the caller can sign media in a second
+    /// async pass (see `resolveMedia`). The signed-media cache is *not* touched
+    /// here — `resolveMedia` fills it once the URLs come back.
+    func fetchMessagesTextFirst(
+        threadId: String,
+        query: String = "",
+        day: String? = nil
+    ) async throws -> (messages: [MessageEntity], pending: [KaiXMessageDTO]) {
+        if KaiXBackend.token != nil {
+            let dtos = try await KaiXAPIClient.shared.messages(threadId, query: query, day: day)
+            // Seed the media cache with whatever resolves without a network sign
+            // (public URLs / legacy media), so text + already-public media paint
+            // together and only signed attachments wait for the second pass.
+            var mediaByMessage: [String: [MediaEntity]] = [:]
+            var entities: [MessageEntity] = []
+            var pending: [KaiXMessageDTO] = []
+            for dto in dtos {
+                let immediate = Self.immediateMediaItems(from: dto)
+                mediaByMessage[dto.id] = immediate.media
+                if immediate.needsSigning { pending.append(dto) }
+                entities.append(Self.message(from: dto, mediaIds: immediate.media.map(\.id)))
+            }
+            Self.cachedMediaByConversationId[threadId] = mediaByMessage
+            return (entities, pending)
+        }
+        let local = try await fetchMessages(threadId: threadId, query: query, day: day)
+        return (local, [])
+    }
+
+    /// Second pass for `fetchMessagesTextFirst`: signs the pending attachments
+    /// (concurrently, bounded) and merges the resolved media into the cache.
+    /// Returns the resolved media keyed by message id so the caller can publish.
+    func resolveMedia(threadId: String, pending: [KaiXMessageDTO]) async -> [String: [MediaEntity]] {
+        guard KaiXBackend.token != nil, !pending.isEmpty else {
+            return Self.cachedMediaByConversationId[threadId] ?? [:]
+        }
+        for dto in pending {
+            let resolved = await Self.resolvedMediaItems(from: dto)
+            Self.cachedMediaByConversationId[threadId, default: [:]][dto.id] = resolved
+        }
+        return Self.cachedMediaByConversationId[threadId] ?? [:]
     }
 
     func fetchMedia(threadId: String, messageIds: Set<String>) async throws -> [String: [MediaEntity]] {
@@ -123,6 +182,7 @@ final class MessageRepository {
         senderId: String,
         content: String,
         mediaDrafts: [MediaDraft] = [],
+        idempotencyKey: String? = nil,
         onProgress: ((Double) -> Void)? = nil
     ) async throws -> MessageEntity {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -136,13 +196,25 @@ final class MessageRepository {
                 // overall send so the UI can show one continuous progress.
                 let base = Double(index) / Double(total)
                 let span = 1.0 / Double(total)
+                // Reuse a previously-uploaded file id for this draft (a retry
+                // after a send that failed *after* the upload finished) instead
+                // of re-uploading the same bytes from scratch.
+                if let cached = Self.uploadedFileIdByDraftId[draft.id] {
+                    attachmentIds.append(cached)
+                    onProgress?(base + span)
+                    continue
+                }
                 let fileId = try await Self.uploadMessageAttachment(draft, threadId: thread.id) { fraction in
                     onProgress?(base + span * Swift.min(Swift.max(fraction, 0), 1))
                 }
+                Self.uploadedFileIdByDraftId[draft.id] = fileId
                 attachmentIds.append(fileId)
             }
             onProgress?(1)
-            let dto = try await KaiXAPIClient.shared.sendMessage(thread.id, content: trimmed, attachmentIds: attachmentIds)
+            let dto = try await KaiXAPIClient.shared.sendMessage(thread.id, content: trimmed, attachmentIds: attachmentIds, idempotencyKey: idempotencyKey)
+            // The send succeeded — the uploaded-file reuse cache for these drafts
+            // has done its job; drop it so it can't leak across unrelated sends.
+            for draft in mediaDrafts { Self.uploadedFileIdByDraftId[draft.id] = nil }
             let mappedMedia = await Self.resolvedMediaItems(from: dto)
             Self.cachedMediaByConversationId[thread.id, default: [:]][dto.id] = mappedMedia
             let message = Self.message(from: dto, mediaIds: mappedMedia.map(\.id))
@@ -274,7 +346,13 @@ final class MessageRepository {
 
     func markThreadUnread(_ thread: MessageThreadEntity) async throws {
         if KaiXBackend.token != nil {
-            try await KaiXAPIClient.shared.markConversationRead(thread.id, isRead: false)
+            // The server now supports manual unread and returns the caller's
+            // *account-wide* unread notification total (not this thread's count),
+            // so it can't set the per-thread badge directly. Keep the optimistic
+            // per-thread value here; the next `fetchThreads` reads the server's
+            // authoritative per-conversation `unread_count` and reconciles.
+            // (`_` tolerates older servers that omit the field.)
+            _ = try await KaiXAPIClient.shared.markConversationRead(thread.id, isRead: false)
             thread.unreadCount = max(1, thread.unreadCount)
             thread.updatedAt = .now
             return
@@ -378,30 +456,112 @@ final class MessageRepository {
         guard let attachments = dto.attachments, !attachments.isEmpty else {
             return mediaItems(from: dto)
         }
-        var signedURLs: [String: String] = [:]
         let now = Date()
+
+        // Split into cache hits (free) and misses that need a network sign.
+        var signedURLs: [String: String] = [:]
+        var toSign: [KaiXMessageAttachmentDTO] = []
         for attachment in attachments {
             let publicSource = attachment.publicUrl ?? attachment.cdnUrl ?? attachment.url ?? ""
             let needsSignedURL = attachment.needsSignedUrl == true || publicSource.isEmpty
             guard needsSignedURL else { continue }
-            let cacheKey = "\(dto.id):\(attachment.id)"
-            if let cached = signedAttachmentURLCache[cacheKey], cached.expiresAt > now {
+            if let cached = signedAttachmentURLCache[Self.signCacheKey(dto.id, attachment.id)], cached.expiresAt > now {
                 signedURLs[attachment.id] = cached.url
-                continue
-            }
-            if let signedURL = try? await KaiXAPIClient.shared.messageAttachmentViewUrl(
-                messageId: dto.id,
-                attachmentId: attachment.id
-            ), !signedURL.isEmpty {
-                signedURLs[attachment.id] = signedURL
-                signedAttachmentURLCache[cacheKey] = SignedAttachmentURLCacheItem(
-                    url: signedURL,
-                    expiresAt: now.addingTimeInterval(240)
-                )
-                Self.pruneSignedAttachmentCacheIfNeeded(now: now)
+            } else {
+                toSign.append(attachment)
             }
         }
+
+        // Sign the misses concurrently (bounded to 6 in flight) rather than one
+        // slow serial POST per attachment — a multi-image message used to block
+        // the whole list decode on N sequential round-trips.
+        if !toSign.isEmpty {
+            let messageId = dto.id
+            let signed = await withTaskGroup(of: (String, String, Int?)?.self) { group -> [(String, String, Int?)] in
+                var iterator = toSign.makeIterator()
+                let maxConcurrent = 6
+                // Bounded fan-out: prime up to `maxConcurrent` sign requests, then
+                // start one more each time an earlier one finishes — never more
+                // than 6 in flight at once.
+                func addNext() {
+                    guard let attachment = iterator.next() else { return }
+                    group.addTask {
+                        guard let result = try? await KaiXAPIClient.shared.messageAttachmentViewUrl(
+                            messageId: messageId,
+                            attachmentId: attachment.id
+                        ), !result.url.isEmpty else { return nil }
+                        return (attachment.id, result.url, result.expiresIn)
+                    }
+                }
+                for _ in 0..<Swift.min(maxConcurrent, toSign.count) { addNext() }
+                var results: [(String, String, Int?)] = []
+                while let finished = await group.next() {
+                    if let finished { results.append(finished) }
+                    addNext()
+                }
+                return results
+            }
+            for (attachmentId, url, expiresIn) in signed {
+                signedURLs[attachmentId] = url
+                // Honor the server's TTL (minus a 60s safety margin) instead of a
+                // hardcoded 240s, so a shorter-lived URL is re-signed before it
+                // dies and a longer-lived one isn't re-signed needlessly.
+                let ttl = expiresIn.map { Swift.max(30, Double($0) - 60) } ?? 240
+                signedAttachmentURLCache[Self.signCacheKey(messageId, attachmentId)] = SignedAttachmentURLCacheItem(
+                    url: url,
+                    expiresAt: now.addingTimeInterval(ttl)
+                )
+            }
+            Self.pruneSignedAttachmentCacheIfNeeded(now: now)
+        }
         return mediaItems(from: dto, signedAttachmentURLs: signedURLs)
+    }
+
+    private static func signCacheKey(_ messageId: String, _ attachmentId: String) -> String {
+        "\(messageId):\(attachmentId)"
+    }
+
+    /// Resolve only what needs no network sign: legacy media + public
+    /// attachments + any signed attachment already in the URL cache. Reports
+    /// whether any attachment still needs a signing round-trip so the caller can
+    /// decide whether to run the second (async) pass.
+    private static func immediateMediaItems(from dto: KaiXMessageDTO) -> (media: [MediaEntity], needsSigning: Bool) {
+        guard let attachments = dto.attachments, !attachments.isEmpty else {
+            return (mediaItems(from: dto), false)
+        }
+        let now = Date()
+        var signedURLs: [String: String] = [:]
+        var needsSigning = false
+        for attachment in attachments {
+            let publicSource = attachment.publicUrl ?? attachment.cdnUrl ?? attachment.url ?? ""
+            let needsSignedURL = attachment.needsSignedUrl == true || publicSource.isEmpty
+            guard needsSignedURL else { continue }
+            if let cached = signedAttachmentURLCache[signCacheKey(dto.id, attachment.id)], cached.expiresAt > now {
+                signedURLs[attachment.id] = cached.url
+            } else {
+                needsSigning = true
+            }
+        }
+        return (mediaItems(from: dto, signedAttachmentURLs: signedURLs), needsSigning)
+    }
+
+    /// Re-sign a single attachment on demand (e.g. after a 403 from an expired
+    /// URL) and update the shared cache. Returns the fresh URL, or nil if the
+    /// sign failed. Used by the loader's re-sign retry path so a rotated URL is
+    /// repaired without reloading the whole thread.
+    static func resignAttachmentURL(messageId: String, attachmentId: String) async -> String? {
+        guard let result = try? await KaiXAPIClient.shared.messageAttachmentViewUrl(
+            messageId: messageId,
+            attachmentId: attachmentId
+        ), !result.url.isEmpty else { return nil }
+        let now = Date()
+        let ttl = result.expiresIn.map { Swift.max(30, Double($0) - 60) } ?? 240
+        signedAttachmentURLCache[signCacheKey(messageId, attachmentId)] = SignedAttachmentURLCacheItem(
+            url: result.url,
+            expiresAt: now.addingTimeInterval(ttl)
+        )
+        pruneSignedAttachmentCacheIfNeeded(now: now)
+        return result.url
     }
 
     private static func mediaItems(from dto: KaiXMessageDTO, signedAttachmentURLs: [String: String] = [:]) -> [MediaEntity] {
@@ -435,6 +595,12 @@ final class MessageRepository {
             let source = signedSource.isEmpty ? publicSource : signedSource
             let poster = att.posterUrl ?? att.poster_url ?? att.thumbnailUrl ?? att.thumbnail_url ?? att.thumbUrl ?? att.thumb_url ?? ""
             let thumb = mediaType == .video ? poster : (poster.isEmpty ? source : poster)
+            // Private attachments (signed, needs re-sign) get a stable cache key
+            // so the image cache keys on the asset, not the rotating signed URL.
+            // The poster/thumbnail is served from a public CDN URL, so only the
+            // signed image body itself is keyed stably (the object key / id).
+            let isPrivate = att.needsSignedUrl == true || (publicSource.isEmpty && mediaType != .video)
+            let stableKey = isPrivate ? (att.objectKey ?? att.object_key ?? att.id) : ""
             return MediaEntity(
                 id: att.id,
                 postId: dto.id,
@@ -452,7 +618,8 @@ final class MessageRepository {
                 uploadProgress: 1,
                 createdAt: parseDate(att.created_at ?? att.createdAt) ?? .now,
                 remoteId: att.id,
-                syncStatus: .synced
+                syncStatus: .synced,
+                stableCacheKey: stableKey
             )
         }
         return legacy + attachments

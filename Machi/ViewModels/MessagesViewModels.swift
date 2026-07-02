@@ -120,7 +120,11 @@ final class ChatViewModel: ObservableObject {
         }
         do {
             let repository = MessageRepository(context: context)
-            let fetched = try await repository.fetchMessages(
+            // Two-phase: render the text bubbles (+ public media) immediately,
+            // then sign private attachments asynchronously and patch them in.
+            // A multi-image thread no longer blanks the whole conversation while
+            // N signing round-trips complete.
+            let (fetched, pending) = try await repository.fetchMessagesTextFirst(
                 threadId: thread.id,
                 query: searchQuery,
                 day: selectedDay.map(Self.serverDayString)
@@ -134,6 +138,16 @@ final class ChatViewModel: ObservableObject {
             let ids = Set(messages.map(\.id))
             mediaByMessageId = try await repository.fetchMedia(threadId: thread.id, messageIds: ids)
             state = messages.isEmpty ? .empty : .loaded
+
+            // Second pass: sign the pending attachments and patch the media in
+            // without disturbing the already-rendered text.
+            if !pending.isEmpty {
+                let resolved = await repository.resolveMedia(threadId: thread.id, pending: pending)
+                // Guard against a racing refresh having moved on: only apply if
+                // the thread's message set still matches what we published.
+                let visibleIds = Set(messages.map(\.id))
+                mediaByMessageId = resolved.filter { visibleIds.contains($0.key) }
+            }
         } catch {
             if hasCachedContent {
                 errorMessage = error.kaixUserMessage
@@ -233,6 +247,9 @@ final class ChatViewModel: ObservableObject {
     func removeMedia(_ draft: MediaDraft, messageStore: MessageStore? = nil) {
         mediaDrafts.removeAll { $0.id == draft.id }
         messageStore?.removeUpload(draft.id)
+        // The user pulled this draft out of the composer — its staged files are
+        // now dead scratch. Delete them off the main actor.
+        Task.detached(priority: .utility) { await UploadService.shared.cleanupDraftFiles(draft) }
     }
 
     func send(context: ModelContext, thread: MessageThreadEntity, currentUser: UserEntity, messageStore: MessageStore? = nil) async {
@@ -268,6 +285,11 @@ final class ChatViewModel: ObservableObject {
             messageStore?.setMessages(messages, conversationId: thread.id)
         }
 
+        // Stable idempotency key: for a text-only send it's the optimistic
+        // bubble id (so a user-triggered retry re-uses it); for a media send
+        // (no optimistic bubble) derive one from the draft ids so a double-tap
+        // can't create two rows.
+        let sendKey = optimisticId ?? "media-\(drafts.map(\.id).sorted().joined(separator: "-"))"
         do {
             let repository = MessageRepository(context: context)
             let message = try await repository.sendMessage(
@@ -275,6 +297,7 @@ final class ChatViewModel: ObservableObject {
                 senderId: currentUser.id,
                 content: trimmed,
                 mediaDrafts: drafts,
+                idempotencyKey: "message-send-\(sendKey)",
                 onProgress: { [weak self] fraction in
                     Task { @MainActor in
                         guard let self, self.isSending else { return }
@@ -301,6 +324,11 @@ final class ChatViewModel: ObservableObject {
             messageStore?.setMessages(messages, conversationId: thread.id)
             messageStore?.removeFromQueue(message.id)
             drafts.forEach { messageStore?.removeUpload($0.id) }
+            // Send landed — the staged upload copies for these drafts are done.
+            let sentDrafts = drafts
+            Task.detached(priority: .utility) {
+                for draft in sentDrafts { await UploadService.shared.cleanupDraftFiles(draft) }
+            }
 
             if KaiXBackend.token != nil {
                 await refreshFromServer(repository: repository, thread: thread, currentUser: currentUser, messageStore: messageStore)
@@ -318,7 +346,14 @@ final class ChatViewModel: ObservableObject {
                     // survives mergePreservingFailed, not `.sending`). Re-append
                     // it as `.failed` from the captured text — a failed send
                     // must never vanish silently along with the cleared input.
+                    // Reuse `optimisticId` as the bubble id (NOT a fresh UUID) so
+                    // a later retry derives the SAME idempotency key
+                    // ("message-send-\(optimisticId)") the in-flight send used —
+                    // otherwise, if that original POST actually landed but its
+                    // response was lost, the retry's different key would insert a
+                    // duplicate server row instead of reconciling the same one.
                     let failed = MessageEntity(
+                        id: optimisticId,
                         threadId: thread.id,
                         senderId: currentUser.id,
                         content: trimmed,
@@ -335,6 +370,18 @@ final class ChatViewModel: ObservableObject {
     }
 
     func deleteMessage(context: ModelContext, thread: MessageThreadEntity, message: MessageEntity, messageStore: MessageStore? = nil) async {
+        // A `.failed` bubble is a purely local, client-id-only optimistic send —
+        // the server has no record of it. Delete it locally with no round-trip
+        // (which would 404 / clobber unrelated state) so tap-to-dismiss on a
+        // failed send is instant and always succeeds.
+        if message.status == .failed {
+            messages.removeAll { $0.id == message.id }
+            mediaByMessageId[message.id] = nil
+            messageStore?.setMessages(messages, conversationId: thread.id)
+            state = messages.isEmpty ? .empty : .loaded
+            return
+        }
+
         let previousMessages = messages
         let previousMedia = mediaByMessageId
         messages.removeAll { $0.id == message.id }
@@ -370,7 +417,16 @@ final class ChatViewModel: ObservableObject {
             }
             do {
                 let repository = MessageRepository(context: context)
-                let sent = try await repository.sendMessage(thread: thread, senderId: message.senderId, content: text, mediaDrafts: [])
+                // Reuse the failed bubble's id as the idempotency key so this
+                // retry reconciles the same server row rather than inserting a
+                // duplicate (the original send used this same derived key).
+                let sent = try await repository.sendMessage(
+                    thread: thread,
+                    senderId: message.senderId,
+                    content: text,
+                    mediaDrafts: [],
+                    idempotencyKey: "message-send-\(failedId)"
+                )
                 if let idx = messages.firstIndex(where: { $0.id == failedId }) {
                     messages[idx] = sent
                     mediaByMessageId[failedId] = nil
@@ -389,7 +445,13 @@ final class ChatViewModel: ObservableObject {
                     // concurrent refresh could have swept it (only `.failed`
                     // survives mergePreservingFailed). Re-append it as `.failed`
                     // so the tap-to-retry affordance never silently disappears.
+                    // Reuse `failedId` as the id (NOT a fresh UUID) so a further
+                    // retry derives the SAME idempotency key
+                    // ("message-send-\(failedId)") this retry used — a fresh id
+                    // would give the next retry a different key and insert a
+                    // duplicate server row if this attempt's POST actually landed.
                     let failed = MessageEntity(
+                        id: failedId,
                         threadId: thread.id,
                         senderId: message.senderId,
                         content: text,
@@ -456,7 +518,24 @@ final class ChatViewModel: ObservableObject {
         let failedLocal = current.filter { $0.status == .failed }
         guard !failedLocal.isEmpty else { return fetched }
         let fetchedIds = Set(fetched.map(\.id))
-        let survivors = failedLocal.filter { !fetchedIds.contains($0.id) }
+        var survivors = failedLocal.filter { !fetchedIds.contains($0.id) }
+        guard !survivors.isEmpty else { return fetched }
+        // Content-level dedup: if the server actually delivered a message that
+        // matches a still-`.failed` local bubble (same sender, same text, sent
+        // within 120s), the send *did* land — drop the stale failed twin so the
+        // user doesn't see "delivered" and "发送失败" side by side. The optimistic
+        // bubble carries a client id the server never had, so id-matching alone
+        // can't catch this.
+        survivors = survivors.filter { failed in
+            let text = failed.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return true }
+            let hasServerTwin = fetched.contains { server in
+                server.senderId == failed.senderId
+                    && server.content.trimmingCharacters(in: .whitespacesAndNewlines) == text
+                    && abs(server.createdAt.timeIntervalSince(failed.createdAt)) < 120
+            }
+            return !hasServerTwin
+        }
         guard !survivors.isEmpty else { return fetched }
         return (fetched + survivors).sorted { $0.createdAt < $1.createdAt }
     }

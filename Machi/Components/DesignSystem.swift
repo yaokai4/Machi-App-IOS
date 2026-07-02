@@ -14,11 +14,14 @@ enum KXSpacing {
 enum KXRadius {
     // Rhythmic 2pt-stepped set (was 7/9/13 — "prime-number" radii with no
     // visual logic). Same-tier surfaces should share one token, not hardcode.
+    // Tier map: control/chip = md, standard card = card(20), showcase/hero
+    // surface = hero(22), bottom sheet / large panel = sheet(26).
     static let xs: CGFloat = 8
     static let sm: CGFloat = 10
     static let md: CGFloat = 14
     static let lg: CGFloat = 20
     static let card: CGFloat = 20
+    static let hero: CGFloat = 22
     static let sheet: CGFloat = 26
     static let pill: CGFloat = 999
 }
@@ -121,6 +124,24 @@ enum KXColor {
     static let glassShadow = Color.black.opacity(0.052)
     static let accent = Color.accentColor
     static let accentSoft = Color.accentColor.opacity(0.11)
+    /// Foreground for content sitting ON an accent fill (button labels, sent
+    /// chat bubbles, CTAs). Pure white on the light brand teal, near-black on
+    /// the brighter dark-mode teal — a raw `.white` on the light dark-mode
+    /// accent washes out and drops below AA. Use this instead of `.white`
+    /// wherever the background is `KXColor.accent`.
+    static let onAccent = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 0.08, alpha: 1)
+            : UIColor.white
+    })
+    /// One notification-badge red, replacing the four ad-hoc `Color(red:0.93…)`
+    /// literals scattered across the tab bar and messages. Slightly deeper in
+    /// dark mode so it doesn't glow on near-black chrome.
+    static let badge = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.86, green: 0.20, blue: 0.34, alpha: 1)
+            : UIColor(red: 0.93, green: 0.16, blue: 0.34, alpha: 1)
+    })
     /// Machi 官方账号标识专用 teal。浅色 = 品牌深青;暗色提亮——
     /// 0.05/0.48/0.45 的深青在深底上对比度不足(原先四处硬编码)。
     static let official = Color(UIColor { traits in
@@ -181,6 +202,37 @@ enum KXColor {
     static let rankViolet = Color(red: 0.514, green: 0.353, blue: 0.953)
     static let rankTeal = Color(red: 0.000, green: 0.651, blue: 0.561)
     static let rankSky = Color(red: 0.063, green: 0.557, blue: 0.969)
+
+    // MARK: Category semantic palette
+    // The Discover category grid used ~25 unique tints — a confetti of hues
+    // with no meaning. Collapse to a 5-colour semantic set so colour encodes
+    // *kind of action*, not just "this tile is different from that one".
+    //   brand   → core Machi surfaces (housing, community, guide)
+    //   heat    → hot / trending / marketplace demand
+    //   alert   → time-sensitive or money (jobs, deadlines, deals)
+    //   info    → informational / directory / reference
+    //   neutral → utilities & everything unclassified
+    static let categoryBrand = accent
+    static let categoryHeat = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.95, green: 0.55, blue: 0.30, alpha: 1)
+            : UIColor(red: 0.85, green: 0.45, blue: 0.12, alpha: 1)
+    })
+    static let categoryAlert = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.96, green: 0.44, blue: 0.42, alpha: 1)
+            : UIColor(red: 0.84, green: 0.28, blue: 0.28, alpha: 1)
+    })
+    static let categoryInfo = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.42, green: 0.66, blue: 0.95, alpha: 1)
+            : UIColor(red: 0.20, green: 0.48, blue: 0.82, alpha: 1)
+    })
+    static let categoryNeutral = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.62, green: 0.66, blue: 0.68, alpha: 1)
+            : UIColor(red: 0.42, green: 0.46, blue: 0.48, alpha: 1)
+    })
 }
 
 /// iOS-17-safe descriptor for the Liquid Glass styles. SwiftUI's `Glass`
@@ -459,9 +511,11 @@ struct KXEmptyState: View {
     let title: String
     let subtitle: String
     var systemImage: String = "tray"
+    /// Optional brand illustration motif; nil keeps the plain icon-in-circle.
+    var illustration: KXBrandIllustration.Motif? = nil
 
     var body: some View {
-        EmptyStateView(title: title, subtitle: subtitle, systemImage: systemImage)
+        EmptyStateView(title: title, subtitle: subtitle, systemImage: systemImage, illustration: illustration)
     }
 }
 
@@ -637,6 +691,15 @@ struct KXGlassBackground: View {
     }
 }
 
+// MARK: - Surface ownership
+//
+// Two surface families, picked by *what the card is about* — not by screen:
+//   • kxLivingSurface — warm, paper-toned. Belongs to COMMERCE content:
+//     房源 listings, 商家 merchants, 民宿 stays, JLPT / 资料商城 "product" cards.
+//   • kxGlassSurface  — cool, translucent glass. Belongs to SOCIAL & REFERENCE
+//     content: community posts, messages, and Guide 资料 (informational) cards.
+// When in doubt, a screen should not mix both families in the same section.
+
 extension View {
     /// Shared product surface for cards and panels.
     func kxGlassSurface(
@@ -749,7 +812,7 @@ extension View {
     func kxGlassButton(prominent: Bool = true, enabled: Bool = true) -> some View {
         self
             .font(.subheadline.weight(.black))
-            .foregroundStyle(prominent ? (enabled ? Color.white : Color.secondary) : KXColor.accent)
+            .foregroundStyle(prominent ? (enabled ? KXColor.onAccent : Color.secondary) : KXColor.accent)
             .frame(maxWidth: .infinity)
             .frame(height: 50)
             .background {
@@ -864,6 +927,47 @@ struct KXFeedSkeleton: View {
             }
         }
         .accessibilityHidden(true)
+        .transition(.opacity)
+    }
+}
+
+/// Guide list/article placeholder — a hero block over a column of rounded
+/// content-card blocks, mirroring the Guide home's real card geometry (icon
+/// bubble + title line + body line) instead of a bare spinner. Used on the
+/// Guide directory/list pages, which render cards, not post feeds.
+struct KXGuideListSkeleton: View {
+    var count: Int = 5
+    private var bone: some ShapeStyle { KXColor.softBackground }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous)
+                .fill(bone)
+                .frame(height: 96)
+            ForEach(0..<count, id: \.self) { _ in
+                HStack(spacing: KXSpacing.md) {
+                    RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
+                        .fill(bone)
+                        .frame(width: 40, height: 40)
+                    VStack(alignment: .leading, spacing: 7) {
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(bone)
+                            .frame(width: 150, height: 11)
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(bone)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 9)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(KXSpacing.card)
+                .kxGlassSurface(radius: KXRadius.card)
+            }
+        }
+        .padding(.horizontal, KXSpacing.screen)
+        .padding(.top, KXSpacing.md)
+        .accessibilityHidden(true)
+        .kxShimmer()
         .transition(.opacity)
     }
 }
@@ -985,7 +1089,7 @@ struct KXCoverCarousel<Placeholder: View>: View {
                         if !interactive, urls.count > 1 {
                             KXCoverPhotoCount(count: urls.count)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                                .padding(9)
+                                .padding(8)
                         }
                     } else if urls.count > 1 {
                         // Swipeable gallery — detail screens only (interactive: true).

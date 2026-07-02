@@ -203,7 +203,7 @@ struct DataManagementView: View {
                     .background(KXColor.accentSoft, in: Capsule())
 
                     Text(KaiXCacheManager.formatted(cache.totalBytes))
-                        .font(.system(size: 42, weight: .bold, design: .rounded))
+                        .kxScaledFont(42, relativeTo: .largeTitle, weight: .bold, design: .rounded)
                         .monospacedDigit()
                         .minimumScaleFactor(0.72)
                         .lineLimit(1)

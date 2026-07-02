@@ -20,6 +20,7 @@ struct ProfileView: View {
     @State private var menuMessage: String?
     @State private var isShowingSettings = false
     @State private var isShowingWorkbench = false
+    @State private var isShowingFavorites = false
     @State private var followListKind: FollowListKind?
     @State private var mutualCount: Int?
     @State private var reputation: KaiXReputationProfileDTO?
@@ -214,7 +215,11 @@ struct ProfileView: View {
 
         switch profileLoadState {
         case .idle, .loading:
-            return AnyView(LoadingView())
+            return AnyView(
+                KXFeedSkeleton()
+                    .padding(.horizontal, KXSpacing.screen)
+                    .padding(.top, KXSpacing.md)
+            )
         case .error(let message):
             return AnyView(ErrorStateView(message: message) {
                 Task { await loadProfileAndContent() }
@@ -242,6 +247,7 @@ struct ProfileView: View {
                     profileHeader
                     if isCurrentUser {
                         personalWorkbenchEntry
+                        favoritesEntry
                     }
                     PersonalProfileTabPicker(tabs: availableTabs, selection: $profileTab)
                         .padding(.horizontal, 2)
@@ -302,6 +308,55 @@ struct ProfileView: View {
         .buttonStyle(.fullArea)
         .contentShape(Rectangle())
         .accessibilityIdentifier("profile.personalWorkbench")
+    }
+
+    /// "我的收藏" aggregate — one entry that opens a two-tab sheet combining
+    /// saved listings (WishlistView) and bookmarked posts (BookmarkView).
+    private var favoritesEntry: some View {
+        Button {
+            isShowingFavorites = true
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "heart.fill")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(
+                        LinearGradient(colors: [.pink, .pink.opacity(0.78)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                        in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    )
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(L("profileFavorites", language))
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(.primary)
+                    Text(L("profileFavoritesSubtitle", language))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(14)
+            .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(KXColor.separator.opacity(0.6), lineWidth: 0.8))
+        }
+        .buttonStyle(.fullArea)
+        .contentShape(Rectangle())
+        .accessibilityIdentifier("profile.favorites")
+        .sheet(isPresented: $isShowingFavorites) {
+            FavoritesHubView(currentUser: currentUser) { listingId in
+                isShowingFavorites = false
+                // Route into the Search tab's listing detail (same destination as
+                // the wishlist row / machi://listing deep link).
+                router.open(.cityListingDetail(listingId: listingId), in: .search)
+                chrome.select(.search)
+                router.setActiveTab(.search)
+            }
+            .environmentObject(postStore)
+        }
     }
 
     /// Localized current-level name (zh/ja/en) for the compact reputation chip.
@@ -383,6 +438,18 @@ struct ProfileView: View {
         }
     }
 
+    /// Public web URL for the system share sheet — resolves back into the app
+    /// via Universal Links (`/u/<id>` → profile).
+    private var profileShareURL: URL {
+        URL(string: "https://machicity.com/u/\(profileUserId)") ?? URL(string: "https://machicity.com")!
+    }
+
+    /// Share-sheet title: the person's display name (or @handle fallback).
+    private var profileShareTitle: String {
+        let name = profileUser.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? "@\(profileUser.username)" : name
+    }
+
     private var topBar: some View {
         HStack {
             if showsBackButton {
@@ -396,7 +463,7 @@ struct ProfileView: View {
                         .kxGlassCircle()
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("返回")
+                .accessibilityLabel(KXListingCopy.pickText(language, "返回", "戻る", "Back"))
             } else if isCurrentUser {
                 Button {
                     isShowingWorkbench = true
@@ -437,9 +504,18 @@ struct ProfileView: View {
                 .accessibilityLabel(L("settings", language))
             } else {
                 Menu {
-                    Button(L("shareProfile", language)) {
+                    ShareLink(
+                        item: profileShareURL,
+                        subject: Text(profileShareTitle),
+                        preview: SharePreview(profileShareTitle)
+                    ) {
+                        Label(L("shareProfile", language), systemImage: "square.and.arrow.up")
+                    }
+                    Button {
                         UIPasteboard.general.string = "@\(profileUser.username)"
                         menuMessage = L("profileCopied", language)
+                    } label: {
+                        Label(L("copyLink", language), systemImage: "at")
                     }
                     Button(L("reportUser", language), role: .destructive) {
                         // C3: file a real report instead of only toasting.
@@ -481,7 +557,9 @@ struct ProfileView: View {
     private var stateContent: some View {
         switch viewModel.state {
         case .loading, .idle:
-            LoadingView()
+            KXFeedSkeleton()
+                .padding(.horizontal, KXSpacing.screen)
+                .padding(.top, KXSpacing.md)
                 .frame(maxWidth: .infinity)
         case .error(let message):
             ErrorStateView(message: message) {
@@ -1094,6 +1172,7 @@ private struct ProfilePresentationModifier: ViewModifier {
 }
 
 private struct WorkbenchFullScreenView: View {
+    @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var chrome: AppChromeState
 
@@ -1118,7 +1197,7 @@ private struct WorkbenchFullScreenView: View {
                         }
                         .buttonStyle(KXPressableStyle(scale: 0.94, dim: 0.88))
                         .accessibilityIdentifier("workbench.close")
-                        .accessibilityLabel("关闭")
+                        .accessibilityLabel(KXListingCopy.pickText(language, "关闭", "閉じる", "Close"))
                     }
                 }
                 .toolbarBackground(.hidden, for: .navigationBar)
@@ -1266,7 +1345,7 @@ private struct ProfileReputationChip: View {
                         .lineLimit(1)
                 }
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 8, weight: .black))
+                    .font(.caption2.weight(.bold))
                     .opacity(0.55)
             }
             .foregroundStyle(KXColor.accent)
@@ -1826,5 +1905,62 @@ private struct PersonalProfileTabPicker: View {
         KXSegmentedControl(tabs, selection: $selection) { tab in
             Text(tab.title(language))
         }
+    }
+}
+
+/// Two-tab aggregate for "我的收藏": saved listings (WishlistView) + bookmarked
+/// posts (BookmarkView). Presented as a sheet from the profile. A single
+/// segmented header switches the panel; each child view keeps its own loading
+/// and empty states.
+struct FavoritesHubView: View {
+    @Environment(\.appLanguage) private var language
+    @Environment(\.dismiss) private var dismiss
+
+    let currentUser: UserEntity
+    /// Opens a saved listing (routes into the Search tab and dismisses the sheet).
+    let onOpenListing: (String) -> Void
+
+    private enum Segment: Hashable { case listings, posts }
+    @State private var segment: Segment = .listings
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                KXSegmentedControl(
+                    [Segment.listings, .posts],
+                    selection: $segment
+                ) { seg in
+                    Text(seg == .listings ? L("favoritesListingsTab", language) : L("favoritesPostsTab", language))
+                }
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityLabel(L("close", language))
+            }
+            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.top, 14)
+            .padding(.bottom, 8)
+
+            Divider().opacity(0.4)
+
+            Group {
+                switch segment {
+                case .listings:
+                    // WishlistView carries its own NavigationStack + chrome; its
+                    // built-in close button also dismisses this sheet.
+                    WishlistView { id in onOpenListing(id) }
+                case .posts:
+                    NavigationStack {
+                        BookmarkView(currentUser: currentUser)
+                            .navigationBarTitleDisplayMode(.inline)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background(KXColor.pageBackground.ignoresSafeArea())
+        .accessibilityIdentifier("favorites.hub")
     }
 }

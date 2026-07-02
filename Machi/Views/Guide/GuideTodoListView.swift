@@ -118,7 +118,7 @@ struct GuideOSTodoCard: View {
                         }
                         .buttonStyle(.fullArea)
                         .disabled(onUpdateSteps == nil)
-                        .accessibilityLabel("切换步骤")
+                        .accessibilityLabel(guideOSText(language, "切换步骤", "ステップを切り替え", "Toggle step"))
                         Text(step.text)
                             .font(.caption)
                             .strikethrough(step.done)
@@ -129,7 +129,7 @@ struct GuideOSTodoCard: View {
                                 Image(systemName: "xmark").font(.caption2).foregroundStyle(.tertiary)
                             }
                             .buttonStyle(.fullArea)
-                            .accessibilityLabel("删除步骤")
+                            .accessibilityLabel(guideOSText(language, "删除步骤", "ステップを削除", "Delete step"))
                         }
                     }
                 }
@@ -233,7 +233,7 @@ struct GuideOSTodoCard: View {
             }
             .buttonStyle(.fullArea)
         .contentShape(Rectangle())
-            .accessibilityLabel("完成")
+            .accessibilityLabel(guideOSText(language, "完成", "完了", "Done"))
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(todo.title)
@@ -262,7 +262,7 @@ struct GuideOSTodoCard: View {
                                 .frame(width: 32, height: 32)
                         }
                         .contentShape(Rectangle())
-                        .accessibilityLabel("改期")
+                        .accessibilityLabel(guideOSText(language, "改期", "日付を変更", "Reschedule"))
                     }
                     if onSetReminder != nil {
                         Button { showReminder = true } label: {
@@ -273,7 +273,7 @@ struct GuideOSTodoCard: View {
                         }
                         .buttonStyle(.fullArea)
         .contentShape(Rectangle())
-                        .accessibilityLabel("提醒")
+                        .accessibilityLabel(guideOSText(language, "提醒", "リマインダー", "Remind"))
                     }
                 }
                 if !todo.summary.isEmpty {
@@ -670,7 +670,7 @@ private struct GuideTodoDetailHeroCard: View {
                     .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 VStack(alignment: .leading, spacing: 5) {
                     Text(titleText)
-                        .font(.title3.weight(.black))
+                        .font(.title3.weight(.bold))
                         .foregroundStyle(KXColor.livingInk)
                         .lineLimit(3)
                         .multilineTextAlignment(.leading)
@@ -703,7 +703,7 @@ private struct GuideTodoDetailHeroCard: View {
             }
         }
         .padding(16)
-        .kxLivingSurface(radius: 26)
+        .kxLivingSurface(radius: KXRadius.sheet)
         .padding(.horizontal, 2)
     }
 

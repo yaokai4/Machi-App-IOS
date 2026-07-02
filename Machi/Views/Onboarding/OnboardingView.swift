@@ -117,7 +117,7 @@ struct OnboardingView: View {
                 }) {
                     Text(pick("先逛逛", "まず見てみる", "Browse first"))
                         .font(.headline.weight(.bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(KXColor.onAccent)
                         .frame(maxWidth: .infinity)
                         .frame(height: 52)
                         .background(KXColor.accent, in: Capsule())
@@ -148,7 +148,7 @@ struct OnboardingView: View {
             Spacer()
             VStack(spacing: 12) {
                 Text(pick("你现在处于哪个阶段？", "いまはどの段階ですか？", "Where are you right now?"))
-                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                    .kxScaledFont(26, relativeTo: .title2, weight: .bold, design: .rounded)
                     .foregroundStyle(.primary)
                     .multilineTextAlignment(.center)
                 Text(pick("选一个，首页和指南会先展示对你最有用的内容。",
@@ -232,7 +232,7 @@ struct OnboardingView: View {
                 .shadow(color: card.tint.opacity(0.3), radius: 18, y: 10)
             VStack(spacing: 12) {
                 Text(card.title)
-                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                    .kxScaledFont(26, relativeTo: .title2, weight: .bold, design: .rounded)
                     .foregroundStyle(.primary)
                     .multilineTextAlignment(.center)
                 Text(card.subtitle)

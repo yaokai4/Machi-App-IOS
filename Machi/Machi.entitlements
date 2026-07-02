@@ -8,5 +8,10 @@
 	<array>
 		<string>Default</string>
 	</array>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:machicity.com</string>
+		<string>applinks:www.machicity.com</string>
+	</array>
 </dict>
 </plist>

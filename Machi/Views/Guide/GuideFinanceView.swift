@@ -636,8 +636,8 @@ private struct GuideCategoryDonut: View {
                             .rotationEffect(.degrees(-90))
                     }
                     VStack(spacing: 1) {
-                        Text(money(total)).font(.system(size: 13, weight: .black)).minimumScaleFactor(0.5).lineLimit(1)
-                        Text(guideOSText(language, "本月支出", "今月の支出", "Spent")).font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
+                        Text(money(total)).kxScaledFont(13, relativeTo: .subheadline, weight: .bold).minimumScaleFactor(0.5).lineLimit(1)
+                        Text(guideOSText(language, "本月支出", "今月の支出", "Spent")).font(.caption2.weight(.bold)).foregroundStyle(.secondary)
                     }
                 }
                 .frame(width: 108, height: 108)
@@ -685,8 +685,8 @@ private struct GuideFinanceStat: View {
                     .foregroundStyle(positive ? KXColor.accent : Color.red)
                 Text(label).font(.caption2.weight(.bold)).foregroundStyle(.secondary)
             }
-            Text(value).font(.system(size: 17, weight: .black)).minimumScaleFactor(0.6).lineLimit(1)
-            if let sub { Text(sub).font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary).lineLimit(1) }
+            Text(value).kxScaledFont(17, relativeTo: .headline, weight: .black).minimumScaleFactor(0.6).lineLimit(1)
+            if let sub { Text(sub).font(.caption2.weight(.semibold)).foregroundStyle(.secondary).lineLimit(1) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)

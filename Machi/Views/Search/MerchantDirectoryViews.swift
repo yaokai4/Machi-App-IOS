@@ -99,7 +99,7 @@ struct KXServiceListingCard: View {
                             .kxCoverBadge(in: Capsule())
                         }
                     }
-                    .padding(9)
+                    .padding(8)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     heartButton
                         .padding(3)   // 44pt frame absorbs the rest of the inset
@@ -107,7 +107,7 @@ struct KXServiceListingCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .top, spacing: 8) {
                         Text(KXListingCopy.displayTitle(listing))
-                            .font(.system(size: 16, weight: .semibold))   // mid-size title, not 19pt
+                            .kxScaledFont(16, relativeTo: .subheadline, weight: .semibold)   // mid-size title, not 19pt
                             .foregroundStyle(.primary)
                             .lineLimit(1)
                         Spacer(minLength: 4)
@@ -138,7 +138,7 @@ struct KXServiceListingCard: View {
                     }
                     HStack(spacing: 6) {
                         Text(priceText)
-                            .font(.system(size: 17, weight: .bold))
+                            .kxScaledFont(17, relativeTo: .headline, weight: .bold)
                             .foregroundStyle(KXColor.livingWarm)   // brand-warm price accent (was neutral/dull)
                             .lineLimit(1)
                         Spacer(minLength: 8)
@@ -154,7 +154,7 @@ struct KXServiceListingCard: View {
                 .padding(.horizontal, 4)
             }
             .padding(10)
-            .kxLivingSurface(radius: 24, elevated: true)
+            .kxLivingSurface(radius: KXRadius.hero, elevated: true)
         }
         .buttonStyle(KXPressableStyle())
         .sensoryFeedback(.impact(weight: .light), trigger: openTaps)
@@ -476,7 +476,7 @@ struct MerchantDirectoryView: View {
                         .kxGlassCircle()
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("返回")
+                .accessibilityLabel(KXListingCopy.pickText(language, "返回", "戻る", "Back"))
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(cityName) · \(L("verifiedMerchant", language))")
                         .font(.headline.weight(.semibold))
@@ -627,7 +627,7 @@ struct BusinessPublicProfileView: View {
                         .kxGlassCircle()
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("返回")
+                .accessibilityLabel(KXListingCopy.pickText(language, "返回", "戻る", "Back"))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(response?.business.business_name ?? L("merchantProfileTitle", language))
                         .font(.headline.weight(.semibold))
@@ -958,7 +958,7 @@ struct ListingReviewsSectionView: View {
                                     .foregroundStyle(star <= draftRating ? Color.orange : Color.secondary.opacity(0.25))
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel("\(star) 星")
+                            .accessibilityLabel(KXListingCopy.pickText(language, "\(star) 星", "星\(star)つ", "\(star) star\(star == 1 ? "" : "s")"))
                         }
                         Text([L("poorRating", language), L("lowRating", language), L("averageRating", language), L("goodRating", language), L("excellentRating", language)][max(0, min(4, draftRating - 1))])
                             .font(.subheadline.weight(.black))

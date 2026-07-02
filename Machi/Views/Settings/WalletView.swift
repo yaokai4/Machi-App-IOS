@@ -16,6 +16,8 @@ struct WalletView: View {
     /// identifies the account server-side, so top-up works without it too.
     var currentUser: UserEntity?
 
+    @State private var showMembershipSheet = false
+
     private var isBusy: Bool {
         store.state == .loading || store.state == .purchasing || store.state == .verifying
     }
@@ -31,6 +33,7 @@ struct WalletView: View {
                     errorCard
                 } else {
                     balanceCard
+                    if currentUser != nil { membershipEntryCard }
                     topupSection
                     disclaimerCard
                     ledgerSection
@@ -52,6 +55,49 @@ struct WalletView: View {
             store.start(appAccountToken: currentUser.flatMap { MembershipStore.appAccountToken(for: $0) })
         }
         .onDisappear { store.stop() }
+        .sheet(isPresented: $showMembershipSheet) {
+            if let currentUser {
+                NavigationStack { MembershipView(currentUser: currentUser) }
+            }
+        }
+    }
+
+    // MARK: - membership entry (#4 wallet → membership funnel)
+
+    /// A funnel card from the wallet to membership: members buy Guide resources at
+    /// the member price with their Machi Coins, so surfacing the upsell here is
+    /// where the spend intent already lives.
+    private var membershipEntryCard: some View {
+        Button {
+            showMembershipSheet = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.title3)
+                    .foregroundStyle(.blue)
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(KXColor.accentSoft))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(wl("会员享 Machi 币会员价", "Members get member pricing", "会員は会員価格で購入"))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text(wl("开通会员后，用 Machi 币购买指南资料更便宜。", "Membership makes Guide resources cheaper to buy with Machi Coins.", "会員になると Machi コインでガイド資料をよりお得に購入できます。"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.cardBackground))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(KXColor.separator, lineWidth: 0.8))
+            .contentShape(RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - unsupported / error states
@@ -122,7 +168,7 @@ struct WalletView: View {
                 Image(systemName: "circle.hexagongrid.fill").foregroundStyle(.orange)
                 Text(wl("当前余额", "Balance", "残高")).font(.subheadline).foregroundStyle(.secondary)
             }
-            Text(store.displayBalance).font(.system(size: 34, weight: .heavy))
+            Text(store.displayBalance).kxScaledFont(34, relativeTo: .largeTitle, weight: .heavy)
             if store.state == .verifying {
                 HStack(spacing: 6) { ProgressView().controlSize(.small); Text(wl("正在确认到账…", "Confirming…", "確認中…")).font(.caption).foregroundStyle(.secondary) }
             }

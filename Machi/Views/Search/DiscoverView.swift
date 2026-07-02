@@ -130,7 +130,6 @@ struct DiscoverView: View {
             }
         }
         .kxPageBackground()
-        .background(KXColor.livingBackground)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("discover.root")
         // Layered OUTSIDE the `discover.root` accessibility container (like the
@@ -456,35 +455,39 @@ struct DiscoverView: View {
         return DiscoverCategory(spec: spec, count: count)
     }
 
+    // Tints collapsed to the 5-colour semantic palette (KXColor.category*):
+    // brand = core Machi surfaces, heat = marketplace/deals, alert = jobs &
+    // warnings (money/time-sensitive), info = reference/directory, neutral =
+    // utilities. Colour now encodes *kind of action*, not just tile identity.
     private static let primarySpecs: [DiscoverCategorySpec] = [
-        .init(id: "secondhand", title: "二手市场", subtitle: "闲置交易、求购和搬家出清", icon: "bag", types: [.secondhand], channel: .secondhand, tint: Color.green),
-        .init(id: "housing", title: "租房 · 住宿", subtitle: "长租房源、看房预约与民宿", icon: "house", types: [.housing, .roommate], channel: .housing, tint: Color.blue),
-        .init(id: "work", title: "工作", subtitle: "职位、招聘、内推和申请进度", icon: "briefcase", types: [.job_seek, .job_post, .referral], channel: .jobPost, tint: KXColor.rankViolet),
-        .init(id: "service", title: "商家与服务", subtitle: "餐厅、订座点评、景点玩乐", icon: "storefront", types: [.service, .merchant], channel: .service, tint: Color.brown),
+        .init(id: "secondhand", title: "二手市场", subtitle: "闲置交易、求购和搬家出清", icon: "bag", types: [.secondhand], channel: .secondhand, tint: KXColor.categoryHeat),
+        .init(id: "housing", title: "租房 · 住宿", subtitle: "长租房源、看房预约与民宿", icon: "house", types: [.housing, .roommate], channel: .housing, tint: KXColor.categoryBrand),
+        .init(id: "work", title: "工作", subtitle: "职位、招聘、内推和申请进度", icon: "briefcase", types: [.job_seek, .job_post, .referral], channel: .jobPost, tint: KXColor.categoryAlert),
+        .init(id: "service", title: "商家与服务", subtitle: "餐厅、订座点评、景点玩乐", icon: "storefront", types: [.service, .merchant], channel: .service, tint: KXColor.categoryInfo),
     ]
 
     private static let extendedSpecs: [DiscoverCategorySpec] = [
-        .init(id: "guide", title: "城市指南", subtitle: "攻略、经验、避坑", icon: "book.closed", types: [.guide, .long_post, .warning], channel: .guide, tint: KXColor.rankTeal),
-        .init(id: "news", title: "本地快讯", subtitle: "新闻、交通、生活提醒", icon: "newspaper", types: [.news, .local_info], channel: .news, tint: KXColor.rankSky),
-        .init(id: "coupon", title: "商家优惠", subtitle: "折扣福利、本地商家活动", icon: "tag", types: [.coupon], channel: .coupon, tint: KXColor.heat),
-        .init(id: "groups", title: "约局 / 活动", subtitle: "约饭、语言交换、桌游", icon: "person.2", types: [.meetup, .dining, .event], channel: .meetup, tint: Color.orange),
-        .init(id: "question", title: "问答互助", subtitle: "问答、匿名提问、生活求助", icon: "questionmark.circle", types: [.question, .anonymous], channel: .question, tint: Color.indigo),
-        .init(id: "warning", title: "避坑经验", subtitle: "风险提醒和踩雷复盘", icon: "exclamationmark.shield", types: [.warning], channel: .guide, tint: Color.red),
-        .init(id: "jobseek", title: "找工作", subtitle: "求职线索、兼职、全职", icon: "briefcase", types: [.job_seek], channel: .jobSeek, tint: Color.mint),
-        .init(id: "jobpost", title: "招聘", subtitle: "职位发布和招聘方认证", icon: "person.badge.plus", types: [.job_post], channel: .jobPost, tint: KXColor.rankViolet),
-        .init(id: "referral", title: "内推", subtitle: "公司内推", icon: "person.crop.circle.badge.checkmark", types: [.referral], channel: .jobPost, tint: Color.indigo),
-        .init(id: "language", title: "语言交换", subtitle: "公开语言学习活动", icon: "bubble.left.and.bubble.right", types: [.meetup], channel: .meetup, tint: Color.orange),
-        .init(id: "food", title: "Food meetup", subtitle: "餐厅、咖啡和小型饭局", icon: "fork.knife", types: [.dining], channel: .dining, tint: KXColor.rankCoral),
-        .init(id: "localgroup", title: "本地约局", subtitle: "运动、周末活动、城市散步", icon: "calendar", types: [.event, .meetup], channel: .event, tint: Color.purple),
-        .init(id: "merchant", title: "商家", subtitle: "本地店铺和服务商资料", icon: "storefront", types: [.merchant], channel: .service, tint: Color.teal),
-        .init(id: "travel_stays", title: "民宿", subtitle: "租房 · 住宿内", icon: "bed.double", types: [.service, .merchant], channel: .housing, tint: Color.cyan),
-        .init(id: "attractions", title: "景点票务", subtitle: "门票、一日游和本地向导", icon: "ticket", types: [.service, .merchant], channel: .service, tint: Color.mint),
-        .init(id: "verified_merchant", title: "认证商家", subtitle: "已提交认证资料的商家", icon: "checkmark.seal", types: [.merchant], channel: .service, tint: Color.teal),
-        .init(id: "poll", title: "投票", subtitle: "选项投票", icon: "chart.bar", types: [.poll], channel: .dynamic, tint: Color.blue),
-        .init(id: "longpost", title: "长文", subtitle: "作为内容形式使用", icon: "doc.text", types: [.long_post], channel: .guide, tint: Color.gray),
-        .init(id: "anonymous", title: "匿名提问", subtitle: "匿名问答/生活吐槽", icon: "eye.slash", types: [.anonymous], channel: .question, tint: Color.gray),
-        .init(id: "localinfo", title: "本地资讯", subtitle: "社区告示", icon: "megaphone", types: [.local_info], channel: .news, tint: Color.orange),
-        .init(id: "roommate", title: "找室友", subtitle: "合租找人", icon: "person.2.fill", types: [.roommate], channel: .housing, tint: Color.cyan),
+        .init(id: "guide", title: "城市指南", subtitle: "攻略、经验、避坑", icon: "book.closed", types: [.guide, .long_post, .warning], channel: .guide, tint: KXColor.categoryBrand),
+        .init(id: "news", title: "本地快讯", subtitle: "新闻、交通、生活提醒", icon: "newspaper", types: [.news, .local_info], channel: .news, tint: KXColor.categoryInfo),
+        .init(id: "coupon", title: "商家优惠", subtitle: "折扣福利、本地商家活动", icon: "tag", types: [.coupon], channel: .coupon, tint: KXColor.categoryHeat),
+        .init(id: "groups", title: "约局 / 活动", subtitle: "约饭、语言交换、桌游", icon: "person.2", types: [.meetup, .dining, .event], channel: .meetup, tint: KXColor.categoryBrand),
+        .init(id: "question", title: "问答互助", subtitle: "问答、匿名提问、生活求助", icon: "questionmark.circle", types: [.question, .anonymous], channel: .question, tint: KXColor.categoryInfo),
+        .init(id: "warning", title: "避坑经验", subtitle: "风险提醒和踩雷复盘", icon: "exclamationmark.shield", types: [.warning], channel: .guide, tint: KXColor.categoryAlert),
+        .init(id: "jobseek", title: "找工作", subtitle: "求职线索、兼职、全职", icon: "briefcase", types: [.job_seek], channel: .jobSeek, tint: KXColor.categoryAlert),
+        .init(id: "jobpost", title: "招聘", subtitle: "职位发布和招聘方认证", icon: "person.badge.plus", types: [.job_post], channel: .jobPost, tint: KXColor.categoryAlert),
+        .init(id: "referral", title: "内推", subtitle: "公司内推", icon: "person.crop.circle.badge.checkmark", types: [.referral], channel: .jobPost, tint: KXColor.categoryAlert),
+        .init(id: "language", title: "语言交换", subtitle: "公开语言学习活动", icon: "bubble.left.and.bubble.right", types: [.meetup], channel: .meetup, tint: KXColor.categoryBrand),
+        .init(id: "food", title: "Food meetup", subtitle: "餐厅、咖啡和小型饭局", icon: "fork.knife", types: [.dining], channel: .dining, tint: KXColor.categoryHeat),
+        .init(id: "localgroup", title: "本地约局", subtitle: "运动、周末活动、城市散步", icon: "calendar", types: [.event, .meetup], channel: .event, tint: KXColor.categoryBrand),
+        .init(id: "merchant", title: "商家", subtitle: "本地店铺和服务商资料", icon: "storefront", types: [.merchant], channel: .service, tint: KXColor.categoryInfo),
+        .init(id: "travel_stays", title: "民宿", subtitle: "租房 · 住宿内", icon: "bed.double", types: [.service, .merchant], channel: .housing, tint: KXColor.categoryBrand),
+        .init(id: "attractions", title: "景点票务", subtitle: "门票、一日游和本地向导", icon: "ticket", types: [.service, .merchant], channel: .service, tint: KXColor.categoryInfo),
+        .init(id: "verified_merchant", title: "认证商家", subtitle: "已提交认证资料的商家", icon: "checkmark.seal", types: [.merchant], channel: .service, tint: KXColor.categoryInfo),
+        .init(id: "poll", title: "投票", subtitle: "选项投票", icon: "chart.bar", types: [.poll], channel: .dynamic, tint: KXColor.categoryInfo),
+        .init(id: "longpost", title: "长文", subtitle: "作为内容形式使用", icon: "doc.text", types: [.long_post], channel: .guide, tint: KXColor.categoryNeutral),
+        .init(id: "anonymous", title: "匿名提问", subtitle: "匿名问答/生活吐槽", icon: "eye.slash", types: [.anonymous], channel: .question, tint: KXColor.categoryNeutral),
+        .init(id: "localinfo", title: "本地资讯", subtitle: "社区告示", icon: "megaphone", types: [.local_info], channel: .news, tint: KXColor.categoryInfo),
+        .init(id: "roommate", title: "找室友", subtitle: "合租找人", icon: "person.2.fill", types: [.roommate], channel: .housing, tint: KXColor.categoryBrand),
     ]
 
     private func openCategory(_ category: DiscoverCategory) {
@@ -1986,7 +1989,7 @@ private struct DiscoverContentCard: View {
         }
         .padding(KXSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .kxGlassSurface(radius: 20)
+        .kxGlassSurface(radius: KXRadius.card)
         .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .gesture(TapGesture().onEnded { onOpen() }, including: .gesture)
     }

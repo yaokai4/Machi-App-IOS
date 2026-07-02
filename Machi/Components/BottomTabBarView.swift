@@ -117,15 +117,15 @@ private struct TabUnreadBadge: View {
 
     var body: some View {
         Text(count > 99 ? "99+" : "\(count)")
-            .font(.system(size: count > 99 ? 7.5 : count > 9 ? 8 : 8.5, weight: .black))
+            .font(.system(size: count > 99 ? 9 : count > 9 ? 9.5 : 10, weight: .black))
             .foregroundStyle(.white)
             .lineLimit(1)
             .minimumScaleFactor(0.72)
             .frame(minWidth: badgeWidth, minHeight: 17)
             .padding(.horizontal, count > 99 ? 3 : count > 9 ? 2 : 0)
-            .background(Color(red: 0.93, green: 0.16, blue: 0.34), in: Capsule())
+            .background(KXColor.badge, in: Capsule())
             .overlay(Capsule().stroke(Color.white.opacity(0.95), lineWidth: 1.4))
-            .shadow(color: Color(red: 0.93, green: 0.16, blue: 0.34).opacity(0.18), radius: 3.5, y: 1)
+            .shadow(color: KXColor.badge.opacity(0.18), radius: 3.5, y: 1)
             .accessibilityHidden(true)
     }
 

@@ -345,21 +345,108 @@ struct KXInlineNotice: View {
     }
 }
 
+/// A light-weight, hand-composed brand illustration for empty states — the
+/// Machi "M" mark seated on a couple of soft geometric shapes, themed per
+/// motif. Pure SwiftUI vectors (no assets), and it respects Reduce Motion:
+/// a single gentle fade/rise on appear, never a perpetual animation.
+struct KXBrandIllustration: View {
+    enum Motif {
+        case messages, saved, search, follow
+
+        var glyph: String {
+            switch self {
+            case .messages: return "bubble.left.and.bubble.right.fill"
+            case .saved:    return "heart.fill"
+            case .search:   return "magnifyingglass"
+            case .follow:   return "sparkles"
+            }
+        }
+        /// Secondary accent for the small companion shape — kept analogous to
+        /// the brand teal so the mark never fights the accent.
+        var companion: Color {
+            switch self {
+            case .messages: return KXColor.categoryInfo
+            case .saved:    return KXColor.categoryHeat
+            case .search:   return KXColor.accent
+            case .follow:   return KXColor.categoryBrand
+            }
+        }
+    }
+
+    let motif: Motif
+    var size: CGFloat = 96
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appeared = false
+
+    var body: some View {
+        ZStack {
+            // Ambient brand tile — the rounded-square "chip" the M sits on.
+            RoundedRectangle(cornerRadius: size * 0.30, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [KXColor.accent.opacity(0.18), KXColor.accent.opacity(0.07)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: size, height: size)
+
+            // Companion shape — a soft off-axis circle that carries the motif's
+            // secondary hue, giving each empty state its own character.
+            Circle()
+                .fill(motif.companion.opacity(0.16))
+                .frame(width: size * 0.42, height: size * 0.42)
+                .offset(x: size * 0.30, y: -size * 0.30)
+                .overlay(alignment: .center) {
+                    Image(systemName: motif.glyph)
+                        .font(.system(size: size * 0.16, weight: .bold))
+                        .foregroundStyle(motif.companion)
+                        .offset(x: size * 0.30, y: -size * 0.30)
+                }
+
+            // The brand M — rounded, teal, the anchor of every variant.
+            Text("M")
+                .font(.system(size: size * 0.44, weight: .black, design: .rounded))
+                .foregroundStyle(KXColor.accent)
+        }
+        .frame(width: size * 1.5, height: size * 1.3)
+        .scaleEffect(appeared ? 1 : 0.94)
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared ? 0 : 6)
+        .accessibilityHidden(true)
+        .onAppear {
+            if reduceMotion {
+                appeared = true
+            } else {
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.82)) { appeared = true }
+            }
+        }
+    }
+}
+
 struct EmptyStateView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let subtitle: String
     var systemImage: String = "tray"
+    /// Optional brand illustration. When set, it replaces the default
+    /// icon-in-circle glyph with a richer composed mark. Defaults to `nil`
+    /// so the ~50 existing call sites are pixel-identical.
+    var illustration: KXBrandIllustration.Motif? = nil
     @State private var appeared = false
 
     var body: some View {
         VStack(spacing: KXSpacing.sm) {
-            Image(systemName: systemImage)
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 52, height: 52)
-                .background(KXColor.softBackground, in: Circle())
-                .symbolEffect(.bounce, value: appeared)
+            if let illustration {
+                KXBrandIllustration(motif: illustration)
+                    .padding(.bottom, KXSpacing.xs)
+            } else {
+                Image(systemName: systemImage)
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 52, height: 52)
+                    .background(KXColor.softBackground, in: Circle())
+                    .symbolEffect(.bounce, value: appeared)
+            }
             Text(title)
                 .font(KXTypography.section)
             Text(subtitle)

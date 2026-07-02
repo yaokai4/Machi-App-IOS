@@ -109,7 +109,7 @@ struct MerchantSettingsView: View {
             }
         }
         .padding(16)
-        .kxGlassSurface(radius: 24, elevated: true)
+        .kxGlassSurface(radius: KXRadius.hero, elevated: true)
     }
 
     private var messageIsPositive: Bool {
@@ -658,6 +658,7 @@ private struct MerchantFieldTitle: View {
 /// Single-line input with icon, required badge, focus halo and proper
 /// keyboard type — replaces the bare `.roundedBorder` text fields.
 private struct MerchantField: View {
+    @Environment(\.appLanguage) private var language
     let icon: String
     let title: String
     var required = false
@@ -691,7 +692,7 @@ private struct MerchantField: View {
                             .foregroundStyle(.tertiary)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("清空")
+                    .accessibilityLabel(KXListingCopy.pickText(language, "清空", "クリア", "Clear"))
                 }
             }
             .padding(.horizontal, 12)

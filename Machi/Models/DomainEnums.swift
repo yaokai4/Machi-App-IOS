@@ -76,6 +76,14 @@ enum NotificationType: String, CaseIterable, Identifiable {
     case listingInquiry = "listing_inquiry"
     // A new listing matched one of the user's saved searches.
     case savedSearch = "saved_search"
+    // A favorited listing dropped its price. Deep-links to the listing.
+    case favoritePriceDrop = "favorite_price_drop"
+    // A favorited listing was taken down / closed. Deep-links to the listing.
+    case favoriteClosed = "favorite_closed"
+    // A batched follow summary ("X and 3 others followed you"). Opens the actor.
+    case followDigest = "follow_digest"
+    // A periodic city activity roundup. Lands on the home/discover tab.
+    case cityDigest = "city_digest"
     case system
 
     var id: String { rawValue }

@@ -171,6 +171,10 @@ struct ComposePostView: View {
                 postStore.insertPublishedPost(post, currentUserId: currentUser.id)
             }
             composeStore.clear()
+            // Success haptic. The visible "已发布" toast is raised by the host
+            // (MainTabView.onPublished) so it lands over the underlying tab
+            // rather than behind this dismissing full-screen cover.
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
             onPublished()
             dismiss()
         } else {
@@ -482,7 +486,7 @@ struct ComposePostView: View {
                 .buttonStyle(.plain)
                 .disabled(viewModel.topicDraft.normalizedTopicName.isEmpty)
                 .foregroundStyle(viewModel.topicDraft.normalizedTopicName.isEmpty ? .secondary : KXColor.accent)
-                .accessibilityLabel("添加话题")
+                .accessibilityLabel(L("composeAddTopic", language))
             }
 
             if !viewModel.selectedTopics.isEmpty {
@@ -711,13 +715,13 @@ struct ComposePostView: View {
         case .waiting, .local:
             return draft.type == .video ? durationText(draft.duration) : ""
         case .compressing:
-            return "压缩中"
+            return L("composeMediaCompressing", language)
         case .uploading:
-            return "上传 \(Int((progress * 100).rounded()))%"
+            return "\(L("composeMediaUploading", language)) \(Int((progress * 100).rounded()))%"
         case .uploaded:
-            return "完成"
+            return L("composeMediaUploaded", language)
         case .failed:
-            return "失败"
+            return L("composeMediaFailed", language)
         }
     }
 

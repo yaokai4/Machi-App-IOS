@@ -85,6 +85,10 @@ final class SystemNotificationService: NSObject {
             // Group banners per interaction type in the notification center.
             content.threadIdentifier = "machi.\(notification.typeRaw)"
             var info: [String: Any] = ["type": notification.typeRaw]
+            // Carry the actor so tap-routing can open a follow/mention actor's
+            // profile (ContentView.routeNotificationPayload), matching the
+            // in-app NotificationsView.route(for:) behavior.
+            if !notification.actorId.isEmpty { info["actorId"] = notification.actorId }
             if let postId = notification.targetPostId { info["postId"] = postId }
             if let listingId = notification.targetListingId { info["listingId"] = listingId }
             if let conversationId = notification.targetConversationId { info["conversationId"] = conversationId }
@@ -140,8 +144,13 @@ final class SystemNotificationService: NSObject {
         case .bookmark: action = L("notifBookmarked", language)
         case .message:  action = L("notifMessaged", language)
         case .listingInquiry: action = L("notifInquired", language)
-        // No meaningful actor — the "actor" is just the listing's seller.
+        // Actor-less summary/system banners: return a standalone title so we
+        // never render a dangling "<name> ..." with no name.
         case .savedSearch: return L("notifSavedSearch", language)
+        case .favoritePriceDrop: return L("notifFavoritePriceDrop", language)
+        case .favoriteClosed: return L("notifFavoriteClosed", language)
+        case .followDigest: return L("notifFollowDigest", language)
+        case .cityDigest: return L("notifCityDigest", language)
         case .system:   return L("systemNotification", language)
         }
         guard !actorName.isEmpty else { return action }
@@ -198,6 +207,8 @@ extension SystemNotificationService: UNUserNotificationCenterDelegate {
     ) async {
         let userInfo = response.notification.request.content.userInfo
         var payload: [String: Any] = [:]
+        if let type = userInfo["type"] as? String { payload["type"] = type }
+        if let actorId = userInfo["actorId"] as? String { payload["actorId"] = actorId }
         if let postId = userInfo["postId"] as? String { payload["postId"] = postId }
         if let listingId = userInfo["listingId"] as? String { payload["listingId"] = listingId }
         if let conversationId = userInfo["conversationId"] as? String { payload["conversationId"] = conversationId }

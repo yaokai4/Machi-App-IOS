@@ -13,6 +13,8 @@ struct HomeTimelineView: View {
     @ObservedObject private var languageManager = LanguageManager.shared
     @State private var isShowingSettings = false
     @State private var isShowingRegionPicker = false
+    /// Bumped on each follow tap to drive `.sensoryFeedback(.selection)`.
+    @State private var followFeedbackTrigger = 0
 
     let currentUser: UserEntity
     @Binding var selectedTab: AppTab
@@ -142,7 +144,8 @@ struct HomeTimelineView: View {
                 } else {
                     isShowingRegionPicker = true
                 }
-            }
+            },
+            onSearch: { router.open(.search(initialQuery: nil), in: .home) }
         )
     }
 
@@ -263,7 +266,7 @@ struct HomeTimelineView: View {
     private var followingEmptyState: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 14) {
-                EmptyStateView(title: L("emptyFollowingFeed", language), subtitle: L("emptyFollowingFeedHelp", language), systemImage: "person.2")
+                EmptyStateView(title: L("emptyFollowingFeed", language), subtitle: L("emptyFollowingFeedHelp", language), systemImage: "person.2", illustration: .follow)
                     .frame(maxWidth: .infinity)
                     .padding(.top, 18)
 
@@ -286,6 +289,7 @@ struct HomeTimelineView: View {
                         Spacer()
 
                         Button {
+                            followFeedbackTrigger += 1
                             Task { await viewModel.follow(context: modelContext, currentUser: currentUser, target: user, postStore: postStore, userStore: userStore) }
                         } label: {
                             Text(L("follow", language))
@@ -296,6 +300,7 @@ struct HomeTimelineView: View {
                                 .kxGlassCapsule(isSelected: true)
                         }
                         .buttonStyle(.plain)
+                        .sensoryFeedback(.selection, trigger: followFeedbackTrigger)
                     }
                     .padding(14)
                     .kxGlassSurface(radius: KXRadius.lg)
@@ -316,6 +321,7 @@ private struct HomeHeaderView: View {
     let onAvatar: () -> Void
     let onRegion: () -> Void
     let onCity: () -> Void
+    let onSearch: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: KXSpacing.md) {
@@ -332,6 +338,18 @@ private struct HomeHeaderView: View {
                     .lineLimit(1)
 
                 Spacer()
+
+                // Quick jump into full search (posts / people / listings).
+                Button(action: onSearch) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 40, height: 40)
+                        .kxGlassCapsule()
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(L("homeSearchEntry", language))
+                .accessibilityIdentifier("home.search")
 
                 // Single region entry — earlier we had both this chip
                 // AND a separate `building.2` button that also opened

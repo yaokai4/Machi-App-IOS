@@ -6,12 +6,17 @@ struct MainTabView: View {
     @EnvironmentObject private var chrome: AppChromeState
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var composeStore: ComposeStore
+    @EnvironmentObject private var toastManager: ToastManager
     @ObservedObject private var regionStore = RegionStore.shared
     let currentUser: UserEntity
     let onLogout: () -> Void
     let onSwitchAccount: (UserEntity) -> Void
 
     @State private var isShowingComposer = false
+    /// The tab the composer was opened from. When a post is published from a
+    /// non-home entry we keep the user where they were (a "查看" toast jumps to
+    /// home) instead of yanking them to the feed.
+    @State private var composeOriginTab: AppTab = .home
     @State private var presetComposeType: ContentType?
     @State private var feedRefreshToken = UUID()
     @State private var profileRefreshToken = UUID()
@@ -166,8 +171,13 @@ struct MainTabView: View {
             // trigger (FAB / Guide / channel shortcuts) and prompt login.
             if isPresented && currentUser.isGuest {
                 isShowingComposer = false
-                GuestGate.shared.requireLogin()
+                GuestGate.shared.requireLogin(L("guestReasonCompose", language))
                 return
+            }
+            if isPresented {
+                // Remember where the composer was launched from so the publish
+                // handler can decide whether to switch tabs.
+                composeOriginTab = chrome.selectedTab
             }
             chrome.setHidden(isPresented, reason: .compose)
             if !isPresented { presetComposeType = nil }
@@ -191,7 +201,25 @@ struct MainTabView: View {
             ComposePostView(currentUser: currentUser, initialContentType: presetComposeType) {
                 feedRefreshToken = UUID()
                 profileRefreshToken = UUID()
-                chrome.select(.home)
+                if composeOriginTab == .home {
+                    // Publishing from the home feed: land back on it (unchanged).
+                    chrome.select(.home)
+                } else {
+                    // Publishing from another tab (Discover / Guide / channel
+                    // shortcut): keep the user in place and offer a "查看" jump
+                    // to the feed instead of a jarring hard tab switch.
+                    toastManager.show(
+                        .publishedSuccess(
+                            title: L("composePublishedToast", language),
+                            actionTitle: L("composePublishedView", language)
+                        ),
+                        duration: 4
+                    ) {
+                        chrome.select(.home)
+                        router.setActiveTab(.home)
+                        toastManager.dismiss()
+                    }
+                }
             }
         }
         #if DEBUG

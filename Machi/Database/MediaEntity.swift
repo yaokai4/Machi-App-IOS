@@ -27,6 +27,11 @@ final class MediaEntity {
     var syncStatusRaw: String
     var deletedAt: Date?
     var cursor: String?
+    /// Stable identity for a private/signed attachment whose display URL rotates
+    /// on every re-sign (DM media). Set to the object key / attachment id so the
+    /// image cache keys on the asset, not the volatile URL. Empty for public
+    /// media (which keeps URL-based cache keys).
+    var stableCacheKeyRaw: String = ""
 
     init(
         id: String = UUID().uuidString,
@@ -52,7 +57,8 @@ final class MediaEntity {
         remoteId: String? = nil,
         syncStatus: SyncStatus = .local,
         deletedAt: Date? = nil,
-        cursor: String? = nil
+        cursor: String? = nil,
+        stableCacheKey: String = ""
     ) {
         self.id = id
         self.postId = postId
@@ -78,6 +84,7 @@ final class MediaEntity {
         self.syncStatusRaw = syncStatus.rawValue
         self.deletedAt = deletedAt
         self.cursor = cursor
+        self.stableCacheKeyRaw = stableCacheKey
     }
 }
 
@@ -129,6 +136,12 @@ extension MediaEntity {
         if !originalURL.isEmpty { return originalURL.asMediaURL }
         if !remoteURL.isEmpty { return remoteURL.asMediaURL }
         return nil
+    }
+
+    /// Non-empty only for private/signed attachments — the cache identity to use
+    /// so a URL rotation is a cache hit, not a miss. Nil means "key by URL".
+    var stableCacheKey: String? {
+        stableCacheKeyRaw.isEmpty ? nil : stableCacheKeyRaw
     }
 }
 

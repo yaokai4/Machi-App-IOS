@@ -7,12 +7,25 @@ struct CachedMediaImageView: View {
     var targetPixelSize: CGFloat = 900
     var failureMode: CachedMediaImageFailureMode = .quietPlaceholder
     var contentMode: ContentMode = .fill
+    /// Stable cache identity for private/signed attachments whose URL rotates on
+    /// re-sign (attachmentId / objectKey). Nil for public URLs.
+    var stableKey: String? = nil
+    /// Re-sign hook for a private attachment: called once when the current
+    /// (likely expired) signed URL fails to load, so the view can fetch a fresh
+    /// URL and retry — instead of endlessly replaying a dead URL. Returns the
+    /// new URL, or nil if re-signing failed.
+    var onResign: (() async -> URL?)? = nil
 
     @State private var image: UIImage?
     @State private var failed = false
     @State private var reloadToken = UUID()
     @State private var loadedURL: URL?
     @State private var loadedPixelSize: CGFloat = 0
+    /// The freshest URL to actually load — starts as `url`, and is replaced by a
+    /// re-signed URL after a load failure so the retry hits a live URL. Reset
+    /// whenever the upstream `url` changes.
+    @State private var effectiveURL: URL?
+    @State private var didAttemptResign = false
 
     var body: some View {
         ZStack {
@@ -64,12 +77,21 @@ struct CachedMediaImageView: View {
         }
     }
 
+    // The upstream `url` and the pixel size drive a reload; the re-signed
+    // `effectiveURL` is tracked separately so a re-sign swaps the source without
+    // re-keying the whole `.task`. `stableKey` is folded in so two different
+    // signed URLs for the same attachment don't force separate loads.
     private var loadKey: String {
-        "\(url?.absoluteString ?? "nil")|\(Int(targetPixelSize.rounded()))|\(reloadToken.uuidString)"
+        "\(url?.absoluteString ?? "nil")|\(stableKey ?? "")|\(Int(targetPixelSize.rounded()))|\(reloadToken.uuidString)"
     }
 
     private func load() async {
-        guard let url else {
+        // A fresh upstream URL (or key change) invalidates any prior re-sign.
+        if effectiveURL == nil || loadedURL != url {
+            effectiveURL = url
+            didAttemptResign = false
+        }
+        guard let target = effectiveURL else {
             image = nil
             loadedURL = nil
             failed = true
@@ -78,7 +100,7 @@ struct CachedMediaImageView: View {
 
         // Fast path: synchronous memory-cache hit → paint immediately, no fade.
         // This is the common case when a recycled cell scrolls back into view.
-        if let cached = ImageCacheService.shared.cachedImageSync(for: url, targetPixelSize: targetPixelSize) {
+        if let cached = ImageCacheService.shared.cachedImageSync(for: target, targetPixelSize: targetPixelSize, stableKey: stableKey) {
             image = cached
             loadedURL = url
             loadedPixelSize = targetPixelSize
@@ -91,25 +113,55 @@ struct CachedMediaImageView: View {
             failed = false
         }
 
-        let requestedURL = url
         let requestedPixelSize = targetPixelSize
-        if let loaded = await ImageCacheService.shared.image(for: requestedURL, targetPixelSize: requestedPixelSize) {
+        if let loaded = await ImageCacheService.shared.image(for: target, targetPixelSize: requestedPixelSize, stableKey: stableKey) {
             guard !Task.isCancelled else { return }
             // Cold load (disk/network): reveal with a gentle cross-fade.
             withAnimation(.easeOut(duration: 0.2)) {
                 image = loaded
             }
-            loadedURL = requestedURL
+            loadedURL = url
             loadedPixelSize = requestedPixelSize
             failed = false
-        } else {
-            guard !Task.isCancelled else { return }
-            if !isSameRequest {
-                image = nil
-                loadedURL = nil
-            }
-            failed = true
+            return
         }
+
+        guard !Task.isCancelled else { return }
+
+        // The signed URL likely expired (403/expired) — re-sign once and retry
+        // against a live URL rather than surfacing a dead-URL failure state.
+        if let onResign, !didAttemptResign {
+            didAttemptResign = true
+            if let fresh = await onResign() {
+                guard !Task.isCancelled else { return }
+                effectiveURL = fresh
+                if let loaded = await ImageCacheService.shared.image(for: fresh, targetPixelSize: requestedPixelSize, stableKey: stableKey) {
+                    guard !Task.isCancelled else { return }
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        image = loaded
+                    }
+                    loadedURL = url
+                    loadedPixelSize = requestedPixelSize
+                    failed = false
+                    // Re-arm the re-sign for this view instance. `loadedURL == url`
+                    // after a successful re-sign, so the load()-top reset guard
+                    // (effectiveURL == nil || loadedURL != url) won't clear this
+                    // flag on a later load. Without re-arming here, if both image
+                    // caches get evicted AND this freshly-signed URL later expires,
+                    // the next load would skip re-signing and paint a dead-URL
+                    // failure — breaking the "never replay a dead URL" guarantee.
+                    didAttemptResign = false
+                    return
+                }
+            }
+        }
+
+        guard !Task.isCancelled else { return }
+        if !isSameRequest {
+            image = nil
+            loadedURL = nil
+        }
+        failed = true
     }
 }
 
@@ -140,9 +192,18 @@ struct MediaImageView: View {
     var targetPixelSize: CGFloat = 900
     var failureMode: CachedMediaImageFailureMode = .quietPlaceholder
     var contentMode: ContentMode = .fill
+    var stableKey: String? = nil
+    var onResign: (() async -> URL?)? = nil
 
     var body: some View {
-        CachedMediaImageView(url: url, targetPixelSize: targetPixelSize, failureMode: failureMode, contentMode: contentMode)
+        CachedMediaImageView(
+            url: url,
+            targetPixelSize: targetPixelSize,
+            failureMode: failureMode,
+            contentMode: contentMode,
+            stableKey: stableKey,
+            onResign: onResign
+        )
     }
 }
 
@@ -156,6 +217,9 @@ struct MediaVideoView: View {
     @State private var player: AVPlayer?
     @State private var isPlaying = false
     @State private var playbackFailed = false
+    /// The URL the current player item was built from — lets a URL rotation swap
+    /// the item + seek (preserving position) instead of rebuilding the player.
+    @State private var loadedSourceURL: URL?
 
     var body: some View {
         ZStack {
@@ -203,6 +267,22 @@ struct MediaVideoView: View {
                 player = nil
                 isPlaying = false
                 playbackFailed = false
+                loadedSourceURL = nil
+                return
+            }
+            // If we're already playing this attachment and only the *signed URL*
+            // changed (rotation), swap the underlying item and seek back to the
+            // current position instead of tearing the player down and restarting
+            // from 0 — the viewer never sees a flash-to-start.
+            if let player, isPlaying, loadedSourceURL != nil, let sourceURL {
+                let resumeAt = player.currentTime()
+                let item = AVPlayerItem(url: sourceURL)
+                player.replaceCurrentItem(with: item)
+                if resumeAt.isNumeric, resumeAt > .zero {
+                    player.seek(to: resumeAt, toleranceBefore: .zero, toleranceAfter: .zero)
+                }
+                player.play()
+                loadedSourceURL = sourceURL
                 return
             }
             configurePlayer(shouldPlay: autoPlay)
@@ -220,6 +300,7 @@ struct MediaVideoView: View {
             player?.pause()
             player = nil
             isPlaying = false
+            loadedSourceURL = nil
         }
     }
 
@@ -229,10 +310,12 @@ struct MediaVideoView: View {
         guard let sourceURL else {
             player = nil
             isPlaying = false
+            loadedSourceURL = nil
             return
         }
         let nextPlayer = AVPlayer(url: sourceURL)
         player = nextPlayer
+        loadedSourceURL = sourceURL
         isPlaying = shouldPlay
         playbackFailed = false
         if shouldPlay {

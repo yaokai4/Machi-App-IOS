@@ -302,6 +302,29 @@ final class KaiXAPIClient {
         return try decode(data)
     }
 
+    /// Step 1 of native password reset: ask the server to email a reset code.
+    /// The server ALWAYS responds success (no account enumeration), so the UI
+    /// advances to the code step regardless of whether the email is registered.
+    /// The captcha (register scene) is included when enforcement is on.
+    @discardableResult
+    func forgotPassword(email: String, locale: String? = nil, captchaId: String? = nil, captchaCode: String? = nil) async throws -> KaiXEmailCodeResponse {
+        var body = ["email": email]
+        if let locale, !locale.isEmpty { body["locale"] = locale }
+        if let captchaId, !captchaId.isEmpty {
+            body["captcha_id"] = captchaId
+            body["captcha_code"] = captchaCode ?? ""
+        }
+        let data = try await request("POST", "/api/auth/forgot-password", body: body)
+        return try decode(data)
+    }
+
+    /// Step 2 of native password reset: submit the emailed code + new password.
+    /// A success revokes all existing sessions server-side.
+    func resetPassword(email: String, code: String, newPassword: String) async throws {
+        _ = try await request("POST", "/api/auth/reset-password",
+                              body: ["email": email, "code": code, "new_password": newPassword])
+    }
+
     func sendSecurityCode(purpose: String, email: String? = nil) async throws -> KaiXEmailCodeResponse {
         var body = ["purpose": purpose]
         if let email, !email.isEmpty {
@@ -428,6 +451,14 @@ final class KaiXAPIClient {
     /// Member-only basic analytics over the caller's own posts.
     func membershipInsights() async throws -> KaiXMembershipInsightsResponse {
         let data = try await request("GET", "/api/membership/insights")
+        return try decode(data)
+    }
+
+    /// This month's remaining high-trust publish quota for a member, by listing
+    /// group. Optional endpoint — a 404 on an older server is handled by the
+    /// caller (it hides the row) rather than surfaced as an error.
+    func membershipListingQuota() async throws -> KaiXMembershipListingQuotaResponse {
+        let data = try await request("GET", "/api/my/membership/listing-quota")
         return try decode(data)
     }
 
@@ -1734,26 +1765,40 @@ final class KaiXAPIClient {
         _ = try await request("DELETE", "/api/conversations/\(id.encodedPathSegment)")
     }
 
-    func messages(_ conversationId: String, query: String = "", day: String? = nil) async throws -> [KaiXMessageDTO] {
+    func messages(_ conversationId: String, query: String = "", day: String? = nil, limit: Int = 80) async throws -> [KaiXMessageDTO] {
         var items: [URLQueryItem] = []
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { items.append(URLQueryItem(name: "q", value: trimmed)) }
         if let day, !day.isEmpty { items.append(URLQueryItem(name: "day", value: day)) }
+        // Bound the page: without a limit the server returned its full default
+        // window, so a long-lived thread paid to decode + re-sign every message
+        // on each 3s poll. 80 covers a screenful with headroom and matches the
+        // existing pagination window.
+        if limit > 0 { items.append(URLQueryItem(name: "limit", value: String(limit))) }
         let data = try await request("GET", "/api/conversations/\(conversationId.encodedPathSegment)/messages", queryItems: items)
         let response: KaiXMessagesResponse = try decode(data)
         return response.items
     }
 
-    func sendMessage(_ conversationId: String, content: String, mediaIds: [String] = [], attachmentIds: [String] = []) async throws -> KaiXMessageDTO {
+    func sendMessage(_ conversationId: String, content: String, mediaIds: [String] = [], attachmentIds: [String] = [], idempotencyKey: String? = nil) async throws -> KaiXMessageDTO {
         struct Body: Encodable { let content: String; let media_ids: [String]; let attachment_ids: [String] }
         struct Wrapper: Codable { let message: KaiXMessageDTO }
+        // A caller-supplied stable key (derived from the optimistic bubble id)
+        // makes a retry idempotent — re-sending the same failed bubble won't
+        // create a duplicate server row. Falls back to a random key otherwise.
+        let key = idempotencyKey.flatMap { $0.isEmpty ? nil : $0 } ?? "message-send-\(UUID().uuidString)"
         let data = try await request("POST", "/api/conversations/\(conversationId.encodedPathSegment)/messages",
                                      body: Body(content: content, media_ids: mediaIds, attachment_ids: attachmentIds),
-                                     idempotencyKey: "message-send-\(UUID().uuidString)")
+                                     idempotencyKey: key)
         return try decode(data) as Wrapper |> \.message
     }
 
-    func messageAttachmentViewUrl(messageId: String, attachmentId: String) async throws -> String {
+    /// Sign a single message attachment for viewing. Returns the URL **and** the
+    /// server's `expiresIn` (seconds) so callers can cache with a real TTL and
+    /// re-sign *before* the URL dies (rather than replaying a dead URL). An
+    /// Idempotency-Key makes the POST safely retryable on a flaky network — the
+    /// same attachment re-signs to a fresh URL without double-charging any audit.
+    func messageAttachmentViewUrl(messageId: String, attachmentId: String) async throws -> (url: String, expiresIn: Int?) {
         struct Payload: Codable {
             let url: String
             let expiresIn: Int?
@@ -1766,11 +1811,16 @@ final class KaiXAPIClient {
         }
         let data = try await request(
             "POST",
-            "/api/messages/\(messageId.encodedPathSegment)/attachments/\(attachmentId.encodedPathSegment)/view-url"
+            "/api/messages/\(messageId.encodedPathSegment)/attachments/\(attachmentId.encodedPathSegment)/view-url",
+            idempotencyKey: "attachment-view-\(messageId)-\(attachmentId)"
         )
         let wrapper: Wrapper = try decode(data)
-        if let url = wrapper.data?.url, !url.isEmpty { return url }
-        if let url = wrapper.url, !url.isEmpty { return url }
+        if let url = wrapper.data?.url, !url.isEmpty {
+            return (url, wrapper.data?.expiresIn ?? wrapper.expiresIn)
+        }
+        if let url = wrapper.url, !url.isEmpty {
+            return (url, wrapper.expiresIn)
+        }
         throw KaiXAPIError(error: .init(code: "attachment_url_missing", message: "Attachment URL missing"))
     }
 
@@ -1778,9 +1828,16 @@ final class KaiXAPIClient {
         _ = try await request("DELETE", "/api/messages/\(id.encodedPathSegment)")
     }
 
-    func markConversationRead(_ id: String, isRead: Bool = true) async throws {
+    /// Mark a conversation read / unread. Returns the server's account-wide
+    /// unread notification count when present (nil on older servers that don't
+    /// send it), so the caller can reconcile the badge instead of trusting the
+    /// optimistic local value forever.
+    @discardableResult
+    func markConversationRead(_ id: String, isRead: Bool = true) async throws -> Int? {
         struct Body: Encodable { let is_read: Bool }
-        _ = try await request("POST", "/api/conversations/\(id.encodedPathSegment)/read", body: Body(is_read: isRead))
+        struct Resp: Decodable { let ok: Bool?; let unread_count: Int? }
+        let data = try await request("POST", "/api/conversations/\(id.encodedPathSegment)/read", body: Body(is_read: isRead))
+        return (try? decode(data) as Resp)?.unread_count
     }
 
     // MARK: - media / S3 uploads

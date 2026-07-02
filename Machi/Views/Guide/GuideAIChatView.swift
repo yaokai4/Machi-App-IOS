@@ -226,6 +226,55 @@ struct GuideAIChatView: View {
         }
     }
 
+    /// #2: an always-present quota pill above the composer. Members see a member
+    /// badge; free users (and guests) see today's remaining server-authoritative
+    /// count, with an inline upgrade link once the count runs low (≤2). Hidden
+    /// while the quota card is already showing, and while the count is unknown
+    /// (pre-bootstrap) for non-members so nothing flashes.
+    @ViewBuilder
+    private var quotaPill: some View {
+        if !viewModel.quotaReached {
+            if viewModel.membershipActive {
+                HStack(spacing: 5) {
+                    Image(systemName: "crown.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(KXColor.livingAccent)
+                    Text(guideText(language, "Machi 会员 · 更高每日额度", "Machi メンバー · 1日の枠アップ", "Machi member · higher daily limit"))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(KXColor.livingMuted)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 4)
+            } else if let remaining = viewModel.remainingFreeUses {
+                let low = remaining <= 2
+                HStack(spacing: 6) {
+                    Image(systemName: low ? "bolt.slash.fill" : "bolt.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(low ? KXColor.livingWarm : KXColor.livingAccent)
+                    Text(guideText(language,
+                                   "今日还可咨询 \(remaining) 次",
+                                   "本日はあと \(remaining) 回相談できます",
+                                   remaining == 1 ? "1 question left today" : "\(remaining) questions left today"))
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(KXColor.livingMuted)
+                    if low {
+                        Button {
+                            router.open(.guideMemberResources, in: .guide)
+                        } label: {
+                            Text(guideText(language, "升级会员", "会員登録", "Upgrade"))
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(KXColor.livingAccent)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 4)
+                .transition(.opacity)
+            }
+        }
+    }
+
     private var promptChips: [String] {
         // Server-curated suggestions from bootstrap take priority; the local
         // list below is the offline / older-backend fallback.
@@ -247,6 +296,8 @@ struct GuideAIChatView: View {
 
     private var inputBar: some View {
         VStack(spacing: 8) {
+            quotaPill
+
             if let error = viewModel.errorMessage, !error.isEmpty {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -681,7 +732,7 @@ private struct GuideAISourcesView: View {
                                     .lineLimit(1)
                                 if source.kxRoute != nil {
                                     Image(systemName: "arrow.up.right")
-                                        .font(.system(size: 8, weight: .bold))
+                                        .font(.caption2.weight(.bold))
                                 }
                             }
                             .foregroundStyle(KXColor.livingAccent)

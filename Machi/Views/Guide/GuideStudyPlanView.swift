@@ -38,7 +38,7 @@ struct GuideStudyPlanView: View {
                         }
                     }
                     .padding(15)
-                    .kxGlassSurface(radius: 22)
+                    .kxGlassSurface(radius: KXRadius.hero)
 
                     if let message = model.message { GuideOSNotice(message: message) }
 

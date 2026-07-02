@@ -34,6 +34,11 @@ struct kaiziApp: App {
         // Subscribe to MetricKit so crash / hang diagnostics from the
         // previous run are captured on this launch.
         DiagnosticsService.shared.activate()
+        // Sweep stale staged-media upload copies (age > 48h or dir > 500 MB) once
+        // per launch so a long-running app can't accumulate orphaned scratch.
+        Task.detached(priority: .background) {
+            await UploadService.shared.trimStagedMedia()
+        }
     }
 
     var body: some Scene {

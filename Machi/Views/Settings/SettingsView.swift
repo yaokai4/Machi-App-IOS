@@ -87,7 +87,7 @@ struct SettingsView: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(L("account", language))
-                    .font(.system(size: 32, weight: .bold))
+                    .kxScaledFont(32, relativeTo: .largeTitle, weight: .bold)
                     .tracking(0)
                 Text(L("accountSettingsSubtitle", language))
                     .font(.footnote.weight(.semibold))

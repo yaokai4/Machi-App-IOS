@@ -13,15 +13,60 @@ struct AuthView: View {
     @State private var isShowingRegionPicker = false
     @State private var isGoogleLoading = false
     @State private var appleNonce = ""
+    @State private var isShowingForgotPassword = false
+    @State private var didApplyInitialMode = false
     @FocusState private var captchaFieldFocused: Bool
 
     let onAuthenticated: (UserEntity) -> Void
     /// When provided, shows a "browse as guest" affordance so people can
     /// look around before creating an account (App Store 5.1.1(v)).
     var onBrowseAsGuest: (() -> Void)? = nil
+    /// Optional one-line context shown under the brand title explaining WHY the
+    /// login sheet appeared (e.g. "登录后即可发布"). Populated from
+    /// `GuestGate.shared.reason` at the guest-gate call site.
+    var contextReason: String? = nil
+    /// Which tab the auth card opens on. Onboarding's "登录 / 注册" enters
+    /// `.register`; guest-gate / session-expiry keep `.login`.
+    var initialMode: AuthViewModel.Mode = .login
 
     private var isFormReady: Bool {
         viewModel.validate(language: language).isEmpty
+    }
+
+    /// Register-mode "还差：…" hint listing every still-missing requirement, so a
+    /// greyed-out button always explains itself (parity with
+    /// CreateListingForm.missingRequiredCopy). Nil when the form is ready or in
+    /// login mode. Built from live field state, not just submit-time errors.
+    private var registerMissingHint: String? {
+        guard viewModel.mode == .register, !isFormReady else { return nil }
+        let filled: (String) -> Bool = { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        var missing: [String] = []
+        if AuthValidation.normalizedHandle(viewModel.username).isEmpty {
+            missing.append(L("authMissingUsername", language))
+        }
+        if !filled(viewModel.displayName) {
+            missing.append(L("authMissingDisplayName", language))
+        }
+        let email = viewModel.email.trimmingCharacters(in: .whitespacesAndNewlines)
+        if email.range(of: AuthValidation.emailRegex, options: .regularExpression) == nil {
+            missing.append(L("authMissingEmail", language))
+        }
+        if !filled(viewModel.code) {
+            missing.append(L("authMissingCode", language))
+        }
+        let password = viewModel.password
+        let passwordOK = password.count >= AuthValidation.passwordMinLength
+            && password.range(of: #"[A-Za-z]"#, options: .regularExpression) != nil
+            && password.range(of: #"\d"#, options: .regularExpression) != nil
+        if !passwordOK {
+            missing.append(L("authMissingPasswordRule", language))
+        }
+        if viewModel.selectedRegion == nil {
+            missing.append(L("authMissingRegion", language))
+        }
+        guard !missing.isEmpty else { return nil }
+        let separator = language == .en ? ", " : "、"
+        return L("authMissingPrefix", language) + missing.joined(separator: separator)
     }
 
     /// Terms + Privacy consent shown under the register button (App Store
@@ -127,9 +172,22 @@ struct AuthView: View {
             }
         }
         .animation(.snappy(duration: 0.2), value: viewModel.mode)
+        .onAppear {
+            // Apply the requested initial tab exactly once (StateObject survives
+            // re-renders, so guard against re-applying and stomping a user's
+            // manual mode switch).
+            guard !didApplyInitialMode else { return }
+            didApplyInitialMode = true
+            viewModel.mode = initialMode
+        }
         .onChange(of: viewModel.mode) { _, _ in
             viewModel.fieldErrors = [:]
             viewModel.errorMessage = nil
+        }
+        .sheet(isPresented: $isShowingForgotPassword) {
+            ForgotPasswordSheet(initialEmail: viewModel.mode == .login ? viewModel.username : viewModel.email)
+                .environment(\.appLanguage, language)
+                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $isShowingRegionPicker) {
             RegionPickerView(
@@ -192,10 +250,27 @@ struct AuthView: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 Text(L("appName", language))
-                    .font(.system(size: 52, weight: .black, design: .rounded))
+                    .kxScaledFont(52, relativeTo: .largeTitle, weight: .heavy, design: .rounded)
                 Text(L("welcomeBack", language))
                     .font(.headline)
                     .foregroundStyle(.secondary)
+
+                // Why the sheet appeared (guest-gated action). Only shown when a
+                // reason was passed in — the logged-out entry screen has none.
+                if let contextReason, !contextReason.isEmpty {
+                    Label(contextReason, systemImage: "lock.open")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(KXColor.accent)
+                        .padding(.horizontal, 13)
+                        .padding(.vertical, 9)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(KXColor.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
+                                .strokeBorder(KXColor.accent.opacity(0.22))
+                        )
+                        .accessibilityIdentifier("auth.contextReason")
+                }
             }
             // Removed the three "国家 / 城市 / 生活" stat pills and the
             // "本地数据库在线" indicator — decorative placeholders that
@@ -218,7 +293,15 @@ struct AuthView: View {
                         let user = try await GoogleAuthService.shared.signIn(context: modelContext)
                         onAuthenticated(user)
                     } catch {
-                        viewModel.errorMessage = L("googleLoginFailed", language)
+                        // A user cancel (dismissing the ASWebAuthenticationSession
+                        // sheet) is not an error worth surfacing — mirror the Apple
+                        // branch's `.canceled` handling and return silently.
+                        let nsError = error as NSError
+                        let canceled = nsError.domain == ASWebAuthenticationSessionError.errorDomain
+                            && nsError.code == ASWebAuthenticationSessionError.canceledLogin.rawValue
+                        if !canceled {
+                            viewModel.errorMessage = L("googleLoginFailed", language)
+                        }
                     }
                 }
             } label: {
@@ -359,6 +442,21 @@ struct AuthView: View {
                     error: viewModel.fieldError(.password)
                 )
 
+                if viewModel.mode == .login {
+                    HStack {
+                        Spacer()
+                        Button {
+                            isShowingForgotPassword = true
+                        } label: {
+                            Text(L("authForgotPassword", language))
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(KXColor.accent)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("auth.forgotPassword")
+                    }
+                }
+
                 if viewModel.mode == .login, viewModel.captchaEnabled {
                     AuthCaptchaField(
                         code: captchaBinding,
@@ -391,6 +489,24 @@ struct AuthView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
+            // A greyed-out "创建账号" button always explains what's still missing,
+            // instead of silently staying disabled.
+            if let registerMissingHint {
+                Label(registerMissingHint, systemImage: "info.circle")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
+                            .strokeBorder(KXColor.separator, lineWidth: 0.7)
+                    )
+                    .transition(.opacity)
+                    .accessibilityIdentifier("auth.missingHint")
+            }
+
             Button {
                 Task {
                     if let user = await viewModel.submit(context: modelContext, language: language) {
@@ -406,7 +522,7 @@ struct AuthView: View {
                     Image(systemName: "arrow.right")
                 }
                 .font(.headline.weight(.bold))
-                .foregroundStyle(isFormReady ? .white : .secondary)
+                .foregroundStyle(isFormReady ? KXColor.onAccent : .secondary)
                 .frame(maxWidth: .infinity)
                 .frame(height: 56)
                 .background {
@@ -486,6 +602,433 @@ struct AuthView: View {
         // the input so the user can retype without hunting for the field.
         .onChange(of: viewModel.captchaFocusRequest) { _, _ in
             captchaFieldFocused = true
+        }
+    }
+}
+
+/// Native three-step password reset (parity with the web /forgot flow):
+/// email → emailed code + new password → done. Fully re-implemented on-device
+/// against `/api/auth/forgot-password` + `/api/auth/reset-password`, so no
+/// Safari hand-off is needed. The forgot endpoint always responds success (no
+/// account enumeration), so we advance to the code step regardless.
+struct ForgotPasswordSheet: View {
+    @Environment(\.appLanguage) private var language
+    @Environment(\.dismiss) private var dismiss
+
+    /// Prefills the email from whatever the user typed on the login screen.
+    var initialEmail: String = ""
+
+    private enum Step { case request, reset, done }
+    @State private var step: Step = .request
+    @State private var email = ""
+    @State private var code = ""
+    @State private var newPassword = ""
+    @State private var confirmPassword = ""
+    @State private var isPasswordVisible = false
+    @State private var isBusy = false
+    @State private var errorMessage: String?
+    @State private var infoMessage: String?
+    @State private var cooldown = 0
+    @State private var cooldownTask: Task<Void, Never>?
+
+    // Image-captcha (register scene, mirrors the send-code guard the server
+    // enforces on /api/auth/forgot-password).
+    @State private var captchaEnabled = false
+    @State private var captchaId = ""
+    @State private var captchaImage: Data?
+    @State private var captchaCode = ""
+    @State private var captchaLoading = false
+    @FocusState private var captchaFocused: Bool
+
+    private var trimmedEmail: String { email.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var emailValid: Bool {
+        trimmedEmail.range(of: AuthValidation.emailRegex, options: .regularExpression) != nil
+    }
+    private var newPasswordValid: Bool {
+        newPassword.count >= AuthValidation.passwordMinLength
+            && newPassword.range(of: #"[A-Za-z]"#, options: .regularExpression) != nil
+            && newPassword.range(of: #"\d"#, options: .regularExpression) != nil
+    }
+    private var resetReady: Bool {
+        !code.trimmingCharacters(in: .whitespaces).isEmpty
+            && newPasswordValid
+            && newPassword == confirmPassword
+    }
+
+    private var localeString: String {
+        switch language {
+        case .ja: return "ja"
+        case .en: return "en"
+        default: return "zh-Hans"
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                KXGlassBackground()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        Text(L("authResetTitle", language))
+                            .kxScaledFont(30, relativeTo: .largeTitle, weight: .bold, design: .rounded)
+
+                        switch step {
+                        case .request: requestStep
+                        case .reset: resetStep
+                        case .done: doneStep
+                        }
+                    }
+                    .padding(22)
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityLabel(L("close", language))
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .onAppear {
+            if email.isEmpty, initialEmail.contains("@") {
+                email = initialEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        .onDisappear { cooldownTask?.cancel() }
+        .animation(.snappy(duration: 0.2), value: step)
+    }
+
+    // MARK: steps
+
+    private var requestStep: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(L("authResetEmailStep", language))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            resetField(title: L("email", language), text: $email, icon: "envelope",
+                       keyboard: .emailAddress, secure: false, id: "forgot.email")
+
+            if captchaEnabled {
+                ForgotCaptchaField(
+                    code: $captchaCode,
+                    image: captchaImage,
+                    loading: captchaLoading,
+                    focus: $captchaFocused,
+                    onRefresh: { Task { await refreshCaptcha() } }
+                )
+            }
+
+            noticeArea
+
+            primaryButton(title: L("authResetSendCode", language), systemImage: "paperplane.fill",
+                          enabled: emailValid && !isBusy, id: "forgot.sendCode") {
+                Task { await requestCode() }
+            }
+        }
+        .task { await refreshCaptcha() }
+    }
+
+    private var resetStep: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(L("authResetCodeStep", language))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 10) {
+                resetField(title: L("authVerificationCode", language), text: $code, icon: "number",
+                           keyboard: .numberPad, secure: false, id: "forgot.code")
+                Button {
+                    Task { await requestCode() }
+                } label: {
+                    Text(cooldown > 0 ? "\(cooldown)s" : L("authResetResend", language))
+                        .font(.subheadline.weight(.bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .padding(.horizontal, 12)
+                        .frame(height: 52)
+                        .foregroundStyle(cooldown == 0 && !isBusy ? KXColor.accent : .secondary)
+                        .kxGlassCapsule(isSelected: cooldown == 0 && !isBusy)
+                }
+                .buttonStyle(.plain)
+                .disabled(cooldown > 0 || isBusy)
+            }
+
+            resetField(title: L("authResetNewPassword", language), text: $newPassword, icon: "lock",
+                       keyboard: .default, secure: !isPasswordVisible, id: "forgot.newPassword",
+                       trailing: passwordVisibilityToggle)
+            Text(L("passwordMin", language))
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+
+            resetField(title: L("authResetConfirmPassword", language), text: $confirmPassword, icon: "lock.rotation",
+                       keyboard: .default, secure: !isPasswordVisible, id: "forgot.confirmPassword")
+
+            if !confirmPassword.isEmpty, newPassword != confirmPassword {
+                Label(L("authResetPasswordMismatch", language), systemImage: "exclamationmark.circle")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.red.opacity(0.78))
+            }
+
+            noticeArea
+
+            primaryButton(title: L("authResetSubmit", language), systemImage: "checkmark.shield.fill",
+                          enabled: resetReady && !isBusy, id: "forgot.submit") {
+                Task { await submitReset() }
+            }
+
+            Button {
+                step = .request
+                infoMessage = nil
+                errorMessage = nil
+            } label: {
+                Text(L("authResetBackToEmail", language))
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var doneStep: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Label(L("authResetSuccess", language), systemImage: "checkmark.seal.fill")
+                .font(.headline.weight(.bold))
+                .foregroundStyle(.green)
+                .fixedSize(horizontal: false, vertical: true)
+            primaryButton(title: L("loginMachi", language), systemImage: "arrow.right",
+                          enabled: true, id: "forgot.backToLogin") {
+                dismiss()
+            }
+        }
+    }
+
+    @ViewBuilder private var noticeArea: some View {
+        if let errorMessage {
+            Label(errorMessage, systemImage: "exclamationmark.circle")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 12).padding(.vertical, 9)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(KXColor.warningSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+        }
+        if let infoMessage {
+            Label(infoMessage, systemImage: "checkmark.circle")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.green)
+                .padding(.horizontal, 12).padding(.vertical, 9)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(KXColor.successSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+        }
+    }
+
+    private var passwordVisibilityToggle: AnyView {
+        AnyView(
+            Button {
+                isPasswordVisible.toggle()
+            } label: {
+                Image(systemName: isPasswordVisible ? "eye.slash" : "eye")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(.blue.opacity(0.65))
+            }
+            .buttonStyle(.plain)
+        )
+    }
+
+    // MARK: components
+
+    private func resetField(title: String, text: Binding<String>, icon: String,
+                            keyboard: UIKeyboardType, secure: Bool, id: String,
+                            trailing: AnyView? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.secondary)
+            HStack(spacing: 13) {
+                Image(systemName: icon)
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24)
+                Group {
+                    if secure {
+                        SecureField("", text: text)
+                    } else {
+                        TextField("", text: text)
+                            .keyboardType(keyboard)
+                    }
+                }
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .accessibilityIdentifier(id)
+                if let trailing { trailing }
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 52)
+            .kxGlassSurface(radius: KXRadius.md, stroke: KXColor.glassStroke)
+        }
+    }
+
+    private func primaryButton(title: String, systemImage: String, enabled: Bool,
+                               id: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                if isBusy { KXSpinner(size: 20, lineWidth: 2.2) }
+                Text(title)
+                Image(systemName: systemImage)
+            }
+            .font(.headline.weight(.bold))
+            .foregroundStyle(enabled ? KXColor.onAccent : .secondary)
+            .frame(maxWidth: .infinity)
+            .frame(height: 54)
+            .background {
+                if enabled {
+                    Capsule().fill(KXColor.accent)
+                } else {
+                    Capsule().fill(KXColor.softBackground)
+                        .overlay(Capsule().stroke(KXColor.separator, lineWidth: 0.7))
+                }
+            }
+            .clipShape(Capsule())
+        }
+        .disabled(!enabled)
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(id)
+    }
+
+    // MARK: actions
+
+    private func refreshCaptcha() async {
+        captchaLoading = true
+        captchaCode = ""
+        defer { captchaLoading = false }
+        do {
+            // The forgot-password endpoint enforces the *register* captcha scene.
+            let res = try await KaiXAPIClient.shared.fetchCaptcha(scene: "register")
+            captchaEnabled = res.enabled
+            captchaId = res.captcha_id ?? ""
+            captchaImage = res.pngData
+        } catch {
+            captchaId = ""
+            captchaImage = nil
+        }
+    }
+
+    private func requestCode() async {
+        guard !isBusy, emailValid, cooldown == 0 else { return }
+        isBusy = true
+        errorMessage = nil
+        defer { isBusy = false }
+        do {
+            _ = try await KaiXAPIClient.shared.forgotPassword(
+                email: trimmedEmail,
+                locale: localeString,
+                captchaId: captchaEnabled && !captchaId.isEmpty ? captchaId : nil,
+                captchaCode: captchaCode.trimmingCharacters(in: .whitespaces)
+            )
+            infoMessage = L("authResetCodeSent", language)
+            withAnimation { step = .reset }
+            startCooldown(60)
+        } catch let apiError as KaiXAPIError {
+            // A burnt captcha (server consumes it on every verify) needs a fresh
+            // challenge before the user retries.
+            if captchaEnabled { await refreshCaptcha(); captchaFocused = true }
+            errorMessage = apiError.kaixUserMessage
+        } catch {
+            errorMessage = L("errNetwork", language)
+        }
+    }
+
+    private func submitReset() async {
+        guard !isBusy, resetReady else { return }
+        isBusy = true
+        errorMessage = nil
+        defer { isBusy = false }
+        do {
+            try await KaiXAPIClient.shared.resetPassword(
+                email: trimmedEmail,
+                code: code.trimmingCharacters(in: .whitespaces),
+                newPassword: newPassword
+            )
+            withAnimation { step = .done }
+        } catch let apiError as KaiXAPIError {
+            errorMessage = apiError.kaixUserMessage
+        } catch {
+            errorMessage = L("errNetwork", language)
+        }
+    }
+
+    private func startCooldown(_ seconds: Int) {
+        cooldownTask?.cancel()
+        cooldown = seconds
+        cooldownTask = Task { @MainActor in
+            while cooldown > 0 {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                if Task.isCancelled { return }
+                cooldown = max(0, cooldown - 1)
+            }
+        }
+    }
+}
+
+/// Compact captcha row used inside the forgot-password sheet (register scene).
+private struct ForgotCaptchaField: View {
+    @Environment(\.appLanguage) private var language
+    @Binding var code: String
+    let image: Data?
+    let loading: Bool
+    var focus: FocusState<Bool>.Binding
+    let onRefresh: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L("authCaptcha", language))
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                HStack(spacing: 13) {
+                    Image(systemName: "checkmark.shield")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24)
+                    TextField(L("authCaptchaPlaceholder", language), text: $code)
+                        .keyboardType(.asciiCapable)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                        .focused(focus)
+                        .accessibilityIdentifier("forgot.captcha")
+                }
+                .padding(.horizontal, 16)
+                .frame(height: 52)
+                .frame(maxWidth: .infinity)
+                .kxGlassSurface(radius: KXRadius.md, stroke: KXColor.glassStroke)
+
+                Button(action: onRefresh) {
+                    Group {
+                        if loading {
+                            KXSpinner(size: 22, lineWidth: 2.2)
+                        } else if let image, let uiImage = UIImage(data: image) {
+                            Image(uiImage: uiImage).resizable().scaledToFit().padding(.horizontal, 4)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(width: 120, height: 52)
+                    .background(.white, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
+                            .strokeBorder(KXColor.glassStroke)
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(loading)
+                .accessibilityIdentifier("forgot.captcha.refresh")
+            }
         }
     }
 }
