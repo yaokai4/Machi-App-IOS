@@ -137,7 +137,6 @@ struct ChatView: View {
     @State private var pickerItems: [PhotosPickerItem] = []
     @State private var isShowingDeleteThreadConfirm = false
     @State private var actionMessage: String?
-    @AppStorage("blockedUserIds") private var blockedUserIdsRaw = ""
     /// Unread count captured when the chat opens, before we mark it read — used
     /// to place the "以下是新消息" divider above the first message that arrived
     /// since the user last looked at this thread.
@@ -197,27 +196,34 @@ struct ChatView: View {
             }
         }
         .task(id: thread.id) {
+            // The tab this chat lives on: navigation always pushes onto the
+            // currently-selected tab, so the poll loop can pause itself while
+            // the user is on another tab (a chat left open on a hidden tab
+            // used to keep polling the server forever).
+            let hostTab = chrome.selectedTab
             if !didCaptureUnread {
                 unreadAtOpen = messageStore.conversationsById[thread.id]?.unreadCount ?? thread.unreadCount
                 didCaptureUnread = true
             }
             await loadAndMarkRead()
-            await pollMessagesLoop()
+            await pollMessagesLoop(hostTab: hostTab)
         }
         .onChange(of: scenePhase) { _, phase in
             viewModel.isForeground = (phase == .active)
             // Coming back to the foreground: pull once immediately instead of
-            // waiting up to 3s for the next poll tick.
-            if phase == .active, KaiXBackend.token != nil, !viewModel.hasActiveFilters {
+            // waiting up to 3s for the next poll tick. Never mid-send — the
+            // wholesale refresh would clobber the optimistic `.sending` bubble
+            // (and its failure path) before `send` reconciles it.
+            if phase == .active, KaiXBackend.token != nil, !viewModel.hasActiveFilters, !viewModel.isSending {
                 Task { await loadAndMarkRead() }
             }
         }
         .onChange(of: messageStore.conversationsById[thread.id]?.lastMessageAt) { _, _ in
-            guard !viewModel.hasActiveFilters else { return }
+            guard !viewModel.hasActiveFilters, !viewModel.isSending else { return }
             Task { await loadAndMarkRead() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .kaiXConversationShouldRefresh)) { note in
-            guard !viewModel.hasActiveFilters else { return }
+            guard !viewModel.hasActiveFilters, !viewModel.isSending else { return }
             let conversationId = note.userInfo?["conversationId"] as? String
             guard conversationId == nil || conversationId == thread.id else { return }
             Task { await loadAndMarkRead() }
@@ -262,14 +268,20 @@ struct ChatView: View {
         messageStore.setUnreadCount(0, conversationId: thread.id)
     }
 
-    private func pollMessagesLoop() async {
+    private func pollMessagesLoop(hostTab: AppTab) async {
         guard KaiXBackend.token != nil else { return }
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(3))
-            // Skip the network round-trip while backgrounded, while the user is
-            // filtering (search/date), or mid-send — polling during a send can
-            // momentarily clobber the optimistic pending bubble.
-            guard !Task.isCancelled, !viewModel.hasActiveFilters, viewModel.isForeground, !viewModel.isSending else { continue }
+            // Skip the network round-trip while backgrounded, while this chat's
+            // tab isn't the one on screen (hidden tabs keep their views — and
+            // their .task — alive), while the user is filtering (search/date),
+            // or mid-send — polling during a send can momentarily clobber the
+            // optimistic pending bubble.
+            guard !Task.isCancelled,
+                  !viewModel.hasActiveFilters,
+                  viewModel.isForeground,
+                  !viewModel.isSending,
+                  chrome.selectedTab == hostTab else { continue }
             await loadAndMarkRead()
         }
     }
@@ -385,9 +397,10 @@ struct ChatView: View {
         Task {
             do {
                 try await KaiXAPIClient.shared.setBlock(peer.id, true)
-                var ids = Set(blockedUserIdsRaw.split(separator: "|").map(String.init))
+                let key = KXBlocklist.storageKey(for: currentUser.id)
+                var ids = Set((UserDefaults.standard.string(forKey: key) ?? "").split(separator: "|").map(String.init))
                 ids.insert(peer.id)
-                blockedUserIdsRaw = ids.sorted().joined(separator: "|")
+                UserDefaults.standard.set(ids.sorted().joined(separator: "|"), forKey: key)
                 actionMessage = L("userBlocked", language)
                 // Leave the conversation after blocking — the composer would only
                 // 403 on send now (server enforces the block), so keeping it open

@@ -110,6 +110,10 @@ struct GuideProfileSetupView: View {
                                 identityType: identityType,
                                 city: city,
                                 isInJapan: isInJapan,
+                                // 服务端 api_guide_profile_update 是整行重写:漏传
+                                // arrivalStage 会把 onboarding persona 清空。这个
+                                // 表单不编辑来日阶段,回传已加载 profile 的现值。
+                                arrivalStage: model.profile?.arrivalStage,
                                 visaStatus: visaStatus,
                                 visaExpiresAt: hasVisaExpiry ? GuideOSDate.iso(visaExpiry) : nil,
                                 japaneseLevel: japaneseLevel,

@@ -113,6 +113,11 @@ struct NotificationsView: View {
                         onOpenTarget: {
                             if let route = route(for: item) {
                                 openNotification(item, route: route)
+                            } else if item.type == .system {
+                                // Target-less system notices are announcements:
+                                // the tap just acknowledges them. A "内容已删除"
+                                // alert here would be wrong and alarming.
+                                markReadInBackground(item)
                             } else {
                                 router.routeErrorMessage = L("postDeletedHelp", language)
                             }
@@ -181,6 +186,9 @@ struct NotificationsView: View {
            let conversationId = item.targetConversationId {
             return .conversation(conversationId: conversationId)
         }
+        if item.type == .savedSearch, let listingId = item.targetListingId {
+            return .cityListingDetail(listingId: listingId)
+        }
         if let postId = item.targetPostId {
             switch item.type {
             case .comment, .reply:
@@ -196,10 +204,18 @@ struct NotificationsView: View {
     }
 
     private func openNotification(_ item: AggregatedNotification, route: KXRoute) {
+        // Navigate first — the tap must feel instant. Marking read is
+        // fire-and-forget: awaiting it here held the navigation hostage for a
+        // full network round-trip (1–3s of dead tap on a weak connection).
+        dismiss()
+        router.open(route)
+        markReadInBackground(item)
+    }
+
+    private func markReadInBackground(_ item: AggregatedNotification) {
+        guard !item.isRead else { return }
         Task {
             await viewModel.markRead(context: modelContext, aggregate: item, notificationStore: notificationStore)
-            dismiss()
-            router.open(route)
         }
     }
 }
@@ -341,6 +357,8 @@ private struct NotificationCard: View {
         case .bookmark: return "\(actorText) \(L("notifBookmarked", language))"
         case .message: return "\(actorText) \(L("notifMessaged", language))"
         case .listingInquiry: return "\(actorText) \(L("notifInquired", language))"
+        // No meaningful actor — the "actor" is just the listing's seller.
+        case .savedSearch: return L("notifSavedSearch", language)
         case .system: return L("systemNotification", language)
         }
     }
@@ -368,6 +386,7 @@ private struct NotificationCard: View {
         case .bookmark: "bookmark.fill"
         case .message: "envelope.fill"
         case .listingInquiry: "tag.fill"
+        case .savedSearch: "sparkle.magnifyingglass"
         case .system: "bell.fill"
         }
     }
@@ -383,6 +402,7 @@ private struct NotificationCard: View {
         case .bookmark: .orange
         case .message: .teal
         case .listingInquiry: .mint
+        case .savedSearch: .yellow
         case .system: .secondary
         }
     }

@@ -18,6 +18,12 @@ import StoreKit
 final class MembershipStore: ObservableObject {
     enum PurchaseState: Equatable {
         case idle, loading, purchasing, verifying, success, pending, cancelled
+        /// StoreKit completed the charge but the server verify call failed
+        /// (network / backend down). The transaction is left unfinished and
+        /// will be retried; the UI must say "payment received, confirming —
+        /// do NOT purchase again", never "purchase failed, retry" (which
+        /// invites a double charge).
+        case verifyFailedPendingCredit
         case failed(String)
     }
 
@@ -43,14 +49,27 @@ final class MembershipStore: ObservableObject {
     @Published private(set) var currentPeriodEnd: String = ""
     /// Localized store price (e.g. "¥18.00"); falls back to the server plan.
     @Published private(set) var displayPrice: String = ""
+    /// Raw membership status string from the server ("active"/"expired"/…),
+    /// mirrored onto the local user by the view.
+    @Published private(set) var serverStatus: String = ""
+    /// Bumped every time the server confirmed a fresh membership snapshot so
+    /// views can write server truth back UNCONDITIONALLY — even when the
+    /// active flag didn't change (e.g. local user says member, server says
+    /// expired, `membershipActive` stays false → no onChange otherwise).
+    @Published private(set) var serverSyncRevision = 0
 
     private var productID: String = MembershipStore.defaultProductID
     private var productsByID: [String: Product] = [:]
     private var updatesTask: Task<Void, Never>?
 
     /// Begin listening for transaction updates and load product + status.
+    ///
+    /// When the app-level IAPTransactionObserver is running it already owns
+    /// Transaction.updates (and finishing), so this store skips its own
+    /// listener and acts as a page-state mirror only — avoids two listeners
+    /// double-verifying/finishing the same transaction.
     func start() {
-        if updatesTask == nil {
+        if updatesTask == nil && !IAPTransactionObserver.shared.isActive {
             updatesTask = Task.detached { [weak self] in
                 guard let self else { return }
                 for await result in Transaction.updates {
@@ -92,7 +111,10 @@ final class MembershipStore: ObservableObject {
             let products = try await Product.products(for: Array(ids))
             productsByID = Dictionary(uniqueKeysWithValues: products.map { ($0.id, $0) })
             let selectedProductID = selectedPlan.map { resolvedProductID(for: $0) } ?? productID
-            product = productsByID[selectedProductID] ?? fallbackProduct(for: selectedPlan) ?? products.first
+            // NO `?? products.first` fallback: buying an arbitrary product
+            // that happens to load would charge the wrong plan. Better to
+            // show "price unavailable" than to sell the wrong thing.
+            product = productsByID[selectedProductID] ?? fallbackProduct(for: selectedPlan)
             productID = product?.id ?? selectedProductID
             if let p = product {
                 displayPrice = p.displayPrice
@@ -131,7 +153,16 @@ final class MembershipStore: ObservableObject {
         if let me = try? await KaiXAPIClient.shared.membershipMe() {
             membershipActive = me.membership.is_active
             currentPeriodEnd = me.membership.current_period_end ?? ""
+            serverStatus = me.membership.status
+            serverSyncRevision += 1
         }
+    }
+
+    /// StoreKit-localized price for a plan; the server's price label is only
+    /// a fallback, so the paywall never shows two conflicting prices for the
+    /// same item.
+    func storeDisplayPrice(for plan: KaiXMembershipPlanDTO) -> String {
+        productsByID[resolvedProductID(for: plan)]?.displayPrice ?? plan.displayPriceLabel
     }
 
     static func appAccountToken(for user: UserEntity) -> UUID? {
@@ -182,19 +213,47 @@ final class MembershipStore: ObservableObject {
 
         let restorableProductIDs = knownProductIDsForRestore()
         var restoredAny = false
+        var verifyFailures = 0
         for await result in Transaction.currentEntitlements {
             let transaction = transaction(from: result)
             guard restorableProductIDs.contains(transaction.productID) else { continue }
             restoredAny = true
-            await handle(result, finishTransaction: false)
+            let verified = await handle(result, finishTransaction: false)
+            if !verified { verifyFailures += 1 }
         }
         await refreshMembership()
         if membershipActive {
             state = .success
+        } else if restoredAny && verifyFailures > 0 {
+            // We DID find purchases but couldn't confirm them with the
+            // server — say so instead of silently going back to idle.
+            state = .failed("restore_verify_failed")
         } else if restoredAny {
             state = .idle
         } else {
             state = .failed("restore_no_purchases")
+        }
+    }
+
+    /// Manual "confirm again" for a charge the server hasn't credited yet:
+    /// re-verify every unfinished membership transaction, then re-pull the
+    /// authoritative status. Both are idempotent server-side.
+    func reverifyPendingCredit() async {
+        state = .verifying
+        var anyFailure = false
+        for await result in Transaction.unfinished {
+            let txn = transaction(from: result)
+            guard !WalletStore.isPointsProduct(txn.productID) else { continue }
+            let verified = await handle(result)
+            if !verified { anyFailure = true }
+        }
+        await refreshMembership()
+        if anyFailure {
+            state = .verifyFailedPendingCredit
+        } else if membershipActive {
+            state = .success
+        } else {
+            state = .idle
         }
     }
 
@@ -239,7 +298,9 @@ final class MembershipStore: ObservableObject {
         }
     }
 
-    private func handle(_ verification: VerificationResult<Transaction>, finishTransaction: Bool = true) async {
+    /// Returns whether the SERVER confirmed the transaction.
+    @discardableResult
+    private func handle(_ verification: VerificationResult<Transaction>, finishTransaction: Bool = true) async -> Bool {
         // Send the signed JWS regardless of local verification — the
         // server re-verifies and is the source of truth.
         let transaction = transaction(from: verification)
@@ -254,6 +315,8 @@ final class MembershipStore: ObservableObject {
             )
             membershipActive = resp.membershipActive
             currentPeriodEnd = resp.currentPeriodEnd ?? ""
+            if let s = resp.status, !s.isEmpty { serverStatus = s }
+            serverSyncRevision += 1
             state = resp.membershipActive ? .success : .idle
             // Only finish once the SERVER gave a definitive answer. If the verify
             // call THREW (network / server down), do NOT finish — StoreKit then
@@ -263,8 +326,15 @@ final class MembershipStore: ObservableObject {
             if finishTransaction {
                 await transaction.finish()
             }
+            return true
         } catch {
-            state = .failed(error.localizedDescription)
+            // Apple already completed the charge; only the server confirmation
+            // is missing. NEVER report this as "purchase failed, retry" — that
+            // invites a double charge. The transaction stays unfinished and is
+            // retried by the app-level observer / next launch / the manual
+            // "confirm again" button.
+            state = .verifyFailedPendingCredit
+            return false
         }
     }
 }

@@ -174,6 +174,7 @@ final class NotificationsViewModel: ObservableObject {
             actorId: dto.actor?.id ?? dto.actor_id,
             targetPostId: dto.target_post_id,
             targetCommentId: dto.target_comment_id,
+            targetListingId: dto.target_listing_id,
             targetConversationId: dto.target_conversation_id,
             content: dto.content ?? "",
             isRead: dto.is_read,
@@ -197,6 +198,7 @@ struct AggregatedNotification: Identifiable {
     var type: NotificationType { latest.type }
     var targetPostId: String? { latest.targetPostId }
     var targetCommentId: String? { latest.targetCommentId }
+    var targetListingId: String? { latest.targetListingId }
     var targetConversationId: String? { latest.targetConversationId }
     var content: String { latest.content }
     var createdAt: Date { latest.createdAt }
@@ -225,6 +227,9 @@ struct AggregatedNotification: Identifiable {
             // One row per conversation, so parallel chats never collapse
             // into each other.
             return "\(notification.typeRaw)|\(notification.targetConversationId ?? notification.id)"
+        case .savedSearch:
+            // One row per matched listing (server dedupes per user+listing).
+            return "\(notification.typeRaw)|\(notification.targetListingId ?? notification.id)"
         case .system:
             return "\(notification.typeRaw)|\(notification.id)"
         }

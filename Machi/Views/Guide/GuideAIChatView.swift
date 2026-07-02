@@ -40,7 +40,7 @@ struct GuideAIChatView: View {
         .toolbar(.hidden, for: .navigationBar)
         .kxEnableSwipeBack()
         .safeAreaInset(edge: .bottom, spacing: 0) { inputBar }
-        .task { viewModel.loadBootstrap() }
+        .task { viewModel.loadBootstrap(isGuest: currentUser.isGuest) }
         .sheet(isPresented: $showHistory) {
             GuideAIHistorySheet(
                 language: language,
@@ -182,6 +182,8 @@ struct GuideAIChatView: View {
             .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(KXColor.livingAccentSoft, lineWidth: 1))
 
+            usageStatusLine
+
             Text(guideText(language, "试试这样问", "こんな質問から", "Try asking"))
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(KXColor.livingMuted)
@@ -200,8 +202,36 @@ struct GuideAIChatView: View {
         }
     }
 
+    /// One quiet line of quota context: members see a member badge, free users
+    /// (and guests) see today's remaining server-authoritative count. Hidden
+    /// while the count is unknown (nil) so nothing flashes before bootstrap.
+    @ViewBuilder
+    private var usageStatusLine: some View {
+        if viewModel.membershipActive {
+            HStack(spacing: 5) {
+                Image(systemName: "crown.fill")
+                    .font(.caption2)
+                    .foregroundStyle(KXColor.livingAccent)
+                Text(guideText(language, "Machi 会员", "Machi メンバー", "Machi member"))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(KXColor.livingMuted)
+            }
+        } else if let remaining = viewModel.remainingFreeUses {
+            Text(guideText(language,
+                           "今日还可咨询 \(remaining) 次",
+                           "本日はあと \(remaining) 回相談できます",
+                           remaining == 1 ? "1 question left today" : "\(remaining) questions left today"))
+                .font(.caption2)
+                .foregroundStyle(KXColor.livingMuted)
+        }
+    }
+
     private var promptChips: [String] {
-        [
+        // Server-curated suggestions from bootstrap take priority; the local
+        // list below is the offline / older-backend fallback.
+        let served = viewModel.suggestions.map(\.title).filter { !$0.isEmpty }
+        if !served.isEmpty { return served }
+        return [
             guideText(language, "刚来日本第一周要办什么？", "来日初週は何を手続きする？", "What to set up in my first week?"),
             guideText(language, "租房初期费用怎么看？", "賃貸の初期費用はどう見る？", "How do move-in costs work?"),
             guideText(language, "留学生找兼职要注意什么？", "留学生バイトの注意点は？", "Part-time work tips for students?"),

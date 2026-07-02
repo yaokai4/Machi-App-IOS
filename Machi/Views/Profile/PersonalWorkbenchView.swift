@@ -15,6 +15,10 @@ struct PersonalWorkbenchView: View {
     @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     @StateObject private var viewModel = GuideViewModel()
+    /// Bumped on pull-to-refresh / re-appear; drives GuideDigestCardView's
+    /// `.task(id:)` so 本月要点 numbers never go stale after 记账 in a leaf page.
+    @State private var digestRefreshToken = 0
+    @State private var hasAppeared = false
 
     let currentUser: UserEntity
 
@@ -36,7 +40,7 @@ struct PersonalWorkbenchView: View {
 
                     // 2) 本月要点 — finance digest (账单/解约窗口/预算/证件到期). Hidden
                     //    for guests by the card itself.
-                    GuideDigestCardView(isGuest: isGuest)
+                    GuideDigestCardView(isGuest: isGuest, refreshToken: digestRefreshToken)
 
                     // 3) 我的事务 — the canonical action directory.
                     affairsSection
@@ -58,7 +62,18 @@ struct PersonalWorkbenchView: View {
         .navigationTitle(guideText(language, "我的工作台", "マイワークベンチ", "My Workbench"))
         .navigationBarTitleDisplayMode(.inline)
         .task { await viewModel.loadGuideOS() }
-        .refreshable { await viewModel.loadGuideOS(force: true) }
+        .refreshable {
+            digestRefreshToken &+= 1
+            await viewModel.loadGuideOS(force: true)
+        }
+        .onAppear {
+            // First appearance is loaded by .task; re-appearing (popping back
+            // from 记账/合同 etc.) force-refreshes both the digest and the
+            // summary so the dashboard reflects what was just saved.
+            guard hasAppeared else { hasAppeared = true; return }
+            digestRefreshToken &+= 1
+            Task { await viewModel.loadGuideOS(force: true) }
+        }
     }
 
     // MARK: Header
@@ -130,21 +145,38 @@ struct PersonalWorkbenchView: View {
     // MARK: 今日摘要
 
     private var todayCount: Int { viewModel.guideOS?.todayTodos.count ?? 0 }
-    private var upcomingCount: Int { viewModel.guideOS?.upcomingTodos.count ?? 0 }
-    private var nextImportantDate: String? {
-        (viewModel.guideOS?.upcomingTodos ?? [])
-            .compactMap { $0.plannedDate ?? $0.dueAt }
-            .map { String($0.prefix(10)) }
-            .sorted()
-            .first
+    /// Overdue = open todos dated before the local today. `openTodos` is the
+    /// server's date-ascending open list, so overdue items sort first and this
+    /// count is honest up to the payload's limit.
+    private var overdueCount: Int {
+        let today = GuideOSDate.today()
+        return (viewModel.guideOS?.openTodos ?? []).filter {
+            let when = String(($0.displayDate ?? "").prefix(10))
+            return !when.isEmpty && when < today
+        }.count
+    }
+    /// Upcoming excludes today's items so the three tiles don't double-count.
+    private var upcomingCount: Int {
+        let today = GuideOSDate.today()
+        return (viewModel.guideOS?.upcomingTodos ?? []).filter {
+            String(($0.displayDate ?? "").prefix(10)) > today
+        }.count
     }
 
     private var todaySummaryCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
-                summaryStat("\(todayCount)", guideText(language, "今日待办", "今日のTodo", "Today"), tint: KXColor.accent)
-                summaryStat("\(upcomingCount)", guideText(language, "即将到期", "まもなく期限", "Upcoming"), tint: .orange)
-                summaryStat(nextImportantDate.map(shortDate) ?? "—", guideText(language, "最近日期", "次の予定", "Next date"), tint: .blue)
+                // 逾期 / 今日 land on the todo list (逾期 group tops "我的一天");
+                // 即将到期 lands on the calendar agenda of the coming days.
+                summaryStat("\(overdueCount)", guideText(language, "逾期", "期限切れ", "Overdue"), tint: overdueCount > 0 ? .red : .secondary) {
+                    router.open(.guidePlan)
+                }
+                summaryStat("\(todayCount)", guideText(language, "今日待办", "今日のTodo", "Today"), tint: KXColor.accent) {
+                    router.open(.guidePlan)
+                }
+                summaryStat("\(upcomingCount)", guideText(language, "即将到期", "まもなく期限", "Upcoming"), tint: .orange) {
+                    router.open(.guideCalendar)
+                }
             }
             Button {
                 if isGuest {
@@ -177,27 +209,26 @@ struct PersonalWorkbenchView: View {
         .kxGlassSurface(radius: 22, elevated: true)
     }
 
-    private func summaryStat(_ value: String, _ label: String, tint: Color) -> some View {
-        VStack(spacing: 4) {
-            Text(value)
-                .font(.system(size: 22, weight: .black, design: .rounded))
-                .foregroundStyle(tint)
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
-            Text(label)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+    private func summaryStat(_ value: String, _ label: String, tint: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Text(value)
+                    .font(.system(size: 22, weight: .black, design: .rounded))
+                    .foregroundStyle(tint)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                Text(label)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(KXColor.accentSoft.opacity(0.4), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(Rectangle())
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(KXColor.accentSoft.opacity(0.4), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-
-    private func shortDate(_ iso: String) -> String {
-        let parts = iso.split(separator: "-")
-        if parts.count >= 3, let m = Int(parts[1]), let d = Int(parts[2]) { return "\(m)/\(d)" }
-        return iso
+        .buttonStyle(.fullArea)
+        .accessibilityHint(guideText(language, "查看对应的待办", "該当するTodoを見る", "Open matching tasks"))
     }
 
     // MARK: 我的事务

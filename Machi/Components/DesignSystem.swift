@@ -121,6 +121,13 @@ enum KXColor {
     static let glassShadow = Color.black.opacity(0.052)
     static let accent = Color.accentColor
     static let accentSoft = Color.accentColor.opacity(0.11)
+    /// Machi 官方账号标识专用 teal。浅色 = 品牌深青;暗色提亮——
+    /// 0.05/0.48/0.45 的深青在深底上对比度不足(原先四处硬编码)。
+    static let official = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.36, green: 0.78, blue: 0.72, alpha: 1)
+            : UIColor(red: 0.05, green: 0.48, blue: 0.45, alpha: 1)
+    })
     static let livingBackground = Color(UIColor { traits in
         traits.userInterfaceStyle == .dark
             ? UIColor(red: 0.055, green: 0.066, blue: 0.063, alpha: 1)
@@ -339,7 +346,7 @@ struct KXOfficialBadge: View {
     var body: some View {
         Image(systemName: "checkmark.shield.fill")
             .font(.caption2.weight(.semibold))
-            .foregroundStyle(Color(red: 0.05, green: 0.48, blue: 0.45))
+            .foregroundStyle(KXColor.official)
             .accessibilityLabel("Machi Official")
     }
 }

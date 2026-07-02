@@ -40,9 +40,21 @@ final class SearchViewModel: ObservableObject {
     @Published private(set) var topicTrendingItems: [TrendingItem] = []
     @Published private(set) var userTrendingItems: [TrendingItem] = []
     @Published private(set) var latestItems: [TrendingItem] = []
-    // O7: server-backed listing search results for the "信息/Listings" scope.
+    // O7: server-backed listing search results for the "信息/Listings" section.
     @Published private(set) var searchedListings: [KaiXCityListingDTO] = []
-    @Published private(set) var listingsSearchLoading = false
+    // Server-backed global search (/api/search kind=all): posts / users /
+    // topics beyond the ~30 preloaded hot items, plus cross-city listings.
+    // The client-side filters stay as instant feedback; these arrive async.
+    @Published private(set) var serverPostItems: [TrendingItem] = []
+    @Published private(set) var serverTopics: [TopicEntity] = []
+    @Published private(set) var serverUsers: [UserEntity] = []
+    @Published private(set) var serverSearchLoading = false
+    // Follow failures surface as a local, dismissible notice — never by
+    // clobbering the whole page state with `.error` (which used to replace
+    // Discover/Search with a full-screen error over a single failed follow).
+    @Published var followErrorMessage: String?
+    /// Monotonic ticket for server searches: "last issued wins".
+    private var serverSearchGeneration = 0
 
     /// `allowRemote: false` keeps the load hermetic for UI/unit fixtures
     /// without live explore data bleeding into deterministic tests.
@@ -65,32 +77,42 @@ final class SearchViewModel: ObservableObject {
             var loadedAuthors: [String: UserEntity] = [:]
             var loadedMediaByPostId: [String: [MediaEntity]] = [:]
 
+            // The user-context lookups (recommended users + who-I-follow) don't
+            // depend on the explore payloads, so they run concurrently with the
+            // explore calls below instead of serially at the end. `try?` keeps
+            // the old degrade-to-empty behavior for signed-out visitors (401).
+            // Only the plain id is captured — not the SwiftData entity.
+            let currentUserId = currentUser.id
+            async let suggestedUsersFetch = try? userRepository.fetchRecommendedUsers(excluding: currentUserId, limit: 12)
+            async let followingIdsFetch = try? userRepository.followingIds(for: currentUserId)
+
             if allowRemote {
-                do {
-                    let response = try await KaiXAPIClient.shared.exploreHappening(region: region, limit: 30)
+                // The three explore requests are mutually independent — issue
+                // them concurrently (async let) instead of back-to-back. Each
+                // keeps its own error swallowing so a failed section degrades
+                // to its fallback without touching the others, and the results
+                // are consumed in the original order so the author/media merge
+                // precedence (hot wins over happening) is unchanged.
+                async let happeningFetch = try? KaiXAPIClient.shared.exploreHappening(region: region, limit: 30)
+                async let hotFetch = try? KaiXAPIClient.shared.exploreHot(region: region, limit: 30)
+                async let topicsFetch = try? KaiXAPIClient.shared.exploreTopics(region: region, limit: 20)
+
+                if let response = await happeningFetch {
                     let bundle = ServerEntityFactory.postBundle(from: response.orderedPosts)
                     loadedHappening = bundle.orderedPosts
                     loadedAuthors.merge(bundle.authors) { _, fresh in fresh }
                     loadedMediaByPostId.merge(bundle.mediaByPostId) { _, fresh in fresh }
-                } catch {
-                    loadedHappening = []
                 }
 
-                do {
-                    let response = try await KaiXAPIClient.shared.exploreHot(region: region, limit: 30)
+                if let response = await hotFetch {
                     let bundle = ServerEntityFactory.postBundle(from: response.orderedPosts)
                     loadedHot = bundle.orderedPosts
                     loadedAuthors.merge(bundle.authors) { _, fresh in fresh }
                     loadedMediaByPostId.merge(bundle.mediaByPostId) { _, fresh in fresh }
-                } catch {
-                    loadedHot = []
                 }
 
-                do {
-                    let response = try await KaiXAPIClient.shared.exploreTopics(region: region, limit: 20)
+                if let response = await topicsFetch {
                     loadedTopics = response.orderedTopics.map(ServerEntityFactory.topic(from:))
-                } catch {
-                    loadedTopics = []
                 }
             }
 
@@ -126,13 +148,15 @@ final class SearchViewModel: ObservableObject {
             let postAuthors = (try? await userRepository.fetchUsers(ids: missingAuthorIds)) ?? []
             loadedAuthors.merge(Dictionary(uniqueKeysWithValues: postAuthors.map { ($0.id, $0) })) { _, fresh in fresh }
             authors = loadedAuthors
-            suggestedUsers = (try? await userRepository.fetchRecommendedUsers(excluding: currentUser.id, limit: 12)) ?? []
-            followingIds = (try? await userRepository.followingIds(for: currentUser.id)) ?? []
+            // Started concurrently above; published in the same order as before.
+            suggestedUsers = (await suggestedUsersFetch) ?? []
+            followingIds = (await followingIdsFetch) ?? []
             rebuildTrendingItems()
-            // Emit .empty (not .loaded) when there's genuinely nothing to show,
-            // so Discover/Search render a real empty state instead of a page of
-            // "no content" fallbacks.
-            state = (trendingItems.isEmpty && topicTrendingItems.isEmpty && userTrendingItems.isEmpty) ? .empty : .loaded
+            // A successful load is .loaded even with zero preloaded content:
+            // the discovery shell (search field + server-backed search) must
+            // stay usable — an .empty takeover would kill search exactly when
+            // the local pools have nothing (see searchLoadsDiscoveryShell test).
+            state = .loaded
             searchStore?.setTrending(trendingItems + topicTrendingItems + userTrendingItems)
             searchStore?.setResults(trendingItems + topicTrendingItems + userTrendingItems)
             searchStore?.setLoadingState(state)
@@ -148,6 +172,7 @@ final class SearchViewModel: ObservableObject {
     }
 
     func toggleFollow(context: ModelContext, currentUser: UserEntity, target: UserEntity, userStore: UserStore? = nil) async {
+        guard GuestSession.requireSignedIn(currentUser) else { return }
         do {
             let isFollowing = try await UserRepository(context: context).toggleFollow(currentUser: currentUser, targetUser: target)
             userStore?.register([currentUser, target])
@@ -157,7 +182,7 @@ final class SearchViewModel: ObservableObject {
             followingIds = try await UserRepository(context: context).followingIds(for: currentUser.id)
             rebuildTrendingItems()
         } catch {
-            state = .error(error.kaixUserMessage)
+            followErrorMessage = error.kaixUserMessage
         }
     }
 
@@ -211,21 +236,41 @@ final class SearchViewModel: ObservableObject {
         debouncedQuery = value
     }
 
-    /// O7: cross-city listing search for the "信息/Listings" scope. Mirrors Web's
-    /// search kind=listing. Empty query clears results.
-    func searchListings() async {
+    /// Global server search (/api/search, kind=all): posts + users + topics +
+    /// cross-city listings in one round trip. Called on every debounced query
+    /// change; an empty query clears the server sections. Failures degrade to
+    /// the client-side instant filters (no page-level error).
+    func searchServer() async {
         let q = debouncedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else {
+            serverPostItems = []
+            serverTopics = []
+            serverUsers = []
             searchedListings = []
             return
         }
-        listingsSearchLoading = true
-        defer { listingsSearchLoading = false }
+        serverSearchGeneration += 1
+        let generation = serverSearchGeneration
+        serverSearchLoading = true
+        defer {
+            // Only the newest request may clear the spinner — a cancelled
+            // predecessor unwinding late must not hide the in-flight one.
+            if generation == serverSearchGeneration {
+                serverSearchLoading = false
+            }
+        }
         do {
-            let response = try await KaiXAPIClient.shared.search(q, kind: .listing)
+            let response = try await KaiXAPIClient.shared.search(q, kind: .all)
+            // Stale guard: the user kept typing while this was in flight.
+            guard generation == serverSearchGeneration else { return }
+            let bundle = ServerEntityFactory.postBundle(from: response.posts)
+            authors.merge(bundle.authors) { _, fresh in fresh }
+            serverPostItems = bundle.orderedPosts.map(makePostTrendingItem)
+            serverTopics = response.topics.map(ServerEntityFactory.topic(from:))
+            serverUsers = response.users.map(UserRepository.entity(from:))
             searchedListings = response.listings ?? []
         } catch {
-            searchedListings = []
+            // Keep whatever the instant client filters already show.
         }
     }
 

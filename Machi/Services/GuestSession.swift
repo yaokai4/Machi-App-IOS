@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import SwiftData
+import UIKit
 
 /// Guest (logged-out) browsing support.
 ///
@@ -77,6 +78,47 @@ extension UserEntity {
     /// write actions behind a login prompt without threading a separate flag
     /// through every view.
     var isGuest: Bool { id == GuestSession.guestID }
+}
+
+extension GuestSession {
+    /// Stable per-device client id for signed-out callers, sent as the
+    /// `X-Machi-Guest-Id` header so the server can grant (and enforce) the
+    /// tiny guest taster quota for Machi AI without an account. Prefers the
+    /// vendor id; falls back to a generated UUID persisted in UserDefaults so
+    /// it survives relaunches. Contains nothing user-identifying, and the
+    /// server only ever stores a hash of it.
+    @MainActor
+    static var stableClientId: String {
+        if let vendor = UIDevice.current.identifierForVendor?.uuidString, !vendor.isEmpty {
+            return vendor
+        }
+        let key = "machi-guest-stable-client-id"
+        if let saved = UserDefaults.standard.string(forKey: key), !saved.isEmpty {
+            return saved
+        }
+        let generated = UUID().uuidString
+        UserDefaults.standard.set(generated, forKey: key)
+        return generated
+    }
+
+    /// Unified guest gate for write actions (favorite / publish / inquire /
+    /// follow / message / report / RSVP …). Returns `true` when the action may
+    /// proceed; for guests it presents the login sheet via `GuestGate` and
+    /// returns `false`, so call sites read as a plain guard:
+    ///
+    ///     guard GuestSession.requireSignedIn(currentUser, reason: …) else { return }
+    ///
+    /// Pass the current user when the call site has one. Views without a user
+    /// in scope (e.g. listing cards) can omit it — the guest holds no backend
+    /// token, so a missing token is the same signal.
+    @MainActor
+    @discardableResult
+    static func requireSignedIn(_ user: UserEntity? = nil, reason: String? = nil) -> Bool {
+        let isGuest = user.map(\.isGuest) ?? (KaiXBackend.token == nil)
+        guard isGuest else { return true }
+        GuestGate.shared.requireLogin(reason)
+        return false
+    }
 }
 
 /// Global, app-wide login prompt for guests. Any action handler can call

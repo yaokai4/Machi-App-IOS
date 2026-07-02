@@ -133,6 +133,20 @@ struct DiscoverView: View {
         .background(KXColor.livingBackground)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("discover.root")
+        // Layered OUTSIDE the `discover.root` accessibility container (like the
+        // FAB below) so the dismiss button stays hittable. Local, dismissible
+        // follow-failure notice — replaces the old behaviour where one failed
+        // follow flipped the whole page into a full-screen error state
+        // (viewModel no longer touches `state` on follow errors).
+        .overlay(alignment: .top) {
+            if let message = viewModel.followErrorMessage {
+                KXInlineNotice(message: message) {
+                    viewModel.followErrorMessage = nil
+                }
+                .padding(.top, 8)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
         // FAB is layered OUTSIDE the `discover.root` accessibility container (a
         // sibling on top, mirroring Home) so it stays hit-testable — nesting it
         // inside `.accessibilityElement(children: .contain)` makes it
@@ -498,6 +512,7 @@ struct DiscoverView: View {
     }
 
     private func follow(_ user: UserEntity) {
+        guard GuestSession.requireSignedIn(currentUser, reason: KXListingCopy.pickText(language, "登录后可以关注感兴趣的人。", "ログインするとフォローできます。", "Sign in to follow people.")) else { return }
         Task {
             await viewModel.toggleFollow(
                 context: modelContext,
@@ -834,8 +849,6 @@ private struct DiscoverCategoryGrid: View {
 /// The shared row used in both the 8-cell grid and the More sheet.
 private struct DiscoverCategoryCell: View {
     @Environment(\.appLanguage) private var language
-    @Environment(\.kxListingZoomNamespace) private var zoomNamespace
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     enum Prominence {
         case normal
         case high
@@ -846,11 +859,13 @@ private struct DiscoverCategoryCell: View {
 
     var body: some View {
         if prominence == .high {
-            // Listing-channel cards become the zoom SOURCE so tapping morphs the
-            // tile into the channel screen (iOS 18+; plain push otherwise). The
-            // id matches the channel's destination id ("channel-<listingType>").
+            // NOTE: no zoom source here on purpose. The channel screen used to
+            // be a zoom destination of this tile AND host the per-card zoom
+            // sources into the listing detail — a nested matchedTransitionSource
+            // setup that iOS 18/26 renders blank (whole list invisible) with
+            // high probability after popping back from the detail. The tile now
+            // plain-pushes; the card→detail zoom (the valuable one) stays.
             highCard
-                .kxListingZoomSource("channel-\(category.listingType ?? "none")", reduceMotion ? nil : zoomNamespace)
         } else {
             normalCard
         }

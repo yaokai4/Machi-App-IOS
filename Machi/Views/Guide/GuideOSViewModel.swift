@@ -36,13 +36,20 @@ func currentGuideOSLanguage() -> String {
 }
 
 enum GuideOSDate {
+    // The workbench is a *local-day* system: "今天" must be the user's calendar
+    // day (JST for users in Japan — the backend's _guide_today_date is JST too),
+    // not UTC. The old UTC formatter shifted every date by a day between 00:00
+    // and 09:00 JST: new todos landed in 逾期, the calendar highlighted the
+    // wrong cell, and 改期 moved dates by -1.
     static func iso(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.timeZone = TimeZone.current
         formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.string(from: date)
+        // DatePicker hands back a Date at the picker's wall-clock time; snap to
+        // the local start-of-day so serialization is stable across the day.
+        return formatter.string(from: Calendar.current.startOfDay(for: date))
     }
 
     static func today(offset days: Int = 0) -> String {
@@ -55,12 +62,14 @@ enum GuideOSDate {
     }
 
     /// Parse a server `yyyy-MM-dd` (or ISO) string back into a Date for editors.
+    /// Local timezone to round-trip with `iso(_:)` — a UTC parse showed the
+    /// previous day in DatePickers for negative-offset timezones.
     static func parse(_ raw: String?) -> Date? {
         guard let raw, !raw.isEmpty else { return nil }
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.timeZone = TimeZone.current
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.date(from: String(raw.prefix(10)))
     }
@@ -88,6 +97,12 @@ class GuideOSViewModel: ObservableObject {
     @Published var message: String?
 
     var isLoggedIn: Bool { KaiXBackend.token != nil }
+
+    /// When set, `loadTodos` keeps only todos generated from these sources
+    /// (e.g. the applications planner shows application todos, not 房租/背单词 —
+    /// the server's `type` filter is a single exact todo_type, so the multi-type
+    /// application ladder is filtered client-side by sourceType instead).
+    var todoSourceTypeFilter: Set<String>? = nil
 
     func requireLogin(_ reason: String = "登录后可以同步 Guide 计划、Todo、日历提醒和服务记录。") -> Bool {
         guard isLoggedIn else {
@@ -117,7 +132,11 @@ class GuideOSViewModel: ObservableObject {
         defer { isLoading = false }
         do {
             let items = try await KaiXAPIClient.shared.guideTodos(status: status, type: type, planId: planId, limit: limit).items
-            todos = items
+            if let filter = todoSourceTypeFilter {
+                todos = items.filter { filter.contains($0.sourceType) }
+            } else {
+                todos = items
+            }
         } catch {
             message = "任务列表加载失败。Guide 核心状态仅以服务器为准，请联网后重试。"
         }
@@ -168,10 +187,21 @@ class GuideOSViewModel: ObservableObject {
     func complete(_ todo: KaiXGuideTodoDTO) async {
         guard requireLogin() else { return }
         do {
-            _ = try await KaiXAPIClient.shared.completeGuideTodo(id: todo.id)
+            let response = try await KaiXAPIClient.shared.completeGuideTodo(id: todo.id)
             GuideHaptics.success()
             withAnimation(.easeInOut(duration: 0.25)) {
                 todos.removeAll { $0.id == todo.id }
+            }
+            // Mirror the completion into calendarItems immediately so the
+            // calendar's month/week/agenda cards show the 勾+划线 state on the
+            // spot — before this, the server marked it done but the card sat
+            // untouched and users tapped (and POSTed) again.
+            if let updated = response.todo {
+                patchTodo(updated)
+            } else {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    calendarItems.removeAll { $0.todoId == todo.id }
+                }
             }
             await loadDashboard()
         } catch {

@@ -23,7 +23,9 @@ struct WalletView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                if store.walletUnavailable {
+                if store.walletNeedsLogin {
+                    needsLoginCard
+                } else if store.walletUnavailable {
                     unsupportedCard
                 } else if store.walletLoadFailed {
                     errorCard
@@ -68,6 +70,29 @@ struct WalletView: View {
             title: wl("钱包加载失败", "Couldn't load your wallet", "ウォレットを読み込めません"),
             message: wl("网络或服务暂时不可用，请重试。", "Network or service is temporarily unavailable.", "ネットワークまたはサービスが一時的に利用できません。")
         )
+    }
+
+    /// 401 from the wallet endpoint: guest / expired session. Guide the user
+    /// to sign in instead of failing silently.
+    private var needsLoginCard: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "person.crop.circle.badge.exclamationmark")
+                .font(.system(size: 30)).foregroundStyle(.secondary)
+            Text(wl("登录后可使用 Machi 币钱包", "Sign in to use your wallet", "ログインするとウォレットを利用できます"))
+                .font(.headline).multilineTextAlignment(.center)
+            Text(wl("登录后即可查看余额、充值和消费记录。", "Sign in to see your balance, top up, and view activity.", "ログインすると残高の確認・チャージ・履歴の表示ができます。"))
+                .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            Button {
+                GuestGate.shared.requireLogin()
+            } label: {
+                Label(wl("去登录", "Sign in", "ログインする"), systemImage: "person.crop.circle")
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(20)
+        .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.cardBackground))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(KXColor.separator, lineWidth: 0.8))
     }
 
     private func stateCard(icon: String, title: String, message: String) -> some View {
@@ -134,6 +159,21 @@ struct WalletView: View {
                     }
                 }
             }
+            if store.state == .verifyFailedPendingCredit {
+                // Honest state: Apple charged, the server hasn't credited
+                // yet. NEVER phrased as "purchase failed, retry".
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(wl("已完成支付，正在确认到账，请勿重复购买。",
+                            "Payment received — we're confirming it with the server. Please don't purchase again.",
+                            "お支払いは完了しています。入金確認中のため、再度購入しないでください。"))
+                        .font(.caption).foregroundStyle(.orange)
+                    Button(wl("重新确认", "Confirm again", "再確認する")) {
+                        Task { await store.reverifyPendingCredit() }
+                    }
+                    .font(.caption.weight(.semibold))
+                    .disabled(isBusy)
+                }
+            }
             if case .failed = store.state {
                 Text(wl("操作失败，请稍后再试。", "Something went wrong, try again.", "失敗しました。もう一度お試しください。"))
                     .font(.caption).foregroundStyle(.red)
@@ -172,7 +212,9 @@ struct WalletView: View {
             .overlay(RoundedRectangle(cornerRadius: 14).stroke(KXColor.separator, lineWidth: 0.8))
         }
         .buttonStyle(.plain)
-        .disabled(!purchasable || isBusy)
+        // Also disabled while a paid charge awaits server confirmation —
+        // buying again there is exactly the double-charge we must prevent.
+        .disabled(!purchasable || isBusy || store.state == .verifyFailedPendingCredit)
         .opacity(purchasable ? 1 : 0.5)
     }
 

@@ -216,17 +216,21 @@ struct GuideFinanceView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             vm.language = language
-            if vm.requireLogin() { await vm.load() }
+            // Guests may browse the page freely (calendar-style); the login
+            // prompt fires only at the point of a write, not on entry.
+            guard vm.isLoggedIn else { return }
+            await vm.load()
         }
         .refreshable { vm.language = language; await vm.load() }
         .sheet(item: $shareDoc) { doc in GuideFinanceActivityView(url: doc.url) }
     }
 
-    // MARK: Controls (currency · 记入固定费 · 导出)
+    // MARK: Controls (月份 · currency · 记入固定费 · 导出)
 
     private var controlsRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
+                monthChip
                 Menu {
                     ForEach(kxFinanceCurrencies, id: \.code) { c in
                         Button(kxCurrencyLabel(language, c.code)) { vm.setCurrency(c.code) }
@@ -246,6 +250,58 @@ struct GuideFinanceView: View {
                 }
             }
         }
+    }
+
+    /// 「‹ 2026-07 ›」 — flip through past months to re-check old ledgers (the
+    /// backend's summary / transactions / trend all accept a month parameter).
+    private var monthChip: some View {
+        HStack(spacing: 0) {
+            Button {
+                Task { await shiftMonth(-1) }
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(KXColor.accent)
+                    .frame(width: 30, height: 36)
+            }
+            .buttonStyle(.fullArea)
+            .contentShape(Rectangle())
+            .accessibilityLabel(guideOSText(language, "上个月", "先月", "Previous month"))
+            Text(vm.month)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.primary)
+                .monospacedDigit()
+            Button {
+                Task { await shiftMonth(1) }
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(vm.month >= GuideFinanceViewModel.currentMonth() ? Color.secondary.opacity(0.4) : KXColor.accent)
+                    .frame(width: 30, height: 36)
+            }
+            .buttonStyle(.fullArea)
+            .contentShape(Rectangle())
+            .disabled(vm.month >= GuideFinanceViewModel.currentMonth())
+            .accessibilityLabel(guideOSText(language, "下个月", "翌月", "Next month"))
+        }
+        .padding(.horizontal, 4)
+        .frame(height: 36)
+        .background(KXColor.livingSurface.opacity(0.76), in: Capsule())
+        .overlay(Capsule().stroke(KXColor.separator.opacity(0.8), lineWidth: 0.8))
+    }
+
+    private func shiftMonth(_ delta: Int) async {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM"
+        guard let base = f.date(from: vm.month),
+              let shifted = Calendar.current.date(byAdding: .month, value: delta, to: base) else { return }
+        let next = f.string(from: shifted)
+        // Future months have nothing to show; cap at the current month.
+        guard next <= GuideFinanceViewModel.currentMonth() else { return }
+        vm.month = next
+        await vm.load()
     }
 
     private func chipLabel(icon: String, text: String) -> some View {
@@ -306,6 +362,7 @@ struct GuideFinanceView: View {
                     .font(.headline.weight(.bold))
                 HStack(alignment: .bottom, spacing: 6) {
                     ForEach(vm.trend) { m in
+                        let isCurrent = m.month == vm.month
                         VStack(spacing: 5) {
                             HStack(alignment: .bottom, spacing: 2) {
                                 Capsule().fill(KXColor.accent.opacity(0.85))
@@ -315,9 +372,21 @@ struct GuideFinanceView: View {
                             }
                             .frame(height: 88, alignment: .bottom)
                             Text(String(m.month.suffix(2)) + guideOSText(language, "月", "月", ""))
-                                .font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(isCurrent ? KXColor.accent : .secondary)
                         }
                         .frame(maxWidth: .infinity)
+                        .contentShape(Rectangle())
+                        // Tap a bar to jump the whole page to that month.
+                        .onTapGesture {
+                            guard !isCurrent else { return }
+                            Task {
+                                vm.month = m.month
+                                await vm.load()
+                            }
+                        }
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityLabel(guideOSText(language, "查看 \(m.month) 的收支", "\(m.month)の収支を見る", "View \(m.month)"))
                     }
                 }
                 HStack(spacing: 14) {
@@ -377,7 +446,7 @@ struct GuideFinanceView: View {
                 category = newValue == "income" ? "salary" : "rent"
             }
             HStack(spacing: 8) {
-                Text("¥").font(.title2.weight(.black)).foregroundStyle(.secondary)
+                Text(kxCurrencySymbol(vm.currency)).font(.title2.weight(.black)).foregroundStyle(.secondary)
                 TextField("0", text: $amountText)
                     .keyboardType(.numberPad)
                     .font(.title.weight(.black))
@@ -476,7 +545,7 @@ struct GuideFinanceView: View {
             .pickerStyle(.menu)
             .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: 8) {
-                Text("¥").font(.headline.weight(.bold)).foregroundStyle(.secondary)
+                Text(kxCurrencySymbol(vm.currency)).font(.headline.weight(.bold)).foregroundStyle(.secondary)
                 TextField(guideOSText(language, "每月上限（0=取消）", "上限（0で解除）", "Monthly limit (0 = off)"), text: $budgetLimitText)
                     .keyboardType(.numberPad)
                     .onChange(of: budgetLimitText) { _, v in

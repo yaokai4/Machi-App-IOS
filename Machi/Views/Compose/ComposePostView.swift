@@ -63,7 +63,16 @@ struct ComposePostView: View {
                 Task {
                     if await viewModel.saveDraft(context: modelContext, currentUser: currentUser, language: language) {
                         composeStore.clear()
-                        onPublished()
+                        // Deliberately NOT onPublished(): saving a draft must not
+                        // trigger the post-publish side effects (feed refresh +
+                        // hard switch to the home tab). Just confirm and close.
+                        toastManager.show(.custom(
+                            title: KXListingCopy.pickText(language, "已存入草稿箱", "下書きに保存しました", "Saved to drafts"),
+                            message: "",
+                            systemImage: "tray.and.arrow.down.fill",
+                            tint: .green,
+                            technicalDetails: nil
+                        ))
                         dismiss()
                     }
                 }

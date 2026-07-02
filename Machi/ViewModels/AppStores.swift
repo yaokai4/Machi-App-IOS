@@ -116,6 +116,20 @@ final class NotificationStore: ObservableObject {
     @Published var filterState: String = "all"
     @Published private(set) var loadingState: ScreenState = .idle
 
+    /// Unread count for social notifications only (likes, comments, follows…).
+    /// DM-backed types (`.message` / `.listingInquiry`) are excluded: each of
+    /// those rows mirrors a conversation MessageStore already counts per-thread,
+    /// so adding them into the app-icon badge would double-count every unread
+    /// DM (and contradict the messages tab badge).
+    var socialUnreadCount: Int {
+        notificationsById.values.reduce(into: 0) { count, notification in
+            guard !notification.isRead,
+                  notification.type != .message,
+                  notification.type != .listingInquiry else { return }
+            count += 1
+        }
+    }
+
     func setNotifications(_ notifications: [NotificationEntity]) {
         notificationsById = Dictionary(uniqueKeysWithValues: notifications.map { ($0.id, $0) })
         groupedNotificationIds = Dictionary(grouping: notifications, by: AggregatedNotification.groupKey(for:))

@@ -50,6 +50,8 @@ enum KXRoute: Hashable {
     case guideInterviewReviews
     case conversation(conversationId: String)
     case search(initialQuery: String?)
+    /// 订阅的搜索(saved searches)管理列表 — 设置入口之外还可被通知深链打开。
+    case savedSearches
 }
 
 @MainActor
@@ -191,7 +193,7 @@ extension KXRoute {
             return .none
         case .postDetailComment(_, let commentId):
             return commentId.map { .comment($0) } ?? .comments
-        case .profile, .topic, .city, .cityChannel, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .myInquiries, .myReservations, .businessDirectory, .businessProfile, .guideCategory, .guideJourney, .guidePlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideFinance, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications, .guideServices, .guideMemberResources, .guideMyLibrary, .personalWorkbench, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .guideAI, .conversation, .search:
+        case .profile, .topic, .city, .cityChannel, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .myInquiries, .myReservations, .businessDirectory, .businessProfile, .guideCategory, .guideJourney, .guidePlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideFinance, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications, .guideServices, .guideMemberResources, .guideMyLibrary, .personalWorkbench, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .guideAI, .conversation, .search, .savedSearches:
             return .none
         }
     }
@@ -204,7 +206,7 @@ extension KXRoute {
         // are never stranded. The 我的工作台 hub itself keeps the tab bar.
         case .postDetail, .postDetailComment, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .businessProfile, .guideArticle, .guideProduct, .guideJourney, .guideSchool, .guideCompany, .guideCompanyReviews, .conversation, .guidePlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideFinance, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications, .guideAI:
             true
-        case .profile, .topic, .city, .cityChannel, .myInquiries, .myReservations, .businessDirectory, .guideCategory, .guideServices, .guideMemberResources, .guideMyLibrary, .personalWorkbench, .guideSchools, .guideCompanies, .guideInterviewReviews, .search:
+        case .profile, .topic, .city, .cityChannel, .myInquiries, .myReservations, .businessDirectory, .guideCategory, .guideServices, .guideMemberResources, .guideMyLibrary, .personalWorkbench, .guideSchools, .guideCompanies, .guideInterviewReviews, .search, .savedSearches:
             false
         }
     }
@@ -217,7 +219,7 @@ extension KXRoute {
             L("unknownUser", language)
         case .topic:
             L("noTopicPosts", language)
-        case .city, .cityChannel, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .myInquiries, .myReservations, .businessDirectory, .businessProfile:
+        case .city, .cityChannel, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .myInquiries, .myReservations, .businessDirectory, .businessProfile, .savedSearches:
             L("emptyFeed", language)
         case .guideCategory, .guideJourney, .guidePlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideFinance, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications, .guideServices, .guideMemberResources, .guideMyLibrary, .personalWorkbench, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .guideAI:
             L("guideOpenFailed", language)
@@ -339,6 +341,8 @@ private struct KXRouteDestinations: ViewModifier {
                     ConversationView(conversationId: conversationId, currentUser: currentUser)
                 case .search(let initialQuery):
                     SearchScreen(currentUser: currentUser, initialQuery: initialQuery ?? "")
+                case .savedSearches:
+                    SavedSearchesView()
                 }
             }
             .alert(L("error", language), isPresented: Binding(
@@ -506,6 +510,8 @@ private extension KXRoute {
         case .search(let initialQuery):
             let query = initialQuery?.trimmingCharacters(in: .whitespacesAndNewlines)
             return .search(initialQuery: query?.isEmpty == true ? nil : query)
+        case .savedSearches:
+            return .savedSearches
         }
     }
 }

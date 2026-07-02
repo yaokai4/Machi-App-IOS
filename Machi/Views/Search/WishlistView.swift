@@ -104,6 +104,8 @@ struct WishlistView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var store = FavoritesStore.shared
     let onOpen: (String) -> Void
+    /// Brief failure notice when a server-side unfavorite fails (row restored).
+    @State private var removalNotice: String?
 
     var body: some View {
         NavigationStack {
@@ -127,7 +129,7 @@ struct WishlistView: View {
                                 WishlistRow(
                                     item: item,
                                     onOpen: { onOpen(item.id) },
-                                    onRemove: { withAnimation(.snappy(duration: 0.22)) { store.remove(item.id) } }
+                                    onRemove: { remove(item) }
                                 )
                             }
                         }
@@ -137,6 +139,16 @@ struct WishlistView: View {
                 }
             }
             .background(KXColor.pageBackground.ignoresSafeArea())
+            .overlay(alignment: .top) {
+                if let removalNotice {
+                    KXInlineNotice(message: removalNotice) {
+                        self.removalNotice = nil
+                    }
+                    .padding(.horizontal, KaiXTheme.horizontalPadding)
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
             .navigationTitle(KXListingCopy.pickText(language, "我的收藏", "お気に入り", "Saved"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -153,6 +165,30 @@ struct WishlistView: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+    }
+
+    /// Optimistically drop the row, then unfavorite on the server — the same
+    /// write path as the card hearts (POST/DELETE /api/listings/:id/favorite)
+    /// so the next `syncFromServer()` no longer resurrects the item. On
+    /// failure the row is restored and a brief notice explains why.
+    private func remove(_ item: FavoriteSnapshot) {
+        withAnimation(.snappy(duration: 0.22)) { store.remove(item.id) }
+        // Guests / signed-out sessions only have the local cache — nothing to
+        // delete server-side (and the call would just 401).
+        guard KaiXBackend.token != nil else { return }
+        Task {
+            do {
+                try await KaiXAPIClient.shared.favoriteListing(item.id, on: false)
+            } catch {
+                withAnimation(.snappy(duration: 0.22)) { store.set(item, on: true) }
+                removalNotice = KXListingCopy.pickText(
+                    language,
+                    "取消收藏失败，请重试",
+                    "お気に入りを解除できませんでした。もう一度お試しください",
+                    "Couldn't remove from saved — please try again"
+                )
+            }
+        }
     }
 }
 

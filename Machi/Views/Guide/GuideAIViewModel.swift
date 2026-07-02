@@ -49,6 +49,19 @@ final class GuideAIViewModel: ObservableObject {
     private let country: String
     private var lastFailedText: String?
     private weak var lastUser: UserEntity?
+    /// True while the screen is used signed-out. Guests never see the
+    /// member-oriented quota card / disabled composer — they get the login
+    /// prompt instead — so the `quotaReached` computations skip them.
+    private var isGuestSession = false
+
+    /// Lifetime count of guest questions asked from this device — the soft
+    /// local gate for "first question free, then sign in". The server stays
+    /// authoritative on top via the X-Machi-Guest-Id daily quota.
+    private static let guestQuestionCountKey = "machi-ai-guest-question-count"
+    private var guestQuestionCount: Int {
+        get { UserDefaults.standard.integer(forKey: Self.guestQuestionCountKey) }
+        set { UserDefaults.standard.set(newValue, forKey: Self.guestQuestionCountKey) }
+    }
 
     init(language: AppLanguage, country: String = "jp") {
         self.language = language
@@ -67,20 +80,27 @@ final class GuideAIViewModel: ObservableObject {
 
     // MARK: - loading
 
-    func loadBootstrap() {
+    func loadBootstrap(isGuest: Bool = false) {
         guard !isLoading else { return }
+        isGuestSession = isGuest
         isLoading = true
         Task {
             defer { isLoading = false }  // never get stuck loading, even if cancelled
-            if let resp = try? await KaiXAPIClient.shared.guideAIBootstrap(country: country, language: serverLanguage) {
+            // Guests bootstrap too (server supports X-Machi-Guest-Id); any
+            // failure is swallowed and the view falls back to local chips.
+            if let resp = try? await KaiXAPIClient.shared.guideAIBootstrap(
+                country: country, language: serverLanguage,
+                guestId: isGuest ? GuestSession.stableClientId : nil
+            ) {
                 membershipActive = resp.membershipActive ?? false
                 remainingFreeUses = (resp.membershipActive == true) ? nil : resp.remainingFreeUses
                 suggestions = resp.suggestions ?? []
                 abilities = resp.abilities ?? []
                 if let text = resp.disclaimer, !text.isEmpty { disclaimer = text }
-                quotaReached = (membershipActive == false) && (remainingFreeUses ?? 1) <= 0
+                quotaReached = !isGuest && (membershipActive == false) && (remainingFreeUses ?? 1) <= 0
             }
-            if let convResp = try? await KaiXAPIClient.shared.guideAIConversations() {
+            // Guests have no server-side history (401 by design) — skip it.
+            if !isGuest, let convResp = try? await KaiXAPIClient.shared.guideAIConversations() {
                 conversations = convResp.items ?? []
             }
         }
@@ -124,7 +144,7 @@ final class GuideAIViewModel: ObservableObject {
         conversationId = nil
         messages = []
         quotaMessage = nil
-        quotaReached = (membershipActive == false) && (remainingFreeUses ?? 1) <= 0
+        quotaReached = !isGuestSession && (membershipActive == false) && (remainingFreeUses ?? 1) <= 0
         errorMessage = nil
         activeAbility = nil
         lastFailedText = nil
@@ -137,8 +157,9 @@ final class GuideAIViewModel: ObservableObject {
         guard !text.isEmpty else { return }
         // Keep the typed text if the guest gate is about to intercept — clearing
         // before the guest check (the old bug) lost the message and still showed
-        // the login sheet, so after signing in the composer was empty.
-        guard !currentUser.isGuest else {
+        // the login sheet, so after signing in the composer was empty. A guest's
+        // first taster question really sends, so it clears like any other.
+        guard !(currentUser.isGuest && guestQuestionCount >= 1) else {
             send(text: text, currentUser: currentUser)
             return
         }
@@ -155,14 +176,12 @@ final class GuideAIViewModel: ObservableObject {
 
     func send(text: String, currentUser: UserEntity) {
         guard !isSending else { return }
-        // Guests can browse but must sign in to use Machi AI.
-        if currentUser.isGuest {
-            GuestGate.shared.requireLogin(guideText(
-                language,
-                "登录后可以使用 Machi AI 继续咨询日本生活、升学和就职问题。",
-                "ログインすると Machi AI で日本生活・進学・就職の相談を続けられます。",
-                "Sign in to keep asking Machi AI about life, study, and work in Japan."
-            ))
+        isGuestSession = currentUser.isGuest
+        // Guests get exactly one taster question on this device (the server
+        // enforces the real per-day guest quota via X-Machi-Guest-Id); from
+        // the second question on they must sign in.
+        if currentUser.isGuest, guestQuestionCount >= 1 {
+            GuestGate.shared.requireLogin(guestLoginPrompt)
             return
         }
         lastUser = currentUser
@@ -187,7 +206,8 @@ final class GuideAIViewModel: ObservableObject {
                 let resp = try await KaiXAPIClient.shared.sendGuideAIMessage(
                     conversationId: conversationId, message: text,
                     country: country, language: serverLanguage, category: nil,
-                    ability: activeAbility
+                    ability: activeAbility,
+                    guestId: currentUser.isGuest ? GuestSession.stableClientId : nil
                 )
                 applyChatResponse(resp, pendingId: pendingId, userMessageId: userMessage.id, text: text)
             } catch let apiError as KaiXAPIError {
@@ -245,9 +265,14 @@ final class GuideAIViewModel: ObservableObject {
             )
         }
         quotaMessage = nil
-        quotaReached = (membershipActive == false) && (remainingFreeUses ?? 1) <= 0
-        // Keep the side list fresh so a new thread appears in history.
-        refreshConversations()
+        quotaReached = !isGuestSession && (membershipActive == false) && (remainingFreeUses ?? 1) <= 0
+        if lastUser?.isGuest == true {
+            // Taster question consumed — the next attempt hits the login gate.
+            guestQuestionCount += 1
+        } else {
+            // Keep the side list fresh so a new thread appears in history.
+            refreshConversations()
+        }
     }
 
     private func handleFailure(_ apiError: KaiXAPIError?, pendingId: String, userMessageId: String, text: String?) {
@@ -259,6 +284,13 @@ final class GuideAIViewModel: ObservableObject {
 
         switch apiError?.error.code {
         case "AI_QUOTA_EXCEEDED":
+            // A guest hitting the server-side taster cap (e.g. a reinstall
+            // reset the local count) goes to sign-in, not the member card.
+            if lastUser?.isGuest == true {
+                guestQuestionCount = max(guestQuestionCount, 1)
+                GuestGate.shared.requireLogin(apiError?.error.message ?? guestLoginPrompt)
+                return
+            }
             quotaReached = true
             quotaMessage = apiError?.error.message
             if membershipActive == false {
@@ -301,6 +333,16 @@ final class GuideAIViewModel: ObservableObject {
             "网络好像不太稳定，请稍后再试。",
             "通信が不安定なようです。少し待ってから再度お試しください。",
             "The connection seems unstable. Please try again shortly."
+        )
+    }
+
+    /// Reason line on the login sheet once a guest's taster question is spent.
+    private var guestLoginPrompt: String {
+        guideText(
+            language,
+            "登录后可以使用 Machi AI 继续咨询日本生活、升学和就职问题。",
+            "ログインすると Machi AI で日本生活・進学・就職の相談を続けられます。",
+            "Sign in to keep asking Machi AI about life, study, and work in Japan."
         )
     }
 

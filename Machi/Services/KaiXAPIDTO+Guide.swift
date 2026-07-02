@@ -551,6 +551,9 @@ struct KaiXGuideProfileDTO: Codable, Equatable, Identifiable, Hashable {
     let country: String
     let city: String
     let isInJapan: Bool
+    /// 来日阶段 pre_arrival / just_arrived / first_year / long_term ("" = 未设置)。
+    /// Optional so decoding stays compatible with servers that predate the field.
+    let arrivalStage: String?
     let visaStatus: String
     let visaExpiresAt: String?
     let japaneseLevel: String
@@ -1063,6 +1066,7 @@ struct KaiXGuideProfileUpdatePayload: Encodable {
     var identityType: String? = nil
     var city: String? = nil
     var isInJapan: Bool? = nil
+    var arrivalStage: String? = nil
     var visaStatus: String? = nil
     var visaExpiresAt: String? = nil
     var japaneseLevel: String? = nil

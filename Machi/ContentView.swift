@@ -6,6 +6,10 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("currentUserID") private var currentUserID = ""
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
+    /// Raw `arrival_stage` value picked on the onboarding persona step ("" =
+    /// skipped). Written by OnboardingView; drives the first-entry journey
+    /// routing here and is synced to the Guide profile on login.
+    @AppStorage("onboardingPersona") private var onboardingPersona = ""
     @AppStorage("appLanguageCode") private var appLanguageCode = AppLanguage.system.rawValue
     @AppStorage("appAppearance") private var appAppearance = AppAppearance.light.rawValue
     @StateObject private var appState = AppState()
@@ -24,6 +28,11 @@ struct ContentView: View {
     @ObservedObject private var guestGate = GuestGate.shared
     @State private var displayedDatabaseNoticeKey: String?
     @State private var isSyncingSystemNotifications = false
+    /// A system-notification tap that arrived while `currentUser` was still nil
+    /// (cold start from a killed app: the tap lands before bootstrap finishes).
+    /// Stashed here and replayed once the session loads, so the deep link is
+    /// never silently swallowed.
+    @State private var pendingNotificationPayload: [AnyHashable: Any]?
 
     private var language: AppLanguage {
         AppLanguage.resolved(from: appLanguageCode)
@@ -180,8 +189,22 @@ struct ContentView: View {
         .onReceive(messageStore.$unreadCounts) { _ in
             syncAppBadge()
         }
+        .onReceive(notificationStore.$notificationsById) { _ in
+            // socialUnreadCount is derived from the notification set, which can
+            // shift without the raw unreadCount total changing (e.g. one social
+            // read + one DM arriving in the same sync) — re-sync the badge on
+            // set changes too, not just count changes.
+            syncAppBadge()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .kaiXSystemNotificationTapped)) { note in
             handleSystemNotificationTap(note)
+        }
+        .onChange(of: appState.currentUser?.id) { _, userId in
+            // Session just became available: replay a notification tap that
+            // arrived before bootstrap finished (cold-start deep link).
+            guard userId != nil, let payload = pendingNotificationPayload else { return }
+            pendingNotificationPayload = nil
+            routeNotificationPayload(payload)
         }
         .onReceive(NotificationCenter.default.publisher(for: .kaiXConversationShouldRefresh)) { _ in
             guard KaiXBackend.token != nil else { return }
@@ -260,6 +283,13 @@ struct ContentView: View {
             appChrome.select(.search)
             appRouter.setActiveTab(.search)
             appRouter.open(.city(regionCode: identifier.lowercased()), in: .search)
+        case "guide":
+            // machi://guide/journey/<key> — Guide journey deep link.
+            let parts = url.pathComponents.filter { $0 != "/" }
+            guard parts.count >= 2, parts[0] == "journey", !parts[1].isEmpty else { return }
+            appChrome.select(.guide)
+            appRouter.setActiveTab(.guide)
+            appRouter.open(.guideJourney(key: parts[1]), in: .guide)
         case "conversation", "dm":
             // Private: opening a thread needs a signed-in user.
             guard appState.currentUser != nil, !identifier.isEmpty else { return }
@@ -274,13 +304,32 @@ struct ContentView: View {
     /// Route a tapped system banner. DM / inquiry banners land in the chat
     /// itself; everything else routes to the post (or just the home feed).
     private func handleSystemNotificationTap(_ note: Notification) {
-        guard appState.currentUser != nil else { return }
-        let conversationId = note.userInfo?["conversationId"] as? String
-        let postId = note.userInfo?["postId"] as? String
+        guard appState.currentUser != nil else {
+            // Cold start from a killed app: the tap fires before bootstrap
+            // resolves the session. Keep the payload and replay it from the
+            // `currentUser` onChange below instead of dropping the deep link.
+            pendingNotificationPayload = note.userInfo ?? [:]
+            return
+        }
+        routeNotificationPayload(note.userInfo)
+    }
+
+    private func routeNotificationPayload(_ userInfo: [AnyHashable: Any]?) {
+        let conversationId = userInfo?["conversationId"] as? String
+        let postId = userInfo?["postId"] as? String
+        let listingId = userInfo?["listingId"] as? String
         if let conversationId, !conversationId.isEmpty {
             appChrome.select(.messages)
             appRouter.setActiveTab(.messages)
             appRouter.open(.conversation(conversationId: conversationId), in: .messages)
+            return
+        }
+        // Saved-search match banners land on the listing itself (same
+        // destination as the machi://listing deep link).
+        if let listingId, !listingId.isEmpty {
+            appChrome.select(.search)
+            appRouter.setActiveTab(.search)
+            appRouter.open(.cityListingDetail(listingId: listingId), in: .search)
             return
         }
         appChrome.select(.home)
@@ -374,7 +423,11 @@ struct ContentView: View {
     }
 
     private func syncAppBadge() {
-        let totalUnread = notificationStore.unreadCount + messageStore.totalUnreadCount
+        // Social unread + per-conversation DM unread. NotificationStore's raw
+        // unreadCount also counts `.message`/`.listingInquiry` rows, which
+        // mirror the very conversations MessageStore already counts — summing
+        // that would badge every unread DM twice.
+        let totalUnread = notificationStore.socialUnreadCount + messageStore.totalUnreadCount
         SystemNotificationService.shared.syncBadge(unreadCount: totalUnread)
     }
 
@@ -385,6 +438,7 @@ struct ContentView: View {
             actorId: dto.actor?.id ?? dto.actor_id,
             targetPostId: dto.target_post_id,
             targetCommentId: dto.target_comment_id,
+            targetListingId: dto.target_listing_id,
             targetConversationId: dto.target_conversation_id,
             content: dto.content ?? "",
             isRead: dto.is_read,
@@ -394,15 +448,10 @@ struct ContentView: View {
         )
     }
 
-    private func parseServerDate(_ raw: String?) -> Date? {
-        guard let raw, !raw.isEmpty else { return nil }
-        let withFraction = ISO8601DateFormatter()
-        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = withFraction.date(from: raw) { return date }
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime]
-        return iso.date(from: raw)
-    }
+    // Delegate to the cached KXDateParsing formatters (see ServerEntityFactory)
+    // instead of allocating fresh ISO8601DateFormatters — this runs for every
+    // notification row on every 12s poll tick.
+    private func parseServerDate(_ raw: String?) -> Date? { KXDateParsing.parse(raw) }
 
     /// First-run shows the onboarding value cards (guest-first); after that, or
     /// once dismissed, the auth screen. Deferring registration friction behind a
@@ -413,7 +462,11 @@ struct ContentView: View {
             AuthView(onAuthenticated: completeLogin, onBrowseAsGuest: enterAsGuest)
         } else {
             OnboardingView(
-                onBrowseAsGuest: { hasSeenOnboarding = true; enterAsGuest() },
+                onBrowseAsGuest: {
+                    hasSeenOnboarding = true
+                    enterAsGuest()
+                    routeOnboardingPersonaJourney()
+                },
                 onContinueToAuth: { hasSeenOnboarding = true }
             )
         }
@@ -427,6 +480,53 @@ struct ContentView: View {
         sessionStore.setCurrentUser(user.id)
         userStore.setCurrentUser(user)
         appState.state = .loaded
+        syncOnboardingPersonaToGuideProfile()
+    }
+
+    /// First guest entry from onboarding: a pre-arrival / just-arrived persona
+    /// lands directly on its matching Guide journey (mirrors the
+    /// machi://guide/journey deep-link routing) so the first screen is the one
+    /// that actually helps. first_year / long_term / skipped keep the default
+    /// home feed.
+    private func routeOnboardingPersonaJourney() {
+        guard let key = guideJourneyKey(forArrivalStage: onboardingPersona) else { return }
+        appChrome.select(.guide)
+        appRouter.setActiveTab(.guide)
+        appRouter.open(.guideJourney(key: key), in: .guide)
+    }
+
+    /// Push the onboarding persona into the server-side Guide profile
+    /// (`arrival_stage`) once a real session exists. The PATCH endpoint is a
+    /// full-replace upsert, so read-merge the current profile first and skip
+    /// entirely when the server already has a stage (never clobber a value the
+    /// user set later in the Guide identity form). Best-effort: any failure is
+    /// silent — the persona stays local and personalization keeps working.
+    private func syncOnboardingPersonaToGuideProfile() {
+        let persona = onboardingPersona
+        guard !persona.isEmpty, KaiXBackend.token != nil else { return }
+        Task {
+            guard let current = try? await KaiXAPIClient.shared.guideProfile() else { return }
+            let profile = current.profile
+            if let stage = profile?.arrivalStage, !stage.isEmpty { return }
+            var payload = KaiXGuideProfileUpdatePayload(
+                identityType: profile?.identityType,
+                city: profile?.city,
+                isInJapan: profile?.isInJapan,
+                visaStatus: profile?.visaStatus,
+                visaExpiresAt: profile?.visaExpiresAt,
+                japaneseLevel: profile?.japaneseLevel,
+                targetJapaneseLevel: profile?.targetJapaneseLevel,
+                graduationDate: profile?.graduationDate,
+                targetEntryTerm: profile?.targetEntryTerm,
+                targetIndustry: profile?.targetIndustry,
+                targetSchoolType: profile?.targetSchoolType,
+                weeklyAvailableMinutes: profile?.weeklyAvailableMinutes,
+                needsMaterials: profile?.needsMaterials,
+                needsServices: profile?.needsServices
+            )
+            payload.arrivalStage = persona
+            _ = try? await KaiXAPIClient.shared.updateGuideProfile(payload)
+        }
     }
 
     /// Enter the app as a guest (logged-out browsing). The guest is a local

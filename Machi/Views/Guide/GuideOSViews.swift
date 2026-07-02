@@ -377,6 +377,43 @@ struct GuideOSMiniBadge: View {
     }
 }
 
+/// Whole days from local-today to a `yyyy-MM-dd` date (negative = past).
+func guideOSDaysLeft(_ raw: String?) -> Int? {
+    guard let date = GuideOSDate.parse(raw) else { return nil }
+    let calendar = Calendar.current
+    return calendar.dateComponents(
+        [.day],
+        from: calendar.startOfDay(for: Date()),
+        to: calendar.startOfDay(for: date)
+    ).day
+}
+
+/// 剩余天数状态徽章 for documents / contracts: an at-a-glance traffic light
+/// (>30 天灰、≤30 橙、≤7 红、过期红底) computed purely from the stored date —
+/// 在留卡逾期是遣返级事故，登记表必须自己会报警。
+struct GuideOSExpiryBadge: View {
+    @Environment(\.appLanguage) private var language
+    let expiresAt: String?
+
+    var body: some View {
+        if let days = guideOSDaysLeft(expiresAt) {
+            let expired = days < 0
+            let tint: Color = days <= 7 ? .red : (days <= 30 ? .orange : .secondary)
+            let text = expired
+                ? guideOSText(language, "已过期", "期限切れ", "Expired")
+                : days == 0
+                    ? guideOSText(language, "今天到期", "本日期限", "Due today")
+                    : guideOSText(language, "剩 \(days) 天", "残り\(days)日", "\(days)d left")
+            Text(text)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(expired ? Color.white : tint)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(expired ? AnyShapeStyle(Color.red) : AnyShapeStyle(tint.opacity(0.13)), in: Capsule())
+        }
+    }
+}
+
 struct GuideOSEmptyMini: View {
     let text: String
 
@@ -577,7 +614,7 @@ struct GuideContractsView: View {
                 LazyVStack(alignment: .leading, spacing: 14) {
                     GuideOSHeaderRow(
                         title: guideOSText(language, "合同管理", "契約管理", "Contracts"),
-                        subtitle: guideOSText(language, "只记到期、续约与解约窗口并自动提醒——不需要上传合同原件，重要文件请你自己保管。", "満了・更新・解約期間だけ記録して自動通知します。契約書のアップロードは不要、原本はご自身で保管を。", "Just the expiry / renewal / cancellation dates with reminders — no need to upload the contract itself; keep the original yourself.")
+                        subtitle: guideOSText(language, "记录到期、续约与解约窗口并自动提醒。原件可选上传，私密加密，仅自己可见。", "満了・更新・解約期間を記録して自動通知。原本のアップロードは任意で、暗号化のうえ自分だけが閲覧できます。", "Track expiry, renewal, and cancellation windows with reminders. Uploading the contract is optional — encrypted and visible only to you.")
                     )
                     contractForm
                     if let message = model.message { GuideOSNotice(message: message) }
@@ -612,9 +649,9 @@ struct GuideContractsView: View {
         .navigationTitle(guideOSText(language, "合同管理", "契約管理", "Contracts"))
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            if model.requireLogin(guideOSText(language, "登录后可以管理合同和到期提醒。", "ログインすると契約や期限のリマインダーを管理できます。", "Log in to manage contracts and expiry reminders.")) {
-                await model.loadContracts()
-            }
+            // 游客可以随意浏览（工作台承诺「保存时再登录」）；登录墙只在保存时弹。
+            guard model.isLoggedIn else { return }
+            await model.loadContracts()
         }
         .refreshable { await model.loadContracts() }
     }
@@ -631,7 +668,7 @@ struct GuideContractsView: View {
                         .frame(minHeight: 44)
                 }
             }
-            Label(guideOSText(language, "只记关键信息，不收合同原件 · 你的隐私由你掌握", "重要情報のみ記録、契約書は預かりません", "We store only key details, never the contract file"), systemImage: "lock.shield.fill")
+            Label(guideOSText(language, "原件可选上传 · 私密加密，仅自己可见", "原本のアップロードは任意 · 暗号化され自分のみ閲覧可", "Original upload optional · encrypted, visible only to you"), systemImage: "lock.shield.fill")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 10)
@@ -744,10 +781,13 @@ struct GuideContractsView: View {
         category = "housing"
         title = ""
         provider = ""
+        // Restore the same smart defaults as first load (~1 年合同 + 到期前 1–2
+        // 个月解约窗口) — resetting to "today" everywhere meant the next 误存
+        // instantly created an already-due contract and fired 到期 reminders.
         startDate = Date()
-        endDate = Date()
-        cancellationStart = Date()
-        cancellationEnd = Date()
+        endDate = Calendar.current.date(byAdding: .year, value: 1, to: Date()) ?? Date()
+        cancellationStart = Calendar.current.date(byAdding: .day, value: 305, to: Date()) ?? Date()
+        cancellationEnd = Calendar.current.date(byAdding: .day, value: 335, to: Date()) ?? Date()
         autoRenew = false
         monthlyCost = ""
         yearlyCost = ""
@@ -776,6 +816,7 @@ private struct GuideContractRow: View {
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 6) {
                         Text(item.title).font(.subheadline.weight(.bold)).lineLimit(2)
+                        GuideOSExpiryBadge(expiresAt: item.endDate)
                         if item.autoRenew { GuideOSMiniBadge(text: guideOSText(language, "自动续约", "自動更新", "Auto-renew")) }
                     }
                     if !item.provider.isEmpty { Text(item.provider).font(.caption).foregroundStyle(.secondary) }
@@ -840,7 +881,7 @@ struct GuideDocumentsView: View {
                 LazyVStack(alignment: .leading, spacing: 14) {
                     GuideOSHeaderRow(
                         title: guideOSText(language, "证件到期", "証明書期限", "Document expiry"),
-                        subtitle: guideOSText(language, "只填写到期日期即可，不上传证件图片，也不需要证件号码。", "有効期限だけ入力し、画像や番号は不要です。", "Add only an expiry date. No image or document number is needed.")
+                        subtitle: guideOSText(language, "只填到期日期即可，不需要证件号码。图片原件可选上传，私密加密，仅自己可见。", "有効期限だけでOK、番号は不要です。画像のアップロードは任意で、暗号化のうえ自分だけが閲覧できます。", "Just add an expiry date — no document number needed. Uploading a photo is optional, encrypted, and visible only to you.")
                     )
                     GuideOSEmptyMini(text: guideOSText(language, "隐私优先：所有日期都可选；不填写任何身份资料也能完整使用 Guide。", "プライバシー優先：日付はすべて任意。身分情報を入力しなくてもGuideを使えます。", "Privacy first: every date is optional; Guide works fully without any ID details."))
                     documentForm
@@ -869,9 +910,9 @@ struct GuideDocumentsView: View {
                 didInitTitle = true
                 if title.isEmpty, let label = categories.first(where: { $0.0 == category })?.1 { title = label }
             }
-            if model.requireLogin(guideOSText(language, "登录后可以保存证件到期提醒。", "ログインすると証明書の期限リマインダーを保存できます。", "Log in to save document expiry reminders.")) {
-                await model.loadDocuments()
-            }
+            // 游客可以随意浏览（工作台承诺「保存时再登录」）；登录墙只在保存时弹。
+            guard model.isLoggedIn else { return }
+            await model.loadDocuments()
         }
         .refreshable { await model.loadDocuments() }
     }
@@ -959,7 +1000,10 @@ private struct GuideDocumentRow: View {
                     .frame(width: 42, height: 42)
                     .background(Color.cyan.opacity(0.12), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(item.title).font(.subheadline.weight(.bold))
+                    HStack(spacing: 6) {
+                        Text(item.title).font(.subheadline.weight(.bold))
+                        GuideOSExpiryBadge(expiresAt: item.expiresAt)
+                    }
                     if let expiresAt = item.expiresAt {
                         Label(GuideOSDate.short(expiresAt), systemImage: "calendar.badge.exclamationmark")
                             .font(.caption.weight(.semibold))

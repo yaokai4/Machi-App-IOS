@@ -86,6 +86,7 @@ final class SystemNotificationService: NSObject {
             content.threadIdentifier = "machi.\(notification.typeRaw)"
             var info: [String: Any] = ["type": notification.typeRaw]
             if let postId = notification.targetPostId { info["postId"] = postId }
+            if let listingId = notification.targetListingId { info["listingId"] = listingId }
             if let conversationId = notification.targetConversationId { info["conversationId"] = conversationId }
             content.userInfo = info
             if let conversationId = info["conversationId"] as? String {
@@ -139,6 +140,8 @@ final class SystemNotificationService: NSObject {
         case .bookmark: action = L("notifBookmarked", language)
         case .message:  action = L("notifMessaged", language)
         case .listingInquiry: action = L("notifInquired", language)
+        // No meaningful actor — the "actor" is just the listing's seller.
+        case .savedSearch: return L("notifSavedSearch", language)
         case .system:   return L("systemNotification", language)
         }
         guard !actorName.isEmpty else { return action }
@@ -196,6 +199,7 @@ extension SystemNotificationService: UNUserNotificationCenterDelegate {
         let userInfo = response.notification.request.content.userInfo
         var payload: [String: Any] = [:]
         if let postId = userInfo["postId"] as? String { payload["postId"] = postId }
+        if let listingId = userInfo["listingId"] as? String { payload["listingId"] = listingId }
         if let conversationId = userInfo["conversationId"] as? String { payload["conversationId"] = conversationId }
         if let conversationId = Self.conversationId(from: userInfo) {
             payload["conversationId"] = conversationId

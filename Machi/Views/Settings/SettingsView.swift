@@ -9,7 +9,6 @@ struct SettingsView: View {
     @AppStorage("appLanguageCode") private var appLanguageCode = AppLanguage.system.rawValue
     @AppStorage("appAppearance") private var appAppearance = AppAppearance.light.rawValue
     @AppStorage("accountEmail") private var accountEmail = ""
-    @AppStorage("blockedUserIds") private var blockedUserIdsRaw = ""
     @StateObject private var viewModel = ProfileViewModel()
     @State private var showLogoutConfirm = false
     @State private var didEnter = false
@@ -154,8 +153,12 @@ struct SettingsView: View {
                 NotificationPreferencesView(currentUser: currentUser)
             }
             SettingsDivider()
+            SettingsRowLink(icon: "bell.and.waves.left.and.right", tint: .mint, title: L("savedSearchesTitle", language), subtitle: L("savedSearchesSubtitle", language)) {
+                SavedSearchesView()
+            }
+            SettingsDivider()
             SettingsRowLink(icon: "hand.raised.fill", tint: .indigo, title: L("privacySettings", language), value: L("public", language), subtitle: L("privacySettingsSubtitle", language)) {
-                PrivacySettingsView()
+                PrivacySettingsView(currentUser: currentUser)
             }
         }
     }
@@ -231,7 +234,9 @@ struct SettingsView: View {
     }
 
     private var blockedUserCount: Int {
-        blockedUserIdsRaw.split(separator: "|").filter { !$0.isEmpty }.count
+        KXBlocklist.migrateLegacyIfNeeded(to: currentUser.id)
+        let raw = UserDefaults.standard.string(forKey: KXBlocklist.storageKey(for: currentUser.id)) ?? ""
+        return raw.split(separator: "|").filter { !$0.isEmpty }.count
     }
 
     private var blocklistSubtitle: String {
@@ -335,7 +340,7 @@ private struct SettingsRolePill: View {
     }
 
     private var tint: Color {
-        if user.isMachiOfficialAccount { return Color(red: 0.05, green: 0.48, blue: 0.45) }
+        if user.isMachiOfficialAccount { return KXColor.official }
         if user.isVerifiedMember { return .blue }
         return user.role == .member ? .secondary : KXColor.accent
     }

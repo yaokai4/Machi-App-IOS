@@ -906,7 +906,7 @@ struct AccountSecuritySettingsView: View {
             }
             SettingsDivider()
             SettingsRowLink(icon: "person.crop.circle.badge.xmark", tint: .red, title: L("blocklist", language), subtitle: L("blocklistSubtitle", language)) {
-                BlocklistSettingsView()
+                BlocklistSettingsView(currentUser: currentUser)
             }
             SettingsDivider()
             SettingsRowLink(icon: "trash", tint: .orange, title: L("clearCache", language), subtitle: L("clearCacheSubtitle", language)) {
@@ -1825,6 +1825,7 @@ struct NotificationPreferencesView: View {
 
 struct PrivacySettingsView: View {
     @Environment(\.appLanguage) private var language
+    let currentUser: UserEntity
     // Mirrors the server's `privacy_protect` / `privacy_allow_dm` —
     // identical semantics to the Web settings page. AppStorage keeps the
     // last known values for offline display.
@@ -1859,7 +1860,7 @@ struct PrivacySettingsView: View {
             Divider()
 
             NavigationLink {
-                BlocklistSettingsView()
+                BlocklistSettingsView(currentUser: currentUser)
             } label: {
                 HStack(spacing: KXSpacing.md) {
                     Label(L("blocklist", language), systemImage: "person.crop.circle.badge.xmark")
@@ -2022,12 +2023,35 @@ struct LoginDevicesView: View {
     }
 }
 
+/// Per-account key for the local blocklist mirror. The old device-global
+/// "blockedUserIds" leaked account A's blocks into account B on the same
+/// device; migrate any legacy value once, then retire the global key.
+enum KXBlocklist {
+    static func storageKey(for userId: String) -> String { "blockedUserIds.\(userId)" }
+
+    static func migrateLegacyIfNeeded(to userId: String) {
+        let defaults = UserDefaults.standard
+        let key = storageKey(for: userId)
+        guard (defaults.string(forKey: key) ?? "").isEmpty,
+              let legacy = defaults.string(forKey: "blockedUserIds"), !legacy.isEmpty else { return }
+        defaults.set(legacy, forKey: key)
+        defaults.removeObject(forKey: "blockedUserIds")
+    }
+}
+
 struct BlocklistSettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
-    @AppStorage("blockedUserIds") private var blockedUserIdsRaw = ""
+    @AppStorage private var blockedUserIdsRaw: String
     @State private var blockedUsers: [UserEntity] = []
     @State private var errorMessage: String?
+    let currentUser: UserEntity
+
+    init(currentUser: UserEntity) {
+        self.currentUser = currentUser
+        KXBlocklist.migrateLegacyIfNeeded(to: currentUser.id)
+        _blockedUserIdsRaw = AppStorage(wrappedValue: "", KXBlocklist.storageKey(for: currentUser.id))
+    }
 
     var body: some View {
         SettingsFormPage(title: L("blocklist", language)) {
@@ -2108,12 +2132,12 @@ struct BlocklistSettingsView: View {
     }
 
     private func loadBlockedUsers() async {
-        // The server blocklist is the source of truth (shared with web);
-        // merge any ids it returns into the local mirror that the rest of
-        // the app uses for content filtering.
-        if let serverBlocked = try? await KaiXAPIClient.shared.blockedUsers() {
-            let merged = (blockedUserIds + serverBlocked.map(\.id)).removingDuplicates()
-            let joined = merged.joined(separator: "|")
+        // The server blocklist is the source of truth (shared with web). It
+        // REPLACES the local mirror — the old union-merge meant an unblock
+        // done on web could never take effect here. Server unreachable →
+        // keep the local mirror as a read-only cache.
+        if !currentUser.isGuest, let serverBlocked = try? await KaiXAPIClient.shared.blockedUsers() {
+            let joined = serverBlocked.map(\.id).removingDuplicates().joined(separator: "|")
             if joined != blockedUserIdsRaw { blockedUserIdsRaw = joined }
         }
         guard !blockedUserIds.isEmpty else {
@@ -2130,11 +2154,21 @@ struct BlocklistSettingsView: View {
     }
 
     private func unblock(_ userId: String) {
+        // Optimistic removal, but the server write must stick — a silent
+        // failure left the user "unblocked" here while still blocked
+        // server-side (and the id came back on the next reload).
+        let snapshot = blockedUserIdsRaw
         blockedUserIdsRaw = blockedUserIds
             .filter { $0 != userId }
             .joined(separator: "|")
-        // Propagate to the server so the unblock sticks across devices/web.
-        Task { try? await KaiXAPIClient.shared.setBlock(userId, false) }
+        Task {
+            do {
+                try await KaiXAPIClient.shared.setBlock(userId, false)
+            } catch {
+                blockedUserIdsRaw = snapshot
+                errorMessage = error.kaixUserMessage
+            }
+        }
     }
 }
 
@@ -2393,6 +2427,7 @@ struct DeleteAccountView: View {
     @State private var confirmText = ""
     @State private var showFinalConfirm = false
     @State private var isDeleting = false
+    @State private var showDeletedConfirm = false
     @State private var errorMessage: String?
     let currentUser: UserEntity
     let onDeleted: () -> Void
@@ -2424,6 +2459,14 @@ struct DeleteAccountView: View {
             }
             Button(L("cancel", language), role: .cancel) {}
         }
+        .alert(L("accountDeletedTitle", language), isPresented: $showDeletedConfirm) {
+            Button(L("done", language)) {
+                onDeleted()
+                dismiss()
+            }
+        } message: {
+            Text(L("accountDeletedBody", language))
+        }
     }
 
     private func deleteAccount() async {
@@ -2433,13 +2476,14 @@ struct DeleteAccountView: View {
         defer { isDeleting = false }
 
         do {
-            if KaiXBackend.token != nil {
-                try await KaiXAPIClient.shared.deleteMe()
-            }
+            // Single server entry point: UserRepository.deleteAccount already
+            // calls deleteMe() when a token exists. Calling it here as well
+            // deleted twice — the second call 401'd against the now-dead
+            // session and could surface an error (and a spurious "session
+            // expired" downgrade) for an account that WAS just deleted.
             try await UserRepository(context: modelContext).deleteAccount(user: currentUser)
             AuthService.shared.logout()
-            onDeleted()
-            dismiss()
+            showDeletedConfirm = true
         } catch {
             errorMessage = error.kaixUserMessage
         }

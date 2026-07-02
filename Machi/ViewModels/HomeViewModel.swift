@@ -27,6 +27,12 @@ final class HomeViewModel: ObservableObject {
     // rows between windows, so window N+1 could re-serve window N's posts.
     private var pendingRemoteBundle: ServerEntityFactory.PostBundle?
     private var pendingRemoteBundleIsCachedSnapshot = false
+    // The server ANSWERED and the page was genuinely empty (e.g. a guest's
+    // 关注 tab). Distinct from "sync failed" (bundle nil, flag false): without
+    // this marker loadPage fell through to repository.fetchPage, which in
+    // remote mode fired a SECOND identical /api/feed request just to learn
+    // "empty" again — every empty feed cost two round trips.
+    private var pendingRemoteBundleIsEmptyPage = false
     // Every post id currently in `posts` — appended pages are filtered
     // against this so a shifted local window can never show a duplicate.
     private var loadedIds = Set<String>()
@@ -85,6 +91,7 @@ final class HomeViewModel: ObservableObject {
         remoteHasMore = false
         pendingRemoteBundle = nil
         pendingRemoteBundleIsCachedSnapshot = false
+        pendingRemoteBundleIsEmptyPage = false
         loadedIds = []
         if clearExisting {
             posts = []
@@ -235,6 +242,16 @@ final class HomeViewModel: ObservableObject {
                 if usedCachedSnapshotPage {
                     canLoadMore = false
                 }
+            } else if pendingRemoteBundleIsEmptyPage {
+                // The server answered with a truly empty page — render it as
+                // such instead of falling through to repository.fetchPage,
+                // which (in remote mode) re-issued the same feed request.
+                // canLoadMore mirrors the old outcome for an empty page:
+                // page.count < pageSize and remoteHasMore == false ⇒ false.
+                pendingRemoteBundleIsEmptyPage = false
+                usedRemotePage = true
+                page = []
+                canLoadMore = false
             } else {
                 usedRemotePage = false
                 page = try await repository.fetchPage(mode: requestedMode, currentUserId: currentUser.id, page: currentPage, pageSize: KaiXConfig.pageSize)
@@ -304,6 +321,8 @@ final class HomeViewModel: ObservableObject {
             remoteHasMore = page.next_cursor != nil && !page.items.isEmpty
             pendingRemoteBundle = page.items.isEmpty ? nil : ServerEntityFactory.postBundle(from: page.items)
             pendingRemoteBundleIsCachedSnapshot = false
+            // Remember "server said empty" so loadPage doesn't re-request.
+            pendingRemoteBundleIsEmptyPage = page.items.isEmpty
             // Snapshot the first page so a future offline cold launch can still
             // show something instead of a blank feed. Best-effort, never blocks.
             if cursor == nil {
@@ -321,6 +340,8 @@ final class HomeViewModel: ObservableObject {
                 pendingRemoteBundle = nil
                 pendingRemoteBundleIsCachedSnapshot = false
             }
+            // A FAILED sync is not an empty page — keep the local fallback path.
+            pendingRemoteBundleIsEmptyPage = false
             // Keep the previous cursor state so a transient network error
             // doesn't permanently stop remote pagination.
         }
@@ -408,7 +429,13 @@ final class HomeViewModel: ObservableObject {
         let hydratedPosts = posts + originalPosts
         let authorIds = Set(hydratedPosts.map(\.authorId))
         let missingAuthorIds = authorIds.subtracting(Set(authors.keys))
-        let authorIdsToFetch = reset ? authorIds : missingAuthorIds
+        // Missing-only on reset too: the server feed response embeds each
+        // post's author and loadPage merged those fresh entries into `authors`
+        // before hydrate runs, so re-fetching every author here repeated one
+        // HTTP round trip per distinct author on every refresh. Only ids the
+        // page bundle didn't cover are fetched. First load is unchanged —
+        // `authors` starts empty, so "missing" == "all".
+        let authorIdsToFetch = missingAuthorIds
         if !authorIdsToFetch.isEmpty {
             let postAuthors = try await userRepository.fetchUsers(ids: authorIdsToFetch)
             authors.merge(Dictionary(uniqueKeysWithValues: postAuthors.map { ($0.id, $0) })) { _, new in new }
@@ -416,25 +443,31 @@ final class HomeViewModel: ObservableObject {
         if refreshRecommendations {
             recommendedUsers = try await userRepository.fetchRecommendedUsers(excluding: currentUser.id, limit: 10)
         }
-        let postsNeedingMedia: [PostEntity]
-        if reset {
-            postsNeedingMedia = hydratedPosts
-        } else {
-            let knownMediaPostIds = Set(mediaByPostId.keys)
-            postsNeedingMedia = hydratedPosts.filter { !knownMediaPostIds.contains($0.id) }
-        }
+        // Missing-only media hydration on reset too: the feed bundle already
+        // delivered an entry (possibly []) for every post on the page and
+        // loadPage merged it into `mediaByPostId`, so re-fetching media for
+        // every post cost one HTTP round trip PER POST per refresh (the feed's
+        // N+1). Only posts without a known entry are fetched now; on reset the
+        // map is then rebuilt to exactly the hydrated ids, preserving the old
+        // behavior of pruning entries left over from the previous feed.
+        let knownMediaPostIds = Set(mediaByPostId.keys)
+        let postsNeedingMedia = hydratedPosts.filter { !knownMediaPostIds.contains($0.id) }
+        var fetchedMedia: [String: [MediaEntity]] = [:]
         if !postsNeedingMedia.isEmpty {
-            var fetchedMedia = try await repository.fetchMedia(for: postsNeedingMedia)
+            fetchedMedia = try await repository.fetchMedia(for: postsNeedingMedia)
             for post in postsNeedingMedia where fetchedMedia[post.id] == nil {
                 fetchedMedia[post.id] = []
             }
-            if reset {
-                mediaByPostId = fetchedMedia
-            } else {
-                mediaByPostId.merge(fetchedMedia) { _, new in new }
+        }
+        if reset {
+            var rebuilt: [String: [MediaEntity]] = [:]
+            rebuilt.reserveCapacity(hydratedPosts.count)
+            for post in hydratedPosts {
+                rebuilt[post.id] = fetchedMedia[post.id] ?? mediaByPostId[post.id] ?? []
             }
-        } else if reset {
-            mediaByPostId = [:]
+            mediaByPostId = rebuilt
+        } else if !fetchedMedia.isEmpty {
+            mediaByPostId.merge(fetchedMedia) { _, new in new }
         }
     }
 }

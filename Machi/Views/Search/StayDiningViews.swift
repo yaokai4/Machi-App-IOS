@@ -250,9 +250,10 @@ struct KXStayListingCard: View {
         )
     }
 
-    /// 右上角爱心：乐观切换，失败回滚；同时写入本地收藏。
+    /// 右上角爱心：乐观切换，失败回滚；同时写入本地收藏。游客先弹登录。
     private var heartButton: some View {
         Button {
+            guard GuestSession.requireSignedIn(reason: KXListingCopy.pickText(language, "登录后可以收藏喜欢的信息。", "ログインするとお気に入りに保存できます。", "Sign in to save listings you like.")) else { return }
             let next = !favorited
             favorited = next
             FavoritesStore.shared.set(favoriteSnapshot, on: next)

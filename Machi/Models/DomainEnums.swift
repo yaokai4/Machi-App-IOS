@@ -74,6 +74,8 @@ enum NotificationType: String, CaseIterable, Identifiable {
     case message
     // Someone contacted the user about one of their listings.
     case listingInquiry = "listing_inquiry"
+    // A new listing matched one of the user's saved searches.
+    case savedSearch = "saved_search"
     case system
 
     var id: String { rawValue }

@@ -917,6 +917,7 @@ struct ProfileView: View {
         } else {
             HStack(spacing: 8) {
                 Button {
+                    guard GuestSession.requireSignedIn(currentUser, reason: KXListingCopy.pickText(language, "登录后可以发私信。", "ログインするとメッセージを送れます。", "Sign in to send messages.")) else { return }
                     guard !isBlocked else {
                         menuMessage = L("userBlocked", language)
                         return
@@ -1212,7 +1213,7 @@ private struct ProfileRoleBadge: View {
     let title: String
     var isOfficial = false
 
-    private var tint: Color { isOfficial ? Color(red: 0.05, green: 0.48, blue: 0.45) : KXColor.accent }
+    private var tint: Color { isOfficial ? KXColor.official : KXColor.accent }
 
     var body: some View {
         Label(title, systemImage: isOfficial ? "checkmark.shield.fill" : "checkmark.seal.fill")
@@ -1626,6 +1627,7 @@ private struct FollowListView: View {
     }
 
     private func openMessage(with user: UserEntity) async {
+        guard GuestSession.requireSignedIn(currentUser, reason: KXListingCopy.pickText(language, "登录后可以发私信。", "ログインするとメッセージを送れます。", "Sign in to send messages.")) else { return }
         guard user.id != currentUser.id else { return }
         do {
             let thread = try await MessageRepository(context: modelContext)

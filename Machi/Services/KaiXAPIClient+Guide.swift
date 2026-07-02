@@ -707,11 +707,16 @@ extension KaiXAPIClient {
 
     // MARK: - Machi AI (原创 in-app assistant)
 
-    func guideAIBootstrap(country: String = "jp", language: String = "zh-CN") async throws -> KaiXGuideAIBootstrapResponse {
+    /// `guestId` (signed-out callers only) rides the `X-Machi-Guest-Id` header
+    /// so the server can compute the guest taster quota; pass nil when logged in.
+    func guideAIBootstrap(country: String = "jp", language: String = "zh-CN",
+                          guestId: String? = nil) async throws -> KaiXGuideAIBootstrapResponse {
+        var headers: [String: String] = [:]
+        if let guestId, !guestId.isEmpty { headers["X-Machi-Guest-Id"] = guestId }
         let data = try await request("GET", "/api/guide/ai/bootstrap", queryItems: [
             URLQueryItem(name: "country", value: country),
             URLQueryItem(name: "language", value: language),
-        ])
+        ], extraHeaders: headers)
         return try decode(data)
     }
 
@@ -739,9 +744,11 @@ extension KaiXAPIClient {
     /// Send one turn to Machi AI. A nil `conversationId` starts a new thread.
     /// Longer timeout than the default JSON budget because answering takes a
     /// few seconds; the 429 `AI_QUOTA_EXCEEDED` surfaces as a `KaiXAPIError`.
+    /// `guestId` (signed-out callers only) carries the stable client UUID in
+    /// `X-Machi-Guest-Id` for the server-enforced guest taster quota.
     func sendGuideAIMessage(conversationId: String?, message: String, country: String = "jp",
                             language: String = "zh-CN", category: String? = nil,
-                            ability: String? = nil) async throws -> KaiXGuideAIChatResponse {
+                            ability: String? = nil, guestId: String? = nil) async throws -> KaiXGuideAIChatResponse {
         struct Body: Encodable {
             let conversationId: String?
             let message: String
@@ -750,10 +757,13 @@ extension KaiXAPIClient {
             let category: String?
             let ability: String?
         }
+        var headers: [String: String] = [:]
+        if let guestId, !guestId.isEmpty { headers["X-Machi-Guest-Id"] = guestId }
         let data = try await request(
             "POST", "/api/guide/ai/chat",
             body: Body(conversationId: conversationId, message: message, country: country,
                        language: language, category: category, ability: ability),
+            extraHeaders: headers,
             timeoutInterval: 40
         )
         return try decode(data)

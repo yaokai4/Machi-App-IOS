@@ -33,16 +33,33 @@ struct MembershipView: View {
         store.state == .loading || store.state == .purchasing || store.state == .verifying
     }
 
+    /// Best-known validity end: server truth first, local mirror as fallback.
+    private var expiryDate: Date? {
+        if let d = MembershipView.parseDate(store.currentPeriodEnd) { return d }
+        return currentUser.verifiedMemberUntil
+    }
+
+    /// Had a membership that has since lapsed (shows "expired" + repurchase).
+    private var isExpired: Bool {
+        guard !isActive, let end = expiryDate else { return false }
+        return end < Date()
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 hero
                 if isActive { activeCard }
+                if isExpired { expiredCard }
                 if isActive, let ins = insights { insightsCard(ins) }
                 if !store.plans.isEmpty { planCards }
                 benefits
                 memberLibraryEntry
-                if !isActive { purchaseControls }
+                // Always shown: active members can renew/extend (the server
+                // simply extends the validity period), expired members can
+                // buy again. Membership is a one-time pass, not auto-renew,
+                // so hiding the buy button from active members was a dead end.
+                purchaseControls
                 purchaseDisclosure
                 safetyNotice
             }
@@ -69,11 +86,23 @@ struct MembershipView: View {
                 insights = try? await KaiXAPIClient.shared.membershipInsights().totals
             }
         }
-        .onChange(of: store.membershipActive) { _, active in
-            // Persist server truth onto the local user so the badge and
-            // compose-gating reflect it across the whole app.
-            currentUser.isVerifiedMember = active
-            currentUser.membershipStatus = active ? "active" : currentUser.membershipStatus
+        .onDisappear {
+            // Stop the page-level Transaction.updates listener — without this
+            // every visit leaked a permanently-resident listener. The
+            // app-level IAPTransactionObserver keeps handling transactions.
+            store.stop()
+        }
+        .onChange(of: store.serverSyncRevision) { _, _ in
+            // Persist server truth onto the local user UNCONDITIONALLY (not
+            // only when the active flag flips) so an expiry the server
+            // reports is mirrored even when the local user still says
+            // "member" — badge and compose-gating then update everywhere.
+            currentUser.isVerifiedMember = store.membershipActive
+            if !store.serverStatus.isEmpty {
+                currentUser.membershipStatus = store.serverStatus
+            } else if store.membershipActive {
+                currentUser.membershipStatus = "active"
+            }
             currentUser.verifiedMemberUntil = MembershipView.parseDate(store.currentPeriodEnd)
             try? modelContext.save()
         }
@@ -96,7 +125,12 @@ struct MembershipView: View {
     }
 
     private var priceText: String {
+        // StoreKit's localized price is authoritative for what Apple will
+        // actually charge; the server label is only a fallback.
         if !store.displayPrice.isEmpty { return store.displayPrice }
+        if store.state == .loading {
+            return ml("正在获取价格…", "Fetching price…", "価格を取得中…")
+        }
         return store.selectedPlan?.displayPriceLabel ?? L("membershipPlanFallback", language)
     }
 
@@ -127,7 +161,7 @@ struct MembershipView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
-                        Text(plan.displayPriceLabel)
+                        Text(store.storeDisplayPrice(for: plan))
                             .font(.title3.weight(.heavy))
                             .foregroundStyle(.primary)
                         if let discount = plan.discountLabel ?? plan.discount_label, !discount.isEmpty {
@@ -175,12 +209,31 @@ struct MembershipView: View {
     }
 
     private var untilText: String? {
-        let raw = store.currentPeriodEnd.isEmpty
-            ? (currentUser.verifiedMemberUntil.map { ISO8601DateFormatter().string(from: $0) } ?? "")
-            : store.currentPeriodEnd
-        guard let date = MembershipView.parseDate(raw) else { return nil }
+        guard let date = expiryDate else { return nil }
         let f = DateFormatter(); f.dateStyle = .medium
         return f.string(from: date)
+    }
+
+    /// Shown to previously-paid users whose pass has lapsed: an honest
+    /// "expired" state with the purchase entry restored right below.
+    private var expiredCard: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "clock.badge.exclamationmark").foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(ml("会员已过期", "Membership expired", "メンバーシップの有効期限が切れています"))
+                    .font(.subheadline.weight(.semibold))
+                if let until = untilText {
+                    Text(ml("有效期至 \(until)，购买后可继续使用会员权益。",
+                            "Expired on \(until). Purchase again to keep your member benefits.",
+                            "\(until) に期限切れになりました。再購入すると会員特典を継続できます。"))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 14).fill(KXColor.softBackground))
     }
 
     private func insightsCard(_ totals: KaiXMembershipInsightsTotals) -> some View {
@@ -278,6 +331,15 @@ struct MembershipView: View {
         .buttonStyle(.plain)
     }
 
+    /// Buy-button label. Active members see an explicit "renew" framing —
+    /// the server simply extends the current validity period.
+    private var purchaseCTALabel: String {
+        guard let plan = store.selectedPlan else { return L("membershipCTA", language) }
+        let base = "\(plan.displayName) · \(store.storeDisplayPrice(for: plan))"
+        guard isActive else { return base }
+        return "\(ml("续期", "Renew", "延長")) · \(base)"
+    }
+
     @ViewBuilder
     private var purchaseControls: some View {
         VStack(spacing: 10) {
@@ -291,7 +353,7 @@ struct MembershipView: View {
                     if store.state == .purchasing || store.state == .verifying {
                         KXSpinner(size: 18, lineWidth: 2.2)
                     }
-                    Text(store.selectedPlan.map { "\($0.displayName) · \($0.displayPriceLabel)" } ?? L("membershipCTA", language))
+                    Text(purchaseCTALabel)
                         .font(.headline.weight(.semibold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.72)
@@ -301,7 +363,9 @@ struct MembershipView: View {
                 .foregroundStyle(.white)
                 .background(Capsule().fill(KXColor.accent))
             }
-            .disabled(store.product == nil || isPaymentBusy)
+            // Also disabled while a paid charge awaits server confirmation —
+            // buying again there is exactly the double-charge we must prevent.
+            .disabled(store.product == nil || isPaymentBusy || store.state == .verifyFailedPendingCredit)
             .opacity(store.product == nil ? 0.6 : 1)
 
             Button {
@@ -316,18 +380,39 @@ struct MembershipView: View {
                 }
                 .foregroundStyle(KXColor.accent)
             }
-            .disabled(isPaymentBusy)
+            .disabled(isPaymentBusy || store.state == .verifyFailedPendingCredit)
 
             if store.state == .pending {
                 Text(L("membershipPurchasePending", language))
                     .font(.caption).foregroundStyle(.secondary)
+            }
+            if store.state == .verifyFailedPendingCredit {
+                // Honest state: Apple charged, the server hasn't confirmed
+                // yet. NEVER phrased as "purchase failed, retry".
+                VStack(spacing: 8) {
+                    Text(ml("已完成支付，正在确认到账，请勿重复购买。",
+                            "Payment received — we're confirming it with the server. Please don't purchase again.",
+                            "お支払いは完了しています。入金確認中のため、再度購入しないでください。"))
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .multilineTextAlignment(.center)
+                    Button {
+                        Task { await store.reverifyPendingCredit() }
+                    } label: {
+                        Text(ml("重新确认", "Confirm again", "再確認する"))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(KXColor.accent)
+                    }
+                }
             }
             if let failure = paymentFailureMessage {
                 Text(failure)
                     .font(.caption).foregroundStyle(.red)
                     .multilineTextAlignment(.center)
             } else if store.product == nil {
-                Text(L("membershipProductUnavailable", language))
+                Text(store.state == .loading
+                     ? ml("正在获取价格…", "Fetching price…", "価格を取得中…")
+                     : productUnavailableMessage)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -335,17 +420,38 @@ struct MembershipView: View {
         }
     }
 
+    /// User-facing wording (no App Store Connect jargon).
+    private var productUnavailableMessage: String {
+        ml("暂时无法从 App Store 获取该商品，请稍后再试。",
+           "This item isn't available from the App Store right now. Please try again later.",
+           "現在 App Store からこの商品を取得できません。しばらくしてからもう一度お試しください。")
+    }
+
     private var paymentFailureMessage: String? {
         guard case .failed(let code) = store.state else { return nil }
         switch code {
         case "product_unavailable":
-            return L("membershipProductUnavailable", language)
+            return productUnavailableMessage
         case "restore_sync_failed":
             return L("membershipRestoreFailed", language)
         case "restore_no_purchases":
             return L("membershipRestoreNoPurchases", language)
+        case "restore_verify_failed":
+            return ml("找到购买记录，但与服务器确认失败，请稍后重试。",
+                      "We found your purchase but couldn't confirm it with the server. Please try again later.",
+                      "購入記録は見つかりましたが、サーバーでの確認に失敗しました。しばらくしてからもう一度お試しください。")
         default:
             return L("membershipPurchaseFailed", language)
+        }
+    }
+
+    /// Local three-language helper for copy not yet in LocalizationService
+    /// (same pattern as WalletView.wl / guideText).
+    private func ml(_ zh: String, _ en: String, _ ja: String) -> String {
+        switch language {
+        case .en: return en
+        case .ja: return ja
+        default: return zh
         }
     }
 

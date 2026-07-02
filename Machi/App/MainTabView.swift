@@ -84,6 +84,19 @@ struct MainTabView: View {
             }
         }
         .animation(.snappy(duration: 0.22), value: chrome.isTabBarHidden)
+        .task(id: currentUser.id) {
+            // App-level IAP recovery: once a signed-in user reaches the main
+            // UI, drain Transaction.unfinished (re-verify with the backend)
+            // and stay resident on Transaction.updates — so a paid purchase
+            // gets credited even if the membership/wallet pages are never
+            // opened again. Guests can't call the verify endpoints (401),
+            // so the observer only runs for signed-in users.
+            if currentUser.isGuest {
+                IAPTransactionObserver.shared.stop()
+            } else {
+                IAPTransactionObserver.shared.start()
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
             // Tabs are kept alive (opacity 0) forever for instant switching, so
             // memory only grows. Under pressure, drop every tab except the one on
@@ -226,7 +239,7 @@ struct MainTabView: View {
                     case "notifications":
                         NotificationsView(currentUser: currentUser)
                     case "privacy":
-                        PrivacySettingsView()
+                        PrivacySettingsView(currentUser: currentUser)
                     case "membership":
                         MembershipView(currentUser: currentUser)
                     case "bookmarks":

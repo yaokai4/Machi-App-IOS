@@ -193,6 +193,12 @@ struct HomeTimelineView: View {
         let feedPosts = visibleFeedPosts
         return ScrollView {
             LazyVStack(spacing: 8) {
+                // "下一步该办什么" Guide-journey hook. Renders nothing when
+                // there is no journey hint, and loads independently — it can
+                // never delay the feed. Sits above the ForEach so the
+                // load-more trigger (anchored to feedPosts.last) is unaffected.
+                HomeJourneyNextStepCard(currentUser: currentUser)
+
                 if feedPosts.isEmpty {
                     EmptyStateView(
                         title: KXListingCopy.pickText(language, "这里还没有热榜内容", "まだ急上昇コンテンツがありません", "No hot posts here yet"),

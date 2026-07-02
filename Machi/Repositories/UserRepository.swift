@@ -21,12 +21,25 @@ final class UserRepository {
     func fetchUsers(ids: Set<String>) async throws -> [UserEntity] {
         let normalizedIds = Self.nonEmptyIds(ids)
         guard !normalizedIds.isEmpty else { return [] }
-        var remoteUsers: [UserEntity] = []
-        for id in normalizedIds {
-            if let dto = try? await KaiXAPIClient.shared.userDetail(id) {
-                remoteUsers.append(Self.entity(from: dto))
+        // Fetch the per-user details concurrently instead of one await at a
+        // time: feed hydration passes up to a page of distinct author ids, and
+        // the old serial loop cost N sequential round trips (N × RTT). Results
+        // are reassembled in `normalizedIds` order so the downstream
+        // dedupe/sort sees exactly the same input as before, and per-id
+        // failures stay silently skipped (same `try?` semantics).
+        let detailById: [String: KaiXUserDTO] = await withTaskGroup(of: (String, KaiXUserDTO?).self) { group in
+            for id in normalizedIds {
+                group.addTask { (id, try? await KaiXAPIClient.shared.userDetail(id)) }
             }
+            var collected: [String: KaiXUserDTO] = [:]
+            for await (id, dto) in group {
+                if let dto { collected[id] = dto }
+            }
+            return collected
         }
+        let remoteUsers = normalizedIds
+            .compactMap { detailById[$0] }
+            .map(Self.entity(from:))
         if !remoteUsers.isEmpty || !KaiXRuntimeFlags.allowLocalStoreFallback {
             return Self.uniqueUsers(remoteUsers)
                 .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }

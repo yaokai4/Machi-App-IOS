@@ -108,6 +108,13 @@ struct GuideHomeView: View {
                         // Machi AI —— 原创助手入口，放在资料库与分类网格之前。
                         GuideAIEntryCard()
 
+                        // Journey 门面:把「路径」页的行动路径带到首页第一屏,
+                        // 横滑 2-4 张;登录用户叠真实进度,数据为空自动隐藏。
+                        GuideJourneySpotlight(
+                            journeys: viewModel.homeJourneys.isEmpty ? (home.journeys ?? []) : viewModel.homeJourneys,
+                            progress: viewModel.journeyProgress
+                        )
+
                         // 高价值资料库优先:学校库 / 公司库在六大指南之前。
                         GuideLibraryDualEntry()
 
@@ -801,7 +808,9 @@ struct GuideMemberResourcesView: View {
                     }
                 }
                 if !membershipActive {
-                    Text(guideText(language, "非会员可查看预览，完整内容需开通会员或在 Web 端完成相应购买后同步查看。", "非会員はプレビューを確認できます。全文は会員登録、または Web で購入後に同じアカウントで同期して閲覧できます。", "Non-members can view previews. Full content is available after membership or a synced web purchase."))
+                    // Neutral entitlement copy only — Apple 3.1.1 forbids
+                    // steering users to purchase outside the app.
+                    Text(guideText(language, "非会员可查看预览，购买或开通会员后可查看完整内容。", "非会員はプレビューを確認できます。購入または会員登録後に全文を閲覧できます。", "Non-members can view previews. Purchase or activate membership to view the full content."))
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(KXColor.accent)
                         .padding(10)
@@ -886,10 +895,9 @@ struct GuideProductDetailView: View {
                         if product.access?.canAccess == true {
                             purchasedContentPanel(product)
                         } else if let preview = product.previewContent, !preview.isEmpty {
-                            previewPanel(preview, locked: product.hasPurchaseContent == true)
+                            previewPanel(preview, product: product)
                         }
                         productDescription(product)
-                        GuideNotePanel(text: guideText(language, "数字资料商品在 Apple IAP 接入前显示「即将开放」。服务类只提交预约咨询，不在 iOS 内提供外部支付按钮。", "デジタル資料は Apple IAP 接続前は「まもなく公開」と表示されます。サービス類は予約相談のみで、iOS 内に外部決済ボタンは表示しません。", "Digital resources show as coming soon until Apple IAP is connected. Services only submit appointment inquiries; no external payment buttons are shown in iOS."))
                     }
                     .padding(KXSpacing.screen)
                     .guideBottomInset()
@@ -1067,7 +1075,8 @@ struct GuideProductDetailView: View {
     }
 
     @ViewBuilder
-    private func previewPanel(_ preview: String, locked: Bool) -> some View {
+    private func previewPanel(_ preview: String, product: KaiXGuideProductDTO) -> some View {
+        let locked = product.hasPurchaseContent == true
         KXCard(padding: 18, radius: 22) {
             VStack(alignment: .leading, spacing: 8) {
                 Label(guideText(language, "预览内容", "プレビュー", "Preview"), systemImage: "lock.fill")
@@ -1078,9 +1087,31 @@ struct GuideProductDetailView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 if locked {
-                    Text(guideText(language, "完整内容请在 Web 端购买或开通会员后，于 iOS 登录同一账号查看。", "全文は Web で購入または会員登録後、iOS で同じアカウントにログインして確認してください。", "Buy on the web or activate membership, then sign in with the same account on iOS to view the full content."))
+                    // Neutral entitlement copy only — Apple 3.1.1 forbids
+                    // steering users to purchase outside the app. When the
+                    // item can be bought with Machi Coins, offer that
+                    // in-app path right here.
+                    Text(guideText(language, "购买或开通会员后可查看完整内容。", "購入または会員登録後に全文を閲覧できます。", "Purchase or activate membership to view the full content."))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                    if product.canBuyWithPoints == true {
+                        Button {
+                            Task { await productPointsAction(product) }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "circle.hexagongrid.fill").foregroundStyle(.orange)
+                                Text(pointsCTALabel(product))
+                                    .font(.subheadline.weight(.bold))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 40)
+                            .background(KXColor.accentSoft, in: Capsule())
+                            .foregroundStyle(KXColor.accent)
+                        }
+                        .buttonStyle(.fullArea)
+                        .contentShape(Rectangle())
+                        .disabled(isSubmitting)
+                    }
                 }
             }
         }

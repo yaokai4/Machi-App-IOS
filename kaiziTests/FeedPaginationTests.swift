@@ -57,6 +57,7 @@ struct FeedPaginationTests {
             user_id: "me",
             target_post_id: "server-post-9",
             target_comment_id: nil,
+            target_listing_id: nil,
             target_conversation_id: nil,
             content: "喜欢了你的帖子",
             is_read: false,

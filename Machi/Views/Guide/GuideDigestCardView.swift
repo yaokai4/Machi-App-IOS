@@ -13,7 +13,11 @@ final class GuideDigestViewModel: ObservableObject {
 
     func load() async {
         guard isLoggedIn else { digest = nil; return }
-        digest = try? await KaiXAPIClient.shared.guideDigest()
+        // Keep the last digest on failure/cancellation (a refresh cancels the
+        // previous `.task(id:)` run) — stale numbers beat a card that blinks out.
+        if let fresh = try? await KaiXAPIClient.shared.guideDigest() {
+            digest = fresh
+        }
     }
 
     func quickSetup(_ profile: String) async {
@@ -30,6 +34,10 @@ struct GuideDigestCardView: View {
     @StateObject private var vm = GuideDigestViewModel()
 
     let isGuest: Bool
+    /// Bump to re-fetch the digest. `.task(id:)` re-runs whenever this changes,
+    /// so the workbench can refresh 本月要点 on pull-to-refresh / re-appear —
+    /// before this the card loaded once and the numbers went stale after 记账.
+    var refreshToken: Int = 0
 
     var body: some View {
         Group {
@@ -39,7 +47,7 @@ struct GuideDigestCardView: View {
                 if d.hasSetup { digestCard(d) } else { setupCard }
             }
         }
-        .task { if !isGuest { await vm.load() } }
+        .task(id: refreshToken) { if !isGuest { await vm.load() } }
     }
 
     // MARK: 本月要点
@@ -113,6 +121,13 @@ struct GuideDigestCardView: View {
     private func digestRows(_ d: KaiXGuideDigestDTO) -> [DigestRow] {
         var rows: [DigestRow] = []
         func dleft(_ n: Int) -> String { n <= 0 ? guideOSText(language, "今天", "今日", "today") : guideOSText(language, "\(n) 天后", "\(n)日後", "in \(n)d") }
+        func docRow(_ doc: KaiXGuideDigestDTO.DocExpiry) -> DigestRow {
+            let s = doc.daysLeft < 0 ? guideOSText(language, "已过期", "期限切れ", "expired") : "\(dleft(doc.daysLeft))\(guideOSText(language, "到期", "期限", " expires"))"
+            return .init(icon: "person.text.rectangle.fill", tone: doc.daysLeft <= 7 ? .red : .cyan, text: "\(doc.title) · \(s)", route: .guideDocuments)
+        }
+        // 在留卡逾期是遣返级事故：expired / ≤7 天的证件红项永远置顶，绝不被账单挤掉。
+        let urgentDocs = d.documentExpiries.filter { $0.daysLeft <= 7 }.sorted { $0.daysLeft < $1.daysLeft }
+        for doc in urgentDocs.prefix(2) { rows.append(docRow(doc)) }
         for b in d.upcomingBills.prefix(3) {
             let amt = b.amount > 0 ? " \(guideMoney(b.amount))" : ""
             rows.append(.init(icon: "creditcard.fill", tone: .orange, text: "\(b.title)\(amt) · \(dleft(b.daysLeft))\(guideOSText(language, "扣款", "支払い", " due"))", route: .guideLifePlanner))
@@ -125,9 +140,8 @@ struct GuideDigestCardView: View {
             let s = a.over ? guideOSText(language, "已超预算", "予算超過", "over budget") : guideOSText(language, "接近上限", "上限間近", "near limit")
             rows.append(.init(icon: "chart.pie.fill", tone: a.over ? .red : .orange, text: "\(vm.label(a.category, language)) \(s) · \(guideMoney(a.spent)) / \(guideMoney(a.limit))", route: .guideFinance))
         }
-        for doc in d.documentExpiries.prefix(2) {
-            let s = doc.daysLeft < 0 ? guideOSText(language, "已过期", "期限切れ", "expired") : "\(dleft(doc.daysLeft))\(guideOSText(language, "到期", "期限", " expires"))"
-            rows.append(.init(icon: "person.text.rectangle.fill", tone: doc.daysLeft < 0 ? .red : .cyan, text: "\(doc.title) · \(s)", route: .guideDocuments))
+        for doc in d.documentExpiries.filter({ $0.daysLeft > 7 }).prefix(2) {
+            rows.append(docRow(doc))
         }
         return Array(rows.prefix(6))
     }

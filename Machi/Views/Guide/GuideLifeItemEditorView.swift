@@ -113,7 +113,8 @@ struct GuideLifePlannerView: View {
         }
         .task {
             await model.loadLifePresets()
-            if !model.requireLogin() { return }
+            // 游客可以随意浏览；登录墙只在保存时弹（工作台承诺「保存时再登录」）。
+            guard model.isLoggedIn else { return }
             await model.loadLifeItems()
             await model.loadTodos(type: "life_payment")
         }

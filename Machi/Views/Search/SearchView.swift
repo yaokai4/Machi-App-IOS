@@ -1,589 +1,6 @@
 import SwiftData
 import SwiftUI
 
-struct SearchView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Environment(\.appLanguage) private var language
-    @EnvironmentObject private var chrome: AppChromeState
-    @EnvironmentObject private var postStore: PostStore
-    @EnvironmentObject private var userStore: UserStore
-    @EnvironmentObject private var searchStore: SearchStore
-    @EnvironmentObject private var router: AppRouter
-    @StateObject private var viewModel = SearchViewModel()
-    @ObservedObject private var regionStore = RegionStore.shared
-    @State private var scope = SearchScope.hot
-    @State private var recentSearchesStorage = ""
-    @State private var searchDebounceTask: Task<Void, Never>?
-    @State private var savedSearchSaving = false
-    @State private var savedSearchDone = false
-
-    let currentUser: UserEntity
-
-    private var recommendedUsers: [UserEntity] {
-        var uniqueUsers: [String: UserEntity] = [:]
-        for user in viewModel.suggestedUsers + Array(viewModel.authors.values) {
-            uniqueUsers[user.id] = user
-        }
-        return uniqueUsers.values
-            .filter { $0.id != currentUser.id }
-            .filter { viewModel.query.isEmpty || $0.displayName.localizedCaseInsensitiveContains(viewModel.query) || $0.username.localizedCaseInsensitiveContains(viewModel.query.normalizedUsername) }
-            .sorted { $0.followerCount > $1.followerCount }
-    }
-
-    private var recentSearches: [String] {
-        recentSearchesStorage.split(separator: "|").map(String.init).filter { !$0.isEmpty }
-    }
-
-    private var recentSearchKey: String {
-        "recentSearches.\(currentUser.id)"
-    }
-
-    private var visiblePopularRegions: [KaiXRegionDirectory.Region] {
-        let country = currentUser.country.isEmpty ? regionStore.current?.countryCode : currentUser.country
-        guard let country, !country.isEmpty else {
-            return Array(KaiXRegionDirectory.popular.prefix(16))
-        }
-        return Array(KaiXRegionDirectory.popular.filter { $0.countryCode == country }.prefix(16))
-    }
-
-    var body: some View {
-        Group {
-            switch viewModel.state {
-            case .loading, .idle:
-                LoadingView()
-            case .empty:
-                EmptyStateView(title: L("emptySearch", language), subtitle: L("searchPlaceholder", language), systemImage: "magnifyingglass")
-            case .error(let message):
-                ErrorStateView(message: message) {
-                    Task { await viewModel.load(context: modelContext, currentUser: currentUser, postStore: postStore, searchStore: searchStore) }
-                }
-            case .loaded:
-                content
-            }
-        }
-        .kxPageBackground()
-        .accessibilityIdentifier("search.root")
-        .toolbar(.hidden, for: .navigationBar)
-        .task {
-            recentSearchesStorage = UserDefaults.standard.string(forKey: recentSearchKey) ?? ""
-            await viewModel.load(context: modelContext, currentUser: currentUser, postStore: postStore, searchStore: searchStore)
-        }
-        .onChange(of: viewModel.query) { _, newValue in
-            searchDebounceTask?.cancel()
-            searchDebounceTask = Task {
-                try? await Task.sleep(for: .milliseconds(280))
-                guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    viewModel.updateDebouncedQuery(newValue)
-                }
-            }
-        }
-        .onChange(of: viewModel.debouncedQuery) { _, _ in
-            savedSearchDone = false
-            if scope == .listings { Task { await viewModel.searchListings() } }
-        }
-        .onChange(of: scope) { _, newScope in
-            if newScope == .listings { Task { await viewModel.searchListings() } }
-        }
-    }
-
-    private var content: some View {
-        VStack(spacing: 0) {
-            discoverHeader
-
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 14) {
-                recentSearchSection
-                localPulseSection
-                trendingOverviewSection
-                popularRegionsSection
-                contentTypeHotGrid
-                SearchScopePicker(selection: $scope)
-
-                switch scope {
-                case .hot:
-                    rankedItems(title: L("hotSearchRank", language), items: viewModel.filteredTrendingItems)
-                case .news:
-                    rankedItems(title: L("newsRank", language), items: viewModel.latestTrendingItems)
-                case .topics:
-                    topicGrid
-                case .users:
-                    recommendedUserSection
-                case .listings:
-                    listingResults
-                }
-            }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
-                .padding(.top, 14)
-            .padding(.bottom, chrome.bottomContentPadding + KXSpacing.lg)
-            }
-            .refreshable {
-                await viewModel.load(context: modelContext, currentUser: currentUser, postStore: postStore, searchStore: searchStore)
-            }
-        }
-    }
-
-    private var discoverHeader: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: KXSpacing.md) {
-                Button {
-                    router.open(.profile(userId: currentUser.id))
-                } label: {
-                    AvatarView(user: currentUser, size: 42)
-                        .overlay(Circle().stroke(KXColor.cardBackground, lineWidth: 2))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(L("profile", language))
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(L("discover", language))
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(.primary)
-                    Button {
-                        if let region = regionStore.current {
-                            router.open(.city(regionCode: region.regionCode))
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "location.fill")
-                                .font(.caption2.weight(.bold))
-                            Text(regionStore.current.map { KaiXRegionDirectory.localizedHeaderLabel($0, language: language) } ?? L("pickRegion", language))
-                                .font(.caption.weight(.bold))
-                                .lineLimit(1)
-                        }
-                        .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                Spacer()
-
-                Button {
-                    if let region = regionStore.current {
-                        router.open(.city(regionCode: region.regionCode))
-                    }
-                } label: {
-                    Image(systemName: "map.fill")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(KXColor.accent)
-                        .frame(width: 40, height: 40)
-                        .kxGlassCircle()
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("地图")
-            }
-
-            Button {
-                router.open(.search(initialQuery: nil))
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.headline.weight(.bold))
-                    Text(L("searchPlaceholder", language))
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    Spacer()
-                }
-                .padding(.horizontal, KXSpacing.md)
-                .frame(height: 46)
-                .kxGlassCapsule()
-                .overlay {
-                    Capsule()
-                        .stroke(KXColor.glassStroke.opacity(0.86), lineWidth: 0.8)
-                }
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(L("searchPlaceholder", language))
-        }
-        .padding(.horizontal, KaiXTheme.horizontalPadding)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
-        .kxGlassBar(ignoresTopSafeArea: true)
-        .overlay(alignment: .bottom) {
-            Divider().opacity(0.18)
-        }
-    }
-
-    @ViewBuilder
-    private var recentSearchSection: some View {
-        if viewModel.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
-            EmptyView()
-        } else if recentSearches.isEmpty == false {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text(L("recentSearches", language))
-                        .font(.headline.weight(.semibold))
-                    Spacer()
-                    Button(L("clear", language)) {
-                        recentSearchesStorage = ""
-                        UserDefaults.standard.set("", forKey: recentSearchKey)
-                    }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                }
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: 8) {
-                        ForEach(recentSearches, id: \.self) { item in
-                            Button {
-                                viewModel.query = item
-                            } label: {
-                                Text(item)
-                                    .font(.subheadline.weight(.bold))
-                                    .padding(.horizontal, 12)
-                                    .frame(height: 34)
-                                    .kxGlassCapsule()
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private func saveRecentSearch() {
-        let trimmed = viewModel.query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.isEmpty == false else { return }
-        var items = recentSearches.filter { $0.caseInsensitiveCompare(trimmed) != .orderedSame }
-        items.insert(trimmed, at: 0)
-        recentSearchesStorage = items.prefix(8).joined(separator: "|")
-        UserDefaults.standard.set(recentSearchesStorage, forKey: recentSearchKey)
-    }
-
-    private var cityHotItems: [TrendingItem] {
-        let local = viewModel.trendingItems(region: regionStore.current, limit: 8)
-        return local.isEmpty ? Array(viewModel.trendingItems.prefix(8)) : local
-    }
-
-    private var countryHotItems: [TrendingItem] {
-        let country = viewModel.countryTrendingItems(region: regionStore.current, limit: 8)
-        return country.isEmpty ? Array(viewModel.trendingItems.prefix(8)) : country
-    }
-
-    private var heroItems: [TrendingItem] {
-        let merged = cityHotItems + countryHotItems + viewModel.trendingItems
-        var seen = Set<String>()
-        return merged.filter { seen.insert($0.id).inserted }.prefix(6).map { $0 }
-    }
-
-    @ViewBuilder
-    private var localPulseSection: some View {
-        let items = heroItems
-        if !items.isEmpty {
-            DiscoverPulseCard(
-                region: regionStore.current,
-                items: items,
-                topics: Array(viewModel.topics.prefix(8)),
-                language: language,
-                onOpenItem: { item in
-                    saveRecentSearch()
-                    open(item)
-                },
-                onOpenTopic: { topic in
-                    router.open(.topic(tag: topic.name))
-                }
-            )
-        }
-    }
-
-    private var trendingOverviewSection: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            LazyHStack(spacing: KXSpacing.sm) {
-                DiscoverOverviewCard(
-                    title: regionStore.current.map { "\($0.cityName) \(L("hot", language))" } ?? L("hot", language),
-                    icon: "location.fill",
-                    tint: KXColor.rankSky,
-                    item: cityHotItems.first,
-                    language: language,
-                    onOpen: { if let item = cityHotItems.first { open(item) } }
-                )
-                DiscoverOverviewCard(
-                    title: regionStore.current.map {
-                        let country = KaiXRegionDirectory.localizedCountryName(.init(code: $0.countryCode, name: $0.countryName, emoji: $0.countryEmoji, tier: 1, hasProvinces: !$0.provinceCode.isEmpty), language: language)
-                        return "\(country) \(L("hot", language))"
-                    } ?? L("trending", language),
-                    icon: "globe.asia.australia.fill",
-                    tint: KXColor.rankTeal,
-                    item: countryHotItems.first,
-                    language: language,
-                    onOpen: { if let item = countryHotItems.first { open(item) } }
-                )
-                DiscoverOverviewCard(
-                    title: L("trending", language),
-                    icon: "flame.fill",
-                    tint: KXColor.heat,
-                    item: viewModel.trendingItems.first,
-                    language: language,
-                    onOpen: { if let item = viewModel.trendingItems.first { open(item) } }
-                )
-            }
-        }
-    }
-
-    private func rankedItems(title: String, items: [TrendingItem]) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            if items.isEmpty {
-                KXEmptyState(title: title, subtitle: L("noContent", language), systemImage: "tray")
-            } else {
-                VStack(spacing: 0) {
-                    let visibleItems = Array(items.prefix(12))
-                    ForEach(Array(visibleItems.enumerated()), id: \.element.id) { index, item in
-                        Button {
-                            saveRecentSearch()
-                            open(item)
-                        } label: {
-                            SearchRankingRow(rank: index + 1, item: item, language: language)
-                        }
-                        .buttonStyle(.plain)
-
-                        if index < visibleItems.count - 1 {
-                            Divider().padding(.leading, 58)
-                        }
-                    }
-                }
-                .kxGlassSurface(radius: KXRadius.lg)
-            }
-
-            if scope != .users && !recommendedUsers.isEmpty {
-                recommendedUserSection
-                    .padding(.top, 10)
-            }
-        }
-    }
-
-    private var discoverSections: some View {
-        VStack(alignment: .leading, spacing: KXSpacing.sm) {
-            if let region = regionStore.current {
-                compactRankingSection(title: "\(region.cityName) \(L("hot", language))", items: viewModel.trendingItems(region: region, limit: 5))
-                compactRankingSection(title: "\(KaiXRegionDirectory.localizedCountryName(.init(code: region.countryCode, name: region.countryName, emoji: region.countryEmoji, tier: 1, hasProvinces: !region.provinceCode.isEmpty), language: language)) \(L("hot", language))", items: viewModel.countryTrendingItems(region: region, limit: 5))
-            }
-            popularRegionsSection
-            contentTypeHotGrid
-        }
-    }
-
-    private func compactRankingSection(title: String, items: [TrendingItem]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-            if items.isEmpty {
-                EmptyView()
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(items.prefix(5).enumerated()), id: \.element.id) { index, item in
-                        Button {
-                            open(item)
-                        } label: {
-                            SearchRankingRow(rank: index + 1, item: item, language: language)
-                        }
-                        .buttonStyle(.plain)
-                        if index < min(items.count, 5) - 1 {
-                            Divider().padding(.leading, 58)
-                        }
-                    }
-                }
-                .kxGlassSurface(radius: KXRadius.lg)
-            }
-        }
-    }
-
-    private var popularRegionsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(L("popularCities", language))
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 8) {
-                    ForEach(visiblePopularRegions, id: \.regionCode) { region in
-                        Button {
-                            router.open(.city(regionCode: region.regionCode))
-                        } label: {
-                            Text(KaiXRegionDirectory.localizedHeaderLabel(region, language: language))
-                                .font(.caption.weight(.bold))
-                                .lineLimit(1)
-                                .padding(.horizontal, 11)
-                                .frame(height: 32)
-                                .kxGlassCapsule()
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-        }
-    }
-
-    private var contentTypeHotGrid: some View {
-        let groups: [(String, String, Color, [ContentType])] = [
-            (L("ct_news", language), "newspaper.fill", Color(red: 0.09, green: 0.48, blue: 0.94), [.news, .local_info]),
-            (L("ct_guide", language), "map.fill", KXColor.rankTeal, [.guide]),
-            (L("ct_secondhand", language), "shippingbox.fill", Color(red: 0.74, green: 0.45, blue: 0.13), [.secondhand]),
-            (L("ct_housing", language), "house.lodge.fill", Color(red: 0.13, green: 0.55, blue: 0.42), [.housing, .roommate]),
-            (L("ct_jobseek", language), "briefcase.fill", KXColor.rankViolet, [.job_seek]),
-            (L("ct_jobpost", language), "person.text.rectangle.fill", Color(red: 0.92, green: 0.35, blue: 0.30), [.job_post, .referral]),
-            (L("ct_event", language), "calendar.badge.clock", Color(red: 0.00, green: 0.52, blue: 0.72), [.event]),
-            (L("ct_meetup", language), "person.2.fill", Color(red: 0.52, green: 0.45, blue: 0.91), [.meetup, .dining]),
-            (L("ct_merchant", language), "storefront.fill", Color(red: 0.83, green: 0.39, blue: 0.61), [.merchant, .service]),
-            (L("ct_coupon", language), "ticket.fill", KXColor.heat, [.coupon]),
-        ]
-        return VStack(alignment: .leading, spacing: KXSpacing.sm) {
-            HStack {
-                Text(L("discoverRadar", language))
-                    .font(.headline.weight(.bold))
-                Spacer()
-                Text(regionStore.current?.cityName ?? L("trending", language))
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.secondary)
-            }
-
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                ForEach(groups, id: \.0) { group in
-                    let localLead = viewModel.trendingItems(region: regionStore.current, contentTypes: group.3, limit: 1).first
-                    let globalLead = viewModel.trendingItems(region: nil, contentTypes: group.3, limit: 1).first
-                    let lead = localLead ?? globalLead
-                    Button {
-                        if let lead { open(lead) }
-                    } label: {
-                        DiscoverTypeCard(
-                            title: group.0,
-                            icon: group.1,
-                            tint: group.2,
-                            item: lead,
-                            isLocal: localLead != nil,
-                            language: language
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(lead == nil)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var listingResults: some View {
-        let q = viewModel.debouncedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        VStack(alignment: .leading, spacing: 12) {
-            if q.isEmpty {
-                EmptyStateView(title: L("listings", language), subtitle: L("searchPlaceholder", language), systemImage: "magnifyingglass")
-            } else {
-                if !currentUser.isGuest {
-                    Button {
-                        guard !savedSearchSaving, !savedSearchDone else { return }
-                        savedSearchSaving = true
-                        Task {
-                            defer { savedSearchSaving = false }
-                            do {
-                                _ = try await KaiXAPIClient.shared.createSavedSearch(keyword: q, label: q)
-                                savedSearchDone = true
-                            } catch {
-                                savedSearchDone = false
-                            }
-                        }
-                    } label: {
-                        Label(
-                            savedSearchDone ? L("subscribedSearch", language) : L("subscribeSearch", language),
-                            systemImage: savedSearchDone ? "bell.fill" : "bell.badge"
-                        )
-                        .font(.subheadline.weight(.semibold))
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(savedSearchSaving || savedSearchDone)
-                    .accessibilityIdentifier("search.subscribeListing")
-                }
-                if viewModel.listingsSearchLoading && viewModel.searchedListings.isEmpty {
-                    LoadingView()
-                } else if viewModel.searchedListings.isEmpty {
-                    EmptyStateView(title: L("listingsSearchEmpty", language), subtitle: L("searchPlaceholder", language), systemImage: "magnifyingglass")
-                } else {
-                    ForEach(viewModel.searchedListings) { item in
-                        KXStructuredListingRow(listing: item) {
-                            router.open(.cityListingDetail(listingId: item.id))
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private var topicGrid: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(L("topics", language))
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                ForEach(viewModel.topics) { topic in
-                    Button {
-                        router.open(.topic(tag: topic.name))
-                    } label: {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("#\(topic.name)")
-                                .font(.subheadline.weight(.semibold))
-                                .lineLimit(1)
-                            Text("\(topic.postCount) \(L("posts", language))")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(12)
-                        .frame(maxWidth: .infinity, minHeight: 78, alignment: .leading)
-                        .kxGlassSurface(radius: KXRadius.md)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
-
-    private func open(_ item: TrendingItem) {
-        switch item.type {
-        case .post, .news:
-            guard let postId = item.targetId ?? item.postId, !postId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                router.routeErrorMessage = L("postDeletedHelp", language)
-                return
-            }
-            router.open(.postDetail(postId: postId))
-        case .topic:
-            guard let topicId = item.targetId ?? item.topicId, !topicId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                router.routeErrorMessage = L("noTopicPosts", language)
-                return
-            }
-            router.open(.topic(tag: topicId))
-        case .user:
-            guard let userId = item.targetId ?? item.userId, !userId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                router.routeErrorMessage = L("unknownUser", language)
-                return
-            }
-            router.open(.profile(userId: userId))
-        }
-    }
-
-    private var recommendedUserSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(L("recommendedFollow", language))
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            ForEach(recommendedUsers.prefix(6)) { user in
-                SearchUserRow(
-                    user: user,
-                    isFollowing: viewModel.followingIds.contains(user.id),
-                    onOpen: { router.open(.profile(userId: user.id)) },
-                    onFollow: {
-                        Task { await viewModel.toggleFollow(context: modelContext, currentUser: currentUser, target: user, userStore: userStore) }
-                    }
-                )
-            }
-        }
-    }
-}
-
 struct SearchScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -596,6 +13,9 @@ struct SearchScreen: View {
     @StateObject private var viewModel = SearchViewModel()
     @State private var recentSearchesStorage = ""
     @State private var searchDebounceTask: Task<Void, Never>?
+    @State private var serverSearchTask: Task<Void, Never>?
+    @State private var savedSearchSaving = false
+    @State private var savedSearchDone = false
     @FocusState private var isSearchFocused: Bool
 
     let currentUser: UserEntity
@@ -619,10 +39,32 @@ struct SearchScreen: View {
             .sorted { $0.followerCount > $1.followerCount }
     }
 
+    // Server hits (/api/search) lead each section; the instant client-side
+    // filters over the preloaded hot items fill in while the request runs
+    // (and remain the offline fallback). Dedup keeps overlap invisible.
+    private var combinedPostItems: [TrendingItem] {
+        var seen = Set<String>()
+        return (viewModel.serverPostItems + viewModel.filteredTrendingItems)
+            .filter { seen.insert($0.id).inserted }
+    }
+
+    private var combinedTopics: [TopicEntity] {
+        var seen = Set<String>()
+        return (viewModel.serverTopics + viewModel.filteredTopics)
+            .filter { seen.insert($0.name).inserted }
+    }
+
+    private var combinedUsers: [UserEntity] {
+        var seen = Set<String>()
+        return (viewModel.serverUsers + userResults)
+            .filter { $0.id != currentUser.id && seen.insert($0.id).inserted }
+    }
+
     private var hasResults: Bool {
-        !viewModel.filteredTrendingItems.isEmpty
-        || !viewModel.filteredTopics.isEmpty
-        || !userResults.isEmpty
+        !combinedPostItems.isEmpty
+        || !combinedTopics.isEmpty
+        || !combinedUsers.isEmpty
+        || !viewModel.searchedListings.isEmpty
     }
 
     var body: some View {
@@ -634,7 +76,14 @@ struct SearchScreen: View {
                 case .loading, .idle:
                     LoadingView()
                 case .empty:
-                    KXEmptyState(title: L("emptySearch", language), subtitle: L("searchPlaceholder", language), systemImage: "magnifyingglass")
+                    // The preloaded hot/topic pool can be empty (fresh region,
+                    // guest) — server search must still work, so an active
+                    // query renders the results content, not a dead end.
+                    if trimmedQuery.isEmpty {
+                        KXEmptyState(title: L("emptySearch", language), subtitle: L("searchPlaceholder", language), systemImage: "magnifyingglass")
+                    } else {
+                        resultsContent
+                    }
                 case .error(let message):
                     ErrorStateView(message: message) {
                         Task { await load() }
@@ -646,6 +95,15 @@ struct SearchScreen: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .kxPageBackground()
+        .overlay(alignment: .top) {
+            if let message = viewModel.followErrorMessage {
+                KXInlineNotice(message: message) {
+                    viewModel.followErrorMessage = nil
+                }
+                .padding(.top, 64)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
         .toolbar(.hidden, for: .navigationBar)
         .task {
             recentSearchesStorage = UserDefaults.standard.string(forKey: recentSearchKey) ?? ""
@@ -668,12 +126,20 @@ struct SearchScreen: View {
                 }
             }
         }
+        .onChange(of: viewModel.debouncedQuery) { _, _ in
+            // Every settled query hits the server (/api/search) — the client
+            // filters above only cover the ~30 preloaded hot items.
+            savedSearchDone = false
+            serverSearchTask?.cancel()
+            serverSearchTask = Task { await viewModel.searchServer() }
+        }
         .onChange(of: isSearchFocused) { _, focused in
             chrome.setHidden(focused, reason: .input)
         }
         .onDisappear {
             chrome.setHidden(false, reason: .input)
             searchDebounceTask?.cancel()
+            serverSearchTask?.cancel()
         }
     }
 
@@ -744,14 +210,24 @@ struct SearchScreen: View {
                     topicSection(title: L("topics", language), topics: viewModel.topics.prefix(8).map { $0 })
                     usersSection(title: L("recommendedFollow", language), users: userResults.prefix(6).map { $0 })
                 } else if hasResults {
-                    rankingSection(title: L("posts", language), items: viewModel.filteredTrendingItems, limit: 10)
-                    topicSection(title: L("topics", language), topics: Array(viewModel.filteredTopics.prefix(8)))
-                    usersSection(title: L("users", language), users: Array(userResults.prefix(8)))
+                    subscribeSearchButton
+                    listingsSection
+                    rankingSection(title: L("posts", language), items: combinedPostItems, limit: 10)
+                    topicSection(title: L("topics", language), topics: Array(combinedTopics.prefix(8)))
+                    usersSection(title: L("users", language), users: Array(combinedUsers.prefix(8)))
                     rankingSection(title: L("newsRank", language), items: viewModel.latestTrendingItems, limit: 6)
+                } else if viewModel.serverSearchLoading {
+                    // First server round-trip for this query — don't flash
+                    // "no results" while it's still in flight.
+                    LoadingView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 28)
                 } else {
                     KXEmptyState(title: L("emptySearch", language), subtitle: viewModel.query, systemImage: "magnifyingglass")
                         .frame(maxWidth: .infinity)
                         .padding(.top, 28)
+                    subscribeSearchButton
+                        .frame(maxWidth: .infinity)
                 }
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
@@ -795,6 +271,55 @@ struct SearchScreen: View {
                             }
                             .buttonStyle(.plain)
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Migrated from the retired SearchView's listings scope: subscribe to the
+    /// current keyword (POST /api/saved_searches) so new matching listings
+    /// notify the user. Hidden for guests — saved searches are per-account.
+    @ViewBuilder
+    private var subscribeSearchButton: some View {
+        let q = trimmedQuery
+        if !currentUser.isGuest, !q.isEmpty {
+            Button {
+                guard !savedSearchSaving, !savedSearchDone else { return }
+                savedSearchSaving = true
+                Task {
+                    defer { savedSearchSaving = false }
+                    do {
+                        _ = try await KaiXAPIClient.shared.createSavedSearch(keyword: q, label: q)
+                        savedSearchDone = true
+                    } catch {
+                        savedSearchDone = false
+                    }
+                }
+            } label: {
+                Label(
+                    savedSearchDone ? L("subscribedSearch", language) : L("subscribeSearch", language),
+                    systemImage: savedSearchDone ? "bell.fill" : "bell.badge"
+                )
+                .font(.subheadline.weight(.semibold))
+            }
+            .buttonStyle(.bordered)
+            .disabled(savedSearchSaving || savedSearchDone)
+            .accessibilityIdentifier("search.subscribeListing")
+        }
+    }
+
+    /// Migrated from the retired SearchView's listings scope: cross-city
+    /// listing hits from /api/search (kind=all) as structured rows.
+    @ViewBuilder
+    private var listingsSection: some View {
+        if !viewModel.searchedListings.isEmpty {
+            VStack(alignment: .leading, spacing: KXSpacing.sm) {
+                KXSectionHeader(title: L("listings", language))
+                ForEach(viewModel.searchedListings.prefix(10)) { item in
+                    KXStructuredListingRow(listing: item) {
+                        saveRecentSearch(viewModel.query)
+                        router.open(.cityListingDetail(listingId: item.id))
                     }
                 }
             }
@@ -878,6 +403,7 @@ struct SearchScreen: View {
                             router.open(.profile(userId: user.id))
                         },
                         onFollow: {
+                            guard GuestSession.requireSignedIn(currentUser, reason: KXListingCopy.pickText(language, "登录后可以关注感兴趣的人。", "ログインするとフォローできます。", "Sign in to follow people.")) else { return }
                             Task { await viewModel.toggleFollow(context: modelContext, currentUser: currentUser, target: user, userStore: userStore) }
                         }
                     )
@@ -990,37 +516,6 @@ struct SearchScreen: View {
 
     private func load() async {
         await viewModel.load(context: modelContext, currentUser: currentUser, postStore: postStore, searchStore: searchStore)
-    }
-}
-
-private enum SearchScope: String, CaseIterable, Identifiable {
-    case hot
-    case news
-    case topics
-    case users
-    case listings
-
-    var id: String { rawValue }
-
-    func title(_ language: AppLanguage) -> String {
-        switch self {
-        case .hot: L("hotSearch", language)
-        case .news: L("news", language)
-        case .topics: L("topics", language)
-        case .users: L("users", language)
-        case .listings: L("listings", language)
-        }
-    }
-}
-
-private struct SearchScopePicker: View {
-    @Environment(\.appLanguage) private var language
-    @Binding var selection: SearchScope
-
-    var body: some View {
-        KXSegmentedControl(SearchScope.allCases, selection: $selection) { scope in
-            Text(scope.title(language))
-        }
     }
 }
 

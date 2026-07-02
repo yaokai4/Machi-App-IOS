@@ -308,9 +308,25 @@ final class ChatViewModel: ObservableObject {
         } catch {
             // Keep the bubble visible but mark it failed so the user can retry,
             // instead of silently dropping the text they typed.
-            if let optimisticId, let idx = messages.firstIndex(where: { $0.id == optimisticId }) {
-                messages[idx].status = .failed
-                messages = messages   // republish: MessageEntity is a reference type
+            if let optimisticId {
+                if let idx = messages.firstIndex(where: { $0.id == optimisticId }) {
+                    messages[idx].status = .failed
+                    messages = messages   // republish: MessageEntity is a reference type
+                } else {
+                    // A concurrent wholesale refresh dropped the optimistic
+                    // bubble while the send was in flight (only `.failed`
+                    // survives mergePreservingFailed, not `.sending`). Re-append
+                    // it as `.failed` from the captured text — a failed send
+                    // must never vanish silently along with the cleared input.
+                    let failed = MessageEntity(
+                        threadId: thread.id,
+                        senderId: currentUser.id,
+                        content: trimmed,
+                        status: .failed
+                    )
+                    messages.append(failed)
+                    mediaByMessageId[failed.id] = []
+                }
                 messageStore?.setMessages(messages, conversationId: thread.id)
             }
             errorMessage = error.kaixUserMessage
@@ -368,7 +384,21 @@ final class ChatViewModel: ObservableObject {
                 if let idx = messages.firstIndex(where: { $0.id == failedId }) {
                     messages[idx].status = .failed
                     messages = messages
+                } else {
+                    // The bubble was `.sending` during the retry, so a
+                    // concurrent refresh could have swept it (only `.failed`
+                    // survives mergePreservingFailed). Re-append it as `.failed`
+                    // so the tap-to-retry affordance never silently disappears.
+                    let failed = MessageEntity(
+                        threadId: thread.id,
+                        senderId: message.senderId,
+                        content: text,
+                        status: .failed
+                    )
+                    messages.append(failed)
+                    mediaByMessageId[failed.id] = []
                 }
+                messageStore?.setMessages(messages, conversationId: thread.id)
                 errorMessage = error.kaixUserMessage
             }
             return

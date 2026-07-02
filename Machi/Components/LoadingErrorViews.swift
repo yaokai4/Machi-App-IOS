@@ -103,8 +103,18 @@ struct KXSplashView: View {
             LinearGradient(
                 colors: [
                     KXColor.pageBackground,
-                    Color(red: 0.968, green: 0.982, blue: 0.976),
-                    Color(red: 0.988, green: 0.988, blue: 0.982),
+                    // Trait-aware mid stops: the old fixed near-white pair made
+                    // the dark-mode splash flash a bright wash on cold start.
+                    Color(UIColor { traits in
+                        traits.userInterfaceStyle == .dark
+                            ? UIColor(red: 0.075, green: 0.095, blue: 0.090, alpha: 1)
+                            : UIColor(red: 0.968, green: 0.982, blue: 0.976, alpha: 1)
+                    }),
+                    Color(UIColor { traits in
+                        traits.userInterfaceStyle == .dark
+                            ? UIColor(red: 0.090, green: 0.100, blue: 0.096, alpha: 1)
+                            : UIColor(red: 0.988, green: 0.988, blue: 0.982, alpha: 1)
+                    }),
                     KXColor.pageBackground,
                 ],
                 startPoint: .topLeading,

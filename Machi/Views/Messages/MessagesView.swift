@@ -53,6 +53,11 @@ struct MessagesView: View {
             viewModel.isForeground = (phase == .active)
             if phase == .active, mode == .conversations { Task { await refreshInbox() } }
         }
+        .onChange(of: chrome.selectedTab) { _, tab in
+            // Coming back to the messages tab: pull once right away instead of
+            // waiting up to 8s for the (tab-paused) poll loop's next tick.
+            if tab == .messages, mode == .conversations { Task { await refreshInbox() } }
+        }
         .overlay(alignment: .top) {
             if let message = viewModel.transientError {
                 KXInlineNotice(message: message) {
@@ -96,8 +101,14 @@ struct MessagesView: View {
         guard KaiXBackend.token != nil else { return }
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(8))
-            // Only poll the live conversation list while foregrounded.
-            guard !Task.isCancelled, mode == .conversations, viewModel.isForeground else { continue }
+            // Only poll the live conversation list while foregrounded AND while
+            // the messages tab is actually on screen — hidden tabs keep their
+            // views (and this .task) alive, so without the tab guard the inbox
+            // poll would keep hitting the server forever after switching away.
+            guard !Task.isCancelled,
+                  mode == .conversations,
+                  viewModel.isForeground,
+                  chrome.selectedTab == .messages else { continue }
             await refreshInbox()
         }
     }

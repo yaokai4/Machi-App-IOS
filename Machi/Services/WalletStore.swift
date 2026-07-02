@@ -15,6 +15,11 @@ import StoreKit
 final class WalletStore: ObservableObject {
     enum PurchaseState: Equatable {
         case idle, loading, purchasing, verifying, success, pending, cancelled
+        /// StoreKit completed the charge but the server verify call failed.
+        /// The transaction stays unfinished and is retried; the UI must say
+        /// "payment received, confirming — don't purchase again", never
+        /// "failed, try again" (which invites a double charge).
+        case verifyFailedPendingCredit
         case failed(String)
     }
 
@@ -35,6 +40,9 @@ final class WalletStore: ObservableObject {
     @Published private(set) var walletUnavailable = false
     /// A non-404 wallet load failed and there's no cached balance to fall back on.
     @Published private(set) var walletLoadFailed = false
+    /// The wallet endpoint said 401: the viewer isn't signed in (guest /
+    /// expired session). Surface a login prompt, never a silent blank page.
+    @Published private(set) var walletNeedsLogin = false
     /// Whether StoreKit returned usable products.
     @Published private(set) var storeStatus: StoreStatus = .ok
 
@@ -51,7 +59,12 @@ final class WalletStore: ObservableObject {
 
     func start(appAccountToken: UUID? = nil) {
         self.appAccountToken = appAccountToken
-        if updatesTask == nil {
+        // When the app-level IAPTransactionObserver is running it already
+        // owns Transaction.updates/unfinished (and finishing) for points
+        // products too — this store then acts as a page-state mirror only,
+        // so the same transaction is never double-verified/finished.
+        let observerOwnsTransactions = IAPTransactionObserver.shared.isActive
+        if updatesTask == nil && !observerOwnsTransactions {
             updatesTask = Task.detached { [weak self] in
                 guard let self else { return }
                 for await result in Transaction.updates {
@@ -63,7 +76,9 @@ final class WalletStore: ObservableObject {
         }
         Task {
             await loadWalletAndProducts()
-            await retryUnfinished()
+            if !observerOwnsTransactions {
+                await retryUnfinished()
+            }
         }
     }
 
@@ -83,6 +98,7 @@ final class WalletStore: ObservableObject {
     func loadWalletAndProducts() async {
         state = state == .idle ? .loading : state
         walletLoadFailed = false
+        walletNeedsLogin = false
         do {
             let me = try await KaiXAPIClient.shared.walletMe()
             wallet = me.wallet
@@ -91,10 +107,14 @@ final class WalletStore: ObservableObject {
             walletUnavailable = false
         } catch {
             // A 404 means the backend predates the wallet (version mismatch) —
-            // surface "not available", not an error. Any other failure with no
-            // cached balance is a transient error the user can retry.
+            // surface "not available", not an error. A 401 means the viewer
+            // isn't signed in — show a login prompt, never a silent failure.
+            // Any other failure with no cached balance is a transient error
+            // the user can retry.
             if Self.isNotFound(error) {
                 walletUnavailable = true
+            } else if Self.isUnauthorized(error) {
+                walletNeedsLogin = true
             } else if wallet == nil {
                 walletLoadFailed = true
             }
@@ -121,6 +141,10 @@ final class WalletStore: ObservableObject {
 
     private static func isNotFound(_ error: Error) -> Bool {
         (error as? KaiXAPIError)?.error.code == "http_404"
+    }
+
+    private static func isUnauthorized(_ error: Error) -> Bool {
+        (error as? KaiXAPIError)?.error.code == "http_401"
     }
 
     /// Race a StoreKit product query against a timeout so a hung App Store
@@ -199,9 +223,11 @@ final class WalletStore: ObservableObject {
         }
     }
 
-    private func handle(_ verification: VerificationResult<Transaction>) async {
+    /// Returns whether the SERVER credited the transaction.
+    @discardableResult
+    private func handle(_ verification: VerificationResult<Transaction>) async -> Bool {
         let transaction = transaction(from: verification)
-        guard WalletStore.isPointsProduct(transaction.productID) else { return }
+        guard WalletStore.isPointsProduct(transaction.productID) else { return true }
         state = .verifying
         do {
             let resp = try await KaiXAPIClient.shared.verifyAppleWalletTopup(
@@ -217,9 +243,28 @@ final class WalletStore: ObservableObject {
             // Only finish AFTER the server credited the points, so a failed
             // verify keeps the transaction for a retry on next launch.
             await transaction.finish()
+            return true
         } catch {
             // Do NOT finish — retried via Transaction.unfinished next launch.
-            state = .failed(error.localizedDescription)
+            // Apple already charged; only the server credit is missing, so
+            // never surface this as a retryable "purchase failed".
+            state = .verifyFailedPendingCredit
+            return false
         }
+    }
+
+    /// Manual "confirm again" for a charge the server hasn't credited yet.
+    /// Idempotent server-side; safe to tap repeatedly.
+    func reverifyPendingCredit() async {
+        state = .verifying
+        var anyFailure = false
+        for await result in Transaction.unfinished {
+            let txn = transaction(from: result)
+            guard WalletStore.isPointsProduct(txn.productID) else { continue }
+            let credited = await handle(result)
+            if !credited { anyFailure = true }
+        }
+        await refreshWallet()
+        state = anyFailure ? .verifyFailedPendingCredit : .idle
     }
 }

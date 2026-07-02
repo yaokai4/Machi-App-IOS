@@ -180,6 +180,7 @@ struct KXServiceListingCard: View {
 
     private var heartButton: some View {
         Button {
+            guard GuestSession.requireSignedIn(reason: KXListingCopy.pickText(language, "登录后可以收藏喜欢的信息。", "ログインするとお気に入りに保存できます。", "Sign in to save listings you like.")) else { return }
             let next = !favorited
             favorited = next
             FavoritesStore.shared.set(favoriteSnapshot, on: next)

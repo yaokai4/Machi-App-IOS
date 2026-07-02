@@ -18,6 +18,11 @@ final class GuideViewModel: ObservableObject {
     @Published private(set) var guideOS: KaiXGuideActivePlanResponse?
     @Published private(set) var isGuideOSLoading = false
     @Published private(set) var guideOSMessage: String?
+    // Journey 门面(首页横滑):/api/guide/journeys 的完整列表 + 登录用户的
+    // per-journey progress summary。加载失败静默 —— home.journeys 兜底,
+    // 都拿不到时首页 journey 区块自动隐藏,绝不影响主内容。
+    @Published private(set) var homeJourneys: [KaiXGuideJourneyDTO] = []
+    @Published private(set) var journeyProgress: [String: KaiXGuideProgressSummaryDTO] = [:]
     @Published var searchText = ""
 
     var hasAnySearchResult: Bool {
@@ -60,6 +65,7 @@ final class GuideViewModel: ObservableObject {
         // deterministic and network-independent.
         if KaiXRuntimeFlags.allowLocalStoreFallback, normalizedCountry.isEmpty || normalizedCountry == "jp" {
             home = GuideFallbackContent.home(language: language)
+            homeJourneys = home?.journeys ?? []
             loadedCountry = normalizedCountry
             loadedLanguage = language
             return
@@ -79,6 +85,25 @@ final class GuideViewModel: ObservableObject {
             } else {
                 errorMessage = error.localizedDescription
             }
+        }
+        await loadJourneySpotlight(country: normalizedCountry.isEmpty ? "jp" : normalizedCountry, language: language)
+    }
+
+    /// 首页 journey 门面数据。失败静默:接口挂了就退回 home.journeys,
+    /// progress 只对登录用户拉,拿不到就不叠进度。
+    private func loadJourneySpotlight(country: String, language: String) async {
+        if let response = try? await KaiXAPIClient.shared.guideJourneys(country: country, language: language),
+           !response.journeys.isEmpty {
+            homeJourneys = response.journeys
+        } else if homeJourneys.isEmpty {
+            homeJourneys = home?.journeys ?? []
+        }
+        guard KaiXBackend.token != nil else {
+            journeyProgress = [:]
+            return
+        }
+        if let progress = try? await KaiXAPIClient.shared.guideProgress() {
+            journeyProgress = Dictionary(progress.summary.map { ($0.journeyKey, $0) }, uniquingKeysWith: { _, new in new })
         }
     }
 

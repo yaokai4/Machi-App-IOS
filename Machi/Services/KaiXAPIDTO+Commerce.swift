@@ -44,11 +44,12 @@ struct KaiXBookingSlotDTO: Codable, Identifiable, Equatable {
 
     static func parseISO(_ s: String?) -> Date? {
         guard let s, !s.isEmpty else { return nil }
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let d = f.date(from: s) { return d }
-        f.formatOptions = [.withInternetDateTime]
-        return f.date(from: s)
+        // Delegate to the app-wide cached ISO8601 parsers (KXDateParsing):
+        // building a fresh ISO8601DateFormatter here did ICU setup on every
+        // slot/booking row render. Same fractional→plain fallback order, so
+        // parsing results are unchanged.
+        if let d = KXDateParsing.isoFractional.date(from: s) { return d }
+        return KXDateParsing.iso.date(from: s)
     }
 }
 
@@ -177,10 +178,24 @@ struct KaiXPaymentOrderDTO: Codable, Identifiable, Equatable {
     let paid_at: String?
 }
 
+/// Echo of the applied /api/listings filters. `fallback`/`fallback_label` only
+/// appear when the requested area had zero rows and the server widened the
+/// scope ("metro_circle" / "country") — clients surface a one-line notice.
+struct KaiXListingFiltersDTO: Codable {
+    let fallback: String?
+    let fallback_label: String?
+}
+
 struct KaiXListingsResponse: Codable {
+    struct DataPayload: Codable {
+        let filters: KaiXListingFiltersDTO?
+    }
+
     let items: [KaiXCityListingDTO]
     let next_cursor: String?
     let type: String?
+    /// Envelope `data` — carries `filters` (empty-result fallback contract).
+    let data: DataPayload?
 }
 
 struct KaiXListingDetailResponse: Codable {
@@ -741,6 +756,7 @@ struct KaiXNotificationDTO: Codable, Equatable {
     let user_id: String
     let target_post_id: String?
     let target_comment_id: String?
+    let target_listing_id: String?
     let target_conversation_id: String?
     let content: String?
     let is_read: Bool

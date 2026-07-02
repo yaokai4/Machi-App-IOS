@@ -52,6 +52,7 @@ final class KaiXAPIClient {
         body: Encodable? = nil,
         queryItems: [URLQueryItem] = [],
         idempotencyKey: String? = nil,
+        extraHeaders: [String: String] = [:],
         timeoutInterval: TimeInterval = 25,
         maxReplayAttempts: Int? = nil
     ) async throws -> Data {
@@ -78,6 +79,11 @@ final class KaiXAPIClient {
         }
         if let idempotencyKey, !idempotencyKey.isEmpty {
             req.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key")
+        }
+        // Endpoint-specific headers (e.g. X-Machi-Guest-Id for the signed-out
+        // Machi AI taster quota). Never used for auth material or secrets.
+        for (field, value) in extraHeaders where !value.isEmpty {
+            req.setValue(value, forHTTPHeaderField: field)
         }
         if let body {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -801,6 +807,11 @@ final class KaiXAPIClient {
     struct ListingsPage {
         let items: [KaiXCityListingDTO]
         let nextCursor: String?
+        /// data.filters.fallback / fallback_label — set only when the requested
+        /// area was empty and the server widened the scope (metro_circle /
+        /// country), so channels can show "该地区暂无,已为你展示{label}的内容".
+        var fallback: String? = nil
+        var fallbackLabel: String? = nil
     }
 
     func listingsPage(
@@ -849,7 +860,12 @@ final class KaiXAPIClient {
         if let limit { q.append(URLQueryItem(name: "limit", value: String(limit))) }
         let data = try await request("GET", "/api/listings", queryItems: q)
         let response: KaiXListingsResponse = try decode(data)
-        return ListingsPage(items: response.items, nextCursor: response.next_cursor)
+        return ListingsPage(
+            items: response.items,
+            nextCursor: response.next_cursor,
+            fallback: response.data?.filters?.fallback,
+            fallbackLabel: response.data?.filters?.fallback_label
+        )
     }
 
     /// 详情页相似推荐：服务端按同类目同城→同国→同城逐层补足,不含同卖家。
@@ -900,6 +916,7 @@ final class KaiXAPIClient {
         category: String? = nil,
         citySlug: String? = nil,
         regionCode: String? = nil,
+        countryCode: String? = nil,
         label: String? = nil,
         cadence: String = "instant"
     ) async throws -> KaiXSavedSearchDTO {
@@ -909,13 +926,15 @@ final class KaiXAPIClient {
             let category: String?
             let city_slug: String?
             let region_code: String?
+            let country_code: String?
             let label: String?
             let cadence: String
         }
         struct Response: Decodable { let item: KaiXSavedSearchDTO }
         let body = Body(
             vertical: vertical, keyword: keyword, category: category,
-            city_slug: citySlug, region_code: regionCode, label: label, cadence: cadence
+            city_slug: citySlug, region_code: regionCode, country_code: countryCode,
+            label: label, cadence: cadence
         )
         let data = try await request("POST", "/api/saved_searches", body: body)
         let response: Response = try decode(data)

@@ -57,8 +57,14 @@ struct GuideApplicationPlannerView: View {
             .pickerStyle(.menu)
             if isJlpt {
                 GuideOSTextField(title: guideOSText(language, "考试名称（如 JLPT N2）", "試験名（例: JLPT N2）", "Exam name (e.g. JLPT N2)"), text: $name)
+            } else if track == "visa" || track == "other" {
+                // 签证/其他没有对应的学校/公司库 — a plain field, not a picker that
+                // would confusingly suggest companies for a visa application.
+                GuideOSTextField(title: guideOSText(language, "申请名称 / 对象", "申請名・対象", "Application name / target"), text: $name)
             } else {
-                GuideOSLibraryPickerField(type: apiType, text: $name)
+                // Semantic picker type: 语言学校/专门学校/奖学金 search the school
+                // library (not the company库 the raw apiType used to hit).
+                GuideOSLibraryPickerField(type: isSchool ? "school" : "company", text: $name)
             }
             if !isJlpt {
                 GuideOSTextField(title: isSchool ? guideOSText(language, "研究科 / 学部", "研究科・学部", "Faculty / graduate school") : guideOSText(language, "部门 / 岗位方向", "部署・職種", "Department / role"), text: $department)
@@ -171,7 +177,11 @@ struct GuideApplicationPlannerView: View {
             }
         }
         .task {
-            if !model.requireLogin() { return }
+            // The bottom todo strip should only show application-generated
+            // todos (出愿/ES/面试倒排), not 房租/背单词 from other planners.
+            model.todoSourceTypeFilter = ["application"]
+            // 游客可以随意浏览；登录墙只在保存时弹（工作台承诺「保存时再登录」）。
+            guard model.isLoggedIn else { return }
             await model.loadApplications()
             await model.loadTodos(status: "open")
         }
@@ -283,7 +293,8 @@ struct GuideApplicationEditorSheet: View {
         self.app = app
         self.onSave = onSave
         _name = State(initialValue: app.name)
-        _detail = State(initialValue: app.type == "school" ? app.department : app.position)
+        let schoolish = ["school", "vocational", "language_school", "scholarship"].contains(app.type)
+        _detail = State(initialValue: schoolish ? app.department : app.position)
         _deadline = State(initialValue: GuideOSDate.parse(app.deadline) ?? Date())
         _hasDeadline = State(initialValue: !(app.deadline ?? "").isEmpty)
         _interview = State(initialValue: GuideOSDate.parse(app.interviewAt) ?? Date())
@@ -299,13 +310,20 @@ struct GuideApplicationEditorSheet: View {
         _favorite = State(initialValue: app.favorite ?? false)
     }
 
-    private var isSchool: Bool { app.type == "school" }
+    // Match the planner's grouping so 语言学校/专门学校/奖学金 read as schools
+    // (labels + which field `detail` maps to) instead of falling into 公司.
+    private var isSchool: Bool { ["school", "vocational", "language_school", "scholarship"].contains(app.type) }
+    private var usesLibraryPicker: Bool { !["visa", "other", "jlpt"].contains(app.type) }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    GuideOSLibraryPickerField(type: app.type, text: $name)
+                    if usesLibraryPicker {
+                        GuideOSLibraryPickerField(type: isSchool ? "school" : "company", text: $name)
+                    } else {
+                        TextField(guideOSText(language, "申请名称 / 对象", "申請名・対象", "Application name / target"), text: $name)
+                    }
                     TextField(isSchool ? guideOSText(language, "研究科 / 学部", "研究科・学部", "Faculty / graduate school") : guideOSText(language, "部门 / 岗位方向", "部署・職種", "Department / role"), text: $detail)
                 }
                 Section(guideOSText(language, "进度", "進捗", "Progress")) {

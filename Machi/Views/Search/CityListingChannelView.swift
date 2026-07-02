@@ -118,12 +118,15 @@ struct CityListingChannelView: View {
     let listingType: String
     let currentUser: UserEntity
     /// Shared with CityListingDetailView (via the router) for the card→detail
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     /// zoom transition. nil outside the router path → plain push.
     var zoomNamespace: Namespace.ID? = nil
 
     @State private var items: [KaiXCityListingDTO] = []
+    /// Signature of the last successfully loaded (region, type, tab). `.task(id:)`
+    /// re-fires on every pop-back from a detail even though the id is unchanged —
+    /// this lets that re-fire become a no-op so the list, scroll position and
+    /// keyset pagination survive returning, instead of flashing a skeleton.
+    @State private var loadedSignature = ""
     @State private var query = ""
     @State private var selectedCategory = "全部"
     @State private var serviceSection = "all"
@@ -159,17 +162,30 @@ struct CityListingChannelView: View {
     /// True while a `quiet` reload (filter/sort change) is in flight — drives a
     /// small "updating…" indicator so a silent reload never reads as "frozen".
     @State private var isReloading = false
-    /// Set when the channel auto-expands a too-thin single city to its metro
-    /// circle on first open — surfaces a one-time "showing 关东圈 · this city
-    /// only" notice so the widened scope isn't silently confusing.
-    @State private var scopeAutoExpanded = false
+    /// data.filters.fallback_label from the last load: the server found the
+    /// requested area empty and widened the scope (metro_circle / country) —
+    /// surfaces a "该地区暂无,已为你展示{label}的内容" notice so the widened
+    /// results aren't silently confusing. nil = no fallback happened.
+    @State private var fallbackNoticeLabel: String?
+    /// 「保存此搜索」按钮态,与 SearchView.subscribeSearchButton 同一套
+    /// saving/done 模式;筛选条件一变 done 复位,可再次订阅新条件。
+    @State private var savedSearchSaving = false
+    @State private var savedSearchDone = false
     /// Bumped on every load. A request that finishes after a newer one started
     /// (rapid filter/sort tapping on a slow network) discards its result instead
     /// of clobbering the newer list — "last issued wins", not "last returned".
     @State private var loadGeneration = 0
+    /// Debounce for the price fields: each keystroke fires `onChange`, but only
+    /// the value that survives ~400ms of silence actually hits the server.
+    @State private var priceDebounceTask: Task<Void, Never>?
 
     private var hasMoreListings: Bool {
         nextCursor != nil || nextHiringCursor != nil
+    }
+
+    /// Shared login-prompt copy for the publish entry points ("+", empty-state CTA).
+    private var publishLoginReason: String {
+        KXListingCopy.pickText(language, "登录后可以发布信息。", "ログインすると投稿できます。", "Sign in to publish a listing.")
     }
 
     private var marketplaceGridSpacing: CGFloat { 12 }
@@ -433,8 +449,8 @@ struct CityListingChannelView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 16) {
-                        if scopeAutoExpanded, scopeMode == .area {
-                            scopeExpandedNotice
+                        if let fallbackNoticeLabel, !visibleItems.isEmpty {
+                            fallbackNotice(fallbackNoticeLabel)
                         }
                         if baseType == "local_service" {
                             MerchantDirectoryStripView(citySlug: regionCode)
@@ -442,9 +458,11 @@ struct CityListingChannelView: View {
                         stateContent
                         if !isLoading, errorMessage == nil, hasMoreListings {
                             // Sentinel row: scrolling it into view pulls the next
-                            // server page. Re-armed by id whenever items grow.
+                            // server page. Re-armed whenever items grow OR a cursor
+                            // advances — dedup can leave count unchanged while a
+                            // fresh page cursor still needs to be consumed.
                             KXInlineLoader()
-                                .task(id: items.count) { await loadMore() }
+                                .task(id: "\(items.count)|\(nextCursor ?? "")|\(nextHiringCursor ?? "")") { await loadMore() }
                         } else if !isLoading, errorMessage == nil, !visibleItems.isEmpty {
                             // Clear end-of-list boundary instead of just stopping.
                             Text(KXListingCopy.pickText(language, "已显示全部", "すべて表示しました", "You've reached the end"))
@@ -488,56 +506,53 @@ struct CityListingChannelView: View {
             }
         }
         .kxPageBackground()
-        // Zoom DESTINATION: morph in from the Discover entry card with the same
-        // id ("channel-<listingType>"). No-op (plain push) when no namespace.
-        .kxListingZoomDestination("channel-\(listingType)", reduceMotion ? nil : zoomNamespace)
+        // Deliberately NOT a zoom destination: this screen hosts the per-card
+        // zoom sources into the listing detail, and being a zoom destination at
+        // the same time (nested matchedTransitionSource) makes iOS 18/26 render
+        // the whole list blank after popping back from the detail.
         .sheet(isPresented: $filtersOpen) { filterSheet }
         .sheet(isPresented: $wishlistOpen) {
             WishlistView { id in openFromWishlist(id) }
         }
         .toolbar(.hidden, for: .navigationBar)
         .task(id: "\(regionCode)-\(listingType)-\(activeRentalTab.rawValue)") {
+            let signature = "\(regionCode)-\(listingType)-\(activeRentalTab.rawValue)"
+            // Unchanged id + data already on screen = a pop-back re-fire, not a
+            // real context switch — keep the list instead of reloading it.
+            guard signature != loadedSignature || items.isEmpty else { return }
             await load()
+            if errorMessage == nil { loadedSignature = signature }
         }
-        .onChange(of: minimumPrice) { _, _ in Task { await load(quiet: true) } }
-        .onChange(of: maximumPrice) { _, _ in Task { await load(quiet: true) } }
+        .onChange(of: minimumPrice) { _, _ in schedulePriceReload() }
+        .onChange(of: maximumPrice) { _, _ in schedulePriceReload() }
         // Instant client-side re-filter the moment any filter changes — the
-        // server reload that follows refreshes it again with fresh data.
-        .onChange(of: visibleFilterSignature) { _, _ in recomputeVisibleItems() }
+        // server reload that follows refreshes it again with fresh data. A
+        // changed filter is a new search, so the saved-search done state resets.
+        .onChange(of: visibleFilterSignature) { _, _ in
+            recomputeVisibleItems()
+            savedSearchDone = false
+        }
         .onAppear { screenWidth = Self.resolveScreenWidth() }
     }
 
-    private var scopeExpandedNotice: some View {
-        Button {
-            scopeMode = .city
-            selectedScopeArea = ""
-            selectedScopeRegionCode = ""
-            scopeAutoExpanded = false
-            Task { await load() }
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "info.circle.fill")
-                    .foregroundStyle(KXColor.livingAccent)
-                Text(KXListingCopy.pickText(language,
-                                            "已扩大范围至\(activeScopeLabel)",
-                                            "\(activeScopeLabel)に範囲を広げています",
-                                            "Showing the wider \(activeScopeLabel)"))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-                Spacer(minLength: 4)
-                Text(KXListingCopy.pickText(language, "只看本市", "この市のみ", "This city only"))
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(KXColor.livingAccent)
-                Image(systemName: "chevron.right")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(KXColor.livingAccent)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(KXColor.livingAccentSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+    /// 服务端空结果回退提示：请求范围没有内容,已自动展示更大范围
+    /// (data.filters.fallback / fallback_label 契约)。纯信息行,不可点。
+    private func fallbackNotice(_ label: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "info.circle.fill")
+                .foregroundStyle(KXColor.livingAccent)
+            Text(KXListingCopy.pickText(language,
+                                        "该地区暂无相关内容,已为你展示\(label)的内容",
+                                        "この地域にはまだ投稿がないため、\(label)の内容を表示しています",
+                                        "Nothing here yet — showing listings from \(label) instead"))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+            Spacer(minLength: 4)
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(KXColor.livingAccentSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
         .transition(.opacity)
     }
 
@@ -573,6 +588,7 @@ struct CityListingChannelView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(KXListingCopy.pickText(language, "我的收藏", "お気に入り", "Saved"))
             Button {
+                guard GuestSession.requireSignedIn(currentUser, reason: publishLoginReason) else { return }
                 router.open(.createCityListing(type: KXListingCopy.createType(for: lodgingActive ? "local_service" : baseType), citySlug: regionCode))
             } label: {
                 Image(systemName: "plus")
@@ -642,6 +658,10 @@ struct CityListingChannelView: View {
             // 三个分区的筛选维度不同（长租=户型/家具，住宿=人数/早餐），
             // 残留上一分区的条件会变成隐形过滤；评分排序仅住宿分区可用。
             attrFilters = [:]
+            // 价格量纲也不同（长租=月租、买房=总价、民宿=每晚）——残留旧区间
+            // 会把新分区隐形过滤成空列表。onChange 仅在值真变时触发。
+            minimumPrice = ""
+            maximumPrice = ""
             if sortMode == .rating, tab == .homes { sortMode = .newest }
         } label: {
             Label(title, systemImage: icon)
@@ -801,7 +821,9 @@ struct CityListingChannelView: View {
         selectedScopeArea = area
         selectedScopeRegionCode = cityCode
         selectedProvinceCode = provinceCode
-        scopeAutoExpanded = false
+        // 换范围 = 新搜索:旧的回退提示与「已订阅」态都不再成立。
+        fallbackNoticeLabel = nil
+        savedSearchDone = false
         Task { await load() }
     }
 
@@ -933,6 +955,7 @@ struct CityListingChannelView: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
             Spacer(minLength: 6)
+            saveSearchButton
             if activeFilterCount > 0 {
                 Button {
                     clearAllFilters()
@@ -945,6 +968,50 @@ struct CityListingChannelView: View {
             }
         }
         .padding(.horizontal, 4)
+    }
+
+    /// 「保存此搜索」——把当前频道条件订阅成 saved search(新匹配上架时通知),
+    /// 与 SearchView.subscribeSearchButton 同一套 saving/done 状态模式。
+    private var saveSearchButton: some View {
+        Button {
+            guard !savedSearchSaving, !savedSearchDone else { return }
+            guard GuestSession.requireSignedIn(currentUser, reason: KXListingCopy.pickText(language, "登录后可以订阅搜索。", "ログインすると検索を保存できます。", "Sign in to save this search.")) else { return }
+            savedSearchSaving = true
+            Task {
+                defer { savedSearchSaving = false }
+                do {
+                    // 用订阅专用的 scope 映射(savedSearchScope),不能复用列表
+                    // 查询的 listingScopeQuery——后者在都市圈/都道府县/全国档把
+                    // 位置放进 provinceCodes/countryCode,直接塞给 createSavedSearch
+                    // 会落库一条位置全空、匹配全世界的订阅。
+                    let scope = region.map { savedSearchScope(for: $0) }
+                    let keyword = query.trimmingCharacters(in: .whitespacesAndNewlines)
+                    _ = try await KaiXAPIClient.shared.createSavedSearch(
+                        // 服务端 vertical 只认真实 listing type:买房/民宿分区走
+                        // queryType(for_sale/local_service);工作频道订阅招聘流。
+                        vertical: isWorkChannel ? "hiring" : queryType,
+                        keyword: keyword.isEmpty ? nil : keyword,
+                        category: selectedCategory == "全部" ? nil : selectedCategory,
+                        citySlug: scope?.citySlug,
+                        regionCode: scope?.regionCode,
+                        countryCode: scope?.countryCode
+                    )
+                    savedSearchDone = true
+                } catch {
+                    savedSearchDone = false
+                }
+            }
+        } label: {
+            Label(
+                savedSearchDone ? KXListingCopy.pickText(language, "已订阅", "保存済み", "Saved") : KXListingCopy.pickText(language, "保存此搜索", "この検索を保存", "Save search"),
+                systemImage: savedSearchDone ? "bell.fill" : "bell.badge"
+            )
+            .font(.caption.weight(.bold))
+            .foregroundStyle(KXColor.livingAccent)
+        }
+        .buttonStyle(.plain)
+        .disabled(savedSearchSaving || savedSearchDone)
+        .accessibilityIdentifier("channel.saveSearch")
     }
 
     private func clearAllFilters() {
@@ -1407,6 +1474,7 @@ struct CityListingChannelView: View {
                     }
                     .buttonStyle(KXPressableStyle())
                     Button {
+                        guard GuestSession.requireSignedIn(currentUser, reason: publishLoginReason) else { return }
                         router.open(.createCityListing(type: KXListingCopy.createType(for: lodgingActive ? "local_service" : baseType), citySlug: regionCode))
                     } label: {
                         Text(KXListingCopy.createTitle(for: lodgingActive ? "local_service" : baseType, language))
@@ -1421,6 +1489,7 @@ struct CityListingChannelView: View {
                         systemImage: KXListingCopy.icon(for: baseType)
                     )
                     Button {
+                        guard GuestSession.requireSignedIn(currentUser, reason: publishLoginReason) else { return }
                         router.open(.createCityListing(type: KXListingCopy.createType(for: lodgingActive ? "local_service" : baseType), citySlug: regionCode))
                     } label: {
                         Label(KXListingCopy.createTitle(for: lodgingActive ? "local_service" : baseType, language), systemImage: "plus.circle.fill")
@@ -1516,6 +1585,18 @@ struct CityListingChannelView: View {
     }
 
     /// quiet = 筛选/排序微调时静默重载：保留旧列表直到新结果回来，避免闪白。
+    /// Price edits reload only after ~400ms of silence — typing "12000" must
+    /// send one request, not five. Cancelling the previous task keeps exactly
+    /// one pending reload; `loadGeneration` already defuses any stragglers.
+    private func schedulePriceReload() {
+        priceDebounceTask?.cancel()
+        priceDebounceTask = Task {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            await load(quiet: true)
+        }
+    }
+
     private func load(quiet: Bool = false) async {
         guard let region else {
             errorMessage = "城市无法识别，请重新选择城市。"
@@ -1536,9 +1617,41 @@ struct CityListingChannelView: View {
                 let jobPage = try await jobs
                 let hiringPage = try await hiring
                 guard generation == loadGeneration else { return }   // superseded by a newer load
-                items = (jobPage.items + hiringPage.items).sorted(by: KXListingCopy.sortForDisplay)
-                nextCursor = jobPage.nextCursor
-                nextHiringCursor = hiringPage.nextCursor
+                // 服务端空结果回退按每个请求独立触发:job 在本地有结果而 hiring
+                // 单独回退到都市圈/全国时,不能把两种地理范围的条目混排,更不能
+                // 在本地结果就摆在屏上时挂「该地区暂无内容」横幅。规则:
+                // ① 两流都回退 → 全部展示 + 横幅;② 单流回退且另一流也为空 →
+                // 展示回退结果 + 横幅;③ 单流回退但另一流有本地结果 → 丢弃回退
+                // 流的异地条目(连同其游标,防止 loadMore 继续拉异地页),无横幅。
+                var jobItems = jobPage.items
+                var hiringItems = hiringPage.items
+                var jobCursor = jobPage.nextCursor
+                var hiringCursor = hiringPage.nextCursor
+                var fbLabel: String?
+                switch (jobPage.fallback != nil, hiringPage.fallback != nil) {
+                case (true, true):
+                    fbLabel = jobPage.fallbackLabel ?? hiringPage.fallbackLabel
+                case (true, false):
+                    if hiringItems.isEmpty {
+                        fbLabel = jobPage.fallbackLabel
+                    } else {
+                        jobItems = []
+                        jobCursor = nil
+                    }
+                case (false, true):
+                    if jobItems.isEmpty {
+                        fbLabel = hiringPage.fallbackLabel
+                    } else {
+                        hiringItems = []
+                        hiringCursor = nil
+                    }
+                case (false, false):
+                    fbLabel = nil
+                }
+                items = (jobItems + hiringItems).sorted(by: KXListingCopy.sortForDisplay)
+                nextCursor = jobCursor
+                nextHiringCursor = hiringCursor
+                fallbackNoticeLabel = (fbLabel?.isEmpty == false) ? fbLabel : nil
             } else {
                 let page = try await KaiXAPIClient.shared.listingsPage(
                     type: queryType,
@@ -1559,11 +1672,20 @@ struct CityListingChannelView: View {
                 items = page.items
                 nextCursor = page.nextCursor
                 nextHiringCursor = nil
+                fallbackNoticeLabel = (page.fallback != nil && page.fallbackLabel?.isEmpty == false) ? page.fallbackLabel : nil
             }
             isLoading = false
             recomputeVisibleItems()
         } catch {
             guard generation == loadGeneration else { return }
+            // A load cancelled by navigation (task torn down mid-flight) is not
+            // an error the user can act on — never surface "已取消" as a retry
+            // screen. Whatever list was on screen stays; the .task guard reloads
+            // on the next appearance only if the list is actually empty.
+            if error is CancellationError || (error as? URLError)?.code == .cancelled {
+                isLoading = false
+                return
+            }
             errorMessage = error.localizedDescription
             isLoading = false
         }
@@ -1579,16 +1701,20 @@ struct CityListingChannelView: View {
         let scope = listingScopeQuery(for: region)
         do {
             var fetched: [KaiXCityListingDTO] = []
+            // Cursor advances land in locals first: a stale page (superseded by
+            // a reload mid-flight) must never overwrite the fresh load's cursors.
+            var advancedCursor = nextCursor
+            var advancedHiringCursor = nextHiringCursor
             if isWorkChannel {
                 if let cursor = nextCursor {
                     let page = try await KaiXAPIClient.shared.listingsPage(type: "job", citySlug: scope.citySlug, regionCode: scope.regionCode, regionCodes: scope.regionCodes, provinceCodes: scope.provinceCodes, countryCode: scope.countryCode, query: query, minPrice: Double(minimumPrice), maxPrice: Double(maximumPrice), sort: serverSort, attributes: attrFilters, cursor: cursor)
                     fetched += page.items
-                    nextCursor = page.nextCursor
+                    advancedCursor = page.nextCursor
                 }
                 if let cursor = nextHiringCursor {
                     let page = try await KaiXAPIClient.shared.listingsPage(type: "hiring", citySlug: scope.citySlug, regionCode: scope.regionCode, regionCodes: scope.regionCodes, provinceCodes: scope.provinceCodes, countryCode: scope.countryCode, query: query, minPrice: Double(minimumPrice), maxPrice: Double(maximumPrice), sort: serverSort, attributes: attrFilters, cursor: cursor)
                     fetched += page.items
-                    nextHiringCursor = page.nextCursor
+                    advancedHiringCursor = page.nextCursor
                 }
             } else if let cursor = nextCursor {
                 let page = try await KaiXAPIClient.shared.listingsPage(
@@ -1608,14 +1734,18 @@ struct CityListingChannelView: View {
                     cursor: cursor
                 )
                 fetched = page.items
-                nextCursor = page.nextCursor
+                advancedCursor = page.nextCursor
             }
             guard generation == loadGeneration else { return }   // a reload replaced the list mid-page
+            nextCursor = advancedCursor
+            nextHiringCursor = advancedHiringCursor
             let existing = Set(items.map(\.id))
             items += fetched.filter { !existing.contains($0.id) }
             recomputeVisibleItems()
         } catch {
-            // Quietly stop paging on error; pull-to-refresh recovers.
+            // Quietly stop paging on error; pull-to-refresh recovers. A stale
+            // page's failure must not kill the cursors a newer load just set.
+            guard generation == loadGeneration else { return }
             nextCursor = nil
             nextHiringCursor = nil
         }
@@ -1638,6 +1768,39 @@ struct CityListingChannelView: View {
         case .selectedCity:
             let selected = selectedScopeRegion ?? region
             return (selected.cityCode, selected.regionCode, [], [], nil)
+        }
+    }
+
+    /// saved_searches 落库只有 city_slug / region_code / country_code 三级位置
+    /// 列(没有都道府县/都市圈列),而服务端匹配会把 region_code 按整个都市圈
+    /// 扩展(metro_circle_region_codes)。据此把各档 scopeMode 映射成可匹配的
+    /// 订阅条件:都市圈/都道府县档取圈内(县内)一个代表城市的 region_code 表达
+    /// 「整圈」(都道府县档因此比所选县略宽——是当前列结构下最小的超集),全国
+    /// 档传 country_code。绝不能三者全空落库,否则订阅会匹配全世界的新信息。
+    private func savedSearchScope(for region: KaiXRegionDirectory.Region) -> (citySlug: String?, regionCode: String?, countryCode: String?) {
+        switch scopeMode {
+        case .city:
+            return (region.cityCode, region.regionCode, nil)
+        case .selectedCity:
+            let selected = selectedScopeRegion ?? region
+            return (selected.cityCode, selected.regionCode, nil)
+        case .area:
+            let circle = KaiXRegionDirectory.jpMetroCircles.first { $0.code == selectedScopeArea }
+            let representative: KaiXRegionDirectory.Region? =
+                (circle?.provinceCodes.contains(region.provinceCode) == true)
+                ? region
+                : KaiXRegionDirectory.regionsForMetroCircle(selectedScopeArea).first?.region
+            return (nil, representative?.regionCode, region.countryCode)
+        case .province:
+            if !selectedProvinceCode.isEmpty,
+               let circle = KaiXRegionDirectory.jpMetroCircles.first(where: { $0.provinceCodes.contains(selectedProvinceCode) }),
+               let representative = KaiXRegionDirectory.regionsForMetroCircle(circle.code)
+                   .first(where: { $0.province.code == selectedProvinceCode })?.region {
+                return (nil, representative.regionCode, region.countryCode)
+            }
+            return (nil, nil, region.countryCode)
+        case .country:
+            return (nil, nil, region.countryCode)
         }
     }
 

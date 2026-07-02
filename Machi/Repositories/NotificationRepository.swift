@@ -128,6 +128,7 @@ final class NotificationRepository {
             actorId: dto.actor?.id ?? dto.actor_id,
             targetPostId: dto.target_post_id,
             targetCommentId: dto.target_comment_id,
+            targetListingId: dto.target_listing_id,
             targetConversationId: dto.target_conversation_id,
             content: dto.content ?? "",
             isRead: dto.is_read,

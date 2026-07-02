@@ -307,6 +307,7 @@ struct ListingBookingSection: View {
     }
 
     private func book(_ slot: KaiXBookingSlotDTO) async {
+        guard GuestSession.requireSignedIn(reason: KXListingCopy.pickText(language, "登录后可以在线预约时段。", "ログインするとオンラインで予約できます。", "Sign in to reserve a slot.")) else { return }
         guard inFlightSlotId == nil else { return }
         await MainActor.run { inFlightSlotId = slot.id; toast = nil }
         do {
@@ -360,30 +361,31 @@ struct ListingBookingSection: View {
         }
     }
 
-    private func localizedFormatter(_ template: String) -> DateFormatter {
-        let f = DateFormatter()
+    // Delegates to the shared DateFormatterUtils template cache — the old
+    // per-call DateFormatter + setLocalizedDateFormatFromTemplate ran an ICU
+    // pattern lookup for every slot chip on every render. The locale mapping
+    // (zh_CN / ja_JP / en_US) is kept identical to the old switch.
+    private var slotLocaleID: String {
         switch language {
-        case .ja: f.locale = Locale(identifier: "ja_JP")
-        case .en: f.locale = Locale(identifier: "en_US")
-        default: f.locale = Locale(identifier: "zh_CN")
+        case .ja: return "ja_JP"
+        case .en: return "en_US"
+        default: return "zh_CN"
         }
-        f.setLocalizedDateFormatFromTemplate(template)
-        return f
     }
 
     private func weekdayText(_ date: Date?) -> String {
         guard let date else { return "—" }
-        return localizedFormatter("EEE").string(from: date)
+        return DateFormatterUtils.localizedTemplateString("EEE", localeID: slotLocaleID, date: date)
     }
 
     private func dayNumberText(_ date: Date?) -> String {
         guard let date else { return "" }
-        return localizedFormatter("Md").string(from: date)
+        return DateFormatterUtils.localizedTemplateString("Md", localeID: slotLocaleID, date: date)
     }
 
     private func timeText(_ date: Date?) -> String {
         guard let date else { return "" }
-        return localizedFormatter("Hm").string(from: date)
+        return DateFormatterUtils.localizedTemplateString("Hm", localeID: slotLocaleID, date: date)
     }
 }
 
@@ -452,6 +454,12 @@ struct CityListingDetailView: View {
     @State private var actionMessage: String?
     @State private var isBusy = false
     @State private var intakeOpen = false
+    /// Local heart state layered over the immutable DTO so a favorite toggles
+    /// instantly (optimistic, rolled back on failure) instead of waiting for a
+    /// full-page reload. Cleared whenever a fresh listing loads.
+    @State private var favoritedOverride: Bool?
+    /// Report flow: pick a reason before submitting (also blocks fat-finger reports).
+    @State private var reportConfirmOpen = false
     @State private var inquiryReceipt: ListingInquiryReceipt?
     @State private var similarItems: [KaiXCityListingDTO] = []
     @State private var sellerOtherItems: [KaiXCityListingDTO] = []
@@ -488,6 +496,27 @@ struct CityListingDetailView: View {
         .kxListingZoomDestination("listing-\(listingId)", zoomNamespace)
         .toolbar(.hidden, for: .navigationBar)
         .task(id: listingId) { await load() }
+        .confirmationDialog(
+            KXListingCopy.pickText(language, "举报这条信息？", "この投稿を通報しますか？", "Report this listing?"),
+            isPresented: $reportConfirmOpen,
+            titleVisibility: .visible
+        ) {
+            Button(KXListingCopy.pickText(language, "虚假或诈骗信息", "虚偽・詐欺の疑い", "Fake or scam"), role: .destructive) {
+                Task { await report(reason: "suspicious") }
+            }
+            Button(KXListingCopy.pickText(language, "广告或骚扰", "広告・迷惑行為", "Spam or harassment"), role: .destructive) {
+                Task { await report(reason: "spam") }
+            }
+            Button(KXListingCopy.pickText(language, "不当内容", "不適切な内容", "Inappropriate content"), role: .destructive) {
+                Task { await report(reason: "inappropriate") }
+            }
+            Button(KXListingCopy.pickText(language, "其他问题", "その他の問題", "Other issue"), role: .destructive) {
+                Task { await report(reason: "other") }
+            }
+            Button(KXListingCopy.pickText(language, "取消", "キャンセル", "Cancel"), role: .cancel) {}
+        } message: {
+            Text(KXListingCopy.pickText(language, "选择举报理由，Machi 会尽快审核。", "通報理由を選んでください。Machi が確認します。", "Choose a reason — Machi will review it."))
+        }
         .sheet(isPresented: $intakeOpen) {
             Group {
                 if let listing {
@@ -568,8 +597,12 @@ struct CityListingDetailView: View {
             }
             Spacer(minLength: 8)
             Button {
-                if ownListing { router.open(.editCityListing(listingId: listing.id)) }
-                else { intakeOpen = true }
+                if ownListing {
+                    router.open(.editCityListing(listingId: listing.id))
+                } else {
+                    guard GuestSession.requireSignedIn(currentUser, reason: intakeLoginReason) else { return }
+                    intakeOpen = true
+                }
             } label: {
                 Text(ownListing ? KXListingCopy.pickText(language, "编辑发布", "投稿を編集", "Edit listing") : ListingIntakeLocalizer.text(spec.title, language))
                     .font(.subheadline.weight(.black))
@@ -617,10 +650,10 @@ struct CityListingDetailView: View {
             }
             Spacer()
             Button { Task { await favorite() } } label: {
-                Image(systemName: listing?.favorited == true ? "heart.fill" : "heart")
+                Image(systemName: isFavoritedNow ? "heart.fill" : "heart")
                     .font(.headline.weight(.semibold))
-                    .foregroundStyle(listing?.favorited == true ? KXColor.heat : .primary)
-                    .symbolEffect(.bounce, value: listing?.favorited)
+                    .foregroundStyle(isFavoritedNow ? KXColor.heat : .primary)
+                    .symbolEffect(.bounce, value: isFavoritedNow)
                     .frame(width: 42, height: 42)
                     .kxGlassCircle()
             }
@@ -948,10 +981,15 @@ struct CityListingDetailView: View {
     @ViewBuilder
     private func contactAvatar(_ contact: KaiXReservationContactDTO, name: String) -> some View {
         if let photo = cleanContactValue(contact.photoUrl), let url = URL(string: photo) {
-            AsyncImage(url: url) { image in
-                image.resizable().scaledToFill()
-            } placeholder: {
+            // Cached + downsampled via the app's image pipeline
+            // (CachedMediaImageView → ImageCacheService) instead of a bare
+            // AsyncImage, which re-downloaded the full-size photo on every
+            // appearance. The soft accent circle underneath mirrors the old
+            // AsyncImage placeholder while loading / on failure.
+            ZStack {
                 Circle().fill(KXColor.livingAccentSoft)
+                CachedMediaImageView(url: url, targetPixelSize: 44 * 3, failureMode: .transparent)
+                    .clipShape(Circle())
             }
             .frame(width: 44, height: 44)
             .clipShape(Circle())
@@ -1101,7 +1139,10 @@ struct CityListingDetailView: View {
                     .buttonStyle(.plain)
                     .disabled(isBusy)
                 } else {
-                    Button { intakeOpen = true } label: {
+                    Button {
+                        guard GuestSession.requireSignedIn(currentUser, reason: intakeLoginReason) else { return }
+                        intakeOpen = true
+                    } label: {
                         Label(isBusy ? KXListingCopy.pickText(language, "处理中", "処理中", "Processing") : ListingIntakeLocalizer.text(spec.title, language), systemImage: "doc.badge.plus")
                             .font(.subheadline.weight(.black))
                             .frame(maxWidth: .infinity)
@@ -1133,7 +1174,10 @@ struct CityListingDetailView: View {
                 }
 
                 HStack(spacing: 8) {
-                    Button { Task { await report() } } label: {
+                    Button {
+                        guard GuestSession.requireSignedIn(currentUser, reason: KXListingCopy.pickText(language, "登录后可以举报异常信息。", "ログインすると問題を報告できます。", "Sign in to report a listing.")) else { return }
+                        reportConfirmOpen = true
+                    } label: {
                         Label(KXListingCopy.pickText(language, "举报异常", "問題を報告", "Report issue"), systemImage: "flag")
                             .font(.caption.weight(.bold))
                             .frame(maxWidth: .infinity)
@@ -1163,11 +1207,11 @@ struct CityListingDetailView: View {
     private func sellerJoinDate(_ listing: KaiXCityListingDTO) -> Date? {
         let iso = listing.seller?.joined_at ?? listing.seller?.created_at
         guard let iso, !iso.isEmpty else { return nil }
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let d = f.date(from: iso) { return d }
-        f.formatOptions = [.withInternetDateTime]
-        return f.date(from: iso)
+        // Cached shared ISO parsers (same fractional→plain fallback order)
+        // instead of allocating a fresh ISO8601DateFormatter per render —
+        // this runs for the trust-chip row every time the detail redraws.
+        if let d = KXDateParsing.isoFractional.date(from: iso) { return d }
+        return KXDateParsing.iso.date(from: iso)
     }
 
     private func sellerIsNew(_ listing: KaiXCityListingDTO) -> Bool {
@@ -1269,6 +1313,8 @@ struct CityListingDetailView: View {
         do {
             let loaded = try await KaiXAPIClient.shared.cityListing(listingId)
             listing = loaded
+            // Fresh server truth supersedes any optimistic heart override.
+            favoritedOverride = nil
             isLoading = false
             await loadRecommendations(for: loaded)
         } catch {
@@ -1308,27 +1354,45 @@ struct CityListingDetailView: View {
         }
     }
 
+    /// True when the heart should render filled — the optimistic override wins
+    /// over the (immutable) DTO's server-provided flag.
+    private var isFavoritedNow: Bool {
+        favoritedOverride ?? (listing?.favorited ?? listing?.isFavorited ?? false)
+    }
+
+    /// Shared login-prompt copy for the inquiry / booking / application entry points.
+    private var intakeLoginReason: String {
+        KXListingCopy.pickText(language, "登录后可以提交申请、预约或咨询。", "ログインすると応募・予約・問い合わせができます。", "Sign in to apply, book or inquire.")
+    }
+
     private func favorite() async {
         guard let listing else { return }
-        let next = !(listing.favorited ?? false)
+        guard GuestSession.requireSignedIn(currentUser, reason: KXListingCopy.pickText(language, "登录后可以收藏喜欢的信息。", "ログインするとお気に入りに保存できます。", "Sign in to save listings you like.")) else { return }
+        let current = isFavoritedNow
+        let next = !current
         // Route the write through FavoritesStore (like the listing cards do) so
         // the local wishlist cache stays consistent with the heart shown on the
-        // cards. Optimistic update + rollback on failure.
+        // cards. Optimistic flip (heart + local cache) + rollback on failure —
+        // no full-page reload, the heart responds instantly.
         let snapshot = FavoritesStore.snapshot(from: listing)
+        favoritedOverride = next
         FavoritesStore.shared.set(snapshot, on: next)
         isBusy = true
         defer { isBusy = false }
         do {
             try await KaiXAPIClient.shared.favoriteListing(listing.id, on: next)
-            await load()
         } catch {
-            FavoritesStore.shared.set(snapshot, on: !next)
+            favoritedOverride = current
+            FavoritesStore.shared.set(snapshot, on: current)
             actionMessage = error.kaixUserMessage
         }
     }
 
     private func submitInquiry(message: String, details: [[String: String]]) async {
         guard let listing else { return }
+        // Backstop for the sheet-less quick-inquiry buttons; the sheet entry
+        // points are gated before the sheet ever opens.
+        guard GuestSession.requireSignedIn(currentUser, reason: intakeLoginReason) else { return }
         guard !isOwnListing(listing) else {
             actionMessage = KXListingCopy.pickText(language, "不能咨询自己发布的信息。", "自分の投稿には問い合わせできません。", "You cannot inquire about your own listing.")
             return
@@ -1364,12 +1428,12 @@ struct CityListingDetailView: View {
         }
     }
 
-    private func report() async {
+    private func report(reason: String) async {
         guard let listing else { return }
         isBusy = true
         defer { isBusy = false }
         do {
-            try await KaiXAPIClient.shared.reportListing(listing.id, reason: "suspicious", note: "App 用户举报")
+            try await KaiXAPIClient.shared.reportListing(listing.id, reason: reason, note: "App 用户举报")
             actionMessage = KXListingCopy.pickText(language, "举报已提交，Machi 会进行审核。", "通報を送信しました。Machi が確認します。", "Report submitted. Machi will review it.")
         } catch {
             actionMessage = error.kaixUserMessage
@@ -1589,10 +1653,23 @@ private struct ListingInquirySuccessSheet: View {
         }
     }
 
+    // Cached per-locale: DateFormatter construction is expensive, and this
+    // label re-renders with the receipt sheet. Fixed format ("yyyy-MM-dd
+    // HH:mm"), so the cached instance produces byte-identical output.
+    private static var timeLabelFormatters: [String: DateFormatter] = [:]
+
     private static func timeLabel(_ date: Date, _ language: AppLanguage) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: language == .ja ? "ja_JP" : language == .en ? "en_US" : "zh_CN")
-        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        let localeID = language == .ja ? "ja_JP" : language == .en ? "en_US" : "zh_CN"
+        let formatter: DateFormatter
+        if let cached = timeLabelFormatters[localeID] {
+            formatter = cached
+        } else {
+            let made = DateFormatter()
+            made.locale = Locale(identifier: localeID)
+            made.dateFormat = "yyyy-MM-dd HH:mm"
+            timeLabelFormatters[localeID] = made
+            formatter = made
+        }
         return formatter.string(from: date)
     }
 }

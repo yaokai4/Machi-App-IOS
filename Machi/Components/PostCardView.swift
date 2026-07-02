@@ -669,11 +669,11 @@ private struct OfficialSourceChip: View {
     var body: some View {
         Text(title)
             .font(.system(size: 9, weight: .bold))
-            .foregroundStyle(Color(red: 0.05, green: 0.48, blue: 0.45))
+            .foregroundStyle(KXColor.official)
             .lineLimit(1)
             .padding(.horizontal, 5)
             .frame(height: 17)
-            .background(Color(red: 0.05, green: 0.48, blue: 0.45).opacity(0.10), in: Capsule())
+            .background(KXColor.official.opacity(0.10), in: Capsule())
     }
 }
 

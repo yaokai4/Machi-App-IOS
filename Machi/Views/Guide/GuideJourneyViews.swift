@@ -48,6 +48,19 @@ func guideJourneyKey(forCategory categoryKey: String) -> String? {
     }
 }
 
+/// Persona (`arrival_stage`) -> journey key, shared by the Guide home journey
+/// spotlight and onboarding so both lead with the same default path. Keys must
+/// exist in the server's GUIDE_JOURNEY_SEED ("prepare" = 行前准备 audience
+/// pre_arrival, "arrival" = 落地办事 audience newcomer). first_year / long_term
+/// have no single dominant path, so they map to nil (keep server order).
+func guideJourneyKey(forArrivalStage stage: String) -> String? {
+    switch stage {
+    case "pre_arrival": return "prepare"
+    case "just_arrived": return "arrival"
+    default: return nil
+    }
+}
+
 private func guideJourneyTitle(forKey key: String) -> String {
     GuideViewModelJourneyTitles.titles[key] ?? key
 }
@@ -163,6 +176,64 @@ struct GuideJourneyCard: View {
     }
 }
 
+// MARK: - Home: journey spotlight (2-4 张横滑门面)
+
+/// Guide 首页的 journey 门面:横滑展示前几条行动路径,把埋在「路径」页的
+/// 完整网格带到第一屏。登录用户用 /api/guide/progress 的 summary 叠真实
+/// 完成度;数据为空时整块自动隐藏,不留空位。
+struct GuideJourneySpotlight: View {
+    @Environment(\.appLanguage) private var language
+    @EnvironmentObject private var router: AppRouter
+
+    let journeys: [KaiXGuideJourneyDTO]
+    var progress: [String: KaiXGuideProgressSummaryDTO] = [:]
+    /// Persona-suggested journey key (see `guideJourneyKey(forArrivalStage:)`);
+    /// moves that path to the front. nil = keep server order.
+    var leadKey: String? = nil
+
+    private var spotlightJourneys: [KaiXGuideJourneyDTO] {
+        var ordered = journeys
+        if let leadKey, let index = ordered.firstIndex(where: { $0.key == leadKey }), index > 0 {
+            ordered.insert(ordered.remove(at: index), at: 0)
+        }
+        return Array(ordered.prefix(4))
+    }
+
+    var body: some View {
+        if !spotlightJourneys.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    GuideSectionHeader(
+                        title: journeyText(language, "你现在想解决什么？", "いま何を解決したいですか？", "What do you need to get done?"),
+                        subtitle: journeyText(language, "选一个目标，Machi 整理成可执行步骤", "目標を選ぶと実行可能なステップに整理します", "Pick a goal and Machi turns it into steps")
+                    )
+                    Spacer()
+                    Button(journeyText(language, "查看全部", "すべて見る", "View all")) {
+                        router.open(.guideGoals)
+                    }
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(KXColor.accent)
+                }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 10) {
+                        ForEach(spotlightJourneys) { journey in
+                            GuideJourneyCard(
+                                journey: journey,
+                                doneCount: progress[journey.key]?.done ?? 0,
+                                totalOverride: progress[journey.key]?.total
+                            ) {
+                                router.open(.guideJourney(key: journey.key))
+                            }
+                            .frame(width: 190)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Journey detail: timeline / checklist
 
 @MainActor
@@ -173,6 +244,10 @@ final class GuideJourneyDetailViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var syncMessage: String?
     @Published var isStartingPlan = false
+    /// Set once when a toggle transitions the journey from partially done to
+    /// fully done. The detail view consumes it (resets to false) to show the
+    /// "share your tips" celebration card, deduped per journey via @AppStorage.
+    @Published var journeyJustCompleted = false
 
     func load(journeyKey: String, country: String, language: String) async {
         guard country == "jp" else { detail = nil; isLoading = false; return }
@@ -214,6 +289,12 @@ final class GuideJourneyDetailViewModel: ObservableObject {
         )
         do {
             _ = try await KaiXAPIClient.shared.updateGuideProgress(journeyKey: journeyKey, stepKey: step.stepKey, status: newStatus)
+            // 完成时刻:这次勾选把路径从「未全完成」推到「全部完成」→ 点亮庆祝卡。
+            // (newStatus == "done" 保证之前该步未完成,即之前必然不是全完成。)
+            if newStatus == "done", let steps = detail?.steps, !steps.isEmpty,
+               doneCount(steps: steps) == steps.count {
+                journeyJustCompleted = true
+            }
         } catch {
             if let previous {
                 progress[step.stepKey] = previous
@@ -279,8 +360,13 @@ final class GuideJourneyDetailViewModel: ObservableObject {
 struct GuideJourneyDetailView: View {
     @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var composeStore: ComposeStore
     @ObservedObject private var regionStore = RegionStore.shared
     @StateObject private var model = GuideJourneyDetailViewModel()
+    /// Journey keys whose completion celebration has already been shown
+    /// (comma-separated), so re-completing the same path doesn't re-prompt.
+    @AppStorage("guide.celebratedJourneys.v1") private var celebratedJourneysRaw = ""
+    @State private var showCompletionCard = false
 
     let journeyKey: String
 
@@ -303,6 +389,14 @@ struct GuideJourneyDetailView: View {
         .task(id: "\(country):\(journeyKey)") {
             await model.load(journeyKey: journeyKey, country: country, language: languageCode)
         }
+        .onChange(of: model.journeyJustCompleted) { _, completed in
+            guard completed else { return }
+            model.journeyJustCompleted = false
+            let celebrated = Set(celebratedJourneysRaw.split(separator: ",").map(String.init))
+            guard !celebrated.contains(journeyKey) else { return }
+            celebratedJourneysRaw = celebrated.isEmpty ? journeyKey : celebratedJourneysRaw + "," + journeyKey
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) { showCompletionCard = true }
+        }
     }
 
     @ViewBuilder
@@ -319,6 +413,10 @@ struct GuideJourneyDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     header(detail.journey, steps: detail.steps)
+                    if showCompletionCard {
+                        completionCard(detail.journey)
+                            .transition(.scale(scale: 0.94).combined(with: .opacity))
+                    }
                     HStack(spacing: 10) {
                         Button {
                             Task {
@@ -454,6 +552,65 @@ struct GuideJourneyDetailView: View {
         }
         .padding(18)
         .kxGlassSurface(radius: 24)
+    }
+
+    /// 完成时刻:恭喜卡 + 引导写攻略帮后来人。主按钮通过 ComposeStore 打开
+    /// 全局发帖器并预选 guide 类型(与频道空态的 requestCompose 同一条通道)。
+    private func completionCard(_ journey: KaiXGuideJourneyDTO) -> some View {
+        let tint = guideHexColor(journey.color)
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                Image(systemName: "party.popper.fill")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 46, height: 46)
+                    .background(
+                        LinearGradient(colors: [tint, tint.opacity(0.82)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                        in: RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    )
+                    .shadow(color: tint.opacity(0.35), radius: 8, y: 4)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(journeyText(language, "恭喜完成「\(journey.title)」！", "「\(journey.title)」完了、おめでとうございます！", "You finished \(journey.title)!"))
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.primary)
+                    Text(journeyText(language, "把踩过的坑和经验写下来，帮后来人少走弯路。", "経験や気づきをシェアして、これからの人を助けましょう。", "Share what you learned to help the next person."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            HStack(spacing: 10) {
+                Button {
+                    withAnimation { showCompletionCard = false }
+                    composeStore.requestCompose(.guide)
+                } label: {
+                    Label(journeyText(language, "写两句攻略帮后来人", "攻略を書いてシェア", "Share your tips"), systemImage: "square.and.pencil")
+                        .font(.caption.weight(.bold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                }
+                .buttonStyle(.fullArea)
+                .contentShape(Rectangle())
+                .foregroundStyle(.white)
+                .background(tint, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                Button {
+                    withAnimation { showCompletionCard = false }
+                } label: {
+                    Text(journeyText(language, "先不用", "あとで", "Not now"))
+                        .font(.caption.weight(.bold))
+                        .frame(width: 76)
+                        .frame(height: 44)
+                }
+                .buttonStyle(.fullArea)
+                .contentShape(Rectangle())
+                .foregroundStyle(.secondary)
+                .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+        }
+        .padding(15)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .kxGlassSurface(radius: 20)
     }
 }
 

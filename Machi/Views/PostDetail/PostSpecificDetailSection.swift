@@ -116,15 +116,9 @@ struct PostSpecificDetailSection: View {
 
     @MainActor
     private func toggleMeetupJoin() async {
-        guard let me = currentUser else {
-            toastManager.show(.custom(
-                title: KXListingCopy.pickText(language, "请先登录", "ログインしてください", "Please sign in"),
-                message: KXListingCopy.pickText(language, "登录后才能报名", "ログインすると参加できます", "Sign in to join"),
-                systemImage: "person.crop.circle.badge.exclamationmark", tint: KXColor.accent, technicalDetails: nil,
-            ), duration: 2.5)
-            return
-        }
-        _ = me
+        // The guest is a non-nil sentinel user, so a `guard let` never fires —
+        // gate on the guest state itself and raise the shared login sheet.
+        guard GuestSession.requireSignedIn(currentUser, reason: KXListingCopy.pickText(language, "登录后可以报名参加。", "ログインすると参加できます。", "Sign in to join.")) else { return }
         meetupBusy = true
         defer { meetupBusy = false }
         do {
@@ -204,6 +198,7 @@ struct PostSpecificDetailSection: View {
             .background(KXColor.accent, in: Capsule())
 
             Button {
+                guard GuestSession.requireSignedIn(currentUser, reason: KXListingCopy.pickText(language, "登录后可以举报内容。", "ログインすると通報できます。", "Sign in to report content.")) else { return }
                 let reportedPostId = post.id
                 Task {
                     do {
@@ -245,17 +240,9 @@ struct PostSpecificDetailSection: View {
     /// signed-out or the repository call fails.
     @MainActor
     private func openConversation() async {
-        guard let me = currentUser else {
-            toastManager.show(.custom(
-                title: KXListingCopy.pickText(language, "请先登录", "ログインしてください", "Please sign in"),
-                message: KXListingCopy.pickText(language, "登录后才能发起私信", "ログインするとメッセージを送れます", "Sign in to start a private message"),
-                systemImage: "person.crop.circle.badge.exclamationmark",
-                tint: KXColor.accent,
-                technicalDetails: nil,
-            ), duration: 2.5)
-            return
-        }
-        guard post.authorId != me.id else { return }
+        // Same guest-sentinel pitfall as the RSVP: gate on isGuest, not nil.
+        guard GuestSession.requireSignedIn(currentUser, reason: KXListingCopy.pickText(language, "登录后可以私信卖家。", "ログインするとメッセージを送れます。", "Sign in to message the seller.")) else { return }
+        guard let me = currentUser, post.authorId != me.id else { return }
         openingDM = true
         defer { openingDM = false }
         do {
