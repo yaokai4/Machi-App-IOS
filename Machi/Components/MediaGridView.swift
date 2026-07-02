@@ -24,11 +24,15 @@ struct MediaGridView: View {
                     } label: {
                         ZStack {
                             if item.type == .video, let posterURL = item.displayURL {
-                                // Video poster is a public CDN URL — no stable key.
+                                // A public video cover keys by URL; a PRIVATE DM
+                                // cover (posterStableCacheKey set) keys stably and
+                                // re-signs on 403 like the body.
                                 MediaImageView(
                                     url: posterURL,
                                     targetPixelSize: count == 1 ? 960 : 640,
-                                    contentMode: .fill
+                                    contentMode: .fill,
+                                    stableKey: item.posterStableCacheKey,
+                                    onResign: posterResignHandler(for: item)
                                 )
                                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                                     .clipped()
@@ -108,6 +112,18 @@ struct MediaGridView: View {
         let attachmentId = media.remoteId ?? media.id
         return {
             guard let fresh = await MessageRepository.resignAttachmentURL(messageId: messageId, attachmentId: attachmentId) else { return nil }
+            return URL(string: fresh)
+        }
+    }
+
+    /// Re-sign handler for a PRIVATE DM video poster (identified by a non-empty
+    /// poster stable cache key). Nil for public covers / non-DM media.
+    private func posterResignHandler(for media: MediaEntity) -> (() async -> URL?)? {
+        guard media.posterStableCacheKey != nil, !media.postId.isEmpty else { return nil }
+        let messageId = media.postId
+        let attachmentId = media.remoteId ?? media.id
+        return {
+            guard let fresh = await MessageRepository.resignPosterURL(messageId: messageId, attachmentId: attachmentId) else { return nil }
             return URL(string: fresh)
         }
     }

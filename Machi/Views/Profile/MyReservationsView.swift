@@ -113,7 +113,7 @@ struct MyReservationsView: View {
                 }
             }
             .padding(KXSpacing.md)
-            .kxLivingSurface(radius: 18)
+            .kxLivingSurface(radius: KXRadius.lg)
             .opacity(cancelled ? 0.6 : 1)
         }
         .buttonStyle(KXPressableStyle())
@@ -371,6 +371,6 @@ private struct KXEmptyActionPanel: View {
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 22)
         .padding(.vertical, 32)
-        .kxLivingSurface(radius: 28, elevated: true)
+        .kxLivingSurface(radius: KXRadius.sheet, elevated: true)
     }
 }

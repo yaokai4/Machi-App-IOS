@@ -565,7 +565,7 @@ struct GuideArticleDetailView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(14)
-            .kxGlassSurface(radius: 18)
+            .kxGlassSurface(radius: KXRadius.lg)
         }
     }
 
@@ -1642,7 +1642,7 @@ private struct GuideSearchFAQCard: View {
             }
         }
         .padding(14)
-        .kxGlassSurface(radius: 18)
+        .kxGlassSurface(radius: KXRadius.lg)
     }
 }
 

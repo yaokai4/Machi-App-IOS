@@ -213,6 +213,10 @@ struct MediaVideoView: View {
     let sourceURL: URL?
     let posterURL: URL?
     var autoPlay = false
+    /// Stable cache identity + re-sign hook for a PRIVATE DM video poster whose
+    /// signed URL rotates. Nil for public covers (keyed by URL, no re-sign).
+    var posterStableKey: String? = nil
+    var posterOnResign: (() async -> URL?)? = nil
 
     @State private var player: AVPlayer?
     @State private var isPlaying = false
@@ -228,7 +232,7 @@ struct MediaVideoView: View {
                     .background(Color.black)
             } else {
                 if let posterURL {
-                    MediaImageView(url: posterURL, targetPixelSize: 1400)
+                    MediaImageView(url: posterURL, targetPixelSize: 1400, stableKey: posterStableKey, onResign: posterOnResign)
                         .transition(.opacity)
                 } else {
                     ZStack {

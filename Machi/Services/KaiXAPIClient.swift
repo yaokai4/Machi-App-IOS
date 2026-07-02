@@ -1798,7 +1798,10 @@ final class KaiXAPIClient {
     /// re-sign *before* the URL dies (rather than replaying a dead URL). An
     /// Idempotency-Key makes the POST safely retryable on a flaky network — the
     /// same attachment re-signs to a fresh URL without double-charging any audit.
-    func messageAttachmentViewUrl(messageId: String, attachmentId: String) async throws -> (url: String, expiresIn: Int?) {
+    /// Fetch a signed URL for a private DM attachment. `poster: true` signs the
+    /// private video COVER (kind=poster) instead of the video body; the endpoint
+    /// authorizes by thread membership, identical to the body's view-url.
+    func messageAttachmentViewUrl(messageId: String, attachmentId: String, poster: Bool = false) async throws -> (url: String, expiresIn: Int?) {
         struct Payload: Codable {
             let url: String
             let expiresIn: Int?
@@ -1809,10 +1812,14 @@ final class KaiXAPIClient {
             let url: String?
             let expiresIn: Int?
         }
+        let idemKind = poster ? "poster" : "body"
+        // Pass ?kind=poster via queryItems — appendingPathComponent would
+        // percent-encode a literal "?" into the path and break the query.
         let data = try await request(
             "POST",
             "/api/messages/\(messageId.encodedPathSegment)/attachments/\(attachmentId.encodedPathSegment)/view-url",
-            idempotencyKey: "attachment-view-\(messageId)-\(attachmentId)"
+            queryItems: poster ? [URLQueryItem(name: "kind", value: "poster")] : [],
+            idempotencyKey: "attachment-view-\(idemKind)-\(messageId)-\(attachmentId)"
         )
         let wrapper: Wrapper = try decode(data)
         if let url = wrapper.data?.url, !url.isEmpty {

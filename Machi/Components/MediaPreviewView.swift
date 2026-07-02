@@ -42,7 +42,13 @@ struct MediaPreviewView: View {
     @ViewBuilder
     private func mediaPage(_ media: MediaEntity) -> some View {
         if media.type == .video {
-            MediaVideoView(sourceURL: media.sourceURL, posterURL: media.previewURL, autoPlay: selection == media.id)
+            MediaVideoView(
+                sourceURL: media.sourceURL,
+                posterURL: media.previewURL,
+                autoPlay: selection == media.id,
+                posterStableKey: media.posterStableCacheKey,
+                posterOnResign: posterResignHandler(for: media)
+            )
                 .padding()
         } else if let url = imageURL(for: media) {
             ZoomableMediaImage(
@@ -158,6 +164,18 @@ struct MediaPreviewView: View {
         let attachmentId = media.remoteId ?? media.id
         return {
             guard let fresh = await MessageRepository.resignAttachmentURL(messageId: messageId, attachmentId: attachmentId) else { return nil }
+            return URL(string: fresh)
+        }
+    }
+
+    /// Re-sign handler for a PRIVATE DM video poster (non-empty poster stable
+    /// cache key). Nil for public covers / non-DM media.
+    private func posterResignHandler(for media: MediaEntity) -> (() async -> URL?)? {
+        guard media.posterStableCacheKey != nil, !media.postId.isEmpty else { return nil }
+        let messageId = media.postId
+        let attachmentId = media.remoteId ?? media.id
+        return {
+            guard let fresh = await MessageRepository.resignPosterURL(messageId: messageId, attachmentId: attachmentId) else { return nil }
             return URL(string: fresh)
         }
     }

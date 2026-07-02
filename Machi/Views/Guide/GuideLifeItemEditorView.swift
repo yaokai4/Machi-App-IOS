@@ -209,7 +209,7 @@ struct GuideOSLifeItemRow: View {
             GuideAttachmentSection(entityType: "guide_life_item", entityId: item.id, title: guideOSText(language, "缴费附件", "支払い添付", "Payment attachments"))
         }
         .padding(12)
-        .kxGlassSurface(radius: 16)
+        .kxGlassSurface(radius: KXRadius.md)
         .confirmationDialog(guideOSText(language, "删除该生活事项？", "この生活項目を削除しますか？", "Delete this life item?"), isPresented: $confirming, titleVisibility: .visible) {
             Button(guideOSText(language, "删除（含待办）", "削除（タスクも含む）", "Delete (incl. todos)"), role: .destructive, action: onDelete)
             Button(guideOSText(language, "取消", "キャンセル", "Cancel"), role: .cancel) {}

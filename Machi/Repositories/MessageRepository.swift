@@ -273,7 +273,9 @@ final class MessageRepository {
                 data: thumbnailData,
                 mime: "image/jpeg",
                 fileName: "\(draft.id)-cover.jpg",
-                purpose: "video_thumbnail",
+                // Private, encrypted, signed-URL poster (matches the video body's
+                // privacy) so the first frame of a DM video isn't on a public CDN.
+                purpose: "message_video_thumbnail",
                 entityType: "message",
                 threadId: threadId,
                 width: Int(draft.width.rounded()),
@@ -452,23 +454,40 @@ final class MessageRepository {
         )
     }
 
+    /// One thing to sign for a message: either an attachment's video/image body
+    /// or its private video poster. `poster` selects which the view-url signs.
+    private struct AttachmentSignWork {
+        let attachmentId: String
+        let poster: Bool
+    }
+
     private static func resolvedMediaItems(from dto: KaiXMessageDTO) async -> [MediaEntity] {
         guard let attachments = dto.attachments, !attachments.isEmpty else {
             return mediaItems(from: dto)
         }
         let now = Date()
 
-        // Split into cache hits (free) and misses that need a network sign.
+        // Split into cache hits (free) and misses that need a network sign — for
+        // BOTH the attachment body and any private video poster.
         var signedURLs: [String: String] = [:]
-        var toSign: [KaiXMessageAttachmentDTO] = []
+        var signedPosterURLs: [String: String] = [:]
+        var toSign: [AttachmentSignWork] = []
         for attachment in attachments {
             let publicSource = attachment.publicUrl ?? attachment.cdnUrl ?? attachment.url ?? ""
             let needsSignedURL = attachment.needsSignedUrl == true || publicSource.isEmpty
-            guard needsSignedURL else { continue }
-            if let cached = signedAttachmentURLCache[Self.signCacheKey(dto.id, attachment.id)], cached.expiresAt > now {
-                signedURLs[attachment.id] = cached.url
-            } else {
-                toSign.append(attachment)
+            if needsSignedURL {
+                if let cached = signedAttachmentURLCache[Self.signCacheKey(dto.id, attachment.id)], cached.expiresAt > now {
+                    signedURLs[attachment.id] = cached.url
+                } else {
+                    toSign.append(AttachmentSignWork(attachmentId: attachment.id, poster: false))
+                }
+            }
+            if attachmentNeedsSignedPoster(attachment) {
+                if let cached = signedAttachmentURLCache[Self.posterSignCacheKey(dto.id, attachment.id)], cached.expiresAt > now {
+                    signedPosterURLs[attachment.id] = cached.url
+                } else {
+                    toSign.append(AttachmentSignWork(attachmentId: attachment.id, poster: true))
+                }
             }
         }
 
@@ -477,48 +496,64 @@ final class MessageRepository {
         // the whole list decode on N sequential round-trips.
         if !toSign.isEmpty {
             let messageId = dto.id
-            let signed = await withTaskGroup(of: (String, String, Int?)?.self) { group -> [(String, String, Int?)] in
+            let signed = await withTaskGroup(of: (String, Bool, String, Int?)?.self) { group -> [(String, Bool, String, Int?)] in
                 var iterator = toSign.makeIterator()
                 let maxConcurrent = 6
                 // Bounded fan-out: prime up to `maxConcurrent` sign requests, then
                 // start one more each time an earlier one finishes — never more
                 // than 6 in flight at once.
                 func addNext() {
-                    guard let attachment = iterator.next() else { return }
+                    guard let work = iterator.next() else { return }
                     group.addTask {
                         guard let result = try? await KaiXAPIClient.shared.messageAttachmentViewUrl(
                             messageId: messageId,
-                            attachmentId: attachment.id
+                            attachmentId: work.attachmentId,
+                            poster: work.poster
                         ), !result.url.isEmpty else { return nil }
-                        return (attachment.id, result.url, result.expiresIn)
+                        return (work.attachmentId, work.poster, result.url, result.expiresIn)
                     }
                 }
                 for _ in 0..<Swift.min(maxConcurrent, toSign.count) { addNext() }
-                var results: [(String, String, Int?)] = []
+                var results: [(String, Bool, String, Int?)] = []
                 while let finished = await group.next() {
                     if let finished { results.append(finished) }
                     addNext()
                 }
                 return results
             }
-            for (attachmentId, url, expiresIn) in signed {
-                signedURLs[attachmentId] = url
+            for (attachmentId, poster, url, expiresIn) in signed {
                 // Honor the server's TTL (minus a 60s safety margin) instead of a
                 // hardcoded 240s, so a shorter-lived URL is re-signed before it
                 // dies and a longer-lived one isn't re-signed needlessly.
                 let ttl = expiresIn.map { Swift.max(30, Double($0) - 60) } ?? 240
-                signedAttachmentURLCache[Self.signCacheKey(messageId, attachmentId)] = SignedAttachmentURLCacheItem(
+                let key = poster ? Self.posterSignCacheKey(messageId, attachmentId) : Self.signCacheKey(messageId, attachmentId)
+                if poster { signedPosterURLs[attachmentId] = url } else { signedURLs[attachmentId] = url }
+                signedAttachmentURLCache[key] = SignedAttachmentURLCacheItem(
                     url: url,
                     expiresAt: now.addingTimeInterval(ttl)
                 )
             }
             Self.pruneSignedAttachmentCacheIfNeeded(now: now)
         }
-        return mediaItems(from: dto, signedAttachmentURLs: signedURLs)
+        return mediaItems(from: dto, signedAttachmentURLs: signedURLs, signedPosterURLs: signedPosterURLs)
     }
 
     private static func signCacheKey(_ messageId: String, _ attachmentId: String) -> String {
         "\(messageId):\(attachmentId)"
+    }
+
+    /// Distinct cache namespace for a private video POSTER so a signed poster URL
+    /// never collides with the same attachment's signed video-body URL.
+    private static func posterSignCacheKey(_ messageId: String, _ attachmentId: String) -> String {
+        "\(messageId):\(attachmentId):poster"
+    }
+
+    /// A private DM video cover (server sets needsSignedPoster) must be resolved
+    /// through a signed URL just like the body. Legacy public covers keep their
+    /// direct URL and return false here.
+    private static func attachmentNeedsSignedPoster(_ attachment: KaiXMessageAttachmentDTO) -> Bool {
+        attachment.needsSignedPoster == true
+            || (attachment.thumbnail_purpose == "message_video_thumbnail")
     }
 
     /// Resolve only what needs no network sign: legacy media + public
@@ -531,18 +566,27 @@ final class MessageRepository {
         }
         let now = Date()
         var signedURLs: [String: String] = [:]
+        var signedPosterURLs: [String: String] = [:]
         var needsSigning = false
         for attachment in attachments {
             let publicSource = attachment.publicUrl ?? attachment.cdnUrl ?? attachment.url ?? ""
             let needsSignedURL = attachment.needsSignedUrl == true || publicSource.isEmpty
-            guard needsSignedURL else { continue }
-            if let cached = signedAttachmentURLCache[signCacheKey(dto.id, attachment.id)], cached.expiresAt > now {
-                signedURLs[attachment.id] = cached.url
-            } else {
-                needsSigning = true
+            if needsSignedURL {
+                if let cached = signedAttachmentURLCache[signCacheKey(dto.id, attachment.id)], cached.expiresAt > now {
+                    signedURLs[attachment.id] = cached.url
+                } else {
+                    needsSigning = true
+                }
+            }
+            if attachmentNeedsSignedPoster(attachment) {
+                if let cached = signedAttachmentURLCache[posterSignCacheKey(dto.id, attachment.id)], cached.expiresAt > now {
+                    signedPosterURLs[attachment.id] = cached.url
+                } else {
+                    needsSigning = true
+                }
             }
         }
-        return (mediaItems(from: dto, signedAttachmentURLs: signedURLs), needsSigning)
+        return (mediaItems(from: dto, signedAttachmentURLs: signedURLs, signedPosterURLs: signedPosterURLs), needsSigning)
     }
 
     /// Re-sign a single attachment on demand (e.g. after a 403 from an expired
@@ -564,7 +608,26 @@ final class MessageRepository {
         return result.url
     }
 
-    private static func mediaItems(from dto: KaiXMessageDTO, signedAttachmentURLs: [String: String] = [:]) -> [MediaEntity] {
+    /// Re-sign a private DM video POSTER on demand (after its signed cover URL
+    /// 403s). Mirrors resignAttachmentURL but hits the ?kind=poster endpoint and
+    /// caches under the poster namespace. Returns nil for public covers / failures.
+    static func resignPosterURL(messageId: String, attachmentId: String) async -> String? {
+        guard let result = try? await KaiXAPIClient.shared.messageAttachmentViewUrl(
+            messageId: messageId,
+            attachmentId: attachmentId,
+            poster: true
+        ), !result.url.isEmpty else { return nil }
+        let now = Date()
+        let ttl = result.expiresIn.map { Swift.max(30, Double($0) - 60) } ?? 240
+        signedAttachmentURLCache[posterSignCacheKey(messageId, attachmentId)] = SignedAttachmentURLCacheItem(
+            url: result.url,
+            expiresAt: now.addingTimeInterval(ttl)
+        )
+        pruneSignedAttachmentCacheIfNeeded(now: now)
+        return result.url
+    }
+
+    private static func mediaItems(from dto: KaiXMessageDTO, signedAttachmentURLs: [String: String] = [:], signedPosterURLs: [String: String] = [:]) -> [MediaEntity] {
         let legacy = (dto.media ?? []).map { media -> MediaEntity in
             MediaEntity(
                 id: media.id,
@@ -593,14 +656,21 @@ final class MessageRepository {
             let signedSource = signedAttachmentURLs[att.id] ?? ""
             let publicSource = att.publicUrl ?? att.cdnUrl ?? att.url ?? ""
             let source = signedSource.isEmpty ? publicSource : signedSource
-            let poster = att.posterUrl ?? att.poster_url ?? att.thumbnailUrl ?? att.thumbnail_url ?? att.thumbUrl ?? att.thumb_url ?? ""
+            // A private DM video poster has no public URL (server suppresses it);
+            // use the signed poster URL when we have one. Public covers fall back
+            // to the direct poster/thumbnail URL as before.
+            let posterIsPrivate = attachmentNeedsSignedPoster(att)
+            let signedPoster = signedPosterURLs[att.id] ?? ""
+            let publicPoster = att.posterUrl ?? att.poster_url ?? att.thumbnailUrl ?? att.thumbnail_url ?? att.thumbUrl ?? att.thumb_url ?? ""
+            let poster = posterIsPrivate ? signedPoster : publicPoster
             let thumb = mediaType == .video ? poster : (poster.isEmpty ? source : poster)
             // Private attachments (signed, needs re-sign) get a stable cache key
             // so the image cache keys on the asset, not the rotating signed URL.
-            // The poster/thumbnail is served from a public CDN URL, so only the
-            // signed image body itself is keyed stably (the object key / id).
             let isPrivate = att.needsSignedUrl == true || (publicSource.isEmpty && mediaType != .video)
             let stableKey = isPrivate ? (att.objectKey ?? att.object_key ?? att.id) : ""
+            // A private, signed poster URL rotates too — key it stably on the
+            // poster file id (or the attachment id) so cache/re-sign works.
+            let posterStableKey = posterIsPrivate ? (att.thumbnail_file_id ?? att.id) : ""
             return MediaEntity(
                 id: att.id,
                 postId: dto.id,
@@ -619,7 +689,8 @@ final class MessageRepository {
                 createdAt: parseDate(att.created_at ?? att.createdAt) ?? .now,
                 remoteId: att.id,
                 syncStatus: .synced,
-                stableCacheKey: stableKey
+                stableCacheKey: stableKey,
+                posterStableCacheKey: posterStableKey
             )
         }
         return legacy + attachments

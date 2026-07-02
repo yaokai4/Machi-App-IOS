@@ -326,6 +326,6 @@ private struct KXListingsEmptyActionPanel: View {
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 22)
         .padding(.vertical, 32)
-        .kxLivingSurface(radius: 28, elevated: true)
+        .kxLivingSurface(radius: KXRadius.sheet, elevated: true)
     }
 }

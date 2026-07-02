@@ -959,7 +959,7 @@ private struct GuideCalendarCountdownStrip: View {
                             }
                             .frame(width: 138, alignment: .leading)
                             .padding(12)
-                            .kxGlassSurface(radius: 16)
+                            .kxGlassSurface(radius: KXRadius.md)
                         }
                     }
                 }

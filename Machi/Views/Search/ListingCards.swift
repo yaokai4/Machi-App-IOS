@@ -31,7 +31,7 @@ struct KXSecondhandSkeletonCard: View {
         .padding(7)
         .padding(.bottom, 2)
         .frame(width: width, alignment: .leading)
-        .kxLivingSurface(radius: 18)
+        .kxLivingSurface(radius: KXRadius.lg)
         .kxShimmer()
     }
 }
@@ -184,9 +184,9 @@ struct KXSecondhandListingCard: View {
             }
             .padding(7)
             .padding(.bottom, 2)
-            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
             .frame(maxWidth: width ?? .infinity, alignment: .leading)
-            .kxLivingSurface(radius: 18)
+            .kxLivingSurface(radius: KXRadius.lg)
         }
         .frame(maxWidth: width ?? .infinity, alignment: .leading)
         .buttonStyle(.plain)

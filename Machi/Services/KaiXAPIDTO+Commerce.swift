@@ -840,6 +840,12 @@ struct KaiXMessageAttachmentDTO: Codable, Equatable, Identifiable {
     let posterUrl: String?
     let needsSignedUrl: Bool?
     let viewUrlEndpoint: String?
+    // Private DM video poster: when true, the cover must be fetched via a signed
+    // URL (posterViewUrlEndpoint) instead of a public URL. Absent/false on legacy
+    // public covers and on older servers, so those keep their direct URL.
+    let needsSignedPoster: Bool?
+    let posterViewUrlEndpoint: String?
+    let thumbnail_purpose: String?
     let thumbnail_file_id: String?
     let duration: Double?
     let duration_seconds: Double?

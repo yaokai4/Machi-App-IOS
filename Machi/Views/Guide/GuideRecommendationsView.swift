@@ -70,7 +70,7 @@ struct GuideRecommendationsView: View {
                             Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
                         }
                         .padding(12)
-                        .kxGlassSurface(radius: 16)
+                        .kxGlassSurface(radius: KXRadius.md)
                     }
                     .buttonStyle(.fullArea)
         .contentShape(Rectangle())

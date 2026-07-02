@@ -32,6 +32,10 @@ final class MediaEntity {
     /// image cache keys on the asset, not the volatile URL. Empty for public
     /// media (which keeps URL-based cache keys).
     var stableCacheKeyRaw: String = ""
+    /// Stable identity for a private DM video POSTER whose signed URL rotates,
+    /// independent of the body's stableCacheKey. Empty for public covers (which
+    /// keep URL-based cache keys). Additive field — safe for lightweight migration.
+    var posterStableCacheKeyRaw: String = ""
 
     init(
         id: String = UUID().uuidString,
@@ -58,7 +62,8 @@ final class MediaEntity {
         syncStatus: SyncStatus = .local,
         deletedAt: Date? = nil,
         cursor: String? = nil,
-        stableCacheKey: String = ""
+        stableCacheKey: String = "",
+        posterStableCacheKey: String = ""
     ) {
         self.id = id
         self.postId = postId
@@ -85,6 +90,7 @@ final class MediaEntity {
         self.deletedAt = deletedAt
         self.cursor = cursor
         self.stableCacheKeyRaw = stableCacheKey
+        self.posterStableCacheKeyRaw = posterStableCacheKey
     }
 }
 
@@ -142,6 +148,12 @@ extension MediaEntity {
     /// so a URL rotation is a cache hit, not a miss. Nil means "key by URL".
     var stableCacheKey: String? {
         stableCacheKeyRaw.isEmpty ? nil : stableCacheKeyRaw
+    }
+
+    /// Non-empty only for a private DM video poster whose signed URL rotates.
+    /// Nil means "key the poster by URL" (public covers).
+    var posterStableCacheKey: String? {
+        posterStableCacheKeyRaw.isEmpty ? nil : posterStableCacheKeyRaw
     }
 }
 

@@ -844,7 +844,7 @@ private struct GuideContractRow: View {
             GuideAttachmentSection(entityType: "guide_contract", entityId: item.id, title: guideOSText(language, "合同附件", "契約の添付", "Contract files"))
         }
         .padding(12)
-        .kxGlassSurface(radius: 18)
+        .kxGlassSurface(radius: KXRadius.lg)
         .confirmationDialog(guideOSText(language, "删除该合同及关联提醒？", "この契約と関連リマインダーを削除しますか？", "Delete this contract and its reminders?"), isPresented: $confirmingDelete, titleVisibility: .visible) {
             Button(guideOSText(language, "删除", "削除", "Delete"), role: .destructive, action: onDelete)
             Button(guideOSText(language, "取消", "キャンセル", "Cancel"), role: .cancel) {}
@@ -1032,7 +1032,7 @@ private struct GuideDocumentRow: View {
             GuideAttachmentSection(entityType: "guide_document", entityId: item.id, title: guideOSText(language, "可选附件", "任意の添付", "Optional files"))
         }
         .padding(12)
-        .kxGlassSurface(radius: 18)
+        .kxGlassSurface(radius: KXRadius.lg)
         .confirmationDialog(guideOSText(language, "删除该证件提醒？", "この証明書リマインダーを削除しますか？", "Delete this document reminder?"), isPresented: $confirmingDelete, titleVisibility: .visible) {
             Button(guideOSText(language, "删除", "削除", "Delete"), role: .destructive, action: onDelete)
             Button(guideOSText(language, "取消", "キャンセル", "Cancel"), role: .cancel) {}
@@ -1172,7 +1172,7 @@ struct GuideGoalsView: View {
                                     GuideAttachmentSection(entityType: "guide_goal", entityId: plan.id, title: guideOSText(language, "目标附件", "目標の添付", "Goal files"))
                                 }
                                 .padding(14)
-                                .kxGlassSurface(radius: 18)
+                                .kxGlassSurface(radius: KXRadius.lg)
                             }
                         }
                     }
@@ -1236,7 +1236,7 @@ struct GuideAttachmentSection: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 Image(systemName: "paperclip")
-                    .font(.subheadline.weight(.black))
+                    .font(.subheadline.weight(.bold))
                     .foregroundStyle(KXColor.accent)
                 Text(title ?? guideOSText(language, "附件", "添付", "Attachments"))
                     .font(.subheadline.weight(.bold))

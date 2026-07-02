@@ -88,7 +88,7 @@ struct GuideJLPTZoneView: View {
                     ForEach(levels) { lv in
                         HStack(alignment: .top, spacing: 12) {
                             Text(lv.label)
-                                .font(.subheadline.weight(.black))
+                                .font(.subheadline.weight(.bold))
                                 .foregroundStyle(KXColor.livingAccent)
                                 .frame(width: 42, height: 42)
                                 .background(KXColor.livingAccentSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))

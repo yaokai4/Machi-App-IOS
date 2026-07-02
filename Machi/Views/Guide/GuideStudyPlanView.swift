@@ -91,6 +91,6 @@ private struct GuideStudyTodoRow: View {
             Spacer(minLength: 0)
         }
         .padding(12)
-        .kxGlassSurface(radius: 16)
+        .kxGlassSurface(radius: KXRadius.md)
     }
 }

@@ -252,7 +252,7 @@ struct GuideOSApplicationRow: View {
             .accessibilityLabel(guideOSText(language, "删除 \(app.name)", "\(app.name)を削除", "Delete \(app.name)"))
         }
         .padding(12)
-        .kxGlassSurface(radius: 16)
+        .kxGlassSurface(radius: KXRadius.md)
         .confirmationDialog(guideOSText(language, "删除该申请？", "この申請を削除しますか？", "Delete this application?"), isPresented: $confirming, titleVisibility: .visible) {
             Button(guideOSText(language, "删除（含倒排待办）", "削除（逆算ToDoも含む）", "Delete (incl. countdown todos)"), role: .destructive, action: onDelete)
             Button(guideOSText(language, "取消", "キャンセル", "Cancel"), role: .cancel) {}

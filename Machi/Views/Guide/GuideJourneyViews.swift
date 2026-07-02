@@ -758,9 +758,9 @@ private struct GuideJourneyStepRow: View {
         }
         .padding(15)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .kxGlassSurface(radius: 18)
+        .kxGlassSurface(radius: KXRadius.lg)
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous)
                 .fill(tint.opacity(isDone ? 0.06 : 0))
                 .allowsHitTesting(false)
         )
