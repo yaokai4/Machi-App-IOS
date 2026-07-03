@@ -1065,6 +1065,10 @@ struct GuideProductDetailView: View {
                             previewPanel(preview, product: product)
                         }
                         productDescription(product)
+                        // BE4: user reviews (star summary + distribution + list +
+                        // write-review sheet for buyers/members). Uses slug — the
+                        // review endpoints accept id-or-slug like the detail route.
+                        GuideProductReviewsSection(productRef: product.slug)
                     }
                     .padding(KXSpacing.screen)
                     .guideBottomInset()

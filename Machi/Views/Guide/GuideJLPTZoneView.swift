@@ -59,6 +59,19 @@ struct GuideJLPTZoneView: View {
                 }
             }
 
+            // 倒计时条 (hero) — 距下一场 JLPT 考试还有几天.
+            if let countdown = z.jlptCore?.examCountdown {
+                JLPTCountdownBar(countdown: countdown)
+            }
+
+            // 打卡 streak badge (signed-in only; server omits when signed out).
+            if let streak = z.jlptCore?.streak, (streak.totalDays ?? 0) > 0 || (streak.currentStreak ?? 0) > 0 {
+                JLPTStreakBadge(streak: streak)
+            }
+
+            // BE6 核心入口:定级 / 自测 / 我的单词 / 模拟考试.
+            coreEntries(z.jlptCore)
+
             if let plan = z.studyPlan, let title = plan.title {
                 Button {
                     router.open(.guidePlan)
@@ -153,6 +166,85 @@ struct GuideJLPTZoneView: View {
 
     private func sectionHeader(_ text: String) -> some View {
         Text(text).font(.headline.weight(.bold)).foregroundStyle(.primary)
+    }
+
+    /// BE6 核心练习入口. Cards route into the placement / practice / vocab / exam
+    /// surfaces; disabled (dimmed) when the bank isn't seeded for that surface.
+    @ViewBuilder
+    private func coreEntries(_ core: KaiXJLPTZoneCore?) -> some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 10) {
+                NavigationLink { GuideJLPTPlacementView() } label: {
+                    coreCard(icon: "gauge.with.dots.needle.50percent",
+                             title: guideText(language, "30 秒测水平", "30秒でレベル判定", "30-sec placement"),
+                             subtitle: guideText(language, "定级 + 学习计划", "レベル判定＋計画", "Level + plan"),
+                             enabled: core?.hasPlacement ?? true)
+                }
+                .buttonStyle(.plain)
+                .disabled(!(core?.hasPlacement ?? true))
+
+                NavigationLink { GuideJLPTPracticeView() } label: {
+                    coreCard(icon: "square.and.pencil",
+                             title: guideText(language, "开始自测", "問題演習", "Practice"),
+                             subtitle: guideText(language, "分级分科题库", "レベル・科目別", "By level & section"),
+                             enabled: core?.hasPractice ?? true)
+                }
+                .buttonStyle(.plain)
+                .disabled(!(core?.hasPractice ?? true))
+            }
+            HStack(spacing: 10) {
+                NavigationLink { GuideJLPTVocabView() } label: {
+                    coreCard(icon: "character.book.closed.fill",
+                             title: guideText(language, "我的单词", "単語", "Vocabulary"),
+                             subtitle: guideText(language, "词表 + 考单词", "単語帳＋テスト", "Decks + quiz"),
+                             enabled: core?.hasVocab ?? true)
+                }
+                .buttonStyle(.plain)
+                .disabled(!(core?.hasVocab ?? true))
+
+                NavigationLink { GuideJLPTExamView() } label: {
+                    coreCard(icon: "checklist",
+                             title: guideText(language, "模拟考试", "模擬試験", "Mock exams"),
+                             subtitle: guideText(language, "限时组卷 + 成绩", "時間制限＋成績", "Timed + scored"),
+                             enabled: core?.hasExams ?? true)
+                }
+                .buttonStyle(.plain)
+                .disabled(!(core?.hasExams ?? true))
+            }
+            HStack(spacing: 10) {
+                NavigationLink { GuideJLPTReviewView() } label: {
+                    coreCard(icon: "arrow.uturn.backward.circle.fill",
+                             title: guideText(language, "错题本", "間違いノート", "Review book"),
+                             subtitle: guideText(language, "重练答错的题", "間違いを再演習", "Re-do wrong ones"),
+                             enabled: core?.hasPractice ?? true)
+                }
+                .buttonStyle(.plain)
+                .disabled(!(core?.hasPractice ?? true))
+
+                // Balance the row when only one card remains.
+                Color.clear.frame(maxWidth: .infinity, maxHeight: 0)
+            }
+        }
+    }
+
+    private func coreCard(icon: String, title: String, subtitle: String, enabled: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(enabled ? KXColor.livingAccent : KXColor.livingMuted)
+            Text(title)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(enabled ? KXColor.livingInk : KXColor.livingMuted)
+            Text(enabled ? subtitle : guideText(language, "即将开放", "近日公開", "Coming soon"))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
+        .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KXColor.livingAccentSoft, lineWidth: 1))
+        .opacity(enabled ? 1 : 0.6)
     }
 
     private func load() async {

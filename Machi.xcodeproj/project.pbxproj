@@ -403,9 +403,9 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
-				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_CFBundleDisplayName = Machi;
 				INFOPLIST_KEY_CFBundleName = Machi;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Machi uses the camera when you choose to capture media for posts or messages.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Machi uses your location to automatically set your current city for the local feed and when you publish a post, so you don't have to pick it manually.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Machi uses the microphone when you choose to record video for posts or messages.";
@@ -450,9 +450,9 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
-				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_CFBundleDisplayName = Machi;
 				INFOPLIST_KEY_CFBundleName = Machi;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Machi uses the camera when you choose to capture media for posts or messages.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Machi uses your location to automatically set your current city for the local feed and when you publish a post, so you don't have to pick it manually.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Machi uses the microphone when you choose to record video for posts or messages.";

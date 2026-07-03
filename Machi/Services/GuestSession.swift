@@ -121,6 +121,41 @@ extension GuestSession {
     }
 }
 
+/// 邀请裂变: a small pending-invite store. When a user taps a
+/// `https://machicity.com/i/<code>` Universal Link, `ContentView` stashes the
+/// code here; the register flow prefills + submits it (`referral_code`), and a
+/// user who was already signed in when they tapped can late-`bind` it. Persisted
+/// to UserDefaults so it survives the whole sign-up flow and relaunches until
+/// consumed. Holds nothing user-identifying — just an opaque invite code.
+enum ReferralInvite {
+    private static let key = "machi-pending-referral-code"
+
+    /// The last-tapped invite code awaiting registration/bind, if any.
+    static var pendingCode: String? {
+        let raw = (UserDefaults.standard.string(forKey: key) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return raw.isEmpty ? nil : raw
+    }
+
+    /// Record a freshly-tapped invite code. Normalized to the server's charset
+    /// (uppercase, alphanumeric); a blank/garbage code is ignored.
+    static func remember(_ code: String) {
+        let cleaned = String(
+            code.trimmingCharacters(in: .whitespacesAndNewlines)
+                .uppercased()
+                .unicodeScalars
+                .filter { CharacterSet.alphanumerics.contains($0) }
+        )
+        guard !cleaned.isEmpty, cleaned.count <= 16 else { return }
+        UserDefaults.standard.set(cleaned, forKey: key)
+    }
+
+    /// Clear the pending code once it has been bound (or is no longer wanted).
+    static func clear() {
+        UserDefaults.standard.removeObject(forKey: key)
+    }
+}
+
 /// Global, app-wide login prompt for guests. Any action handler can call
 /// `GuestGate.shared.requireLogin()`; `ContentView` observes it and presents
 /// the auth sheet. Kept as a shared singleton so individual views/stores

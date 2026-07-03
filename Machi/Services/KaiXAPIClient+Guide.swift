@@ -516,6 +516,52 @@ extension KaiXAPIClient {
         return try decode(data)
     }
 
+    // MARK: - Guide product reviews (BE4 / guide_reviews)
+
+    /// Public paginated list of PUBLISHED reviews + the 5-bucket distribution.
+    /// `idOrSlug` matches the product detail route (server accepts id OR slug).
+    func guideProductReviews(_ idOrSlug: String, limit: Int = 20, offset: Int = 0) async throws -> KaiXGuideReviewsResponse {
+        let data = try await request("GET", "/api/guide/products/\(idOrSlug.encodedPathSegment)/reviews", queryItems: [
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "offset", value: String(offset)),
+        ])
+        return try decode(data)
+    }
+
+    /// The caller's own review (any status) + whether they're allowed to write one.
+    func guideProductMyReview(_ idOrSlug: String) async throws -> KaiXGuideReviewMeResponse {
+        let data = try await request("GET", "/api/guide/products/\(idOrSlug.encodedPathSegment)/reviews/me")
+        return try decode(data)
+    }
+
+    /// Create or update the caller's review. Buy-gated + one per (user, product).
+    /// A re-submit returns the row to pending for re-moderation.
+    @discardableResult
+    func submitGuideProductReview(_ idOrSlug: String, rating: Int, body reviewBody: String, anonymous: Bool = false) async throws -> KaiXGuideReviewSubmitResponse {
+        struct Body: Encodable { let rating: Int; let body: String; let anonymous: Bool }
+        let data = try await request("POST", "/api/guide/products/\(idOrSlug.encodedPathSegment)/reviews",
+                                     body: Body(rating: rating, body: reviewBody, anonymous: anonymous))
+        return try decode(data)
+    }
+
+    /// Author withdraws their own review.
+    func deleteMyGuideReview(_ reviewId: String) async throws {
+        _ = try await request("DELETE", "/api/guide/reviews/\(reviewId.encodedPathSegment)")
+    }
+
+    /// Idempotent "有帮助" vote toggle. `on == false` removes the vote.
+    @discardableResult
+    func voteGuideReviewHelpful(_ reviewId: String, on: Bool) async throws -> KaiXGuideReviewHelpfulResponse {
+        let data = try await request(on ? "POST" : "DELETE", "/api/guide/reviews/\(reviewId.encodedPathSegment)/helpful")
+        return try decode(data)
+    }
+
+    /// Report a review. Deduped server-side (one report per user per target).
+    func reportGuideReview(_ reviewId: String, reason: String = "other", note: String = "") async throws {
+        _ = try await request("POST", "/api/guide/reviews/\(reviewId.encodedPathSegment)/report",
+                              body: ["reason": reason, "note": note])
+    }
+
     func guideSchools(
         country: String = "jp",
         regionGroup: String? = nil,
@@ -782,6 +828,176 @@ extension KaiXAPIClient {
         let mid = try requirePathIdentifier(messageId)
         let data = try await request("POST", "/api/guide/ai/messages/\(mid.encodedPathSegment)/feedback",
                                      body: Body(rating: rating, reason: reason))
+        return try decode(data)
+    }
+
+    // MARK: - JLPT 备考核心 (BE6 / iOS-3): 题库 / 定级 / 打卡 / 单词 / 在线考试 / 日历
+
+    /// Sample practice questions. Signed-out callers get free questions only;
+    /// members additionally see member-only questions (server-enforced).
+    func jlptPractice(level: String, section: String? = nil, count: Int? = nil) async throws -> KaiXJLPTPracticeResponse {
+        var q = [URLQueryItem(name: "level", value: level)]
+        if let section, !section.isEmpty { q.append(URLQueryItem(name: "section", value: section)) }
+        if let count { q.append(URLQueryItem(name: "count", value: String(count))) }
+        let data = try await request("GET", "/api/guide/jlpt/practice", queryItems: q)
+        return try decode(data)
+    }
+
+    /// Grade + record one answer. Requires auth.
+    func jlptAttempt(questionId: String, selectedIndex: Int, sessionId: String? = nil,
+                     sourceKind: String = "practice") async throws -> KaiXJLPTAttemptResult {
+        struct Body: Encodable {
+            let questionId: String
+            let selectedIndex: Int
+            let sessionId: String?
+            let sourceKind: String
+        }
+        let data = try await request("POST", "/api/guide/jlpt/attempt",
+                                     body: Body(questionId: questionId, selectedIndex: selectedIndex,
+                                                sessionId: sessionId, sourceKind: sourceKind))
+        return try decode(data)
+    }
+
+    /// 错题本 — questions whose latest attempt was wrong (answers revealed).
+    func jlptReview(level: String? = nil, count: Int? = nil) async throws -> KaiXJLPTReviewResponse {
+        var q: [URLQueryItem] = []
+        if let level, !level.isEmpty { q.append(URLQueryItem(name: "level", value: level)) }
+        if let count { q.append(URLQueryItem(name: "count", value: String(count))) }
+        let data = try await request("GET", "/api/guide/jlpt/review", queryItems: q)
+        return try decode(data)
+    }
+
+    func jlptStats(level: String? = nil) async throws -> KaiXJLPTStatsResponse {
+        var q: [URLQueryItem] = []
+        if let level, !level.isEmpty { q.append(URLQueryItem(name: "level", value: level)) }
+        let data = try await request("GET", "/api/guide/jlpt/stats", queryItems: q)
+        return try decode(data)
+    }
+
+    func jlptStreak() async throws -> KaiXJLPTStreakResponse {
+        let data = try await request("GET", "/api/guide/jlpt/streak")
+        return try decode(data)
+    }
+
+    func jlptExamDates(region: String = "jp") async throws -> KaiXJLPTExamDatesResponse {
+        let data = try await request("GET", "/api/guide/jlpt/exam-dates",
+                                     queryItems: [URLQueryItem(name: "region", value: region)])
+        return try decode(data)
+    }
+
+    /// Member-only per-question AI explanation (Machi AI Pro). Free callers spend
+    /// their normal Machi AI daily quota (or 403 when exhausted). Longer timeout
+    /// since generation takes a few seconds.
+    func jlptExplain(questionId: String, language: String = "zh-CN") async throws -> KaiXJLPTExplainResponse {
+        struct Body: Encodable {
+            let questionId: String
+            let language: String
+        }
+        let data = try await request("POST", "/api/guide/jlpt/explain",
+                                     body: Body(questionId: questionId, language: language),
+                                     timeoutInterval: 40)
+        return try decode(data)
+    }
+
+    // ── placement (定级) ────────────────────────────────────────────────────
+    func jlptPlacementStart() async throws -> KaiXJLPTPlacementStartResponse {
+        let data = try await request("GET", "/api/guide/jlpt/placement/start")
+        return try decode(data)
+    }
+
+    func jlptPlacementSubmit(answers: [KaiXJLPTPlacementAnswer]) async throws -> KaiXJLPTPlacementResult {
+        struct Body: Encodable { let answers: [KaiXJLPTPlacementAnswer] }
+        let data = try await request("POST", "/api/guide/jlpt/placement/submit", body: Body(answers: answers))
+        return try decode(data)
+    }
+
+    // ── vocab (单词) ────────────────────────────────────────────────────────
+    func jlptVocabDecks(level: String? = nil) async throws -> KaiXJLPTVocabDecksResponse {
+        var q: [URLQueryItem] = []
+        if let level, !level.isEmpty { q.append(URLQueryItem(name: "level", value: level)) }
+        let data = try await request("GET", "/api/guide/jlpt/vocab/decks", queryItems: q)
+        return try decode(data)
+    }
+
+    /// Deck detail. Member-only decks 403 (`MEMBER_REQUIRED`) for free users.
+    func jlptVocabDeck(deckId: String) async throws -> KaiXJLPTVocabDeckResponse {
+        let id = try requirePathIdentifier(deckId)
+        let data = try await request("GET", "/api/guide/jlpt/vocab/deck/\(id.encodedPathSegment)")
+        return try decode(data)
+    }
+
+    @discardableResult
+    func jlptVocabMark(wordId: String, state: String) async throws -> KaiXJLPTVocabMarkResponse {
+        struct Body: Encodable { let wordId: String; let state: String }
+        let data = try await request("POST", "/api/guide/jlpt/vocab/mark",
+                                     body: Body(wordId: wordId, state: state))
+        return try decode(data)
+    }
+
+    func jlptVocabProgress(level: String? = nil) async throws -> KaiXJLPTVocabProgress {
+        var q: [URLQueryItem] = []
+        if let level, !level.isEmpty { q.append(URLQueryItem(name: "level", value: level)) }
+        let data = try await request("GET", "/api/guide/jlpt/vocab/progress", queryItems: q)
+        return try decode(data)
+    }
+
+    /// 考单词 — generates an MCQ quiz from the word bank (kind='vocab' session).
+    func jlptVocabQuizStart(level: String, deckId: String? = nil, count: Int? = nil) async throws -> KaiXJLPTVocabQuizStartResponse {
+        var q = [URLQueryItem(name: "level", value: level)]
+        if let deckId, !deckId.isEmpty { q.append(URLQueryItem(name: "deckId", value: deckId)) }
+        if let count { q.append(URLQueryItem(name: "count", value: String(count))) }
+        let data = try await request("GET", "/api/guide/jlpt/vocab/quiz/start", queryItems: q)
+        return try decode(data)
+    }
+
+    /// Submit a vocab quiz. `answers` is index-aligned to the quiz questions.
+    func jlptVocabQuizSubmit(sessionId: String, answers: [Int]) async throws -> KaiXJLPTVocabQuizSubmitResponse {
+        struct Body: Encodable { let sessionId: String; let answers: [Int] }
+        let data = try await request("POST", "/api/guide/jlpt/vocab/quiz/submit",
+                                     body: Body(sessionId: sessionId, answers: answers))
+        return try decode(data)
+    }
+
+    // ── online exams (在线考试) ─────────────────────────────────────────────
+    func jlptExams(level: String? = nil) async throws -> KaiXJLPTExamsResponse {
+        var q: [URLQueryItem] = []
+        if let level, !level.isEmpty { q.append(URLQueryItem(name: "level", value: level)) }
+        let data = try await request("GET", "/api/guide/jlpt/exams", queryItems: q)
+        return try decode(data)
+    }
+
+    /// Start an exam session. Member-only exams 403 (`MEMBER_REQUIRED`) for free
+    /// users; empty banks return 409 (`no_questions`).
+    func jlptExamStart(examId: String) async throws -> KaiXJLPTExamStartResponse {
+        struct Body: Encodable { let examId: String }
+        let data = try await request("POST", "/api/guide/jlpt/exam/start", body: Body(examId: examId))
+        return try decode(data)
+    }
+
+    @discardableResult
+    func jlptExamAnswer(sessionId: String, questionId: String, selectedIndex: Int) async throws -> KaiXJLPTExamAnswerResponse {
+        struct Body: Encodable { let sessionId: String; let questionId: String; let selectedIndex: Int }
+        let data = try await request("POST", "/api/guide/jlpt/exam/answer",
+                                     body: Body(sessionId: sessionId, questionId: questionId, selectedIndex: selectedIndex))
+        return try decode(data)
+    }
+
+    func jlptExamSubmit(sessionId: String) async throws -> KaiXJLPTExamResult {
+        struct Body: Encodable { let sessionId: String }
+        let data = try await request("POST", "/api/guide/jlpt/exam/submit", body: Body(sessionId: sessionId))
+        return try decode(data)
+    }
+
+    func jlptExamHistory(level: String? = nil) async throws -> KaiXJLPTExamHistoryResponse {
+        var q: [URLQueryItem] = []
+        if let level, !level.isEmpty { q.append(URLQueryItem(name: "level", value: level)) }
+        let data = try await request("GET", "/api/guide/jlpt/exam/history", queryItems: q)
+        return try decode(data)
+    }
+
+    func jlptExamSession(sessionId: String) async throws -> KaiXJLPTExamResult {
+        let id = try requirePathIdentifier(sessionId)
+        let data = try await request("GET", "/api/guide/jlpt/exam/session/\(id.encodedPathSegment)")
         return try decode(data)
     }
 }

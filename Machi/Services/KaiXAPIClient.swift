@@ -211,10 +211,17 @@ final class KaiXAPIClient {
     }
 
     @discardableResult
-    func register(handle: String, displayName: String, password: String, email: String? = nil, code: String? = nil, region: KaiXRegionDirectory.Region? = nil, appLanguage: AppLanguage? = nil) async throws -> KaiXLoginResponse {
+    func register(handle: String, displayName: String, password: String, email: String? = nil, code: String? = nil, referralCode: String? = nil, region: KaiXRegionDirectory.Region? = nil, appLanguage: AppLanguage? = nil) async throws -> KaiXLoginResponse {
         var body: [String: String] = ["handle": handle, "display_name": displayName, "password": password]
         if let email { body["email"] = email }
         if let code, !code.isEmpty { body["code"] = code }
+        // 邀请裂变: the invite code is a SEPARATE field from the email-verification
+        // `code` above — the server keys off `referral_code` and silently ignores
+        // a bad/blank/self code so it can never block sign-up.
+        if let referralCode {
+            let trimmed = referralCode.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { body["referral_code"] = trimmed.uppercased() }
+        }
         if let appLanguage {
             body["language"] = appLanguage == .zh ? "zh-Hans" : appLanguage.rawValue
         }
@@ -479,6 +486,28 @@ final class KaiXAPIClient {
             "environment": environment,
         ]
         let data = try await request("POST", "/api/payments/apple/verify", body: body)
+        return try decode(data)
+    }
+
+    // MARK: - 邀请裂变 (referral)
+
+    /// The signed-in user's invite 战绩: stable code + share URL + counts +
+    /// recent invitees. The server mints the code lazily on first read, so this
+    /// is safe to call even for a user who has never opened the invite page.
+    func referralMe() async throws -> KaiXReferralSummaryDTO {
+        let data = try await request("GET", "/api/referral/me")
+        let response: KaiXReferralMeResponse = try decode(data)
+        return response.referral
+    }
+
+    /// Late-bind an invite for an already-registered user who tapped an `/i/…`
+    /// link AFTER creating their account. Idempotent server-side (UNIQUE
+    /// invitee) and never pays out — a no-op if they were ever bound. Returns
+    /// whether the bind took, for optional UI feedback.
+    @discardableResult
+    func referralBind(code: String) async throws -> KaiXReferralBindResponse {
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let data = try await request("POST", "/api/referral/bind", body: ["referral_code": trimmed])
         return try decode(data)
     }
 

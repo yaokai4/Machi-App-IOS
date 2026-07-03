@@ -156,6 +156,11 @@ struct KaiXGuideProductDTO: Codable, Equatable, Identifiable, Hashable {
     let status: String
     let purchaseCount: Int
     let rating: Double
+    // BE4 review aggregate. `ratingCount` = published review count; `ratingSummary`
+    // carries avg + count (+ optional 5-bucket distribution on the detail endpoint).
+    // Both optional so older payloads / list responses still decode.
+    let ratingCount: Int?
+    let ratingSummary: KaiXGuideRatingSummaryDTO?
     let publishedAt: String?
     let fileCount: Int?
     // Member / payment / gating fields from the unified Guide API. All optional so
@@ -1296,6 +1301,91 @@ struct KaiXGuideProductDetailResponse: Codable {
     let product: KaiXGuideProductDTO
 }
 
+// MARK: - Guide product reviews (BE4 / guide_reviews)
+
+/// One star bucket of the rating distribution, e.g. { star: 5, count: 12 }.
+struct KaiXGuideRatingBucketDTO: Codable, Equatable, Hashable, Identifiable {
+    let star: Int
+    let count: Int
+    var id: Int { star }
+}
+
+/// Rating aggregate over published reviews. On lists this carries just avg +
+/// count; the reviews endpoint additionally fills the 5-bucket `distribution`.
+struct KaiXGuideRatingSummaryDTO: Codable, Equatable, Hashable {
+    let ratingAvg: Double
+    let ratingCount: Int
+    let distribution: [KaiXGuideRatingBucketDTO]?
+
+    /// Buckets padded to all five stars (5→1) so the bar chart always renders a
+    /// full ladder even when the server omits empty buckets.
+    var fullDistribution: [KaiXGuideRatingBucketDTO] {
+        let existing = Dictionary(uniqueKeysWithValues: (distribution ?? []).map { ($0.star, $0.count) })
+        return [5, 4, 3, 2, 1].map { KaiXGuideRatingBucketDTO(star: $0, count: existing[$0] ?? 0) }
+    }
+}
+
+/// Light author summary attached to non-anonymous reviews. Anonymous reviews
+/// carry `author == nil` — the server is the sole authority on that gate.
+struct KaiXGuideReviewAuthorDTO: Codable, Equatable, Hashable {
+    let id: String?
+    let handle: String?
+    let displayName: String?
+    let avatarUrl: String?
+}
+
+/// A product review. `status` is pending/published/rejected/hidden/withdrawn;
+/// only `published` ones appear in the public list. `isMine` drives the
+/// edit/withdraw affordance; `viewerVoted` the "有帮助" toggle state.
+struct KaiXGuideReviewDTO: Codable, Equatable, Hashable, Identifiable {
+    let id: String
+    let productId: String?
+    let rating: Int
+    let body: String
+    let status: String
+    let helpfulCount: Int
+    let reportCount: Int?
+    let anonymous: Bool
+    let createdAt: String?
+    let updatedAt: String?
+    let isMine: Bool
+    let viewerVoted: Bool
+    let author: KaiXGuideReviewAuthorDTO?
+}
+
+/// Public paginated reviews list + rating distribution summary.
+struct KaiXGuideReviewsResponse: Codable {
+    let status: String
+    let productId: String
+    let summary: KaiXGuideRatingSummaryDTO
+    let items: [KaiXGuideReviewDTO]
+    let hasMore: Bool
+}
+
+/// The caller's own review of a product (any status) + whether they may write one.
+struct KaiXGuideReviewMeResponse: Codable {
+    let status: String
+    let productId: String
+    let canReview: Bool
+    let review: KaiXGuideReviewDTO?
+}
+
+/// Result of submitting a review — status is "pending_review" (App Store 1.2:
+/// reviews are never shown before an admin approves).
+struct KaiXGuideReviewSubmitResponse: Codable {
+    let status: String
+    let id: String?
+    let message: String?
+}
+
+/// Result of a helpful-vote toggle.
+struct KaiXGuideReviewHelpfulResponse: Codable {
+    let status: String
+    let id: String
+    let helpfulCount: Int
+    let viewerVoted: Bool
+}
+
 struct KaiXGuideCompanyDetailResponse: Codable {
     let status: String
     let company: KaiXGuideCompanyDTO
@@ -1662,6 +1752,8 @@ struct KaiXGuideJLPTZoneResponse: Codable, Equatable {
     let faq: [KaiXGuideFaqDTO]?
     let studyPlan: KaiXGuideJLPTStudyPlanDTO?
     let disclaimer: String?
+    /// Live BE6 overlay (counts + per-user streak + exam countdown).
+    let jlptCore: KaiXJLPTZoneCore?
 }
 
 struct KaiXGuideAIConversationDTO: Codable, Equatable, Hashable, Identifiable {
@@ -1719,4 +1811,327 @@ struct KaiXGuideAIChatResponse: Codable, Equatable {
 struct KaiXGuideAIFeedbackResponse: Codable, Equatable {
     let status: String?
     let rating: String?
+}
+
+// MARK: - JLPT 备考核心 (BE6/iOS-3): 题库 / 定级 / 打卡 / 单词 / 在线考试 / 日历
+//
+// Contract mirrors `server_jlpt.py` (camelCase JSON). Compliance: all study
+// content is original / licensed-import, never unauthorized past-paper text.
+
+/// One practice / exam / placement question. `answerIndex` + `explanation` are
+/// only present after the user has answered (review book, exam回看, or the local
+/// grade result), so both stay optional.
+struct KaiXJLPTQuestionDTO: Codable, Equatable, Hashable, Identifiable {
+    let id: String
+    let level: String
+    let section: String
+    let sectionLabel: String?
+    let questionType: String?
+    let stem: String
+    let passage: String?
+    let audioMediaId: String?
+    let choices: [String]
+    let difficulty: Int?
+    let isMemberOnly: Bool?
+    // Post-answer reveal (review / exam breakdown).
+    let answerIndex: Int?
+    let explanation: String?
+    // Exam / review breakdown overlays (server merges these onto the question).
+    let selectedIndex: Int?
+    let correct: Bool?
+}
+
+struct KaiXJLPTPracticeResponse: Codable, Equatable {
+    let status: String?
+    let level: String?
+    let section: String?
+    let membershipActive: Bool?
+    let questions: [KaiXJLPTQuestionDTO]?
+    let disclaimer: String?
+}
+
+/// Result of grading one attempt (`/attempt`). `correctIndex` reveals the key so
+/// the client can flip the card and teach.
+struct KaiXJLPTAttemptResult: Codable, Equatable {
+    let status: String?
+    let questionId: String?
+    let correct: Bool?
+    let correctIndex: Int?
+    let selectedIndex: Int?
+    let explanation: String?
+}
+
+struct KaiXJLPTReviewResponse: Codable, Equatable {
+    let status: String?
+    let questions: [KaiXJLPTQuestionDTO]?
+    let disclaimer: String?
+}
+
+struct KaiXJLPTSectionStat: Codable, Equatable, Hashable, Identifiable {
+    let section: String
+    let label: String?
+    let total: Int?
+    let correct: Int?
+    let accuracy: Double?
+    var id: String { section }
+}
+
+struct KaiXJLPTStatsResponse: Codable, Equatable {
+    let status: String?
+    let level: String?
+    let total: Int?
+    let correct: Int?
+    let accuracy: Double?
+    let sections: [KaiXJLPTSectionStat]?
+}
+
+struct KaiXJLPTStreakDay: Codable, Equatable, Hashable, Identifiable {
+    let date: String
+    let done: Bool
+    var id: String { date }
+}
+
+struct KaiXJLPTStreak: Codable, Equatable {
+    let currentStreak: Int?
+    let longestStreak: Int?
+    let todayDone: Bool?
+    let totalDays: Int?
+    let last7days: [KaiXJLPTStreakDay]?
+}
+
+struct KaiXJLPTStreakResponse: Codable, Equatable {
+    let status: String?
+    let currentStreak: Int?
+    let longestStreak: Int?
+    let todayDone: Bool?
+    let totalDays: Int?
+    let last7days: [KaiXJLPTStreakDay]?
+}
+
+struct KaiXJLPTExamDate: Codable, Equatable, Hashable, Identifiable {
+    let id: String
+    let region: String?
+    let sessionLabel: String?
+    let examDate: String?
+    let regOpenDate: String?
+    let regCloseDate: String?
+    let note: String?
+}
+
+struct KaiXJLPTCountdown: Codable, Equatable, Hashable {
+    let sessionLabel: String?
+    let examDate: String?
+    let daysRemaining: Int?
+}
+
+struct KaiXJLPTExamDatesResponse: Codable, Equatable {
+    let status: String?
+    let region: String?
+    let examDates: [KaiXJLPTExamDate]?
+    let countdown: KaiXJLPTCountdown?
+}
+
+/// Live per-user overlay embedded in the zone payload (counts + streak +
+/// countdown). Drives which entry cards light up.
+struct KaiXJLPTZoneCore: Codable, Equatable {
+    let hasPractice: Bool?
+    let hasPlacement: Bool?
+    let hasVocab: Bool?
+    let hasExams: Bool?
+    let examCountdown: KaiXJLPTCountdown?
+    let streak: KaiXJLPTStreak?
+}
+
+struct KaiXJLPTPlacementStartResponse: Codable, Equatable {
+    let status: String?
+    let questions: [KaiXJLPTQuestionDTO]?
+    let note: String?
+}
+
+struct KaiXJLPTPlacementResult: Codable, Equatable {
+    let status: String?
+    let recommendedLevel: String?
+    let confidence: Double?
+    let sectionBreakdown: [KaiXJLPTSectionStat]?
+    let weakSections: [String]?
+    let suggestedDailyMinutes: Int?
+    let answered: Int?
+    let studyPlanRoute: String?
+}
+
+/// Answer payload the client posts to `/placement/submit`.
+struct KaiXJLPTPlacementAnswer: Codable, Equatable {
+    let questionId: String
+    let selectedIndex: Int
+}
+
+// ── vocab ────────────────────────────────────────────────────────────────────
+
+struct KaiXJLPTVocabDeck: Codable, Equatable, Hashable, Identifiable {
+    let id: String
+    let level: String?
+    let title: String?
+    let description: String?
+    let wordCount: Int?
+    let isMemberOnly: Bool?
+}
+
+struct KaiXJLPTVocabDecksResponse: Codable, Equatable {
+    let status: String?
+    let decks: [KaiXJLPTVocabDeck]?
+}
+
+struct KaiXJLPTVocabWord: Codable, Equatable, Hashable, Identifiable {
+    let id: String
+    let level: String?
+    let word: String
+    let reading: String?
+    let meaningZh: String?
+    let meaningEn: String?
+    let pos: String?
+    let example: String?
+    let exampleZh: String?
+    let mastered: Bool?
+}
+
+struct KaiXJLPTVocabDeckResponse: Codable, Equatable {
+    let status: String?
+    let deck: KaiXJLPTVocabDeck?
+    let words: [KaiXJLPTVocabWord]?
+}
+
+struct KaiXJLPTVocabMarkResponse: Codable, Equatable {
+    let status: String?
+    let wordId: String?
+    let state: String?
+}
+
+struct KaiXJLPTVocabProgress: Codable, Equatable {
+    let status: String?
+    let level: String?
+    let total: Int?
+    let mastered: Int?
+    let learning: Int?
+    let progress: Double?
+}
+
+/// A generated vocab-quiz question (自 build_vocab_quiz; answer key is server-side).
+struct KaiXJLPTVocabQuizQuestion: Codable, Equatable, Hashable, Identifiable {
+    let wordId: String
+    let word: String?
+    let reading: String?
+    let stem: String
+    let choices: [String]
+    var id: String { wordId }
+}
+
+struct KaiXJLPTVocabQuizStartResponse: Codable, Equatable {
+    let status: String?
+    let sessionId: String?
+    let level: String?
+    let kind: String?
+    let total: Int?
+    let questions: [KaiXJLPTVocabQuizQuestion]?
+}
+
+struct KaiXJLPTVocabQuizResult: Codable, Equatable, Hashable, Identifiable {
+    let index: Int
+    let selectedIndex: Int?
+    let correctIndex: Int?
+    let correct: Bool?
+    var id: Int { index }
+}
+
+struct KaiXJLPTVocabQuizSubmitResponse: Codable, Equatable {
+    let status: String?
+    let sessionId: String?
+    let total: Int?
+    let correct: Int?
+    let score: Int?
+    let passed: Bool?
+    let durationSeconds: Int?
+    let results: [KaiXJLPTVocabQuizResult]?
+}
+
+// ── online exams ─────────────────────────────────────────────────────────────
+
+struct KaiXJLPTExam: Codable, Equatable, Hashable, Identifiable {
+    let id: String
+    let level: String?
+    let title: String?
+    let kind: String?
+    let section: String?
+    let questionCount: Int?
+    let durationSeconds: Int?
+    let passScore: Int?
+    let isMemberOnly: Bool?
+}
+
+struct KaiXJLPTExamsResponse: Codable, Equatable {
+    let status: String?
+    let exams: [KaiXJLPTExam]?
+}
+
+struct KaiXJLPTExamStartResponse: Codable, Equatable {
+    let status: String?
+    let sessionId: String?
+    let examId: String?
+    let level: String?
+    let title: String?
+    let durationSeconds: Int?
+    let passScore: Int?
+    let total: Int?
+    let questions: [KaiXJLPTQuestionDTO]?
+    let disclaimer: String?
+}
+
+struct KaiXJLPTExamAnswerResponse: Codable, Equatable {
+    let status: String?
+    let saved: Bool?
+    let questionId: String?
+}
+
+/// Result of `/exam/submit` and the shape returned by `/exam/session/{id}`.
+struct KaiXJLPTExamResult: Codable, Equatable {
+    let status: String?
+    let sessionId: String?
+    let examId: String?
+    let level: String?
+    let total: Int?
+    let correct: Int?
+    let score: Int?
+    let passed: Bool?
+    let passScore: Int?
+    let durationSeconds: Int?
+    let questions: [KaiXJLPTQuestionDTO]?
+    let disclaimer: String?
+}
+
+struct KaiXJLPTExamHistoryItem: Codable, Equatable, Hashable, Identifiable {
+    let sessionId: String
+    let examId: String?
+    let title: String?
+    let kind: String?
+    let level: String?
+    let total: Int?
+    let correct: Int?
+    let score: Int?
+    let passed: Bool?
+    let durationSeconds: Int?
+    let startedAt: String?
+    let submittedAt: String?
+    var id: String { sessionId }
+}
+
+struct KaiXJLPTExamHistoryResponse: Codable, Equatable {
+    let status: String?
+    let sessions: [KaiXJLPTExamHistoryItem]?
+}
+
+struct KaiXJLPTExplainResponse: Codable, Equatable {
+    let status: String?
+    let questionId: String?
+    let explanation: String?
+    let usage: KaiXGuideAIUsageDTO?
+    let disclaimer: String?
 }

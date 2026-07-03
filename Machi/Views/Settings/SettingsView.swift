@@ -141,6 +141,15 @@ struct SettingsView: View {
                 WalletView(currentUser: currentUser)
             }
             SettingsDivider()
+            SettingsRowLink(
+                icon: "gift.fill",
+                tint: .pink,
+                title: inviteRowTitle,
+                subtitle: inviteRowSubtitle
+            ) {
+                MyInvitesView()
+            }
+            SettingsDivider()
             SettingsRowLink(icon: "doc.plaintext.fill", tint: .green, title: L("ordersTitle", language), subtitle: L("ordersSubtitle", language)) {
                 MyOrdersView()
             }
@@ -177,6 +186,17 @@ struct SettingsView: View {
         case .ja: return "Machi ポイントの残高・チャージ・履歴"
         default: return "Machi 币余额、充值与记录"
         }
+    }
+
+    private var inviteRowTitle: String {
+        KXListingCopy.pickText(language, "我的邀请", "招待", "Invite friends")
+    }
+
+    private var inviteRowSubtitle: String {
+        KXListingCopy.pickText(language,
+            "邀请好友注册，双方都得 Machi 币",
+            "友達を招待して二人ともコイン獲得",
+            "Invite friends — you both earn Machi Coins")
     }
 
     private var contentSection: some View {

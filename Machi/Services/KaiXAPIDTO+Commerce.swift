@@ -926,3 +926,55 @@ struct KaiXDeviceDTO: Codable, Equatable, Identifiable {
     }
 }
 
+// MARK: - 邀请裂变 (referral / invite growth loop)
+//
+// Mirrors `server_referral.referral_summary` (GET /api/referral/me). Unlike the
+// snake_case wallet/reservation DTOs above, the referral summary is already
+// serialized in camelCase server-side, so these property names map 1:1 with no
+// CodingKeys needed. Machi Points earned via referral are a virtual accounting
+// liability — never cash.
+
+/// One row in the "最近邀请" list on the invite 战绩页.
+struct KaiXReferralInviteeDTO: Codable, Equatable, Identifiable {
+    let referralId: String
+    let status: String        // pending | qualified | rewarded | rejected
+    let handle: String
+    let displayName: String
+    let avatarUrl: String
+    let createdAt: String
+    let rewardedAt: String
+
+    var id: String { referralId }
+
+    /// True once the invitee did their first valuable action (both sides paid,
+    /// or at least advanced past pending).
+    var isQualified: Bool { status == "qualified" || status == "rewarded" }
+    var isRewarded: Bool { status == "rewarded" }
+}
+
+/// GET /api/referral/me → the invite 战绩页 data model. The stable per-user code
+/// is minted lazily server-side on first read, so `code`/`shareUrl` are always
+/// present.
+struct KaiXReferralSummaryDTO: Codable, Equatable {
+    let code: String
+    let shareUrl: String
+    let invitedCount: Int
+    let qualifiedCount: Int
+    let pointsEarned: Int
+    let inviterReward: Int
+    let inviteeReward: Int
+    let recentInvitees: [KaiXReferralInviteeDTO]
+}
+
+/// Envelope: the server wraps the summary as `{"referral": {…}}`.
+struct KaiXReferralMeResponse: Codable {
+    let referral: KaiXReferralSummaryDTO
+}
+
+/// POST /api/referral/bind → `{bound, reason}`. Used to late-bind an invite for
+/// a user who tapped the link *after* they already had an account.
+struct KaiXReferralBindResponse: Codable {
+    let bound: Bool
+    let reason: String?
+}
+

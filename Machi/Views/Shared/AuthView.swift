@@ -140,6 +140,16 @@ struct AuthView: View {
         }
     }
 
+    /// 邀请裂变: normalize toward the server's code charset (uppercase
+    /// alphanumerics, ≤16). Blank stays valid — the field is optional.
+    private var referralCodeBinding: Binding<String> {
+        Binding {
+            viewModel.referralCode
+        } set: { value in
+            viewModel.referralCode = String(value.uppercased().filter { $0.isLetter || $0.isNumber }.prefix(16))
+        }
+    }
+
     @ViewBuilder
     private func availabilityHint(_ state: AuthViewModel.FieldAvailability, takenKey: String, okKey: String) -> some View {
         switch state {
@@ -179,6 +189,12 @@ struct AuthView: View {
             guard !didApplyInitialMode else { return }
             didApplyInitialMode = true
             viewModel.mode = initialMode
+            // 邀请裂变: prefill an invite code the user tapped in (/i/<code>).
+            // Leaves it editable and never forces register mode — a returning
+            // user can still log in with the code quietly waiting.
+            if viewModel.referralCode.isEmpty, let pending = ReferralInvite.pendingCode {
+                viewModel.referralCode = pending
+            }
         }
         .onChange(of: viewModel.mode) { _, _ in
             viewModel.fieldErrors = [:]
@@ -433,6 +449,17 @@ struct AuthView: View {
                     AuthRegionField(region: viewModel.selectedRegion, error: viewModel.fieldError(.region)) {
                         isShowingRegionPicker = true
                     }
+
+                    // 邀请裂变: optional friend invite code. Prefilled from a
+                    // tapped /i/<code> link, but always editable and never
+                    // required — leaving it blank just skips the referral.
+                    AuthInputField(
+                        title: KXListingCopy.pickText(language, "邀请码（选填）", "招待コード（任意）", "Invite code (optional)"),
+                        placeholder: KXListingCopy.pickText(language, "好友的邀请码", "友達の招待コード", "Your friend's code"),
+                        text: referralCodeBinding,
+                        icon: "gift",
+                        accessibilityIdentifier: "auth.referralCode"
+                    )
                 }
 
                 AuthPasswordField(

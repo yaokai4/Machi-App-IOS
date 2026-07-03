@@ -59,7 +59,7 @@ final class AuthService {
         return user
     }
 
-    func register(username: String, displayName: String, password: String, email: String? = nil, code: String? = nil, region: KaiXRegionDirectory.Region, appLanguage: AppLanguage? = nil, context: ModelContext) async throws -> UserEntity {
+    func register(username: String, displayName: String, password: String, email: String? = nil, code: String? = nil, referralCode: String? = nil, region: KaiXRegionDirectory.Region, appLanguage: AppLanguage? = nil, context: ModelContext) async throws -> UserEntity {
         if usesLocalAuthOnly {
             let user = try await UserRepository(context: context).register(
                 username: username, displayName: displayName, password: password, region: region,
@@ -74,6 +74,7 @@ final class AuthService {
             password: password,
             email: email,
             code: code,
+            referralCode: referralCode,
             region: region,
             appLanguage: appLanguage
         )

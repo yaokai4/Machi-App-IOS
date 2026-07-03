@@ -292,6 +292,13 @@ struct ContentView: View {
         }
 
         switch first {
+        case "i":
+            // /i/<code> → 邀请裂变 invite link. There is no in-app destination:
+            // stash the code so the register flow can prefill + submit it, then
+            // either prompt an anonymous user to sign up, or late-bind it for a
+            // user who tapped the link while already signed in.
+            guard parts.count >= 2 else { return }
+            handleInviteCode(parts[1])
         case "p":
             // /p/<id> → post
             guard parts.count >= 2 else { return }
@@ -317,6 +324,36 @@ struct ContentView: View {
             route("machi://profile/\(enc(parts[1]))")
         default:
             break
+        }
+    }
+
+    /// 邀请裂变: a tapped `https://machicity.com/i/<code>` invite link.
+    ///
+    /// - Always remembers the code (so the register form can prefill + submit
+    ///   it as `referral_code`).
+    /// - If the user is already signed in (not a guest), late-binds it right
+    ///   away — idempotent server-side, never pays out, a no-op if they were
+    ///   ever bound — then clears the pending code.
+    /// - Otherwise nudges them toward sign-up via the shared guest gate; the
+    ///   code rides along into `register`.
+    private func handleInviteCode(_ rawCode: String) {
+        let code = rawCode.removingPercentEncoding ?? rawCode
+        ReferralInvite.remember(code)
+        let isSignedIn = KaiXBackend.token != nil && appState.currentUser?.isGuest != true
+        if isSignedIn {
+            Task {
+                _ = try? await KaiXAPIClient.shared.referralBind(code: code)
+                ReferralInvite.clear()
+            }
+        } else {
+            GuestGate.shared.requireLogin(
+                KXListingCopy.pickText(
+                    language,
+                    "注册即可领取好友邀请奖励。",
+                    "登録すると友達招待の特典を受け取れます。",
+                    "Sign up to claim your friend's invite reward."
+                )
+            )
         }
     }
 
@@ -609,6 +646,21 @@ struct ContentView: View {
         userStore.setCurrentUser(user)
         appState.state = .loaded
         syncOnboardingPersonaToGuideProfile()
+        bindPendingReferralIfNeeded()
+    }
+
+    /// 邀请裂变: consume a pending `/i/<code>` invite once a real session exists.
+    /// Registration already binds it inline (via `referral_code`), but a user
+    /// who tapped the link and then *logged in* to an existing account needs the
+    /// late-bind here. Idempotent server-side (UNIQUE invitee, no payout), so a
+    /// double-bind after register is a harmless no-op. Best-effort — a failure
+    /// leaves the code pending for a later attempt but never blocks sign-in.
+    private func bindPendingReferralIfNeeded() {
+        guard let code = ReferralInvite.pendingCode, KaiXBackend.token != nil else { return }
+        Task {
+            _ = try? await KaiXAPIClient.shared.referralBind(code: code)
+            ReferralInvite.clear()
+        }
     }
 
     /// First guest entry from onboarding: a pre-arrival / just-arrived persona

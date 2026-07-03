@@ -28,6 +28,11 @@ final class AuthViewModel: ObservableObject {
     @Published var displayName = ""
     @Published var email = ""
     @Published var code = ""
+    /// 邀请裂变: the friend's invite code (`referral_code`), SEPARATE from the
+    /// email-verification `code` above. Optional — prefilled from a tapped
+    /// `/i/<code>` link but freely editable, and a blank/bad code never blocks
+    /// sign-up (the server silently ignores it).
+    @Published var referralCode = ""
     @Published var password = ""
     @Published var selectedRegion: KaiXRegionDirectory.Region?
     @Published var errorMessage: String?
@@ -87,16 +92,22 @@ final class AuthViewModel: ObservableObject {
             case .register:
                 guard let selectedRegion else { return nil }
                 do {
-                    return try await AuthService.shared.register(
+                    let user = try await AuthService.shared.register(
                         username: AuthValidation.normalizedHandle(username),
                         displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines),
                         password: password,
                         email: optionalEmail,
                         code: code.trimmingCharacters(in: .whitespacesAndNewlines),
+                        referralCode: referralCode.trimmingCharacters(in: .whitespacesAndNewlines),
                         region: selectedRegion,
                         appLanguage: language,
                         context: context
                     )
+                    // 邀请裂变: the code (if any) rode along in the register call
+                    // as a pending bind — consume the stashed link so we don't
+                    // re-apply it later.
+                    ReferralInvite.clear()
+                    return user
                 } catch RepositoryError.duplicate {
                     fieldErrors[.username] = L("handleTaken", language)
                     return nil
