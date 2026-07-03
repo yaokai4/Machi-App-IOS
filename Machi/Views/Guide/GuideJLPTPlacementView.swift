@@ -52,15 +52,30 @@ struct GuideJLPTPlacementView: View {
 
     private var quizView: some View {
         VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(guideText(language, "凭直觉作答，不会做就跳过——我们据此推荐等级。",
-                               "直感で回答してください。分からなければ飛ばしてOK。結果からレベルを提案します。",
-                               "Answer by instinct; skip what you don't know. We recommend a level from your answers."))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                ProgressView(value: Double(answeredCount), total: Double(max(1, questions.count)))
-                    .tint(KXColor.livingAccent)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
+                    Image(systemName: "gauge.with.dots.needle.50percent")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(KXColor.livingAccent)
+                        .frame(width: 42, height: 42)
+                        .background(KXColor.livingAccentSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    Text(guideText(language, "凭直觉作答，不会做就跳过——我们据此推荐等级。",
+                                   "直感で回答してください。分からなければ飛ばしてOK。結果からレベルを提案します。",
+                                   "Answer by instinct; skip what you don't know. We recommend a level from your answers."))
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(KXColor.livingMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                HStack(spacing: 8) {
+                    ProgressView(value: Double(answeredCount), total: Double(max(1, questions.count)))
+                        .tint(KXColor.livingAccent)
+                    Text("\(answeredCount)/\(questions.count)")
+                        .font(.caption.weight(.bold).monospacedDigit())
+                        .foregroundStyle(KXColor.livingMuted)
+                }
             }
+            .padding(16)
+            .jlptSurface(radius: KXRadius.hero)
 
             ForEach(Array(questions.enumerated()), id: \.element.id) { idx, q in
                 JLPTQuestionCard(
@@ -79,7 +94,7 @@ struct GuideJLPTPlacementView: View {
 
             if submitFailed {
                 HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(KXColor.livingWarm)
                     Text(guideText(language, "提交失败，请检查网络后重试——你的答案已保留。",
                                    "提出に失敗しました。通信を確認して再試行してください。回答は保持されています。",
                                    "Submit failed. Check your connection and try again — your answers are kept."))
@@ -87,25 +102,19 @@ struct GuideJLPTPlacementView: View {
                         .foregroundStyle(KXColor.livingInk)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
-                .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .padding(13)
+                .background(KXColor.livingWarm.opacity(0.10), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous).stroke(KXColor.livingWarm.opacity(0.24), lineWidth: 0.8))
             }
 
-            Button(action: { Task { await submit() } }) {
-                HStack {
-                    if submitting { ProgressView().controlSize(.small).tint(.white) }
-                    Text(submitFailed
-                         ? guideText(language, "重试提交", "再試行", "Retry submit")
-                         : guideText(language, "提交并查看结果", "提出して結果を見る", "Submit & see result"))
-                        .font(.subheadline.weight(.bold))
-                }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(allAnswered ? KXColor.livingAccent : KXColor.livingMuted, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .disabled(submitting || answeredCount == 0)
+            JLPTPrimaryButton(
+                title: submitFailed
+                    ? guideText(language, "重试提交", "再試行", "Retry submit")
+                    : guideText(language, "提交并查看结果", "提出して結果を見る", "Submit & see result"),
+                icon: submitFailed ? "arrow.clockwise" : "checkmark.circle.fill",
+                loading: submitting,
+                enabled: answeredCount > 0,
+                action: { Task { await submit() } })
 
             JLPTComplianceNote()
         }
@@ -117,30 +126,32 @@ struct GuideJLPTPlacementView: View {
     @ViewBuilder
     private func resultView(_ r: KaiXJLPTPlacementResult) -> some View {
         VStack(alignment: .leading, spacing: 18) {
-            VStack(spacing: 10) {
-                JLPTLevelBadge(level: r.recommendedLevel ?? "N5", size: 84)
+            // 级别大徽章 hero.
+            VStack(spacing: 12) {
+                JLPTEyebrow(text: guideText(language, "定级结果", "判定結果", "Your level"))
+                JLPTLevelBadge(level: r.recommendedLevel ?? "N5", size: 92)
                 Text(guideText(language, "推荐备考等级", "おすすめ学習レベル", "Recommended level"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(KXColor.livingMuted)
-                Text(r.recommendedLevel ?? "N5")
+                Text(JLPTLevel.from(r.recommendedLevel).tierName(language))
                     .font(.title.weight(.black))
                     .foregroundStyle(KXColor.livingInk)
                 if let mins = r.suggestedDailyMinutes {
-                    Text(guideText(language, "建议每天学习约 \(mins) 分钟", "1日あたり約 \(mins) 分の学習を推奨", "Suggested ~\(mins) min/day"))
-                        .font(.footnote.weight(.semibold))
+                    Label(guideText(language, "建议每天约 \(mins) 分钟", "1日あたり約 \(mins) 分", "~\(mins) min/day"),
+                          systemImage: "clock.fill")
+                        .font(.footnote.weight(.bold))
                         .foregroundStyle(KXColor.livingAccent)
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .background(KXColor.livingAccentSoft, in: Capsule())
                 }
             }
             .frame(maxWidth: .infinity)
-            .padding(20)
-            .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.livingAccentSoft, lineWidth: 1))
+            .padding(24)
+            .jlptSurface(radius: KXRadius.sheet, elevated: true)
 
             if let breakdown = r.sectionBreakdown, !breakdown.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(guideText(language, "各部分正确率", "セクション別正答率", "Accuracy by section"))
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(KXColor.livingInk)
+                VStack(alignment: .leading, spacing: 14) {
+                    JLPTSectionHeader(title: guideText(language, "各部分正确率", "セクション別正答率", "Accuracy by section"))
                     ForEach(breakdown) { s in
                         JLPTAccuracyBar(label: s.label ?? s.section,
                                         accuracy: s.accuracy ?? 0,
@@ -148,29 +159,37 @@ struct GuideJLPTPlacementView: View {
                                         correct: s.correct ?? 0)
                     }
                 }
-                .padding(16)
+                .padding(18)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .jlptSurface(radius: KXRadius.hero)
             }
 
             if let weak = r.weakSections, !weak.isEmpty {
                 let names = weak.compactMap { code in JLPTSection(rawValue: code)?.label(language) }
                 if !names.isEmpty {
-                    HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: "target").foregroundStyle(.orange)
-                        Text(guideText(language, "薄弱环节：", "弱点：", "Focus areas: ") + names.joined(separator: "、"))
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(KXColor.livingInk)
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "target")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(KXColor.livingWarm)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(guideText(language, "薄弱环节", "弱点", "Focus areas"))
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(KXColor.livingWarm)
+                            Text(names.joined(separator: "、"))
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(KXColor.livingInk)
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
-                    .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .padding(14)
+                    .background(KXColor.livingWarm.opacity(0.09), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous).stroke(KXColor.livingWarm.opacity(0.22), lineWidth: 0.8))
                 }
             }
 
             VStack(spacing: 10) {
                 NavigationLink {
-                    GuideJLPTPracticeView(initialLevel: JLPTLevel(rawValue: r.recommendedLevel ?? "N5") ?? .n5)
+                    GuideJLPTPracticeView(initialLevel: JLPTLevel.from(r.recommendedLevel))
                 } label: {
                     ctaLabel(icon: "play.fill",
                              title: guideText(language, "开始 \(r.recommendedLevel ?? "N5") 题库练习",
@@ -178,7 +197,7 @@ struct GuideJLPTPlacementView: View {
                                               "Start \(r.recommendedLevel ?? "N5") practice"),
                              filled: true)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(KXPressableStyle(scale: 0.98))
 
                 Button {
                     router.open(.guidePlan, in: .guide)
@@ -187,7 +206,7 @@ struct GuideJLPTPlacementView: View {
                              title: guideText(language, "生成学习计划", "学習計画を作る", "Generate study plan"),
                              filled: false)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(KXPressableStyle(scale: 0.98))
 
                 Button {
                     result = nil
@@ -196,8 +215,9 @@ struct GuideJLPTPlacementView: View {
                     Task { await load() }
                 } label: {
                     Text(guideText(language, "重新测一次", "もう一度測る", "Test again"))
-                        .font(.footnote.weight(.semibold))
+                        .font(.footnote.weight(.bold))
                         .foregroundStyle(KXColor.livingMuted)
+                        .padding(.vertical, 6)
                 }
                 .buttonStyle(.plain)
             }
@@ -209,15 +229,17 @@ struct GuideJLPTPlacementView: View {
 
     private func ctaLabel(icon: String, title: String, filled: Bool) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: icon)
+            Image(systemName: icon).font(.subheadline.weight(.bold))
             Text(title).font(.subheadline.weight(.bold))
             Spacer(minLength: 0)
-            Image(systemName: "arrow.right")
+            Image(systemName: "arrow.right").font(.subheadline.weight(.bold))
         }
-        .foregroundStyle(filled ? .white : KXColor.livingAccent)
-        .padding(14)
+        .foregroundStyle(filled ? KXColor.onAccent : KXColor.livingAccent)
+        .padding(15)
         .frame(maxWidth: .infinity)
-        .background(filled ? KXColor.livingAccent : KXColor.livingAccentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(filled ? KXColor.livingAccent : KXColor.livingAccentSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous).stroke(filled ? Color.clear : JLPTStyle.accentRim, lineWidth: 0.8))
+        .shadow(color: filled ? KXColor.livingAccent.opacity(0.22) : .clear, radius: 9, y: 3)
     }
 
     // MARK: data

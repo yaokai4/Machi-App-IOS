@@ -89,8 +89,7 @@ struct GuideJLPTExamView: View {
                 ForEach(exams) { exam in examRow(exam) }
             }
             if !history.isEmpty {
-                Text(guideText(language, "历史成绩", "受験履歴", "History"))
-                    .font(.headline.weight(.bold)).foregroundStyle(KXColor.livingInk)
+                JLPTSectionHeader(title: guideText(language, "历史成绩", "受験履歴", "History"))
                     .padding(.top, 6)
                 ForEach(history) { item in historyRow(item) }
             }
@@ -103,38 +102,51 @@ struct GuideJLPTExamView: View {
             Task { await start(exam) }
         } label: {
             HStack(spacing: 12) {
-                JLPTLevelBadge(level: exam.level ?? "", size: 46)
-                VStack(alignment: .leading, spacing: 3) {
+                JLPTLevelBadge(level: exam.level ?? "", size: 48)
+                VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 6) {
                         Text(exam.title ?? "")
                             .font(.subheadline.weight(.bold)).foregroundStyle(KXColor.livingInk)
                         if exam.isMemberOnly ?? false {
-                            Image(systemName: "crown.fill").font(.caption2).foregroundStyle(.orange)
+                            Image(systemName: "crown.fill").font(.caption2).foregroundStyle(KXColor.livingWarm)
                         }
                     }
-                    HStack(spacing: 8) {
-                        Label("\(exam.questionCount ?? 0)", systemImage: "list.number")
+                    HStack(spacing: 6) {
+                        examMetaChip(icon: "list.number", text: "\(exam.questionCount ?? 0)")
                         if (exam.durationSeconds ?? 0) > 0 {
-                            Label(minuteText(exam.durationSeconds ?? 0), systemImage: "clock")
+                            examMetaChip(icon: "clock", text: minuteText(exam.durationSeconds ?? 0))
                         }
-                        Label(guideText(language, "合格 \(exam.passScore ?? 60)", "合格 \(exam.passScore ?? 60)", "Pass \(exam.passScore ?? 60)"), systemImage: "checkmark.seal")
+                        examMetaChip(icon: "checkmark.seal", text: guideText(language, "合格 \(exam.passScore ?? 60)", "合格 \(exam.passScore ?? 60)", "≥\(exam.passScore ?? 60)"))
                     }
-                    .font(.caption2).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
                 if starting == exam.id {
                     ProgressView().controlSize(.small)
                 } else {
-                    Image(systemName: "play.circle.fill").font(.title3).foregroundStyle(KXColor.livingAccent)
+                    Image(systemName: "play.fill")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(KXColor.onAccent)
+                        .frame(width: 34, height: 34)
+                        .background(KXColor.livingAccent, in: Circle())
+                        .shadow(color: KXColor.livingAccent.opacity(0.24), radius: 6, y: 2)
                 }
             }
-            .padding(12)
+            .padding(14)
             .frame(maxWidth: .infinity)
-            .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KXColor.livingAccentSoft, lineWidth: 1))
+            .jlptSurface(radius: KXRadius.hero)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(KXPressableStyle(scale: 0.98))
         .disabled(starting != nil)
+    }
+
+    private func examMetaChip(icon: String, text: String) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: icon).font(.system(size: 9, weight: .bold))
+            Text(text).font(.caption2.weight(.semibold))
+        }
+        .foregroundStyle(KXColor.livingMuted)
+        .padding(.horizontal, 7).padding(.vertical, 3)
+        .background(KXColor.livingSoft, in: Capsule())
     }
 
     private func historyRow(_ item: KaiXJLPTExamHistoryItem) -> some View {
@@ -142,23 +154,30 @@ struct GuideJLPTExamView: View {
             GuideJLPTExamReviewView(sessionId: item.sessionId, title: item.title ?? "")
         } label: {
             HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
+                // Score chip — passing = accent tile, failing = warm tile.
+                Text("\(item.score ?? 0)")
+                    .font(.system(size: 17, weight: .black, design: .rounded))
+                    .foregroundStyle((item.passed ?? false) ? KXColor.livingAccent : KXColor.livingWarm)
+                    .frame(width: 44, height: 44)
+                    .background(((item.passed ?? false) ? KXColor.livingAccent : KXColor.livingWarm).opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                VStack(alignment: .leading, spacing: 3) {
                     Text(item.title ?? item.level ?? "")
-                        .font(.subheadline.weight(.semibold)).foregroundStyle(KXColor.livingInk)
+                        .font(.subheadline.weight(.bold)).foregroundStyle(KXColor.livingInk)
                     Text(guideText(language, "\(item.correct ?? 0)/\(item.total ?? 0) 正确", "\(item.correct ?? 0)/\(item.total ?? 0) 正解", "\(item.correct ?? 0)/\(item.total ?? 0) correct"))
-                        .font(.caption2).foregroundStyle(.secondary)
+                        .font(.caption2.weight(.medium)).foregroundStyle(KXColor.livingMuted)
                 }
                 Spacer(minLength: 0)
-                Text("\(item.score ?? 0)")
-                    .font(.headline.weight(.black))
-                    .foregroundStyle((item.passed ?? false) ? KXColor.livingAccent : .orange)
-                Image(systemName: "chevron.right").font(.caption).foregroundStyle(KXColor.livingMuted)
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(KXColor.livingMuted)
+                    .frame(width: 24, height: 24)
+                    .background(KXColor.livingSoft, in: Circle())
             }
             .padding(12)
             .frame(maxWidth: .infinity)
-            .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .jlptSurface(radius: KXRadius.hero)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(KXPressableStyle(scale: 0.98))
     }
 
     private func minuteText(_ seconds: Int) -> String {
@@ -257,13 +276,19 @@ struct GuideJLPTExamSessionView: View {
     private var sessionBody: some View {
         let q = questions[cursor]
         VStack(alignment: .leading, spacing: 16) {
-            HStack {
+            HStack(spacing: 10) {
                 ProgressView(value: Double(cursor), total: Double(max(1, questions.count)))
                     .tint(KXColor.livingAccent)
+                Text("\(cursor + 1)/\(questions.count)")
+                    .font(.caption.weight(.bold).monospacedDigit())
+                    .foregroundStyle(KXColor.livingMuted)
                 if isTimed {
-                    Label(clockText, systemImage: "clock")
+                    let urgent = remaining <= 60
+                    Label(clockText, systemImage: "clock.fill")
                         .font(.caption.weight(.bold).monospacedDigit())
-                        .foregroundStyle(remaining <= 60 ? .red : KXColor.livingAccent)
+                        .foregroundStyle(urgent ? .red : KXColor.livingAccent)
+                        .padding(.horizontal, 9).padding(.vertical, 5)
+                        .background((urgent ? Color.red : KXColor.livingAccent).opacity(0.12), in: Capsule())
                 }
             }
 
@@ -390,25 +415,22 @@ struct JLPTExamResultContent: View {
     }
 
     private var scoreCard: some View {
-        VStack(spacing: 8) {
-            Image(systemName: (result.passed ?? false) ? "checkmark.seal.fill" : "arrow.clockwise.circle.fill")
-                .font(.system(size: 48))
-                .foregroundStyle((result.passed ?? false) ? KXColor.livingAccent : .orange)
-            Text("\(result.score ?? 0)")
-                .font(.system(size: 46, weight: .black, design: .rounded))
-                .foregroundStyle(KXColor.livingInk)
+        let passed = result.passed ?? false
+        let total = max(1, result.total ?? 1)
+        let frac = Double(result.correct ?? 0) / Double(total)
+        return VStack(spacing: 14) {
+            JLPTEyebrow(text: guideText(language, "考试结果", "試験結果", "Result"))
+            JLPTScoreRing(score: result.score ?? 0, fraction: frac, passed: passed, size: 140)
             Text(guideText(language, "答对 \(result.correct ?? 0)/\(result.total ?? 0)", "正解 \(result.correct ?? 0)/\(result.total ?? 0)", "\(result.correct ?? 0)/\(result.total ?? 0) correct"))
-                .font(.subheadline.weight(.semibold)).foregroundStyle(KXColor.livingMuted)
-            Text((result.passed ?? false)
-                 ? guideText(language, "达到合格线 \(result.passScore ?? 60)", "合格ライン \(result.passScore ?? 60) 到達", "Passed (≥\(result.passScore ?? 60))")
-                 : guideText(language, "未达合格线 \(result.passScore ?? 60)", "合格ライン \(result.passScore ?? 60) 未達", "Below \(result.passScore ?? 60)"))
-                .font(.caption.weight(.bold))
-                .foregroundStyle((result.passed ?? false) ? KXColor.livingAccent : .orange)
+                .font(.subheadline.weight(.bold)).foregroundStyle(KXColor.livingMuted)
+            JLPTPassPill(passed: passed,
+                         title: passed
+                            ? guideText(language, "达到合格线 \(result.passScore ?? 60)", "合格ライン \(result.passScore ?? 60) 到達", "Passed · ≥\(result.passScore ?? 60)")
+                            : guideText(language, "未达合格线 \(result.passScore ?? 60)", "合格ライン \(result.passScore ?? 60) 未達", "Below \(result.passScore ?? 60)"))
         }
         .frame(maxWidth: .infinity)
-        .padding(20)
-        .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.livingAccentSoft, lineWidth: 1))
+        .padding(24)
+        .jlptSurface(radius: KXRadius.sheet, elevated: true)
     }
 }
 

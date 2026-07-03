@@ -76,53 +76,56 @@ struct GuideJLPTVocabView: View {
     }
 
     private func progressCard(_ p: KaiXJLPTVocabProgress) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(guideText(language, "\(level.rawValue) 掌握进度", "\(level.rawValue) の習得状況", "\(level.rawValue) mastery"))
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(KXColor.livingInk)
                 Spacer(minLength: 0)
                 Text("\(p.mastered ?? 0)/\(p.total ?? 0)")
-                    .font(.caption.weight(.bold))
+                    .font(.subheadline.weight(.black).monospacedDigit())
                     .foregroundStyle(KXColor.livingAccent)
             }
             ProgressView(value: p.progress ?? 0).tint(KXColor.livingAccent)
         }
-        .padding(14)
+        .padding(16)
         .frame(maxWidth: .infinity)
-        .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KXColor.livingAccentSoft, lineWidth: 1))
+        .jlptSurface(radius: KXRadius.hero)
     }
 
     private func deckRow(_ deck: KaiXJLPTVocabDeck) -> some View {
         HStack(spacing: 12) {
             Image(systemName: "rectangle.stack.fill")
-                .font(.title3)
+                .font(.title3.weight(.semibold))
                 .foregroundStyle(KXColor.livingAccent)
-                .frame(width: 44, height: 44)
-                .background(KXColor.livingAccentSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            VStack(alignment: .leading, spacing: 3) {
+                .frame(width: 46, height: 46)
+                .background(KXColor.livingAccentSoft, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(JLPTStyle.accentRim, lineWidth: 0.8))
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(deck.title ?? "")
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(KXColor.livingInk)
                     if deck.isMemberOnly ?? false {
-                        Image(systemName: "crown.fill").font(.caption2).foregroundStyle(.orange)
+                        Image(systemName: "crown.fill").font(.caption2).foregroundStyle(KXColor.livingWarm)
                     }
                 }
                 Text(guideText(language, "\(deck.wordCount ?? 0) 词", "\(deck.wordCount ?? 0) 語", "\(deck.wordCount ?? 0) words"))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.caption.weight(.medium)).foregroundStyle(KXColor.livingMuted)
                 if let d = deck.description, !d.isEmpty {
                     Text(d).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
                 }
             }
             Spacer(minLength: 0)
-            Image(systemName: "chevron.right").font(.caption).foregroundStyle(KXColor.livingMuted)
+            Image(systemName: "chevron.right")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(KXColor.livingMuted)
+                .frame(width: 24, height: 24)
+                .background(KXColor.livingSoft, in: Circle())
         }
-        .padding(12)
+        .padding(14)
         .frame(maxWidth: .infinity)
-        .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KXColor.livingAccentSoft, lineWidth: 1))
+        .jlptSurface(radius: KXRadius.hero)
     }
 
     private func load() async {
@@ -189,25 +192,30 @@ struct GuideJLPTDeckDetailView: View {
                 GuideJLPTVocabQuizView(level: level, deckId: deckId, deckTitle: deckTitle)
             } label: {
                 HStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle.fill")
+                    Image(systemName: "checkmark.circle.fill").font(.subheadline.weight(.bold))
                     Text(guideText(language, "考单词（测验）", "単語テスト", "Vocab quiz"))
                         .font(.subheadline.weight(.bold))
                     Spacer(minLength: 0)
-                    Image(systemName: "arrow.right")
+                    Image(systemName: "arrow.right").font(.subheadline.weight(.bold))
                 }
-                .foregroundStyle(.white)
-                .padding(14)
+                .foregroundStyle(KXColor.onAccent)
+                .padding(15)
                 .frame(maxWidth: .infinity)
-                .background(KXColor.livingAccent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(KXColor.livingAccent, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+                .shadow(color: KXColor.livingAccent.opacity(0.24), radius: 9, y: 3)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(KXPressableStyle(scale: 0.98))
 
-            HStack {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(KXColor.livingAccent)
                 Text(guideText(language, "已掌握 \(mastered.count)/\(words.count)", "習得 \(mastered.count)/\(words.count)", "Mastered \(mastered.count)/\(words.count)"))
-                    .font(.caption.weight(.semibold))
+                    .font(.caption.weight(.bold))
                     .foregroundStyle(KXColor.livingMuted)
                 Spacer(minLength: 0)
             }
+            .padding(.horizontal, 2)
 
             ForEach(words) { word in
                 GuideJLPTWordCard(
@@ -256,45 +264,63 @@ struct GuideJLPTWordCard: View {
     @State private var revealed = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                // 日文大字 — the star of the card.
                 Text(word.word)
-                    .font(.title3.weight(.bold))
+                    .font(.system(size: 26, weight: .bold))
                     .foregroundStyle(KXColor.livingInk)
                 if revealed, let reading = word.reading, !reading.isEmpty {
-                    Text(reading).font(.subheadline).foregroundStyle(KXColor.livingAccent)
+                    Text(reading)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(KXColor.livingAccent)
                 }
                 if let pos = word.pos, !pos.isEmpty, revealed {
-                    Text(pos).font(.caption2).foregroundStyle(.secondary)
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(KXColor.softBackground, in: Capsule())
+                    Text(pos).font(.caption2.weight(.semibold)).foregroundStyle(KXColor.livingMuted)
+                        .padding(.horizontal, 7).padding(.vertical, 2)
+                        .background(KXColor.livingSoft, in: Capsule())
                 }
                 Spacer(minLength: 0)
                 Button(action: onToggle) {
                     Image(systemName: mastered ? "checkmark.circle.fill" : "circle")
-                        .font(.title3)
+                        .font(.title2)
                         .foregroundStyle(mastered ? KXColor.livingAccent : KXColor.livingMuted)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(KXPressableStyle(scale: 0.9))
+                .sensoryFeedback(.selection, trigger: mastered)
             }
             if revealed {
                 if let mz = word.meaningZh, !mz.isEmpty {
-                    Text(mz).font(.subheadline).foregroundStyle(KXColor.livingInk)
+                    Text(mz)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(KXColor.livingInk)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 if let ex = word.example, !ex.isEmpty {
-                    Text(ex).font(.caption).foregroundStyle(.secondary)
+                    Text(ex)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineSpacing(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 2)
                 }
             } else {
-                Text(guideText(language, "点按查看释义", "タップして意味を見る", "Tap to reveal"))
-                    .font(.caption).foregroundStyle(KXColor.livingMuted)
+                Label(guideText(language, "点按查看释义", "タップして意味を見る", "Tap to reveal"),
+                      systemImage: "hand.tap")
+                    .font(.caption.weight(.medium)).foregroundStyle(KXColor.livingMuted)
             }
         }
-        .padding(14)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KXColor.livingAccentSoft, lineWidth: 1))
-        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .onTapGesture { withAnimation(.easeInOut(duration: 0.15)) { revealed.toggle() } }
+        .background(
+            (mastered ? KXColor.livingAccentSoft : KXColor.livingSurface),
+            in: RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous)
+        )
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous)
+            .stroke(mastered ? JLPTStyle.accentRim : JLPTStyle.hairline, lineWidth: 0.8))
+        .shadow(color: Color.black.opacity(0.035), radius: 6, y: 2)
+        .contentShape(RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous))
+        .onTapGesture { withAnimation(.easeInOut(duration: 0.18)) { revealed.toggle() } }
     }
 }
 
@@ -349,18 +375,28 @@ struct GuideJLPTVocabQuizView: View {
         if cursor < questions.count {
             let q = questions[cursor]
             VStack(alignment: .leading, spacing: 16) {
-                ProgressView(value: Double(cursor), total: Double(max(1, questions.count)))
-                    .tint(KXColor.livingAccent)
+                HStack(spacing: 8) {
+                    ProgressView(value: Double(cursor), total: Double(max(1, questions.count)))
+                        .tint(KXColor.livingAccent)
+                    Text("\(cursor + 1)/\(questions.count)")
+                        .font(.caption.weight(.bold).monospacedDigit())
+                        .foregroundStyle(KXColor.livingMuted)
+                }
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("\(cursor + 1) / \(questions.count)")
-                        .font(.caption2.weight(.bold)).foregroundStyle(KXColor.livingMuted)
+                    Text(guideText(language, "选择正确释义", "正しい意味を選択", "Pick the meaning"))
+                        .font(.caption2.weight(.heavy))
+                        .tracking(0.8)
+                        .foregroundStyle(KXColor.livingMuted)
+                    // 日文大字题干.
                     Text(q.stem)
-                        .font(.title3.weight(.bold))
+                        .font(.system(size: 28, weight: .bold))
                         .foregroundStyle(KXColor.livingInk)
                     if let reading = q.reading, !reading.isEmpty {
-                        Text(reading).font(.subheadline).foregroundStyle(KXColor.livingAccent)
+                        Text(reading)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(KXColor.livingAccent)
                     }
-                    VStack(spacing: 8) {
+                    VStack(spacing: 9) {
                         ForEach(Array(q.choices.enumerated()), id: \.offset) { i, choice in
                             JLPTChoiceRow(
                                 text: choice,
@@ -370,28 +406,21 @@ struct GuideJLPTVocabQuizView: View {
                             )
                         }
                     }
+                    .padding(.top, 2)
                 }
-                .padding(16)
-                .frame(maxWidth: .infinity)
-                .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(KXColor.livingAccentSoft, lineWidth: 1))
+                .padding(18)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .jlptSurface(radius: KXRadius.sheet)
 
-                Button(action: next) {
-                    HStack {
-                        if submitting { ProgressView().controlSize(.small).tint(.white) }
-                        Text(cursor + 1 < questions.count
-                             ? guideText(language, "下一题", "次へ", "Next")
-                             : guideText(language, "交卷", "提出", "Submit"))
-                            .font(.subheadline.weight(.bold))
-                    }
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 13)
-                    .background(selected != nil ? KXColor.livingAccent : KXColor.livingMuted,
-                                in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .disabled(selected == nil || submitting)
+                JLPTPrimaryButton(
+                    title: cursor + 1 < questions.count
+                        ? guideText(language, "下一题", "次へ", "Next")
+                        : guideText(language, "交卷", "提出", "Submit"),
+                    icon: cursor + 1 < questions.count ? nil : "checkmark.circle.fill",
+                    trailingArrow: cursor + 1 < questions.count,
+                    loading: submitting,
+                    enabled: selected != nil,
+                    action: next)
 
                 JLPTComplianceNote()
             }
@@ -400,26 +429,34 @@ struct GuideJLPTVocabQuizView: View {
     }
 
     private func resultView(_ r: KaiXJLPTVocabQuizSubmitResponse) -> some View {
-        VStack(spacing: 16) {
-            Image(systemName: (r.passed ?? false) ? "checkmark.seal.fill" : "arrow.clockwise.circle.fill")
-                .font(.system(size: 56))
-                .foregroundStyle((r.passed ?? false) ? KXColor.livingAccent : .orange)
-            Text("\(r.score ?? 0)")
-                .font(.system(size: 48, weight: .black, design: .rounded))
-                .foregroundStyle(KXColor.livingInk)
+        let total = max(1, r.total ?? 1)
+        let frac = Double(r.correct ?? 0) / Double(total)
+        return VStack(spacing: 18) {
+            JLPTEyebrow(text: guideText(language, "单词测验结果", "単語テスト結果", "Quiz result"))
+            JLPTScoreRing(score: r.score ?? 0, fraction: frac, passed: r.passed ?? false, size: 140)
             Text(guideText(language, "答对 \(r.correct ?? 0)/\(r.total ?? 0) 题", "正解 \(r.correct ?? 0)/\(r.total ?? 0)", "\(r.correct ?? 0)/\(r.total ?? 0) correct"))
-                .font(.subheadline.weight(.semibold))
+                .font(.subheadline.weight(.bold))
                 .foregroundStyle(KXColor.livingMuted)
+            JLPTPassPill(passed: r.passed ?? false,
+                         title: (r.passed ?? false)
+                            ? guideText(language, "通过", "合格", "Passed")
+                            : guideText(language, "再接再厉", "もう一歩", "Keep going"))
             Button(action: { Task { await start() } }) {
-                Text(guideText(language, "再考一次", "もう一度", "Try again"))
-                    .font(.subheadline.weight(.bold)).foregroundStyle(.white)
-                    .padding(.horizontal, 22).padding(.vertical, 12)
-                    .background(KXColor.livingAccent, in: Capsule())
+                HStack(spacing: 7) {
+                    Image(systemName: "arrow.clockwise").font(.subheadline.weight(.bold))
+                    Text(guideText(language, "再考一次", "もう一度", "Try again"))
+                        .font(.subheadline.weight(.bold))
+                }
+                .foregroundStyle(KXColor.onAccent)
+                .padding(.horizontal, 24).padding(.vertical, 13)
+                .background(KXColor.livingAccent, in: Capsule())
+                .shadow(color: KXColor.livingAccent.opacity(0.24), radius: 8, y: 3)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(KXPressableStyle(scale: 0.96))
+            .padding(.top, 2)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(28)
+        .padding(32)
     }
 
     private func start() async {

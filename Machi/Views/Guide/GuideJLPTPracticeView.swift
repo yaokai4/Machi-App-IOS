@@ -63,6 +63,9 @@ struct GuideJLPTPracticeView: View {
             JLPTLevelPicker(selection: $level)
             JLPTSectionPicker(selection: $section)
         }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .jlptSurface(radius: KXRadius.hero)
         .onChange(of: level) { _, _ in Task { await load() } }
         .onChange(of: section) { _, _ in Task { await load() } }
     }
@@ -113,35 +116,19 @@ struct GuideJLPTPracticeView: View {
                 )
 
                 if !revealed {
-                    Button(action: { Task { await submitAnswer(q) } }) {
-                        HStack {
-                            if submitting { ProgressView().controlSize(.small).tint(.white) }
-                            Text(guideText(language, "提交", "回答する", "Submit"))
-                                .font(.subheadline.weight(.bold))
-                        }
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 13)
-                        .background(selectedIndex != nil ? KXColor.livingAccent : KXColor.livingMuted,
-                                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(selectedIndex == nil || submitting)
+                    JLPTPrimaryButton(
+                        title: guideText(language, "提交", "回答する", "Submit"),
+                        icon: "paperplane.fill",
+                        loading: submitting,
+                        enabled: selectedIndex != nil,
+                        action: { Task { await submitAnswer(q) } })
                 } else {
-                    Button(action: advance) {
-                        HStack {
-                            Text(cursor + 1 < questions.count
-                                 ? guideText(language, "下一题", "次の問題", "Next")
-                                 : guideText(language, "完成本组", "このセットを終える", "Finish set"))
-                                .font(.subheadline.weight(.bold))
-                            Image(systemName: "arrow.right")
-                        }
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 13)
-                        .background(KXColor.livingAccent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
+                    JLPTPrimaryButton(
+                        title: cursor + 1 < questions.count
+                            ? guideText(language, "下一题", "次の問題", "Next")
+                            : guideText(language, "完成本组", "このセットを終える", "Finish set"),
+                        trailingArrow: true,
+                        action: advance)
                 }
 
                 JLPTComplianceNote()
@@ -150,32 +137,44 @@ struct GuideJLPTPracticeView: View {
     }
 
     private var batchDoneView: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "checkmark.seal.fill")
-                .font(.largeTitle)
-                .foregroundStyle(KXColor.livingAccent)
-            Text(guideText(language, "本组已完成！", "このセットが完了！", "Set complete!"))
-                .font(.headline.weight(.bold))
-                .foregroundStyle(KXColor.livingInk)
-            Button(action: { Task { await load() } }) {
-                Text(guideText(language, "再来一组", "もう一セット", "Another set"))
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 22).padding(.vertical, 12)
-                    .background(KXColor.livingAccent, in: Capsule())
+        VStack(spacing: 16) {
+            ZStack {
+                Circle().fill(KXColor.livingAccentSoft).frame(width: 76, height: 76)
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 32, weight: .semibold))
+                    .foregroundStyle(KXColor.livingAccent)
             }
-            .buttonStyle(.plain)
+            Text(guideText(language, "本组已完成！", "このセットが完了！", "Set complete!"))
+                .font(.title3.weight(.bold))
+                .foregroundStyle(KXColor.livingInk)
+            Text(guideText(language, "保持节奏，连续打卡更容易上分。", "この調子で続けましょう。", "Keep the streak going."))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Button(action: { Task { await load() } }) {
+                HStack(spacing: 7) {
+                    Image(systemName: "arrow.clockwise").font(.subheadline.weight(.bold))
+                    Text(guideText(language, "再来一组", "もう一セット", "Another set"))
+                        .font(.subheadline.weight(.bold))
+                }
+                .foregroundStyle(KXColor.onAccent)
+                .padding(.horizontal, 24).padding(.vertical, 13)
+                .background(KXColor.livingAccent, in: Capsule())
+                .shadow(color: KXColor.livingAccent.opacity(0.24), radius: 8, y: 3)
+            }
+            .buttonStyle(KXPressableStyle(scale: 0.96))
             NavigationLink {
                 GuideJLPTReviewView(initialLevel: level)
             } label: {
                 Text(guideText(language, "去错题本", "間違いノートへ", "Review book"))
-                    .font(.footnote.weight(.semibold))
+                    .font(.footnote.weight(.bold))
                     .foregroundStyle(KXColor.livingAccent)
+                    .padding(.vertical, 4)
             }
             .buttonStyle(.plain)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(28)
+        .padding(32)
     }
 
     // MARK: data

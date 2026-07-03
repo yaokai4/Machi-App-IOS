@@ -51,18 +51,27 @@ struct GuideJLPTReviewView: View {
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Toggle(isOn: $levelFilterOn) {
-                Text(guideText(language, "仅看 \(level.rawValue)", "\(level.rawValue) のみ", "\(level.rawValue) only"))
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(KXColor.livingInk)
-            }
-            .tint(KXColor.livingAccent)
-            .onChange(of: levelFilterOn) { _, _ in Task { await load() } }
+            VStack(alignment: .leading, spacing: 12) {
+                Toggle(isOn: $levelFilterOn) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "line.3.horizontal.decrease.circle.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(KXColor.livingAccent)
+                        Text(guideText(language, "仅看 \(level.rawValue)", "\(level.rawValue) のみ", "\(level.rawValue) only"))
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(KXColor.livingInk)
+                    }
+                }
+                .tint(KXColor.livingAccent)
+                .onChange(of: levelFilterOn) { _, _ in Task { await load() } }
 
-            if levelFilterOn {
-                JLPTLevelPicker(selection: $level)
-                    .onChange(of: level) { _, _ in Task { await load() } }
+                if levelFilterOn {
+                    JLPTLevelPicker(selection: $level)
+                        .onChange(of: level) { _, _ in Task { await load() } }
+                }
             }
+            .padding(14)
+            .jlptSurface(radius: KXRadius.hero)
 
             ForEach(Array(questions.enumerated()), id: \.element.id) { idx, q in
                 JLPTQuestionCard(
