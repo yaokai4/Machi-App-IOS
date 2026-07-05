@@ -478,33 +478,29 @@ struct LanguageSettingsView: View {
     let currentUser: UserEntity
 
     var body: some View {
-        Form {
-            Section(L("currentLanguage", language)) {
+        SettingsFormPage(title: L("language", language)) {
+            Text(L("currentLanguage", language))
+                .font(.footnote.weight(.bold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+
+            VStack(spacing: KXSpacing.xxs) {
                 ForEach(AppLanguage.allCases) { option in
-                    Button {
-                        persistAppLanguage(option)
-                    } label: {
-                        HStack {
-                            Text(option == .system ? L("systemAppearance", language) : option.title)
-                            Spacer()
-                            if appLanguageCode == option.rawValue {
-                                Image(systemName: "checkmark")
-                                    .fontWeight(.bold)
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
+                    KXSelectRow(
+                        leadingSymbol: option == .system ? "gearshape.fill" : "character.bubble.fill",
+                        title: option == .system ? L("systemAppearance", language) : option.title,
+                        isSelected: appLanguageCode == option.rawValue,
+                        action: { persistAppLanguage(option) }
+                    )
                 }
             }
+
             if let message {
-                Section {
-                    Text(message)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
         }
-        .navigationTitle(L("language", language))
     }
 
     private func persistAppLanguage(_ option: AppLanguage) {

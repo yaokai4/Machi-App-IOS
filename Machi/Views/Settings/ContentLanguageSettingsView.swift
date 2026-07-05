@@ -21,62 +21,60 @@ struct ContentLanguageSettingsView: View {
     ]
 
     var body: some View {
-        Form {
-            Section {
+        SettingsFormPage(title: L("contentLanguage", language)) {
+            // Primary — single select
+            Text(L("contentLanguagePrimary", language))
+                .font(.footnote.weight(.bold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+            VStack(spacing: KXSpacing.xxs) {
                 ForEach(primaryOptions) { option in
-                    Button {
-                        persistContentLanguage(preferred: option, fallbacks: languageManager.fallbacks)
-                    } label: {
-                        HStack {
-                            Text(option.title(language))
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            if languageManager.preferred == option {
-                                Image(systemName: "checkmark")
-                                    .fontWeight(.bold)
-                                    .foregroundStyle(KXColor.accent)
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
-            } header: {
-                Text(L("contentLanguagePrimary", language))
-            } footer: {
-                Text(L("contentLanguageSubtitle", language))
-            }
-
-            Section {
-                ForEach(fallbackOptions) { option in
-                    let isOn = Binding(
-                        get: { languageManager.fallbacks.contains(option) },
-                        set: { newValue in
-                            var current = languageManager.fallbacks
-                            if newValue {
-                                if !current.contains(option) { current.append(option) }
-                            } else {
-                                current.removeAll { $0 == option }
-                            }
-                            persistContentLanguage(preferred: languageManager.preferred, fallbacks: current)
-                        }
+                    KXSelectRow(
+                        title: option.title(language),
+                        isSelected: languageManager.preferred == option,
+                        action: { persistContentLanguage(preferred: option, fallbacks: languageManager.fallbacks) }
                     )
-                    Toggle(option.title(language), isOn: isOn)
                 }
-            } header: {
-                Text(L("contentLanguageFallback", language))
-            } footer: {
-                Text(L("contentLanguageFallbackHint", language))
             }
+            Text(L("contentLanguageSubtitle", language))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            // Fallbacks — multi select (tap toggles inclusion)
+            Text(L("contentLanguageFallback", language))
+                .font(.footnote.weight(.bold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .padding(.top, KXSpacing.sm)
+            VStack(spacing: KXSpacing.xxs) {
+                ForEach(fallbackOptions) { option in
+                    KXSelectRow(
+                        title: option.title(language),
+                        isSelected: languageManager.fallbacks.contains(option),
+                        action: { toggleFallback(option) }
+                    )
+                }
+            }
+            Text(L("contentLanguageFallbackHint", language))
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
             if let message {
-                Section {
-                    Text(message)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
         }
-        .navigationTitle(L("contentLanguage", language))
+    }
+
+    private func toggleFallback(_ option: ContentLanguage) {
+        var current = languageManager.fallbacks
+        if current.contains(option) {
+            current.removeAll { $0 == option }
+        } else {
+            current.append(option)
+        }
+        persistContentLanguage(preferred: languageManager.preferred, fallbacks: current)
     }
 
     private func persistContentLanguage(preferred: ContentLanguage, fallbacks: [ContentLanguage]) {

@@ -733,7 +733,8 @@ struct CountrySettingsView: View {
 
     private struct CountryOption: Identifiable, Equatable {
         let code: String
-        let title: String
+        let emoji: String
+        let name: String
         let regionCode: String
         var id: String { code }
     }
@@ -744,7 +745,7 @@ struct CountrySettingsView: View {
         KaiXRegionDirectory.countries.compactMap { country in
             guard let regionCode = KaiXRegionDirectory.defaultRegionCode(forCountry: country.code) else { return nil }
             let name = KaiXRegionDirectory.localizedCountryName(code: country.code, language: language)
-            return CountryOption(code: country.code, title: "\(country.emoji) \(name)", regionCode: regionCode)
+            return CountryOption(code: country.code, emoji: country.emoji, name: name, regionCode: regionCode)
         }
     }
 
@@ -753,24 +754,15 @@ struct CountrySettingsView: View {
             Text(settingsText(language, "切换国家会同时把当前浏览城市切换到该国家的默认城市；其他入口只能切换当前国家下的城市。", "国を切り替えると現在の閲覧都市もその国のデフォルト都市に切り替わります。他の入口では現在の国の都市のみ選択できます。", "Changing country also switches your current browsing city to that country's default city. Other entry points can only switch cities within the current country."))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            ForEach(options) { option in
-                Button {
-                    pendingCountry = option
-                } label: {
-                    HStack {
-                        Text(option.title)
-                            .foregroundStyle(.primary)
-                        Spacer()
-                        if option.code == currentCountry {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(KXColor.accent)
-                                .fontWeight(.semibold)
-                        }
-                    }
-                    .padding(.vertical, 10)
+            VStack(spacing: KXSpacing.xxs) {
+                ForEach(options) { option in
+                    KXSelectRow(
+                        leadingEmoji: option.emoji,
+                        title: option.name,
+                        isSelected: option.code == currentCountry,
+                        action: { pendingCountry = option }
+                    )
                 }
-                .buttonStyle(.plain)
-                SettingsDivider()
             }
             if let message {
                 Text(message)

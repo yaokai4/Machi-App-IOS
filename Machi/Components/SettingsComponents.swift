@@ -228,3 +228,78 @@ struct ProfileMetricBox: View {
         .kxGlassSurface(radius: KXRadius.sm, stroke: KaiXTheme.mutedGlassStroke)
     }
 }
+
+/// A fully-tappable single/multi-select option row for settings pickers
+/// (app language, country, content language). The WHOLE row is the hit target
+/// via `.contentShape(Rectangle())` — the old pickers wrapped an `HStack` with a
+/// `Spacer` in a `.plain` button, so the empty middle never hit-tested and you
+/// had to land exactly on the text to switch. Selected rows get an accent wash,
+/// accent-weighted title, and a filled accent check; unselected show a hollow
+/// ring, so the current choice reads at a glance.
+struct KXSelectRow: View {
+    var leadingEmoji: String? = nil
+    var leadingSymbol: String? = nil
+    let title: String
+    var subtitle: String? = nil
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: KXSpacing.md) {
+                if let leadingEmoji {
+                    Text(leadingEmoji)
+                        .font(.title3)
+                        .frame(width: 30, alignment: .center)
+                        .accessibilityHidden(true)
+                } else if let leadingSymbol {
+                    Image(systemName: leadingSymbol)
+                        .kxScaledFont(16, weight: .semibold)
+                        .foregroundStyle(isSelected ? KXColor.accent : Color.secondary)
+                        .frame(width: 30, alignment: .center)
+                        .accessibilityHidden(true)
+                }
+
+                VStack(alignment: .leading, spacing: KXSpacing.xxs) {
+                    Text(title)
+                        .font(.body.weight(isSelected ? .semibold : .regular))
+                        .foregroundStyle(isSelected ? KXColor.accent : .primary)
+                        .lineLimit(1)
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer(minLength: KXSpacing.sm)
+
+                ZStack {
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .kxScaledFont(20, weight: .semibold)
+                            .foregroundStyle(KXColor.accent)
+                    } else {
+                        Circle()
+                            .strokeBorder(KXColor.separator.opacity(0.9), lineWidth: 1.4)
+                            .frame(width: 21, height: 21)
+                    }
+                }
+                .frame(width: 24, height: 24)
+                .accessibilityHidden(true)
+            }
+            .padding(.vertical, KXSpacing.sm + 2)
+            .padding(.horizontal, KXSpacing.sm)
+            .frame(minHeight: 44)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .background(
+                RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
+                    .fill(isSelected ? KXColor.accentSoft : Color.clear)
+            )
+        }
+        .buttonStyle(KXPressableStyle(scale: 0.99, dim: 0.94))
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : [.isButton])
+    }
+}
