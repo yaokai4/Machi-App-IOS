@@ -29,6 +29,7 @@ struct GuideJLPTPracticeView: View {
     @State private var isLoading = true
     @State private var loadFailed = false
     @State private var submitting = false
+    @State private var submitFailed = false
     @State private var sessionId = UUID().uuidString
     @State private var upgradeMessage: String?
 
@@ -122,6 +123,12 @@ struct GuideJLPTPracticeView: View {
                         loading: submitting,
                         enabled: selectedIndex != nil,
                         action: { Task { await submitAnswer(q) } })
+                    if submitFailed {
+                        Text(guideText(language, "提交失败,请检查网络后重试。", "送信に失敗しました。接続を確認して再試行してください。", "Submit failed — check your connection and try again."))
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(.red)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                    }
                 } else {
                     JLPTPrimaryButton(
                         title: cursor + 1 < questions.count
@@ -186,6 +193,7 @@ struct GuideJLPTPracticeView: View {
         explanation = nil
         aiExplanation = nil
         explaining = false
+        submitFailed = false
     }
 
     private func load() async {
@@ -207,6 +215,7 @@ struct GuideJLPTPracticeView: View {
     private func submitAnswer(_ q: KaiXJLPTQuestionDTO) async {
         guard let sel = selectedIndex, !submitting else { return }
         submitting = true
+        submitFailed = false
         defer { submitting = false }
         do {
             let result = try await KaiXAPIClient.shared.jlptAttempt(
@@ -215,10 +224,13 @@ struct GuideJLPTPracticeView: View {
             explanation = result.explanation
             revealed = true
         } catch {
-            // Grade locally as a graceful fallback if the round-trip fails but we
-            // already know the key (we don't for practice) — otherwise surface a
-            // retryable reveal by leaving the card open.
-            loadFailed = false
+            // We can't grade locally (practice never ships the answer key), so
+            // surface a retryable error instead of silently swallowing it — the
+            // card stays on the question with the Submit button live, and a
+            // visible "submit failed, retry" hint tells the user why nothing
+            // happened. (Reusing `loadFailed` here would tear down the whole
+            // question area into the full-screen retry state and lose the card.)
+            submitFailed = true
         }
     }
 

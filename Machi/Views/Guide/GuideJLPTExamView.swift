@@ -234,8 +234,12 @@ struct GuideJLPTExamSessionView: View {
     @State private var remaining: Int = 0
     @State private var timedOut = false
     @State private var submitting = false
+    @State private var submitFailed = false
     @State private var result: KaiXJLPTExamResult?
     @State private var pushResult = false
+    /// Question ids whose live per-answer save failed — re-flushed before submit
+    /// so a dropped save isn't graded as unanswered.
+    @State private var unsavedAnswers: Set<String> = []
 
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
@@ -246,6 +250,12 @@ struct GuideJLPTExamSessionView: View {
         ScrollView {
             if questions.isEmpty {
                 JLPTStateView(systemImage: "tray", title: guideText(language, "本卷暂无题目", "問題がありません", "No questions"))
+            } else if timedOut && result == nil {
+                // Time's up: show a reachable submit/retry state instead of
+                // leaving the user stranded on whatever question they were on
+                // with a frozen 0:00 clock and the only Submit button hidden on
+                // the last page.
+                timeUpState
             } else if cursor < questions.count {
                 sessionBody
             } else {
@@ -345,9 +355,36 @@ struct GuideJLPTExamSessionView: View {
                 }
             }
 
+            if submitFailed {
+                Text(guideText(language, "交卷失败,请检查网络后重试。", "提出に失敗しました。接続を確認して再試行してください。", "Submit failed — check your connection and try again."))
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.red)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
+
             JLPTComplianceNote()
         }
         .padding(16)
+    }
+
+    /// Shown once the clock hits 0:00. Auto-submit runs; if it fails the user
+    /// gets a reachable "submit again" button that doesn't depend on paging to
+    /// the last question.
+    @ViewBuilder
+    private var timeUpState: some View {
+        if submitting {
+            JLPTStateView(title: guideText(language, "时间到,正在交卷…", "時間切れ、採点中…", "Time's up — submitting…"), isLoading: true)
+        } else {
+            JLPTStateView(
+                systemImage: "clock.badge.exclamationmark",
+                title: guideText(language, "时间到", "時間切れ", "Time's up"),
+                message: submitFailed
+                    ? guideText(language, "交卷失败,请检查网络后重试。", "提出に失敗しました。接続を確認して再試行してください。", "Submit failed — check your connection and try again.")
+                    : guideText(language, "正在为你交卷…", "採点を準備しています…", "Preparing your results…"),
+                actionTitle: guideText(language, "重新交卷", "もう一度提出", "Submit again"),
+                action: { Task { await submit() } }
+            )
+        }
     }
 
     private var clockText: String {
@@ -357,18 +394,47 @@ struct GuideJLPTExamSessionView: View {
 
     private func save(_ q: KaiXJLPTQuestionDTO, selected: Int) async {
         guard let sid = start.sessionId else { return }
-        _ = try? await KaiXAPIClient.shared.jlptExamAnswer(sessionId: sid, questionId: q.id, selectedIndex: selected)
+        do {
+            try await KaiXAPIClient.shared.jlptExamAnswer(sessionId: sid, questionId: q.id, selectedIndex: selected)
+            unsavedAnswers.remove(q.id)
+        } catch {
+            // Remember the failed save so it can be re-flushed at submit time —
+            // otherwise a single dropped save (transient network) is graded as
+            // unanswered and the score is silently, unexplainably low.
+            unsavedAnswers.insert(q.id)
+        }
+    }
+
+    /// Best-effort re-send of any answers whose live save failed, using the
+    /// selections we still hold locally, so the server grades what the user
+    /// actually chose. Runs before submit. (The fully robust fix is a whole-
+    /// paper answers snapshot on submit — that needs a backend endpoint.)
+    private func flushUnsavedAnswers() async {
+        guard let sid = start.sessionId else { return }
+        for qid in Array(unsavedAnswers) {
+            guard let selected = answers[qid] else { unsavedAnswers.remove(qid); continue }
+            do {
+                try await KaiXAPIClient.shared.jlptExamAnswer(sessionId: sid, questionId: qid, selectedIndex: selected)
+                unsavedAnswers.remove(qid)
+            } catch {
+                // Keep it marked; submit still proceeds best-effort.
+            }
+        }
     }
 
     private func submit() async {
         guard let sid = start.sessionId, !submitting, result == nil else { return }
         submitting = true
+        submitFailed = false
+        await flushUnsavedAnswers()
         do {
             let r = try await KaiXAPIClient.shared.jlptExamSubmit(sessionId: sid)
             result = r
             pushResult = true
         } catch {
-            // Leave the session open so the user can retry submit.
+            // Leave the session open and surface the failure so a timed-out
+            // auto-submit doesn't look like a frozen exam with no way forward.
+            submitFailed = true
         }
         submitting = false
     }
