@@ -25,18 +25,27 @@ struct WalletView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                if store.walletNeedsLogin {
-                    needsLoginCard
-                } else if store.walletUnavailable {
-                    unsupportedCard
-                } else if store.walletLoadFailed {
+                if store.walletLoadFailed {
+                    // Hard transient error (not 401/404): offer a retry.
                     errorCard
                 } else {
-                    balanceCard
-                    if currentUser != nil { membershipEntryCard }
+                    // Header reflects sign-in / availability, but the top-up
+                    // catalog + legal disclosure ALWAYS render below so the
+                    // consumable IAPs are visible/locatable to everyone
+                    // (guest, offline, server-down) — the Buy tap gates on login.
+                    if store.walletNeedsLogin {
+                        needsLoginCard
+                    } else if store.walletUnavailable {
+                        unsupportedCard
+                    } else {
+                        balanceCard
+                        if currentUser != nil { membershipEntryCard }
+                    }
                     topupSection
                     disclaimerCard
-                    ledgerSection
+                    if !store.walletNeedsLogin && !store.walletUnavailable {
+                        ledgerSection
+                    }
                 }
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
@@ -188,12 +197,12 @@ struct WalletView: View {
                     ProgressView().controlSize(.small)
                     Text(wl("加载中…", "Loading…", "読み込み中…")).font(.caption).foregroundStyle(.secondary)
                 }
-            } else if store.topupProducts.isEmpty {
+            } else if store.visibleTopupPacks.isEmpty {
                 Text(wl("暂无可充值套餐，请稍后再试。", "No top-up packs available right now.", "現在チャージできるパックはありません。"))
                     .font(.caption).foregroundStyle(.secondary)
             } else {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                    ForEach(store.topupProducts) { pack in
+                    ForEach(store.visibleTopupPacks) { pack in
                         topupCard(pack)
                     }
                 }
@@ -240,7 +249,13 @@ struct WalletView: View {
     private func topupCard(_ pack: KaiXWalletTopupProductDTO) -> some View {
         let purchasable = pack.purchasable ?? true
         return Button {
-            Task { await store.purchaseTopup(pack) }
+            // Catalog is visible to everyone; the purchase itself requires an
+            // account so points can be credited server-side.
+            if currentUser?.isGuest ?? true {
+                GuestGate.shared.requireLogin(wl("登录后即可充值 Machi 币。", "Sign in to top up Machi Coins.", "ログインすると Machi コインをチャージできます。"))
+            } else {
+                Task { await store.purchaseTopup(pack) }
+            }
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 Text(pack.displayPoints ?? "\(pack.totalPoints) 币").font(.title3.weight(.heavy))
@@ -265,14 +280,22 @@ struct WalletView: View {
     }
 
     private var disclaimerCard: some View {
-        HStack(alignment: .top, spacing: KXSpacing.sm) {
-            Image(systemName: "checkmark.shield").foregroundStyle(KXColor.accent)
-            Text(store.disclaimer.isEmpty
-                 ? wl("Machi 币仅可用于 Machi 内的数字资料与平台服务，不可提现、不可转让、不可兑换现金，且不会过期。iOS 端充值通过 App Store 完成。",
-                       "Machi Coins are for Machi digital materials and platform services only — non-refundable as cash, non-transferable, and never expire. On iOS, top-ups go through the App Store.",
-                       "Machi コインは Machi 内のデジタル資料とサービス専用です。現金化・譲渡不可、有効期限なし。iOS ではチャージは App Store 経由です。")
-                 : store.disclaimer)
-                .font(.caption).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
+            HStack(alignment: .top, spacing: KXSpacing.sm) {
+                Image(systemName: "checkmark.shield").foregroundStyle(KXColor.accent)
+                Text(store.disclaimer.isEmpty
+                     ? wl("Machi 币仅可用于 Machi 内的数字资料与平台服务，不可提现、不可转让、不可兑换现金，且不会过期。iOS 端充值通过 App Store 完成。",
+                           "Machi Coins are for Machi digital materials and platform services only — non-refundable as cash, non-transferable, and never expire. On iOS, top-ups go through the App Store.",
+                           "Machi コインは Machi 内のデジタル資料とサービス専用です。現金化・譲渡不可、有効期限なし。iOS ではチャージは App Store 経由です。")
+                     : store.disclaimer)
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            HStack(spacing: KXSpacing.lg) {
+                Link(L("termsOfService", language), destination: KaiXBackend.termsOfServiceURL)
+                Link(L("privacyPolicy", language), destination: KaiXBackend.privacyPolicyURL)
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(KXColor.accent)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)

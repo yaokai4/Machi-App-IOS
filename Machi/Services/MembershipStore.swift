@@ -165,6 +165,19 @@ final class MembershipStore: ObservableObject {
         productsByID[resolvedProductID(for: plan)]?.displayPrice ?? plan.displayPriceLabel
     }
 
+    // StoreKit-only fallback tiers for when the server plan list is empty (guest
+    // / offline / server-down), so BOTH membership tiers stay visible + locatable
+    // (App Review must be able to find the subscriptions).
+    var storeMonthlyProduct: Product? { productsByID[Self.defaultProductID] }
+    var storeYearlyProduct: Product? { productsByID[Self.yearlyProductID] }
+
+    /// Pick a StoreKit product directly on the fallback paywall (no server plan).
+    func selectStoreProduct(_ p: Product) {
+        productID = p.id
+        product = p
+        displayPrice = p.displayPrice
+    }
+
     static func appAccountToken(for user: UserEntity) -> UUID? {
         if let remote = user.remoteId, let uuid = UUID(uuidString: remote) {
             return uuid

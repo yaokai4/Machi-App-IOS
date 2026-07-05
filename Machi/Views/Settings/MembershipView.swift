@@ -1,3 +1,4 @@
+import StoreKit
 import SwiftData
 import SwiftUI
 
@@ -58,7 +59,14 @@ struct MembershipView: View {
                     if isExpired { expiredCard }
                     if isActive, let ins = insights { insightsCard(ins) }
                     if !isActive { lockedInsightsPreview }
-                    if !store.plans.isEmpty { planCards }
+                    if !store.plans.isEmpty {
+                        planCards
+                    } else {
+                        // Server returned no plans (guest / offline) — still show
+                        // both tiers from StoreKit so title/duration/price stay
+                        // visible + locatable for the user and App Review.
+                        storeFallbackPlanCards
+                    }
                     benefits
                     memberLibraryEntry
                     // Always shown: active members can renew/extend (the server
@@ -183,6 +191,45 @@ struct MembershipView: View {
                     .overlay(RoundedRectangle(cornerRadius: KXRadius.md).stroke(selected ? KXColor.accent : KXColor.separator, lineWidth: selected ? 1.2 : 0.7))
                 }
                 .buttonStyle(.plain)
+            }
+        }
+    }
+
+    /// Fallback tier cards built straight from StoreKit when the server returned
+    /// no plans (guest / offline), so both tiers (title + duration + price) stay
+    /// visible + locatable and selectable.
+    @ViewBuilder
+    private var storeFallbackPlanCards: some View {
+        let tiers: [(product: Product, isYear: Bool)] = {
+            var out: [(Product, Bool)] = []
+            if let m = store.storeMonthlyProduct { out.append((m, false)) }
+            if let y = store.storeYearlyProduct { out.append((y, true)) }
+            return out.map { (product: $0.0, isYear: $0.1) }
+        }()
+        if !tiers.isEmpty {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                ForEach(tiers, id: \.product.id) { tier in
+                    let selected = store.product?.id == tier.product.id
+                    Button {
+                        store.selectStoreProduct(tier.product)
+                    } label: {
+                        VStack(alignment: .leading, spacing: KXSpacing.sm) {
+                            Text(tier.isYear ? ml("年度会员", "Yearly", "年間メンバー") : ml("月度会员", "Monthly", "月間メンバー"))
+                                .font(.subheadline.weight(.bold)).foregroundStyle(.primary).lineLimit(2)
+                            Text(tier.isYear
+                                 ? ml("365 天会员（一次性购买，非自动续费）", "365-day pass · one-time, no auto-renew", "365日パス（一回購入・自動更新なし）")
+                                 : ml("30 天会员（一次性购买，非自动续费）", "30-day pass · one-time, no auto-renew", "30日パス（一回購入・自動更新なし）"))
+                                .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                            Text(tier.product.displayPrice)
+                                .font(.title3.weight(.heavy)).foregroundStyle(.primary)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 128, alignment: .topLeading)
+                        .padding(14)
+                        .background(RoundedRectangle(cornerRadius: KXRadius.md).fill(selected ? KXColor.accentSoft : KXColor.cardBackground))
+                        .overlay(RoundedRectangle(cornerRadius: KXRadius.md).stroke(selected ? KXColor.accent : KXColor.separator, lineWidth: selected ? 1.2 : 0.7))
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
     }

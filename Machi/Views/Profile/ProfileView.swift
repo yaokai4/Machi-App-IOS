@@ -140,11 +140,54 @@ struct ProfileView: View {
             .buttonStyle(.plain)
             .padding(.horizontal, 36)
             .padding(.top, KXSpacing.xs)
+
+            // Browse the paid tiers without an account — the subscriptions and
+            // coin packs are visible here so they're always locatable (including
+            // for App Review, which browses as a guest); the Buy action prompts
+            // for sign-in. Do NOT gate these behind the Settings gear, which a
+            // guest can never reach.
+            VStack(spacing: KXSpacing.sm) {
+                NavigationLink {
+                    MembershipView(currentUser: currentUser)
+                } label: {
+                    guestPaidEntryLabel(icon: "checkmark.seal.fill", title: L("membershipTitle", language))
+                }
+                NavigationLink {
+                    WalletView(currentUser: currentUser)
+                } label: {
+                    guestPaidEntryLabel(icon: "circle.hexagongrid.fill",
+                                        title: KXListingCopy.pickText(language, "Machi 币钱包", "Machi コインウォレット", "Machi Coins Wallet"))
+                }
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 36)
+            .padding(.top, KXSpacing.sm)
+
             Spacer()
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.bottom, chrome.bottomContentPadding)
+    }
+
+    private func guestPaidEntryLabel(icon: String, title: String) -> some View {
+        HStack(spacing: KXSpacing.md) {
+            Image(systemName: icon)
+                .foregroundStyle(KXColor.accent)
+                .frame(width: 24)
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+            Spacer(minLength: KXSpacing.sm)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, KXSpacing.sm + 2)
+        .padding(.horizontal, KXSpacing.md)
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
+        .background(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
     }
 
     private var displayedFollowerCount: Int {

@@ -29,6 +29,11 @@ final class WalletStore: ObservableObject {
 
     @Published private(set) var wallet: KaiXWalletDTO?
     @Published private(set) var topupProducts: [KaiXWalletTopupProductDTO] = []
+    /// StoreKit-only fallback packs built directly from the App Store products
+    /// (independent of the server wallet endpoint), so the consumable IAPs are
+    /// visible/locatable even to a signed-out user or when the server is down —
+    /// App Review must be able to find them. The Buy action still gates on login.
+    @Published private(set) var storeFallbackPacks: [KaiXWalletTopupProductDTO] = []
     @Published private(set) var recentEntries: [KaiXWalletLedgerEntryDTO] = []
     @Published private(set) var state: PurchaseState = .idle
     /// StoreKit-localized prices keyed by Apple product id (e.g. "¥6.00").
@@ -53,6 +58,13 @@ final class WalletStore: ObservableObject {
     var balancePoints: Int { wallet?.balancePoints ?? 0 }
     var displayBalance: String { wallet?.displayBalance ?? "\(balancePoints) 币" }
     var disclaimer: String { wallet?.disclaimer ?? "" }
+
+    /// What the top-up grid renders: the server's packs when available, else the
+    /// StoreKit-only fallback so the 9 consumables always show (guest / offline /
+    /// server-down) and reviewers can locate them.
+    var visibleTopupPacks: [KaiXWalletTopupProductDTO] {
+        topupProducts.isEmpty ? storeFallbackPacks : topupProducts
+    }
 
     /// Identifies a points consumable so the membership listener can ignore it.
     nonisolated static func isPointsProduct(_ productID: String) -> Bool { productID.hasPrefix("machi_points_") }
@@ -121,13 +133,19 @@ final class WalletStore: ObservableObject {
         }
         let ids = Set(topupProducts.map { $0.resolvedAppleProductID }.filter { !$0.isEmpty })
             .union(WalletStore.knownPackProductIDs)
-        if walletUnavailable {
-            storeStatus = .ok  // don't probe the store for a wallet we can't credit
-        } else if !ids.isEmpty {
+        // Always probe StoreKit for the pack products — even when the server
+        // wallet is unavailable (404) or the viewer is a guest (401) — so the
+        // consumables are visible/locatable for the user and App Review. The
+        // Buy action gates on login separately; showing the catalog does not.
+        if !ids.isEmpty {
             do {
                 let products = try await Self.productsWithTimeout(ids: Array(ids), seconds: 12)
                 productsByID = Dictionary(uniqueKeysWithValues: products.map { ($0.id, $0) })
                 displayPrices = Dictionary(uniqueKeysWithValues: products.map { ($0.id, $0.displayPrice) })
+                storeFallbackPacks = products
+                    .filter { WalletStore.isPointsProduct($0.id) }
+                    .map { Self.fallbackPack(from: $0) }
+                    .sorted { $0.totalPoints < $1.totalPoints }
                 storeStatus = products.isEmpty ? .noProducts : .ok
             } catch {
                 // Network/timeout/StoreKit unavailable — show a retryable notice
@@ -204,6 +222,32 @@ final class WalletStore: ObservableObject {
         "machi_points_9800", "machi_points_12800", "machi_points_19800", "machi_points_32800",
         "machi_points_64800",
     ]
+
+    /// Build a display-only top-up pack straight from a StoreKit product, for
+    /// when the server pack list is empty (guest / offline / server-down). Coin
+    /// amount is parsed from the `machi_points_<n>` id; price is StoreKit's
+    /// localized `displayPrice`.
+    private static func fallbackPack(from product: Product) -> KaiXWalletTopupProductDTO {
+        let coins = Int(product.id.replacingOccurrences(of: "machi_points_", with: "")) ?? 0
+        return KaiXWalletTopupProductDTO(
+            id: product.id,
+            packKey: product.id,
+            title: product.displayName,
+            subtitle: nil,
+            points: coins,
+            bonusPoints: 0,
+            totalPoints: coins,
+            amountCents: 0,
+            currency: "",
+            priceLabel: product.displayPrice,
+            displayPoints: "\(coins) 币",
+            appleProductId: product.id,
+            iosIapProductId: product.id,
+            googleProductId: nil,
+            purchasable: true,
+            disabledReason: nil
+        )
+    }
 
     nonisolated private func transaction(from verification: VerificationResult<Transaction>) -> Transaction {
         switch verification {
