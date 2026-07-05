@@ -962,9 +962,9 @@ struct LocalizationService {
         "membershipYearlyPlan": [.zh: "年度会员", .ja: "年額メンバー", .en: "Annual membership"],
         "membershipMonthlyPlan": [.zh: "月度会员", .ja: "月額メンバー", .en: "Monthly membership"],
         "membershipPurchaseDisclosure": [
-            .zh: "这是一次性购买的会员有效期，不会自动续费。确认购买后将向你的 Apple ID 收费；月度套餐延长 1 个月，年度套餐延长 1 年。",
-            .ja: "これは自動更新されない有効期間の購入です。購入確定時に Apple ID へ課金され、月額プランは1か月、年額プランは1年分の有効期間が追加されます。",
-            .en: "This is a one-time purchase for a membership validity period. It does not auto-renew. Your Apple ID is charged on confirmation; monthly adds 1 month and annual adds 1 year."
+            .zh: "Machi 认证会员为自动续费订阅：月度套餐每月续费、年度套餐每年续费。购买时向你的 Apple ID 账户收取当期费用，并在当期结束前 24 小时自动续订、扣取下一期费用，除非提前取消。你可随时在 iPhone「设置 › 你的 Apple ID › 订阅」中管理或取消；取消将于当前订阅期结束时生效。",
+            .ja: "Machi 認証メンバーは自動更新サブスクリプションです。月額プランは毎月、年額プランは毎年更新されます。購入時に Apple ID アカウントへ当期分が課金され、解約しない限り期間終了の24時間前に自動更新され次期分が課金されます。iPhone の「設定 › Apple ID › サブスクリプション」でいつでも管理・解約でき、解約は現在の期間終了時に有効になります。",
+            .en: "Machi Verified is an auto-renewing subscription: monthly plans renew every month and yearly plans every year. Your Apple ID account is charged for the current period at purchase and automatically renewed 24 hours before the period ends unless cancelled. Manage or cancel anytime in Settings › your Apple ID › Subscriptions; cancellation takes effect at the end of the current period."
         ],
         "membershipPurchaseNote": [
             .zh: "购买成功后会由 Machi 服务器校验并同步到当前账号；已购买的有效期可使用至到期，订单记录会保留在工作台。",

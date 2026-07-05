@@ -178,6 +178,25 @@ final class MembershipStore: ObservableObject {
         displayPrice = p.displayPrice
     }
 
+    /// Per-month equivalent price for a multi-month subscription (e.g. yearly),
+    /// for App Store 3.1.2(c)'s "price per unit if appropriate". nil for monthly.
+    func perMonthPriceLabel(for product: Product) -> String? {
+        guard let sub = product.subscription else { return nil }
+        let months: Int
+        switch sub.subscriptionPeriod.unit {
+        case .year: months = 12 * sub.subscriptionPeriod.value
+        case .month: months = sub.subscriptionPeriod.value
+        default: return nil
+        }
+        guard months > 1 else { return nil }
+        let per = product.price / Decimal(months)
+        return per.formatted(product.priceFormatStyle)
+    }
+
+    func perMonthPriceLabel(forPlan plan: KaiXMembershipPlanDTO) -> String? {
+        productsByID[resolvedProductID(for: plan)].flatMap { perMonthPriceLabel(for: $0) }
+    }
+
     static func appAccountToken(for user: UserEntity) -> UUID? {
         if let remote = user.remoteId, let uuid = UUID(uuidString: remote) {
             return uuid

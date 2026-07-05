@@ -69,10 +69,10 @@ struct MembershipView: View {
                     }
                     benefits
                     memberLibraryEntry
-                    // Always shown: active members can renew/extend (the server
-                    // simply extends the validity period), expired members can
-                    // buy again. Membership is a one-time pass, not auto-renew,
-                    // so hiding the buy button from active members was a dead end.
+                    // Always shown: the subscription auto-renews, but members can
+                    // also change tier or re-subscribe if lapsed, and StoreKit
+                    // needs a live buy affordance, so hiding it from active
+                    // members was a dead end.
                     purchaseControls
                         .id(MembershipView.purchaseAnchor)
                     purchaseDisclosure
@@ -181,6 +181,10 @@ struct MembershipView: View {
                         Text(store.storeDisplayPrice(for: plan))
                             .font(.title3.weight(.heavy))
                             .foregroundStyle(.primary)
+                        if let perMonth = store.perMonthPriceLabel(forPlan: plan) {
+                            Text(ml("约 \(perMonth)/月", "≈ \(perMonth)/mo", "約 \(perMonth)/月"))
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
                         if let discount = plan.discountLabel ?? plan.discount_label, !discount.isEmpty {
                             Text(discount).font(.caption.weight(.semibold)).foregroundStyle(.green)
                         }
@@ -217,11 +221,15 @@ struct MembershipView: View {
                             Text(tier.isYear ? ml("年度会员", "Yearly", "年間メンバー") : ml("月度会员", "Monthly", "月間メンバー"))
                                 .font(.subheadline.weight(.bold)).foregroundStyle(.primary).lineLimit(2)
                             Text(tier.isYear
-                                 ? ml("365 天会员（一次性购买，非自动续费）", "365-day pass · one-time, no auto-renew", "365日パス（一回購入・自動更新なし）")
-                                 : ml("30 天会员（一次性购买，非自动续费）", "30-day pass · one-time, no auto-renew", "30日パス（一回購入・自動更新なし）"))
+                                 ? ml("按年订阅 · 自动续费", "Billed yearly · auto-renews", "年額・自動更新")
+                                 : ml("按月订阅 · 自动续费", "Billed monthly · auto-renews", "月額・自動更新"))
                                 .font(.caption).foregroundStyle(.secondary).lineLimit(2)
                             Text(tier.product.displayPrice)
                                 .font(.title3.weight(.heavy)).foregroundStyle(.primary)
+                            if let perMonth = store.perMonthPriceLabel(for: tier.product) {
+                                Text(ml("约 \(perMonth)/月", "≈ \(perMonth)/mo", "約 \(perMonth)/月"))
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
                         }
                         .frame(maxWidth: .infinity, minHeight: 128, alignment: .topLeading)
                         .padding(14)
@@ -235,15 +243,13 @@ struct MembershipView: View {
     }
 
     private func periodLabel(_ plan: KaiXMembershipPlanDTO) -> String {
-        // Membership is a NON-renewing one-time pass — never frame it as
-        // monthly/yearly subscription billing (that implied auto-renew). Show the
-        // access duration as a one-time pass instead.
+        // Auto-renewable subscription: state the billing period + that it renews.
         let period = plan.billingPeriod ?? plan.billing_period ?? plan.billing_cycle
-        let days = period == "yearly" ? 365 : 30
+        let isYear = period == "yearly"
         switch language {
-        case .ja: return "\(days)日パス（一回購入・自動更新なし）"
-        case .en: return "\(days)-day pass · one-time, no auto-renew"
-        default: return "\(days) 天会员（一次性购买，非自动续费）"
+        case .ja: return isYear ? "年額・自動更新" : "月額・自動更新"
+        case .en: return isYear ? "Billed yearly · auto-renews" : "Billed monthly · auto-renews"
+        default: return isYear ? "按年订阅 · 自动续费" : "按月订阅 · 自动续费"
         }
     }
 
@@ -570,7 +576,7 @@ struct MembershipView: View {
         }
     }
 
-    /// Non-renewing purchase disclosure: clear validity rules plus functional
+    /// Auto-renewable subscription disclosure: renewal terms plus functional
     /// Privacy Policy + Terms of Use links on the paywall.
     private var purchaseDisclosure: some View {
         VStack(alignment: .leading, spacing: 10) {
