@@ -1002,6 +1002,10 @@ struct LocalizationService {
         "guestReasonLike": [.zh: "登录后即可点赞、转发和收藏。", .ja: "ログインするといいね・リポスト・保存ができます。", .en: "Sign in to like, repost, and save."],
         "guestReasonCompose": [.zh: "登录后即可发布内容。", .ja: "ログインすると投稿できます。", .en: "Sign in to post."],
         "guestReasonMessage": [.zh: "登录后即可管理私信。", .ja: "ログインするとメッセージを管理できます。", .en: "Sign in to manage messages."],
+        "guestReasonComment": [.zh: "登录后即可评论。", .ja: "ログインするとコメントできます。", .en: "Sign in to comment."],
+        "guestReasonReport": [.zh: "登录后即可举报内容。", .ja: "ログインすると通報できます。", .en: "Sign in to report content."],
+        "guestReasonFollow": [.zh: "登录后即可关注。", .ja: "ログインするとフォローできます。", .en: "Sign in to follow."],
+        "guestReasonMembership": [.zh: "登录后即可开通和管理会员。", .ja: "ログインすると会員登録・管理ができます。", .en: "Sign in to join and manage membership."],
 
         // MARK: - I3: register missing-fields hint
         "authMissingPrefix": [.zh: "还差：", .ja: "あと少し：", .en: "Still needed: "],

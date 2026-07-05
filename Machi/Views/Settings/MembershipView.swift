@@ -412,7 +412,7 @@ struct MembershipView: View {
     private var purchaseControls: some View {
         VStack(spacing: 10) {
             Button {
-                if currentUser.isGuest { GuestGate.shared.requireLogin(); return }
+                if currentUser.isGuest { GuestGate.shared.requireLogin(L("guestReasonMembership", language)); return }
                 Task {
                     await store.purchase(appAccountToken: MembershipStore.appAccountToken(for: currentUser))
                 }

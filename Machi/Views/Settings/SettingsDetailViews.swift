@@ -459,6 +459,10 @@ struct ContactSettingsView: View {
             }
             .font(.subheadline.weight(.semibold))
             .frame(width: 64, height: 44)
+            // Whole capsule is the tap target — .background sits after
+            // .buttonStyle(.plain), so without this only the text hit-tests and
+            // the padded sides are dead (the FullAreaButtonStyle trap).
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .foregroundStyle(disabled ? Color.secondary : Color.white)
@@ -483,6 +487,9 @@ struct ContactSettingsView: View {
             .font(.subheadline.weight(.semibold))
             .frame(maxWidth: .infinity)
             .frame(height: 46)
+            // Full-width capsule is the tap target — without this only the
+            // centered text hit-tests and the wide padded sides are dead.
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .foregroundStyle(canSaveEmail ? Color.white : Color.secondary)

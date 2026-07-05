@@ -1816,6 +1816,7 @@ private struct HappeningRankRow: View {
 
 /// Small breathing dot that signals the radar is live (real-time).
 private struct HappeningLiveDot: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var animate = false
 
     var body: some View {
@@ -1829,7 +1830,11 @@ private struct HappeningLiveDot: View {
                 .fill(Color.green)
                 .frame(width: 8, height: 8)
         }
+        // Perpetual pulse guarded by Reduce Motion + UITest idle, matching the
+        // rest of this file (a repeatForever animation blocks XCUITest's idle
+        // snapshot and ignores the accessibility switch). Static dot otherwise.
         .onAppear {
+            guard !reduceMotion, !KXRuntime.isUITesting else { return }
             withAnimation(.easeOut(duration: 1.4).repeatForever(autoreverses: false)) {
                 animate = true
             }

@@ -128,7 +128,7 @@ struct ProfileView: View {
             .multilineTextAlignment(.leading)
             .padding(.horizontal, 32)
             Button {
-                GuestGate.shared.requireLogin()
+                GuestGate.shared.requireLogin(L("guestLoginRequired", language))
             } label: {
                 Text(L("loginOrRegister", language))
                     .font(.headline.weight(.bold))
@@ -519,7 +519,7 @@ struct ProfileView: View {
                     }
                     Button(L("reportUser", language), role: .destructive) {
                         // C3: file a real report instead of only toasting.
-                        if currentUser.isGuest { GuestGate.shared.requireLogin() }
+                        if currentUser.isGuest { GuestGate.shared.requireLogin(L("guestReasonReport", language)) }
                         else {
                             let targetId = profileUserId
                             Task {
@@ -1022,7 +1022,7 @@ struct ProfileView: View {
                 .accessibilityLabel(L("messages", language))
 
                 Button {
-                    if currentUser.isGuest { GuestGate.shared.requireLogin(); return }
+                    if currentUser.isGuest { GuestGate.shared.requireLogin(L("guestReasonFollow", language)); return }
                     Task { await toggleFollow() }
                 } label: {
                     Text(isFollowing ? L("followed", language) : L("follow", language))

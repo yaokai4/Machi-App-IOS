@@ -51,6 +51,7 @@ struct BottomTabBarView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(tab.title(language))
+                .accessibilityValue(unreadAccessibilityValue(for: tab))
                 .accessibilityIdentifier("tabbar.\(tab.rawValue)")
             }
         }
@@ -86,6 +87,14 @@ struct BottomTabBarView: View {
         default:
             return nil
         }
+    }
+
+    /// Spoken unread count for VoiceOver — the badge overlay is
+    /// accessibilityHidden, so without this the unread number is unreachable to
+    /// screen-reader users (they'd only hear "消息"). Empty when there's none.
+    private func unreadAccessibilityValue(for tab: AppTab) -> String {
+        guard let count = badgeCount(for: tab), count > 0 else { return "" }
+        return KXListingCopy.pickText(language, "\(count) 条未读", "未読 \(count) 件", "\(count) unread")
     }
 
     @ViewBuilder

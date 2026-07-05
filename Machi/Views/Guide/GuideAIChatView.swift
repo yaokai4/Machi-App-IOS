@@ -585,6 +585,7 @@ private struct GuideAIMessageRow: View {
 // MARK: - typing indicator (three bouncing dots)
 
 private struct GuideAITypingDots: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var animating = false
 
     var body: some View {
@@ -596,12 +597,18 @@ private struct GuideAITypingDots: View {
                     .opacity(animating ? 1 : 0.3)
                     .scaleEffect(animating ? 1 : 0.6)
                     .animation(
-                        .easeInOut(duration: 0.6).repeatForever().delay(Double(index) * 0.18),
+                        reduceMotion ? nil : .easeInOut(duration: 0.6).repeatForever().delay(Double(index) * 0.18),
                         value: animating
                     )
             }
         }
-        .onAppear { animating = true }
+        // Guard the perpetual bounce behind Reduce Motion + UITest idle (same as
+        // KXSpinner/KXShimmer) — a repeatForever animation never lets XCUITest
+        // reach an idle snapshot, and it ignores the accessibility switch.
+        .onAppear {
+            guard !reduceMotion, !KXRuntime.isUITesting else { return }
+            animating = true
+        }
         .accessibilityLabel("Machi AI")
     }
 }

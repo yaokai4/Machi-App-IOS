@@ -129,7 +129,7 @@ struct WalletView: View {
             Text(wl("登录后即可查看余额、充值和消费记录。", "Sign in to see your balance, top up, and view activity.", "ログインすると残高の確認・チャージ・履歴の表示ができます。"))
                 .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
             Button {
-                GuestGate.shared.requireLogin()
+                GuestGate.shared.requireLogin(wl("登录后即可查看余额、充值和消费记录。", "Sign in to see your balance, top up, and view activity.", "ログインすると残高の確認・チャージ・履歴の表示ができます。"))
             } label: {
                 Label(wl("去登录", "Sign in", "ログインする"), systemImage: "person.crop.circle")
             }

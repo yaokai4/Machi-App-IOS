@@ -330,7 +330,7 @@ struct PostDetailView: View {
     /// C3: file a REAL report (the buttons used to only show a confirmation toast
     /// without ever calling the API). Confirms only on success; surfaces errors.
     private func performReport(_ action: @escaping () async throws -> Void) {
-        if currentUser.isGuest { GuestGate.shared.requireLogin(); return }
+        if currentUser.isGuest { GuestGate.shared.requireLogin(L("guestReasonReport", language)); return }
         Task {
             do {
                 try await action()
@@ -642,7 +642,7 @@ struct PostDetailView: View {
                     .kxGlassSurface(radius: KXRadius.md)
 
                 Button {
-                    if currentUser.isGuest { GuestGate.shared.requireLogin(); return }
+                    if currentUser.isGuest { GuestGate.shared.requireLogin(L("guestReasonComment", language)); return }
                     // Keep every reply at depth-1: replying to a reply attaches
                     // to its root ancestor, since the comment UI only renders
                     // one level of replies (a grandchild would silently vanish).
