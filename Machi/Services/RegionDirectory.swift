@@ -428,35 +428,68 @@ enum KaiXRegionDirectory {
         regionsForMetro(region: region).map(\.cityCode)
     }
 
+    /// Single source of truth for a JP metro circle's trilingual display name,
+    /// keyed by the codes in `jpMetroCircles`. RegionPickerView, the circle
+    /// drill-down title, and `localizedMetroName` must all route through here so
+    /// the zh/ja/en names can never drift out of sync with the circle codes
+    /// again (an earlier code rename left `localizedMetroName` matching stale
+    /// `nagoya/fukuoka/…` codes, degrading every non-Kanto/Kansai circle to
+    /// "その他都市/Other cities").
+    static func localizedMetroCircleName(_ code: String, language: AppLanguage) -> String {
+        switch code {
+        case "hokkaido_tohoku":
+            switch language {
+            case .ja: return "北海道・東北"
+            case .en: return "Hokkaido / Tohoku"
+            default: return "北海道・东北"
+            }
+        case "kanto":
+            switch language {
+            case .ja: return "関東"
+            case .en: return "Kanto"
+            default: return "关东"
+            }
+        case "chubu":
+            switch language {
+            case .ja: return "中部"
+            case .en: return "Chubu"
+            default: return "中部"
+            }
+        case "kansai":
+            switch language {
+            case .ja: return "近畿・関西"
+            case .en: return "Kansai"
+            default: return "近畿・关西"
+            }
+        case "chugoku":
+            switch language {
+            case .ja: return "中国地方"
+            case .en: return "Chugoku"
+            default: return "中国地区"
+            }
+        case "shikoku":
+            switch language {
+            case .ja: return "四国"
+            case .en: return "Shikoku"
+            default: return "四国"
+            }
+        case "kyushu_okinawa":
+            switch language {
+            case .ja: return "九州・沖縄"
+            case .en: return "Kyushu / Okinawa"
+            default: return "九州・冲绳"
+            }
+        default:
+            return jpMetroCircles.first { $0.code == code }?.name ?? code
+        }
+    }
+
     static func localizedMetroName(for region: Region?, language: AppLanguage) -> String? {
         guard let region else { return nil }
         guard let circle = metroCircle(for: region) else {
             return localizedShortLabel(region, language: language)
         }
-        switch language {
-        case .ja:
-            switch circle.code {
-            case "kanto": return "関東圏"
-            case "kansai": return "関西圏"
-            case "nagoya": return "名古屋・中部"
-            case "fukuoka": return "福岡・九州"
-            case "sapporo": return "札幌・北海道"
-            case "sendai": return "仙台・東北"
-            default: return "その他都市"
-            }
-        case .en:
-            switch circle.code {
-            case "kanto": return "Kanto"
-            case "kansai": return "Kansai"
-            case "nagoya": return "Nagoya / Chubu"
-            case "fukuoka": return "Fukuoka / Kyushu"
-            case "sapporo": return "Sapporo / Hokkaido"
-            case "sendai": return "Sendai / Tohoku"
-            default: return "Other cities"
-            }
-        case .zh, .system:
-            return circle.name
-        }
+        return localizedMetroCircleName(circle.code, language: language)
     }
 
     static func resolve(regionCode: String) -> Region? {

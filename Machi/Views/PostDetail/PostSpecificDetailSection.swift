@@ -79,14 +79,16 @@ struct PostSpecificDetailSection: View {
         let full = meetupCapacity > 0 && meetupGoing >= meetupCapacity && !meetupJoined
         return HStack(spacing: 10) {
             Label(
-                meetupCapacity > 0 ? "\(meetupGoing) / \(meetupCapacity) 人已报名" : "\(meetupGoing) 人已报名",
+                meetupCapacity > 0
+                    ? KXListingCopy.pickText(language, "\(meetupGoing) / \(meetupCapacity) 人已报名", "\(meetupGoing) / \(meetupCapacity) 人参加", "\(meetupGoing) / \(meetupCapacity) going")
+                    : KXListingCopy.pickText(language, "\(meetupGoing) 人已报名", "\(meetupGoing) 人参加", "\(meetupGoing) going"),
                 systemImage: "person.2.fill"
             )
             .font(.subheadline.weight(.bold))
             .foregroundStyle(KXColor.accent)
             Spacer(minLength: 0)
             if currentUser?.id == post.authorId {
-                Text("你发起的局").font(.caption.weight(.bold)).foregroundStyle(.secondary)
+                Text(KXListingCopy.pickText(language, "你发起的局", "あなたが主催", "You're hosting")).font(.caption.weight(.bold)).foregroundStyle(.secondary)
             } else {
                 Button {
                     Task { await toggleMeetupJoin() }
@@ -97,7 +99,10 @@ struct PostSpecificDetailSection: View {
                         } else if meetupJoined {
                             Image(systemName: "checkmark").font(.caption.weight(.bold))
                         }
-                        Text(meetupJoined ? "已报名" : (full ? "名额已满" : "报名参加"))
+                        Text(meetupJoined
+                            ? KXListingCopy.pickText(language, "已报名", "参加済み", "Joined")
+                            : (full ? KXListingCopy.pickText(language, "名额已满", "満員", "Full")
+                                    : KXListingCopy.pickText(language, "报名参加", "参加する", "Join")))
                             .font(.subheadline.weight(.bold))
                     }
                     .padding(.horizontal, 16)

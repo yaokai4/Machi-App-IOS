@@ -215,9 +215,9 @@ struct RegionPickerView: View {
         VStack(spacing: 0) {
             if country.code == "jp" {
                 ForEach(KaiXRegionDirectory.jpMetroCircles) { circle in
-                    NavigationLink(value: CircleRoute(country: country, circleCode: circle.code, circleName: circle.name)) {
+                    NavigationLink(value: CircleRoute(country: country, circleCode: circle.code, circleName: KaiXRegionDirectory.localizedMetroCircleName(circle.code, language: language))) {
                         HStack(spacing: KXSpacing.sm) {
-                            Text(circle.name).font(.body)
+                            Text(KaiXRegionDirectory.localizedMetroCircleName(circle.code, language: language)).font(.body)
                             Spacer()
                             Text(metroCircleCountLabel(KaiXRegionDirectory.regionsForMetroCircle(circle.code).count))
                                 .font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
@@ -450,9 +450,9 @@ private struct ProvinceListView: View {
                 if country.code == "jp" {
                     // 日本：先选都市圈（关东圈/关西圈/名古屋…），再进城市。
                     ForEach(KaiXRegionDirectory.jpMetroCircles) { circle in
-                        NavigationLink(value: CircleRoute(country: country, circleCode: circle.code, circleName: circle.name)) {
+                        NavigationLink(value: CircleRoute(country: country, circleCode: circle.code, circleName: KaiXRegionDirectory.localizedMetroCircleName(circle.code, language: language))) {
                             HStack {
-                                Text(circle.name).font(.body)
+                                Text(KaiXRegionDirectory.localizedMetroCircleName(circle.code, language: language)).font(.body)
                                 Spacer()
                                 Text(metroCircleCountLabel(KaiXRegionDirectory.regionsForMetroCircle(circle.code).count))
                                     .font(.caption.weight(.semibold))
