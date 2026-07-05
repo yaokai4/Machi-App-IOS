@@ -1,4 +1,5 @@
 import Foundation
+import os
 import SwiftData
 
 /// Legacy bridge retained for explicit local fixture/debug flows.
@@ -10,6 +11,7 @@ import SwiftData
 final class RemoteSyncService {
     static let shared = RemoteSyncService()
 
+    private static let logger = Logger(subsystem: "com.yaokai.kaizi", category: "sync")
     private let api = KaiXAPIClient.shared
     private let iso = ISO8601DateFormatter()
 
@@ -89,8 +91,10 @@ final class RemoteSyncService {
             // Other API errors are not retryable from here; leave the
             // local cache as-is so the UI can keep working offline.
         } catch {
-            // Pure transport errors (DNS / TLS / timeout) — fall back
-            // to the local SwiftData cache silently.
+            // Pure transport errors (DNS / TLS / timeout) — fall back to the
+            // local SwiftData cache. Log it (not silent) so a chronically
+            // failing bootstrap is observable in diagnostics.
+            Self.logger.warning("bootstrap fell back to local cache: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -146,6 +150,7 @@ final class RemoteSyncService {
             try? context.save()
             return fresh
         } catch {
+            Self.logger.warning("syncNotifications failed, keeping local: \(error.localizedDescription, privacy: .public)")
             return []
         }
     }
