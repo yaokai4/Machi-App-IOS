@@ -706,4 +706,21 @@ final class MessageRepository {
         let mediaLabel = firstType == .video ? "[视频]" : "[图片]"
         return trimmed.isEmpty ? mediaLabel : "\(mediaLabel) \(trimmed)"
     }
+
+    /// Recompute a thread's list-preview (last-message text + timestamp) from an
+    /// explicit remaining-messages set. The server-backed delete path can't
+    /// recompute from SwiftData (production messages live only in the view
+    /// model), so it hands the remaining loaded messages here to keep the
+    /// conversation list from showing a just-deleted last message until the
+    /// next poll.
+    func refreshThreadPreview(_ thread: MessageThreadEntity, remaining: [MessageEntity], mediaByMessageId: [String: [MediaEntity]]) {
+        if let last = remaining.last {
+            thread.lastMessage = Self.previewText(content: last.content, mediaTypes: (mediaByMessageId[last.id] ?? []).map(\.type))
+            thread.lastMessageAt = last.createdAt
+        } else {
+            thread.lastMessage = ""
+            thread.lastMessageAt = .now
+        }
+        thread.updatedAt = .now
+    }
 }

@@ -1006,6 +1006,8 @@ struct LocalizationService {
         "guestReasonReport": [.zh: "登录后即可举报内容。", .ja: "ログインすると通報できます。", .en: "Sign in to report content."],
         "guestReasonFollow": [.zh: "登录后即可关注。", .ja: "ログインするとフォローできます。", .en: "Sign in to follow."],
         "guestReasonMembership": [.zh: "登录后即可开通和管理会员。", .ja: "ログインすると会員登録・管理ができます。", .en: "Sign in to join and manage membership."],
+        "iapVerifyPending": [.zh: "购买正在确认中", .ja: "購入を確認しています", .en: "Confirming your purchase"],
+        "iapVerifyPendingHelp": [.zh: "稍后会自动完成，也可在会员/钱包页点「恢复购买」。", .ja: "まもなく自動的に完了します。会員・ウォレットで「購入を復元」もできます。", .en: "It'll finish automatically soon; you can also tap Restore Purchases in Membership or Wallet."],
 
         // MARK: - I3: register missing-fields hint
         "authMissingPrefix": [.zh: "还差：", .ja: "あと少し：", .en: "Still needed: "],

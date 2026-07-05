@@ -13,7 +13,7 @@ struct CitySecondaryFilterChips: View {
             HStack(spacing: 8) {
                 ForEach(primary.channels) { entry in
                     Button {
-                        withAnimation(.snappy(duration: 0.18)) {
+                        withAnimation(KXMotion.select) {
                             channel = entry
                         }
                     } label: {

@@ -259,6 +259,21 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .kaiXSessionInvalidated)) { _ in
             handleSessionExpired()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .kaixIAPVerificationPending)) { _ in
+            // A background IAP verification failed — the charge is safe (StoreKit
+            // re-delivers it) but tell the user it's confirming rather than
+            // leaving it silently pending.
+            toastManager.show(
+                .custom(
+                    title: L("iapVerifyPending", language),
+                    message: L("iapVerifyPendingHelp", language),
+                    systemImage: "hourglass",
+                    tint: .orange,
+                    technicalDetails: nil
+                ),
+                duration: 6
+            )
+        }
         .onOpenURL { url in
             handleDeepLink(url)
         }

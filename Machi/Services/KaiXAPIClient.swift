@@ -7,6 +7,12 @@ extension Notification.Name {
     /// (and clear local user state). Posted on the main queue so UI
     /// observers can react without dispatch.
     static let kaiXSessionInvalidated = Notification.Name("KaiXSessionInvalidated")
+
+    /// Fired when the IAP observer's background server verification for a paid
+    /// transaction fails. A UI layer (ContentView) shows a "purchase confirming"
+    /// toast so an observer-owned background transaction (Ask-to-Buy approval,
+    /// cross-device purchase, killed mid-verify) doesn't stay silently pending.
+    static let kaixIAPVerificationPending = Notification.Name("KaiXIAPVerificationPending")
 }
 
 /// HTTP client for the unified KaiX backend.

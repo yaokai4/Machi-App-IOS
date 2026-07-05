@@ -13,9 +13,24 @@ enum AppChromeHiddenReason: Hashable {
 
 @MainActor
 final class AppChromeState: ObservableObject {
-    @Published var selectedTab: AppTab = .home
+    private static let persistedTabKey = "kx.selectedTab"
+
+    @Published var selectedTab: AppTab = AppChromeState.restoredTab() {
+        didSet { UserDefaults.standard.set(selectedTab.rawValue, forKey: Self.persistedTabKey) }
+    }
     @Published private(set) var navigationDepthByTab: [AppTab: Int] = [:]
     @Published private(set) var hiddenReasons = Set<AppChromeHiddenReason>()
+
+    /// Restore the last-selected tab across cold launches. Region and language
+    /// were already persisted, but the tab wasn't — so a user who lived in
+    /// 我的 / 消息 was always dropped back onto 首页 on relaunch. MainTabView reads
+    /// `selectedTab` at startup to seed loadedTabs + the router, so restoring it
+    /// here is enough. Falls back to .home for a fresh install / bad value.
+    private static func restoredTab() -> AppTab {
+        guard let raw = UserDefaults.standard.string(forKey: persistedTabKey),
+              let tab = AppTab(rawValue: raw) else { return .home }
+        return tab
+    }
 
     var isTabBarHidden: Bool {
         !hiddenReasons.isEmpty

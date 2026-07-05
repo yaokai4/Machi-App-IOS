@@ -389,7 +389,15 @@ final class ChatViewModel: ObservableObject {
         messageStore?.setMessages(messages, conversationId: thread.id)
         state = messages.isEmpty ? .empty : .loaded
         do {
-            try await MessageRepository(context: context).deleteMessage(message, in: thread)
+            let repository = MessageRepository(context: context)
+            try await repository.deleteMessage(message, in: thread)
+            // Server delete returns early without recomputing the thread preview
+            // (production messages live only here in the VM), so refresh it from
+            // the remaining loaded messages and push it into the store — else the
+            // conversation list keeps showing the just-deleted last message until
+            // the next fetchThreads poll.
+            repository.refreshThreadPreview(thread, remaining: messages, mediaByMessageId: mediaByMessageId)
+            messageStore?.upsertConversation(thread)
         } catch {
             messages = previousMessages
             mediaByMessageId = previousMedia

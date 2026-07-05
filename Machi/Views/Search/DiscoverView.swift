@@ -1391,7 +1391,7 @@ private struct HotBoardSection: View {
         HotPillRow(ids: HotBoardScope.allCases.map(\.id),
                    labels: HotBoardScope.allCases.map { $0.label(region, language) },
                    selected: scope.id) { id in
-            if let next = HotBoardScope(rawValue: id) { withAnimation(.snappy(duration: 0.16)) { scope = next } }
+            if let next = HotBoardScope(rawValue: id) { withAnimation(KXMotion.select) { scope = next } }
         }
     }
 

@@ -99,6 +99,10 @@ final class IAPTransactionObserver {
             // transactions still needs UI wiring (deferred).
             Logger(subsystem: "com.yaokai.kaizi", category: "iap")
                 .warning("Apple transaction verify failed for product \(transaction.productID, privacy: .public); left unfinished for retry")
+            // Surface it: a UI layer shows a "purchase confirming, retries
+            // automatically" toast so an observer-owned background transaction
+            // isn't silently stuck pending. No JWS/token in the notification.
+            NotificationCenter.default.post(name: .kaixIAPVerificationPending, object: nil)
         }
     }
 
