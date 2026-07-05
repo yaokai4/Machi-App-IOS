@@ -200,10 +200,14 @@ final class CityChannelViewModel: ObservableObject {
             loadedIds = Set(posts.map(\.id))
             postStore.register(posts)
             currentPage += 1
-            // Hot has no server cursor (single ranked page) — after it,
-            // deterministic local windows keep deeper browsing alive.
+            // Hot has no server cursor (single ranked page). Deeper local-window
+            // browsing only exists in the local-store fallback build; in
+            // production `fetchCityPage(.hot)` re-requests the same first page
+            // with no cursor, so keeping canLoadMore true there re-pulls an
+            // all-duplicate page on every scroll-to-bottom. Only keep the hot
+            // "load more" where the local fallback can serve deeper windows.
             canLoadMore = usedRemotePage
-                ? (remoteHasMore || requestedChannel == .hot)
+                ? (remoteHasMore || (requestedChannel == .hot && KaiXRuntimeFlags.allowLocalStoreFallback))
                 : page.count == KaiXConfig.pageSize
             try await hydrate(context: context, repository: repository, currentUser: currentUser, postStore: postStore)
             guard requestedChannel == channel else { return }

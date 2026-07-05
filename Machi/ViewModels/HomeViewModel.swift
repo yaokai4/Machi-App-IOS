@@ -179,6 +179,22 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func loadPage(context: ModelContext, currentUser: UserEntity, mode requestedMode: TimelineMode, postStore: PostStore, reset: Bool) async -> Bool {
+        // Same-city feed with no city chosen yet: don't hit the network — the
+        // server's `local` mode 400s without a region, which would strand the
+        // user on a network-error page instead of the "pick a city" prompt.
+        // Short-circuit to the empty state (HomeTimelineView renders
+        // localPickRegionState for .local + nil region), mirroring the local-
+        // store fallback's `guard region else { return [] }`.
+        if requestedMode == .local, RegionStore.shared.current == nil {
+            if requestedMode == mode {
+                posts = []
+                loadedIds = []
+                postStore.setFeed([], append: false)
+                canLoadMore = false
+                state = .empty
+            }
+            return true
+        }
         if reset {
             if posts.isEmpty {
                 // Stale-while-revalidate: paint the last cached feed instantly so
@@ -270,8 +286,15 @@ final class HomeViewModel: ObservableObject {
             // Hot has no server cursor (single ranked page) — after it,
             // deterministic local windows keep deeper browsing alive.
             if canLoadMore {
+                // Hot has no server cursor (single ranked page). Deeper browsing
+                // via deterministic local windows only exists in the local-store
+                // fallback build; in production `fetchPage(.hot)` re-requests the
+                // same first page with no cursor, so keeping canLoadMore true
+                // there just re-pulls an all-duplicate page on every scroll-to-
+                // bottom. Only preserve the hot "load more" when the local
+                // fallback can actually serve deeper windows.
                 canLoadMore = usedRemotePage
-                    ? (remoteHasMore || requestedMode == .hot)
+                    ? (remoteHasMore || (requestedMode == .hot && KaiXRuntimeFlags.allowLocalStoreFallback))
                     : (page.count == KaiXConfig.pageSize || remoteHasMore)
             }
             if !usedCachedSnapshotPage {

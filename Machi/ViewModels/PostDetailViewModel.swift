@@ -192,9 +192,14 @@ final class PostDetailViewModel: ObservableObject {
         let previousState = commentState
         transientCommentError = nil
         comments.removeAll { $0.id == comment.id || $0.parentCommentId == comment.id }
+        // Authoritative count of what actually left the loaded thread (parent +
+        // its loaded replies) so post.commentCount, the list, and CommentStore
+        // all move by the same amount — a plain SwiftData descendant fetch is
+        // empty in production and would only decrement the header by 1.
+        let removedCount = previousComments.count - comments.count
         commentStore?.removeComment(comment)
         do {
-            try await postStore.deleteComment(context: context, comment: comment)
+            try await postStore.deleteComment(context: context, comment: comment, removedCount: removedCount)
             commentState = CommentLoadState.resolved(commentCount: post.commentCount, loadedComments: comments)
         } catch {
             comments = previousComments

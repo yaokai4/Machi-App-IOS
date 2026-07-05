@@ -212,12 +212,20 @@ final class PostStore: ObservableObject {
         )
     }
 
-    func deleteComment(context: ModelContext, comment: CommentEntity) async throws {
+    func deleteComment(context: ModelContext, comment: CommentEntity, removedCount: Int? = nil) async throws {
         let parentId = comment.id
-        let descendants = (try? context.fetch(FetchDescriptor<CommentEntity>(
+        // In production the comment thread lives only in memory — the server is
+        // the source of truth and comments are never inserted into SwiftData —
+        // so this local relation fetch returns 0 and would under-count the
+        // delete by every reply (post.commentCount drops by 1 while the list
+        // loses parent + N replies). Prefer the caller's authoritative removed
+        // count (parent + the replies it actually pruned from the loaded
+        // thread, matching CommentStore's own book-keeping); fall back to the
+        // local relation only for callers that don't track the in-memory thread.
+        let localDescendants = (try? context.fetch(FetchDescriptor<CommentEntity>(
             predicate: #Predicate { $0.parentCommentId == parentId }
-        ))) ?? []
-        let delta = -(1 + descendants.count)
+        )))?.count ?? 0
+        let delta = -(removedCount ?? (1 + localDescendants))
         updateCommentCount(postId: comment.postId, delta: delta)
         do {
             try await PostRepository(context: context).deleteComment(comment: comment, commentCountAlreadyUpdated: true)
