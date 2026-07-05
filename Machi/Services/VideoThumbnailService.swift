@@ -11,6 +11,11 @@ actor VideoThumbnailService {
         if let cached = cache.object(forKey: key) {
             return cached
         }
+        // NOTE: no in-flight de-duplication (unlike ImageCacheService). The one
+        // caller today (UploadService, single-shot cover extraction) never asks
+        // for the same URL concurrently, so it isn't needed. If this ever backs
+        // grid/list cover rendering, add an `[NSURL: Task<UIImage?, Never>]`
+        // in-flight map so concurrent requests for one URL share a generator.
 
         let asset = AVURLAsset(url: url)
         let generator = AVAssetImageGenerator(asset: asset)

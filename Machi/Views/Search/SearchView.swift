@@ -610,7 +610,7 @@ private struct SearchRankStyle {
             )
         case 2:
             return SearchRankStyle(
-                colors: [KXColor.rankCoral.opacity(0.23), Color(red: 1.000, green: 0.486, blue: 0.286).opacity(0.13)],
+                colors: [KXColor.rankCoral.opacity(0.23), KXColor.rankCoralGlow.opacity(0.13)],
                 foreground: KXColor.rankCoral,
                 stroke: KXColor.rankCoral.opacity(0.32),
                 shadow: .clear,
@@ -618,7 +618,7 @@ private struct SearchRankStyle {
             )
         case 3:
             return SearchRankStyle(
-                colors: [KXColor.rankViolet.opacity(0.22), Color(red: 0.245, green: 0.469, blue: 0.980).opacity(0.13)],
+                colors: [KXColor.rankViolet.opacity(0.22), KXColor.rankVioletGlow.opacity(0.13)],
                 foreground: KXColor.rankViolet,
                 stroke: KXColor.rankViolet.opacity(0.30),
                 shadow: .clear,

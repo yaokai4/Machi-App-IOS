@@ -67,6 +67,7 @@ struct PostCardView: View, Equatable {
         && lhs.originalPost?.updatedAt == rhs.originalPost?.updatedAt
         && lhs.originalPost?.likeCount == rhs.originalPost?.likeCount
         && lhs.originalPost?.repostCount == rhs.originalPost?.repostCount
+        && lhs.originalPost?.bookmarkCount == rhs.originalPost?.bookmarkCount
         && lhs.originalPost?.commentCount == rhs.originalPost?.commentCount
         && lhs.originalAuthor?.id == rhs.originalAuthor?.id
         && lhs.originalAuthor?.updatedAt == rhs.originalAuthor?.updatedAt
@@ -410,87 +411,6 @@ struct PostCardView: View, Equatable {
         }
     }
 
-    private func attributeSummary(for post: PostEntity, visibleHashtags: [String]) -> String? {
-        func s(_ key: String) -> String? {
-            post.stringAttribute(key)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
-        }
-        func money(_ numberKey: String) -> String? {
-            guard let value = post.doubleAttribute(numberKey) else { return nil }
-            let currency = s(PostAttributeKeys.currency) ?? ""
-            let amount = value.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(value))" : String(format: "%.2f", value)
-            return currency.isEmpty ? amount : "\(currency) \(amount)"
-        }
-        func joined(_ parts: [String?]) -> String? {
-            let values = parts.compactMap { $0?.nilIfBlank }
-            return values.isEmpty ? nil : values.joined(separator: " · ")
-        }
-        func status(_ raw: String?) -> String? {
-            guard let raw else { return nil }
-            switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-            case "active":
-                return nil
-            case "under_review":
-                return L("status_under_review", language)
-            default:
-                return raw
-            }
-        }
-
-        switch post.contentType {
-        case .image_post, .long_post:
-            return joined([s(PostAttributeKeys.title), s(PostAttributeKeys.summary)])
-        case .question:
-            return joined([s(PostAttributeKeys.question), s(PostAttributeKeys.category)])
-        case .rant:
-            return joined([s(PostAttributeKeys.title), s(PostAttributeKeys.category)])
-        case .secondhand:
-            return joined([money(PostAttributeKeys.price), s(PostAttributeKeys.condition), s(PostAttributeKeys.tradeMethod), s(PostAttributeKeys.status)])
-        case .housing:
-            return joined([money(PostAttributeKeys.rent), s(PostAttributeKeys.roomType), s(PostAttributeKeys.area), s(PostAttributeKeys.nearestStation)])
-        case .roommate:
-            return joined([s(PostAttributeKeys.rentRange), s(PostAttributeKeys.area), s(PostAttributeKeys.moveInDate)])
-        case .job_seek:
-            return joined([s(PostAttributeKeys.desiredJob), s(PostAttributeKeys.expectedSalary), s(PostAttributeKeys.visaStatus)])
-        case .job_post:
-            return joined([s(PostAttributeKeys.salary), s(PostAttributeKeys.companyName), s(PostAttributeKeys.workLocation)])
-        case .referral:
-            return joined([s(PostAttributeKeys.companyName), s(PostAttributeKeys.jobTitle), s(PostAttributeKeys.contactMethod)])
-        case .meetup:
-            return joined([s(PostAttributeKeys.meetupTime), s(PostAttributeKeys.location), post.intAttribute(PostAttributeKeys.peopleLimit).map { "\($0)人" }])
-        case .dining:
-            return joined([s(PostAttributeKeys.restaurantOrArea), s(PostAttributeKeys.meetupTime), s(PostAttributeKeys.budget)])
-        case .event:
-            return joined([s(PostAttributeKeys.eventTime), s(PostAttributeKeys.location), s(PostAttributeKeys.fee)])
-        case .guide:
-            return s(PostAttributeKeys.summary)
-        case .news, .local_info:
-            return joined([s(PostAttributeKeys.source), s(PostAttributeKeys.summary)])
-        case .service:
-            return joined([s(PostAttributeKeys.serviceType), s(PostAttributeKeys.priceRange), s(PostAttributeKeys.contactMethod)])
-        case .merchant:
-            let rating = post.doubleAttribute(PostAttributeKeys.rating).map { String(format: "%.1f★", $0) }
-            return joined([rating, s(PostAttributeKeys.address), s(PostAttributeKeys.merchantType)])
-        case .coupon:
-            return joined([s(PostAttributeKeys.discountInfo), s(PostAttributeKeys.validUntil)])
-        case .warning:
-            let category = s(PostAttributeKeys.category)
-            let normalizedCategory = category?.normalizedTopicName
-            let categoryAlreadyVisible = normalizedCategory.map { normalized in
-                visibleHashtags.contains { $0.normalizedTopicName == normalized }
-            } ?? false
-            return joined([
-                categoryAlreadyVisible ? nil : category,
-                status(s(PostAttributeKeys.reviewStatus))
-            ])
-        case .poll:
-            return joined([s(PostAttributeKeys.question), s(PostAttributeKeys.expiresAt)])
-        case .anonymous:
-            return joined([s(PostAttributeKeys.title), s(PostAttributeKeys.description)])
-        default:
-            return nil
-        }
-    }
-
     private var menuTargetPost: PostEntity {
         if originalPost != nil && !post.previewText.isEmpty {
             return post
@@ -684,28 +604,6 @@ struct PostCardView: View, Equatable {
     }
 }
 
-private struct TypedSummaryView: View {
-    let summary: String
-    let tint: Color
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text(summary)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(tint.opacity(0.045), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
-                .stroke(tint.opacity(0.09), lineWidth: 0.6)
-        }
-    }
-}
-
 private struct PostAuthorPresentation {
     let displayName: String
     let username: String
@@ -862,31 +760,6 @@ private struct MetricButton: View {
         .buttonStyle(KXPressableStyle(scale: 0.90, dim: 0.8))
         .sensoryFeedback(.selection, trigger: isActive)
         .accessibilityLabel("\(label) \(value)")
-    }
-}
-
-private struct MetricLabel: View {
-    let icon: String
-    let value: Int
-    let label: String
-    var tint: Color = .secondary
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Image(systemName: icon)
-                .font(.system(size: 15, weight: .regular))
-                .frame(width: 17, height: 17)
-            Text(NumberFormatterUtils.compact(value))
-                .kxScaledFont(12, relativeTo: .caption, weight: .medium)
-                .monospacedDigit()
-                .contentTransition(.numericText(value: Double(value)))
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
-        }
-            .foregroundStyle(tint)
-            .frame(maxWidth: .infinity)
-            .frame(height: 30, alignment: .center)
-            .accessibilityLabel("\(label) \(value)")
     }
 }
 

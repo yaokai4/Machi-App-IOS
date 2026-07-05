@@ -11,7 +11,7 @@ import SwiftUI
 struct GuideStarRow: View {
     let rating: Double
     var size: CGFloat = 14
-    var color: Color = Color(red: 0.98, green: 0.70, blue: 0.16)
+    var color: Color = KXColor.rankGold
 
     var body: some View {
         HStack(spacing: 2) {
@@ -51,7 +51,7 @@ struct GuideStarPicker: View {
                 } label: {
                     Image(systemName: i <= rating ? "star.fill" : "star")
                         .font(.system(size: size))
-                        .foregroundStyle(i <= rating ? Color(red: 0.98, green: 0.70, blue: 0.16) : Color.secondary.opacity(0.5))
+                        .foregroundStyle(i <= rating ? KXColor.rankGold : Color.secondary.opacity(0.5))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("\(i)")
@@ -198,12 +198,12 @@ struct GuideProductReviewsSection: View {
                 .frame(width: 10, alignment: .trailing)
             Image(systemName: "star.fill")
                 .font(.system(size: 9))
-                .foregroundStyle(Color(red: 0.98, green: 0.70, blue: 0.16))
+                .foregroundStyle(KXColor.rankGold)
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.secondary.opacity(0.15))
                     Capsule()
-                        .fill(Color(red: 0.98, green: 0.70, blue: 0.16))
+                        .fill(KXColor.rankGold)
                         .frame(width: max(fraction > 0 ? 6 : 0, geo.size.width * fraction))
                 }
             }

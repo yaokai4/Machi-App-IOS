@@ -192,16 +192,56 @@ enum KXColor {
             ? UIColor(red: 0.910, green: 0.475, blue: 0.365, alpha: 1)
             : UIColor(red: 0.760, green: 0.326, blue: 0.220, alpha: 1)
     })
-    static let heat = Color(red: 0.85, green: 0.45, blue: 0.12)
+    static let heat = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.980, green: 0.580, blue: 0.250, alpha: 1)
+            : UIColor(red: 0.850, green: 0.450, blue: 0.120, alpha: 1)
+    })
     static let dangerSoft = Color.red.opacity(0.10)
     static let warningSoft = Color.orange.opacity(0.12)
     static let successSoft = Color.green.opacity(0.10)
     static let infoSoft = Color.blue.opacity(0.10)
-    static let rankGold = Color(red: 1.000, green: 0.678, blue: 0.145)
-    static let rankCoral = Color(red: 1.000, green: 0.346, blue: 0.384)
-    static let rankViolet = Color(red: 0.514, green: 0.353, blue: 0.953)
-    static let rankTeal = Color(red: 0.000, green: 0.651, blue: 0.561)
-    static let rankSky = Color(red: 0.063, green: 0.557, blue: 0.969)
+    // Rank / accent palette — brightened one step in dark so the same token
+    // reads on dark surfaces whether used as a low-opacity gradient wash or a
+    // full-opacity badge/icon foreground (previously flat single-value RGB).
+    static let rankGold = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 1.000, green: 0.780, blue: 0.320, alpha: 1)
+            : UIColor(red: 1.000, green: 0.678, blue: 0.145, alpha: 1)
+    })
+    static let rankCoral = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 1.000, green: 0.480, blue: 0.510, alpha: 1)
+            : UIColor(red: 1.000, green: 0.346, blue: 0.384, alpha: 1)
+    })
+    static let rankViolet = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.640, green: 0.510, blue: 0.980, alpha: 1)
+            : UIColor(red: 0.514, green: 0.353, blue: 0.953, alpha: 1)
+    })
+    static let rankTeal = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.180, green: 0.780, blue: 0.690, alpha: 1)
+            : UIColor(red: 0.000, green: 0.651, blue: 0.561, alpha: 1)
+    })
+    static let rankSky = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.320, green: 0.680, blue: 1.000, alpha: 1)
+            : UIColor(red: 0.063, green: 0.557, blue: 0.969, alpha: 1)
+    })
+    /// Warm/cool glow tail colors for the search rank gradients (were bare RGB
+    /// literals inline in SearchView). Trait-aware so the dark gradient wash
+    /// stays warm/cool instead of muddy.
+    static let rankCoralGlow = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 1.000, green: 0.560, blue: 0.400, alpha: 1)
+            : UIColor(red: 1.000, green: 0.486, blue: 0.286, alpha: 1)
+    })
+    static let rankVioletGlow = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.420, green: 0.600, blue: 1.000, alpha: 1)
+            : UIColor(red: 0.245, green: 0.469, blue: 0.980, alpha: 1)
+    })
 
     // MARK: Category semantic palette
     // The Discover category grid used ~25 unique tints — a confetti of hues
