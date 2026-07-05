@@ -1282,6 +1282,50 @@ struct BookmarkView: View {
     }
 }
 
+/// The current user's own posts — the tappable destination for the 帖子 tile on
+/// the settings content dashboard. Reuses the shared managed-post list.
+struct MyPostsView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.appLanguage) private var language
+    @EnvironmentObject private var postStore: PostStore
+    @StateObject private var viewModel = SavedContentViewModel()
+    let currentUser: UserEntity
+
+    var body: some View {
+        ManagedPostListView(
+            title: KXListingCopy.pickText(language, "我的帖子", "私の投稿", "My posts"),
+            emptySubtitle: L("emptyPosts", language),
+            state: viewModel.state,
+            posts: viewModel.posts,
+            mediaByPostId: viewModel.mediaByPostId,
+            authors: viewModel.authors,
+            currentUser: currentUser,
+            reload: { await viewModel.loadAuthoredPosts(context: modelContext, currentUser: currentUser, postStore: postStore) },
+            onLike: { post in
+                await viewModel.toggleLike(context: modelContext, post: post, currentUser: currentUser, postStore: postStore) {
+                    await viewModel.loadAuthoredPosts(context: modelContext, currentUser: currentUser, postStore: postStore)
+                }
+            },
+            onBookmark: { post in
+                await viewModel.toggleBookmark(context: modelContext, post: post, currentUser: currentUser, postStore: postStore) {
+                    await viewModel.loadAuthoredPosts(context: modelContext, currentUser: currentUser, postStore: postStore)
+                }
+            },
+            onRepost: { post in
+                await viewModel.repost(context: modelContext, post: post, currentUser: currentUser, postStore: postStore) {
+                    await viewModel.loadAuthoredPosts(context: modelContext, currentUser: currentUser, postStore: postStore)
+                }
+            },
+            onQuoteRepost: { post, content in
+                await viewModel.quoteRepost(context: modelContext, post: post, currentUser: currentUser, content: content, postStore: postStore) {
+                    await viewModel.loadAuthoredPosts(context: modelContext, currentUser: currentUser, postStore: postStore)
+                }
+            }
+        )
+        .task { await viewModel.loadAuthoredPosts(context: modelContext, currentUser: currentUser, postStore: postStore) }
+    }
+}
+
 struct MediaLibraryView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language

@@ -20,7 +20,6 @@ struct ProfileView: View {
     @State private var menuMessage: String?
     @State private var isShowingSettings = false
     @State private var isShowingWorkbench = false
-    @State private var isShowingFavorites = false
     @State private var followListKind: FollowListKind?
     @State private var mutualCount: Int?
     @State private var reputation: KaiXReputationProfileDTO?
@@ -290,7 +289,6 @@ struct ProfileView: View {
                     profileHeader
                     if isCurrentUser {
                         personalWorkbenchEntry
-                        favoritesEntry
                     }
                     PersonalProfileTabPicker(tabs: availableTabs, selection: $profileTab)
                         .padding(.horizontal, KXSpacing.xxs)
@@ -353,54 +351,6 @@ struct ProfileView: View {
         .accessibilityIdentifier("profile.personalWorkbench")
     }
 
-    /// "我的收藏" aggregate — one entry that opens a two-tab sheet combining
-    /// saved listings (WishlistView) and bookmarked posts (BookmarkView).
-    private var favoritesEntry: some View {
-        Button {
-            isShowingFavorites = true
-        } label: {
-            HStack(spacing: 14) {
-                Image(systemName: "heart.fill")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-                    .background(
-                        LinearGradient(colors: [.pink, .pink.opacity(0.78)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                        in: RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    )
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(L("profileFavorites", language))
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(.primary)
-                    Text(L("profileFavoritesSubtitle", language))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(14)
-            .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(KXColor.separator.opacity(0.6), lineWidth: 0.8))
-        }
-        .buttonStyle(.fullArea)
-        .contentShape(Rectangle())
-        .accessibilityIdentifier("profile.favorites")
-        .sheet(isPresented: $isShowingFavorites) {
-            FavoritesHubView(currentUser: currentUser) { listingId in
-                isShowingFavorites = false
-                // Route into the Search tab's listing detail (same destination as
-                // the wishlist row / machi://listing deep link).
-                router.open(.cityListingDetail(listingId: listingId), in: .search)
-                chrome.select(.search)
-                router.setActiveTab(.search)
-            }
-            .environmentObject(postStore)
-        }
-    }
 
     /// Localized current-level name (zh/ja/en) for the compact reputation chip.
     private var reputationLevelName: String {
@@ -1994,9 +1944,9 @@ struct FavoritesHubView: View {
             Group {
                 switch segment {
                 case .listings:
-                    // WishlistView carries its own NavigationStack + chrome; its
-                    // built-in close button also dismisses this sheet.
-                    WishlistView { id in onOpenListing(id) }
+                    // Embedded: WishlistView renders only its list (the hub owns
+                    // the segmented header + the single close button above).
+                    WishlistView(embedded: true) { id in onOpenListing(id) }
                 case .posts:
                     NavigationStack {
                         BookmarkView(currentUser: currentUser)

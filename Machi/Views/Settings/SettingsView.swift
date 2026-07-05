@@ -6,11 +6,14 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
     @EnvironmentObject private var postStore: PostStore
+    @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var chrome: AppChromeState
     @AppStorage("appLanguageCode") private var appLanguageCode = AppLanguage.system.rawValue
     @AppStorage("appAppearance") private var appAppearance = AppAppearance.light.rawValue
     @AppStorage("accountEmail") private var accountEmail = ""
     @StateObject private var viewModel = ProfileViewModel()
     @State private var showLogoutConfirm = false
+    @State private var isShowingFavorites = false
     @State private var didEnter = false
 
     let currentUser: UserEntity
@@ -22,17 +25,16 @@ struct SettingsView: View {
                 LazyVStack(alignment: .leading, spacing: 15) {
                     topBar
                         .kxSettingsEntrance(didEnter, index: 0)
-                    SettingsAccountCard(
-                        user: currentUser,
-                        postCount: viewModel.postCount,
-                        draftCount: viewModel.draftCount,
-                        bookmarkCount: viewModel.bookmarkCount
-                    )
-                    .kxSettingsEntrance(didEnter, index: 1)
+                    SettingsAccountCard(user: currentUser)
+                        .kxSettingsEntrance(didEnter, index: 1)
+
+                    // My content dashboard — the tappable home for posts /
+                    // favorites (listings + posts) / drafts / media. Replaces the
+                    // dead header numbers AND the old "内容管理" list section.
+                    contentDashboard
+                        .kxSettingsEntrance(didEnter, index: 2)
 
                     accountSection
-                        .kxSettingsEntrance(didEnter, index: 2)
-                    contentSection
                         .kxSettingsEntrance(didEnter, index: 3)
                     serviceSection
                         .kxSettingsEntrance(didEnter, index: 4)
@@ -64,6 +66,18 @@ struct SettingsView: View {
             }
             .kxPageBackground()
             .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $isShowingFavorites) {
+            FavoritesHubView(currentUser: currentUser) { listingId in
+                isShowingFavorites = false
+                dismiss()   // pop settings so the profile tab isn't left stale
+                router.open(.cityListingDetail(listingId: listingId), in: .search)
+                chrome.select(.search)
+                router.setActiveTab(.search)
+            }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+            .environmentObject(postStore)
+        }
         .task {
             await viewModel.load(context: modelContext, user: currentUser, postStore: postStore)
         }
@@ -199,20 +213,63 @@ struct SettingsView: View {
             "Invite friends — you both earn Machi Coins")
     }
 
-    private var contentSection: some View {
-        SettingsSectionCard(title: L("contentManagement", language)) {
-            SettingsRowLink(icon: "bookmark.fill", tint: .blue, title: L("bookmarks", language), value: "\(viewModel.bookmarkCount)", subtitle: "\(viewModel.bookmarkCount) \(L("savedItems", language))") {
-                BookmarkView(currentUser: currentUser)
+    /// Four tappable tiles: my posts / favorites (listings + posts) / drafts /
+    /// media library. Favorites opens the two-tab hub as a sheet (its listing
+    /// taps route into the Search tab); the rest push in the settings stack.
+    private var contentDashboard: some View {
+        HStack(spacing: KXSpacing.sm) {
+            NavigationLink {
+                MyPostsView(currentUser: currentUser)
+            } label: {
+                dashboardTile(icon: "doc.text.fill", tint: KXColor.accent, count: viewModel.postCount, label: L("posts", language))
             }
-            SettingsDivider()
-            SettingsRowLink(icon: "tray.full", tint: .purple, title: L("drafts", language), value: "\(viewModel.draftCount)", subtitle: L("navigationReady", language)) {
+            .buttonStyle(.plain)
+
+            Button {
+                isShowingFavorites = true
+            } label: {
+                dashboardTile(icon: "heart.fill", tint: .pink, count: viewModel.bookmarkCount, label: L("bookmarks", language))
+            }
+            .buttonStyle(.plain)
+
+            NavigationLink {
                 DraftsSettingsView(currentUser: currentUser)
+            } label: {
+                dashboardTile(icon: "tray.full.fill", tint: .purple, count: viewModel.draftCount, label: L("drafts", language))
             }
-            SettingsDivider()
-            SettingsRowLink(icon: "photo.on.rectangle", tint: .cyan, title: L("mediaLibrary", language), value: "\(viewModel.mediaCount)", subtitle: L("navigationReady", language)) {
+            .buttonStyle(.plain)
+
+            NavigationLink {
                 MediaLibraryView(currentUser: currentUser)
+            } label: {
+                dashboardTile(icon: "photo.on.rectangle.fill", tint: .cyan, count: viewModel.mediaCount, label: L("mediaLibrary", language))
             }
+            .buttonStyle(.plain)
         }
+    }
+
+    private func dashboardTile(icon: String, tint: Color, count: Int, label: String) -> some View {
+        VStack(spacing: KXSpacing.xs) {
+            Image(systemName: icon)
+                .kxScaledFont(15, weight: .semibold)
+                .foregroundStyle(tint)
+                .frame(height: 20)
+            Text(NumberFormatterUtils.compact(count))
+                .font(.headline.weight(.bold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Text(label)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, KXSpacing.md)
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
+        .kxGlassSurface(radius: KXRadius.md)
     }
 
     private var regionDisplayLabel: String {
@@ -281,9 +338,6 @@ private extension View {
 private struct SettingsAccountCard: View {
     @Environment(\.appLanguage) private var language
     let user: UserEntity
-    let postCount: Int
-    let draftCount: Int
-    let bookmarkCount: Int
 
     var body: some View {
         VStack(alignment: .leading, spacing: KXSpacing.md) {
@@ -318,12 +372,6 @@ private struct SettingsAccountCard: View {
                 .lineSpacing(3)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: KXSpacing.sm) {
-                SettingsInlineStat(value: postCount, title: L("posts", language))
-                SettingsInlineStat(value: bookmarkCount, title: L("bookmarks", language))
-                SettingsInlineStat(value: draftCount, title: L("drafts", language))
-            }
         }
         .padding(14)
         .kxGlassSurface(radius: KXRadius.lg)
@@ -363,31 +411,6 @@ private struct SettingsRolePill: View {
         if user.isMachiOfficialAccount { return KXColor.official }
         if user.isVerifiedMember { return .blue }
         return user.role == .member ? .secondary : KXColor.accent
-    }
-}
-
-private struct SettingsInlineStat: View {
-    let value: Int
-    let title: String
-
-    var body: some View {
-        VStack(spacing: 3) {
-            Text(NumberFormatterUtils.compact(value))
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
-            Text(title)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.78)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, KXSpacing.sm)
-        .background(KXColor.softBackground.opacity(0.86), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
-                .stroke(KXColor.separator.opacity(0.45), lineWidth: 0.55)
-        }
     }
 }
 

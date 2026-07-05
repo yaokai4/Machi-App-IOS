@@ -103,13 +103,40 @@ struct WishlistView: View {
     @Environment(\.appLanguage) private var language
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var store = FavoritesStore.shared
+    /// When true (embedded in FavoritesHubView), render ONLY the list — no own
+    /// NavigationStack / title / close — so the host's single close button isn't
+    /// duplicated (the "two close buttons" bug).
+    var embedded: Bool = false
     let onOpen: (String) -> Void
     /// Brief failure notice when a server-side unfavorite fails (row restored).
     @State private var removalNotice: String?
 
     var body: some View {
-        NavigationStack {
-            Group {
+        if embedded {
+            content
+        } else {
+            NavigationStack {
+                content
+                    .navigationTitle(KXListingCopy.pickText(language, "我的收藏", "お気に入り", "Saved"))
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button { dismiss() } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.title3)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .accessibilityLabel(L("close", language))
+                        }
+                    }
+            }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
+    }
+
+    private var content: some View {
+        Group {
                 if store.items.isEmpty {
                     if store.isSyncing {
                         KXSpinner()
@@ -150,22 +177,7 @@ struct WishlistView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
-            .navigationTitle(KXListingCopy.pickText(language, "我的收藏", "お気に入り", "Saved"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
-                    }
-                    .accessibilityLabel(L("close", language))
-                }
-            }
             .task { await store.syncFromServer() }
-        }
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
     }
 
     /// Optimistically drop the row, then unfavorite on the server — the same

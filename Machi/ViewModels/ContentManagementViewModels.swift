@@ -39,6 +39,21 @@ final class SavedContentViewModel: ObservableObject {
         }
     }
 
+    func loadAuthoredPosts(context: ModelContext, currentUser: UserEntity, postStore: PostStore? = nil) async {
+        state = .loading
+        do {
+            let repository = PostRepository(context: context)
+            posts = try await repository.fetchPosts(authorId: currentUser.id)
+            postStore?.register(posts)
+            mediaByPostId = try await repository.fetchMedia(for: posts)
+            let users = try await UserRepository(context: context).fetchUsers(ids: Set(posts.map(\.authorId)))
+            authors = Dictionary(uniqueKeysWithValues: users.map { ($0.id, $0) })
+            state = posts.isEmpty ? .empty : .loaded
+        } catch {
+            state = .error(error.kaixUserMessage)
+        }
+    }
+
     func toggleLike(context: ModelContext, post: PostEntity, currentUser: UserEntity, postStore: PostStore? = nil, reload: @escaping () async -> Void) async {
         do {
             if let postStore {
