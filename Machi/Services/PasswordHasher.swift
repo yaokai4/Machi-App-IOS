@@ -1,6 +1,13 @@
 import CryptoKit
 import Foundation
 
+/// ⚠️ DEBUG / test-only. This is a demo-grade hasher (unsalted SHA-256, with a
+/// plaintext-equality fallback in `verify`) reached ONLY through the local-store
+/// fallback auth path, which is compiled out in Release
+/// (`KaiXRuntimeFlags.allowLocalStoreFallback` is false there — production auth
+/// is entirely server-side). Do NOT wire this into any Release code path: if
+/// local authentication ever ships, replace it with a per-user-salted slow hash
+/// (PBKDF2/scrypt) and delete the plaintext fallback below first.
 enum PasswordHasher {
     private static let prefix = "v1$sha256$"
     private static let namespace = "KaiX.password.v1"

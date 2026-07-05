@@ -22,8 +22,35 @@ enum KaiXTokenStore {
     private static let legacyDefaultsKey = "kaix.token"
     private static let migrationDoneKey = "kaix.token.migrated"
 
+    // Process-in-memory cache so the hot path (every request builds an
+    // Authorization header, and the 401 branch re-reads) doesn't issue a
+    // synchronous SecItemCopyMatching each time — DM polling + feed paging
+    // hammered the Keychain. Guarded by a lock (read/write happen off the main
+    // thread). Outer optional = "loaded"; inner = the token (nil = no token).
+    // Correctness holds because every mutation routes through write()/delete().
+    private static let cacheLock = NSLock()
+    private static var cachedToken: String??
+
     static func read() -> String? {
+        cacheLock.lock()
+        if let loaded = cachedToken {
+            cacheLock.unlock()
+            return loaded
+        }
+        cacheLock.unlock()
+
         migrateLegacyIfNeeded()
+        let value = keychainRead()
+
+        cacheLock.lock()
+        // Don't clobber a token a concurrent write() just cached.
+        if cachedToken == nil { cachedToken = .some(value) }
+        let resolved = cachedToken ?? value
+        cacheLock.unlock()
+        return resolved
+    }
+
+    private static func keychainRead() -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -42,6 +69,7 @@ enum KaiXTokenStore {
     }
 
     static func write(_ token: String) {
+        cacheLock.lock(); cachedToken = .some(token); cacheLock.unlock()
         let data = Data(token.utf8)
         let attributes: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -64,6 +92,7 @@ enum KaiXTokenStore {
     }
 
     static func delete() {
+        cacheLock.lock(); cachedToken = .some(nil); cacheLock.unlock()
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

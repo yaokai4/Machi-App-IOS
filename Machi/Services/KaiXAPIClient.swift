@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 extension Notification.Name {
     /// Fired when the backend rejects our session with HTTP 401.
@@ -1144,6 +1145,14 @@ final class KaiXAPIClient {
             cursor = page.nextCursor
             pageCount += 1
         } while cursor != nil && pageCount < 20
+        if cursor != nil {
+            // Hit the 20-page safety cap with a non-nil cursor still pending —
+            // the inventory is truncated even though this method promises to be
+            // exhaustive. Log it so a seller with >20 pages surfaces in
+            // diagnostics instead of silently showing a partial list.
+            Logger(subsystem: "com.yaokai.kaizi", category: "api")
+                .warning("collectListings hit the 20-page cap; inventory truncated at \(allItems.count, privacy: .public) items with more pages remaining")
+        }
         return allItems
     }
 

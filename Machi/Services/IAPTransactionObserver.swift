@@ -1,4 +1,5 @@
 import Foundation
+import os
 import StoreKit
 
 /// App-level StoreKit 2 transaction pipeline. Started once after login (from
@@ -90,8 +91,14 @@ final class IAPTransactionObserver {
             // retried on the next launch / next verifyUnfinished() pass.
             await transaction.finish()
         } catch {
-            // Never finish on failure — a paid transaction must survive
-            // until the server has actually credited it.
+            // Never finish on failure — a paid transaction must survive until
+            // the server has actually credited it. StoreKit re-delivers it, so
+            // it's not lost; log it (no JWS/token) so a stuck "charged but
+            // pending" transaction is observable in diagnostics. A user-visible
+            // "purchase confirming…" toast for these observer-owned background
+            // transactions still needs UI wiring (deferred).
+            Logger(subsystem: "com.yaokai.kaizi", category: "iap")
+                .warning("Apple transaction verify failed for product \(transaction.productID, privacy: .public); left unfinished for retry")
         }
     }
 
