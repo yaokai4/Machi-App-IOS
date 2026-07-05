@@ -521,20 +521,32 @@ final class ChatViewModel: ObservableObject {
         var survivors = failedLocal.filter { !fetchedIds.contains($0.id) }
         guard !survivors.isEmpty else { return fetched }
         // Content-level dedup: if the server actually delivered a message that
-        // matches a still-`.failed` local bubble (same sender, same text, sent
-        // within 120s), the send *did* land — drop the stale failed twin so the
-        // user doesn't see "delivered" and "发送失败" side by side. The optimistic
-        // bubble carries a client id the server never had, so id-matching alone
-        // can't catch this.
+        // matches a still-`.failed` local bubble, the send *did* land — drop the
+        // stale failed twin so the user doesn't see "delivered" and "发送失败"
+        // side by side. The optimistic bubble carries a client id the server
+        // never had, so id-matching alone can't catch this.
+        //
+        // We detect the landing by a NEWLY fetched server row (an id we didn't
+        // already have on screen) from the same sender with identical text.
+        // This is clock-source-independent — the old `abs(server.createdAt -
+        // failed.createdAt) < 120` compared a client-clock optimistic bubble
+        // against a server-clock row, so a device clock skewed >120s from the
+        // server broke the match and the failed twin lingered next to the
+        // delivered copy. A wide client-clock recency guard keeps an ancient
+        // failed bubble from being dropped against an unrelated later send of
+        // the same text.
+        let existingIds = Set(current.map(\.id))
+        let now = Date()
         survivors = survivors.filter { failed in
             let text = failed.content.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { return true }
-            let hasServerTwin = fetched.contains { server in
+            guard now.timeIntervalSince(failed.createdAt) < 3600 else { return true }
+            let hasFreshServerTwin = fetched.contains { server in
                 server.senderId == failed.senderId
+                    && !existingIds.contains(server.id)
                     && server.content.trimmingCharacters(in: .whitespacesAndNewlines) == text
-                    && abs(server.createdAt.timeIntervalSince(failed.createdAt)) < 120
             }
-            return !hasServerTwin
+            return !hasFreshServerTwin
         }
         guard !survivors.isEmpty else { return fetched }
         return (fetched + survivors).sorted { $0.createdAt < $1.createdAt }

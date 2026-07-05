@@ -11,6 +11,16 @@ extension String {
         }
 
         if trimmed.hasPrefix("/") {
+            // Server-relative media (e.g. "/uploads/avatars/x.jpg", "/media/…",
+            // "/api/…") must resolve against the backend base URL. Treating them
+            // as local file paths yields a file:// URL to a nonexistent path, so
+            // the avatar/cover silently never loads (AsyncImage shows the
+            // placeholder forever). Mirrors DTO.realCoverURL. Genuine on-device
+            // paths (a freshly picked photo's local URL) still fall through to
+            // fileURLWithPath.
+            if trimmed.hasPrefix("/uploads") || trimmed.hasPrefix("/media") || trimmed.hasPrefix("/api") {
+                return URL(string: trimmed, relativeTo: KaiXBackend.baseURL)?.absoluteURL
+            }
             return URL(fileURLWithPath: trimmed)
         }
 
