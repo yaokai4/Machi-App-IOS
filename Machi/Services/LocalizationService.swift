@@ -517,7 +517,7 @@ struct LocalizationService {
         "workbenchPublishTrading": [.zh: "发布与交易", .ja: "投稿と取引", .en: "Publishing and deals"],
         "workbenchPublishCity": [.zh: "发布信息", .ja: "投稿する", .en: "Create listing"],
         "workbenchPublishCitySubtitle": [.zh: "二手、租房、工作、商家与服务", .ja: "中古・住まい・仕事・店舗サービス", .en: "Secondhand, housing, jobs, merchants and services"],
-        "workbenchCityListingsTitle": [.zh: "本地发布", .ja: "ローカル投稿", .en: "My listings"],
+        "workbenchCityListingsTitle": [.zh: "我的发布", .ja: "マイ投稿", .en: "My listings"],
         "workbenchCityListingsSubtitle": [.zh: "管理二手、租房、工作、本地服务和优惠", .ja: "中古・住まい・仕事・地域サービス・特典を管理", .en: "Manage secondhand, housing, jobs, services and deals"],
         "workbenchCityListingsEmpty": [.zh: "还没有发布", .ja: "投稿はまだありません", .en: "No listings yet"],
         "workbenchCityListingsEmptyHelp": [.zh: "二手、租房、招聘、本地服务和优惠都会出现在这里。", .ja: "中古・住まい・求人・地域サービス・特典がここに表示されます。", .en: "Secondhand, housing, hiring, local services, and deals appear here."],

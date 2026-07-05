@@ -1,6 +1,28 @@
 import SwiftData
 import SwiftUI
 
+/// Result categories shown as a segmented tab row (X-style) once a query has
+/// matches — replaces the old single long column that stacked 帖子 / 话题 / 用户 /
+/// 信息 on top of each other. One tap switches category instead of scrolling past
+/// every other kind of result.
+private enum SearchResultTab: String, CaseIterable, Identifiable, Hashable {
+    case posts
+    case topics
+    case users
+    case listings
+
+    var id: String { rawValue }
+
+    func title(_ language: AppLanguage) -> String {
+        switch self {
+        case .posts: L("posts", language)
+        case .topics: L("topics", language)
+        case .users: L("users", language)
+        case .listings: L("listings", language)
+        }
+    }
+}
+
 struct SearchScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -16,6 +38,7 @@ struct SearchScreen: View {
     @State private var serverSearchTask: Task<Void, Never>?
     @State private var savedSearchSaving = false
     @State private var savedSearchDone = false
+    @State private var selectedResultTab: SearchResultTab = .posts
     @FocusState private var isSearchFocused: Bool
 
     let currentUser: UserEntity
@@ -215,11 +238,32 @@ struct SearchScreen: View {
                     usersSection(title: L("recommendedFollow", language), users: userResults.prefix(6).map { $0 })
                 } else if hasResults {
                     subscribeSearchButton
-                    listingsSection
-                    rankingSection(title: L("posts", language), items: combinedPostItems, limit: 10)
-                    topicSection(title: L("topics", language), topics: Array(combinedTopics.prefix(8)))
-                    usersSection(title: L("users", language), users: Array(combinedUsers.prefix(8)))
-                    rankingSection(title: L("newsRank", language), items: viewModel.latestTrendingItems, limit: 6)
+                    KXSegmentedControl(
+                        SearchResultTab.allCases,
+                        selection: $selectedResultTab,
+                        itemMinWidth: 60,
+                        itemHeight: 40
+                    ) { tab in
+                        Text(tab.title(language))
+                    }
+                    .padding(.bottom, KXSpacing.xs)
+                    switch selectedResultTab {
+                    case .posts:
+                        rankingSection(title: L("posts", language), items: combinedPostItems, limit: 10)
+                        rankingSection(title: L("newsRank", language), items: viewModel.latestTrendingItems, limit: 6)
+                    case .topics:
+                        topicSection(title: L("topics", language), topics: Array(combinedTopics.prefix(8)))
+                    case .users:
+                        usersSection(title: L("users", language), users: Array(combinedUsers.prefix(8)))
+                    case .listings:
+                        if viewModel.searchedListings.isEmpty {
+                            KXEmptyState(title: L("listings", language), subtitle: L("noContent", language), systemImage: "tray")
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, 20)
+                        } else {
+                            listingsSection
+                        }
+                    }
                 } else if viewModel.serverSearchLoading {
                     // First server round-trip for this query — don't flash
                     // "no results" while it's still in flight.

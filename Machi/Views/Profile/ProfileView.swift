@@ -607,12 +607,15 @@ struct ProfileView: View {
             ZStack(alignment: .bottomLeading) {
                 CoverGradientView(user: profileUser)
 
+                // Seat the avatar exactly half-into the cover: bottom-anchored,
+                // then pushed down by half its diameter (82 / 2 = 41) so its
+                // center lands on the cover's bottom edge — the X-style straddle.
                 AvatarView(user: profileUser, size: KXAvatarSize.profile)
                     .overlay(Circle().stroke(KXColor.cardBackground, lineWidth: 4))
                     .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
-                    .offset(x: 14, y: 44)
+                    .offset(x: 14, y: 41)
             }
-            .padding(.bottom, 48)
+            .padding(.bottom, 46)
 
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -1855,7 +1858,7 @@ private struct CoverGradientView: View {
                 }
             }
         }
-        .frame(height: 146)
+        .frame(height: 156)
         .clipShape(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
     }
 }

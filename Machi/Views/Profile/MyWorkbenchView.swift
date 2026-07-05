@@ -229,22 +229,10 @@ struct MyWorkbenchView: View {
             SettingsRowLink(icon: "star.bubble.fill", tint: .orange, title: L("workbenchReviewsTitle", language), subtitle: L("workbenchReviewsSubtitle", language)) {
                 MerchantReviewsManageView(currentUser: currentUser)
             }
-            SettingsDivider()
-            SettingsRowLink(icon: "briefcase.fill", tint: .indigo, title: L("workbenchJobPublishTitle", language), subtitle: L("workbenchJobPublishSubtitle", language), revealsNavBar: false) {
-                CreateCityListingView(listingType: "job", citySlug: currentRegionCode, currentUser: currentUser, onPublishedListing: onPublishedListing)
-            }
-            SettingsDivider()
-            SettingsRowLink(icon: "house.fill", tint: .blue, title: L("workbenchRentalPublishTitle", language), subtitle: L("workbenchRentalPublishSubtitle", language), revealsNavBar: false) {
-                CreateCityListingView(listingType: "rental", citySlug: currentRegionCode, currentUser: currentUser, onPublishedListing: onPublishedListing)
-            }
-            SettingsDivider()
-            SettingsRowLink(icon: "storefront.fill", tint: .brown, title: L("workbenchServicePublishTitle", language), subtitle: L("workbenchServicePublishSubtitle", language), revealsNavBar: false) {
-                CreateCityListingView(listingType: "local_service", citySlug: currentRegionCode, currentUser: currentUser, onPublishedListing: onPublishedListing)
-            }
-            SettingsDivider()
-            SettingsRowLink(icon: "tag.fill", tint: .pink, title: L("workbenchDiscountPublishTitle", language), subtitle: L("workbenchDiscountPublishSubtitle", language), revealsNavBar: false) {
-                CreateCityListingView(listingType: "discount", citySlug: currentRegionCode, currentUser: currentUser, onPublishedListing: onPublishedListing)
-            }
+            // 招聘 / 房源 / 服务 / 优惠 的「发布」入口已从这里移除 —— 它们与上方
+            //「发布信息」(PublishListingTypeChooserView) 里的类型逐项重复。商家后台
+            // 只保留「认证」与「点评」这类真正的经营管理项;所有发布统一走
+            //「发布与交易 → 发布信息」这唯一入口,避免同一功能出现两处。
         }
     }
 }

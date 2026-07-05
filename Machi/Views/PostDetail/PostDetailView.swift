@@ -371,6 +371,7 @@ struct PostDetailView: View {
                             originalAuthor: viewModel.originalAuthor,
                             originalMediaItems: viewModel.originalMedia,
                             showsMenu: false,
+                            expandOnTap: true,
                             onOpen: { },
                             onOpenOriginal: { if let originalPost = viewModel.originalPost { router.open(.postDetail(postId: originalPost.id)) } },
                             onAuthor: { router.open(.profile(userId: post.authorId)) },

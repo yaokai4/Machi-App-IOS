@@ -26,6 +26,10 @@ struct PostCardView: View, Equatable {
     var originalAuthor: UserEntity?
     var originalMediaItems: [MediaEntity] = []
     var showsMenu = true
+    /// When true (post detail), tapping anywhere in the body/card expands the
+    /// truncated text instead of navigating — the whole post is the tap target,
+    /// not just the small「查看全文」link. Feed cards keep `false` (tap = open).
+    var expandOnTap = false
     var onOpen: () -> Void = {}
     var onOpenOriginal: () -> Void = {}
     var onAuthor: () -> Void = {}
@@ -173,7 +177,13 @@ struct PostCardView: View, Equatable {
                     metadataRow(for: contentPost)
 
                     if !contentPost.previewText.isEmpty {
-                        Button(action: onOpen) {
+                        Button {
+                            if expandOnTap {
+                                expandTextIfPossible(contentPost.previewText)
+                            } else {
+                                onOpen()
+                            }
+                        } label: {
                             Text(contentPost.previewText)
                                 .kxScaledFont(15, relativeTo: .body, weight: .regular)
                                 .foregroundStyle(.primary)
@@ -227,7 +237,13 @@ struct PostCardView: View, Equatable {
                 .padding(.vertical, 13)
                 .kxGlassSurface(radius: KXRadius.lg)
                 .contentShape(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
-                .gesture(TapGesture().onEnded { onOpen() }, including: .gesture)
+                .gesture(TapGesture().onEnded {
+                    if expandOnTap {
+                        expandTextIfPossible(contentPost.previewText)
+                    } else {
+                        onOpen()
+                    }
+                }, including: .gesture)
             }
         }
         .confirmationDialog(L("repost", language), isPresented: $isShowingRepostOptions, titleVisibility: .visible) {
@@ -341,6 +357,15 @@ struct PostCardView: View, Equatable {
             isOfficial: true,
             label: account.label
         )
+    }
+
+    /// Expands the truncated body when tapped anywhere (detail view only).
+    /// One-way: a full-card tap only opens the text — collapsing stays on the
+    /// explicit「收起」button so an accidental tap never re-truncates a post the
+    /// reader is midway through.
+    private func expandTextIfPossible(_ text: String) {
+        guard !isTextExpanded, shouldShowExpand(for: text) else { return }
+        withAnimation(.snappy(duration: 0.18)) { isTextExpanded = true }
     }
 
     private func shouldShowExpand(for text: String) -> Bool {

@@ -48,55 +48,7 @@ struct MyCityListingsView: View {
                 ScrollView {
                     LazyVStack(spacing: 10) {
                         ForEach(listings) { listing in
-                            Button {
-                                router.open(.cityListingDetail(listingId: listing.id))
-                            } label: {
-                                row(listing)
-                            }
-                            .buttonStyle(.plain)
-                            .contextMenu {
-                                Button {
-                                    router.open(.editCityListing(listingId: listing.id))
-                                } label: {
-                                    Label(L("edit", language), systemImage: "pencil")
-                                }
-                                if listing.status == "hidden" || listing.status == "draft" {
-                                    Button {
-                                        Task { await updateStatus(listing, status: "published") }
-                                    } label: {
-                                        Label(L("listingRepublish", language), systemImage: "arrow.up.circle")
-                                    }
-                                } else if listing.status == "published" || listing.status == "reserved" {
-                                    Button {
-                                        Task { await updateStatus(listing, status: "hidden") }
-                                    } label: {
-                                        Label(L("listingHideTemporarily", language), systemImage: "eye.slash")
-                                    }
-                                    Button {
-                                        Task { await updateStatus(listing, status: completionStatus(for: listing)) }
-                                    } label: {
-                                        Label(completionLabel(for: listing), systemImage: "checkmark.circle")
-                                    }
-                                }
-                                Button(role: .destructive) {
-                                    pendingDelete = listing
-                                } label: {
-                                    Label(L("delete", language), systemImage: "trash")
-                                }
-                            }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button(role: .destructive) {
-                                    pendingDelete = listing
-                                } label: {
-                                    Label(L("delete", language), systemImage: "trash")
-                                }
-                                Button {
-                                    router.open(.editCityListing(listingId: listing.id))
-                                } label: {
-                                    Label(L("edit", language), systemImage: "pencil")
-                                }
-                                .tint(KXColor.accent)
-                            }
+                            listingRow(listing)
                         }
                     }
                     .padding(.horizontal, KaiXTheme.horizontalPadding)
@@ -138,6 +90,67 @@ struct MyCityListingsView: View {
         .disabled(isActing)
     }
 
+    /// One managed listing. The card body opens the detail; a visible「•••」
+    /// menu on the right exposes 编辑 / 隐藏 / 重新上架 / 标记完成 / 删除 directly,
+    /// so管理动作不再藏在长按里。长按整行仍会弹出同一组操作作为快捷方式。
+    @ViewBuilder
+    private func listingRow(_ listing: KaiXCityListingDTO) -> some View {
+        HStack(spacing: 8) {
+            Button {
+                router.open(.cityListingDetail(listingId: listing.id))
+            } label: {
+                row(listing)
+            }
+            .buttonStyle(.plain)
+
+            Menu {
+                listingMenuItems(listing)
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 40, height: 40)
+                    .kxGlassCircle()
+            }
+            .accessibilityLabel(KXListingCopy.pickText(language, "管理这条发布", "この投稿を管理", "Manage listing"))
+        }
+        .contextMenu { listingMenuItems(listing) }
+    }
+
+    /// Shared action set for both the visible「•••」menu and the long-press
+    /// context menu — one definition, two entry points.
+    @ViewBuilder
+    private func listingMenuItems(_ listing: KaiXCityListingDTO) -> some View {
+        Button {
+            router.open(.editCityListing(listingId: listing.id))
+        } label: {
+            Label(L("edit", language), systemImage: "pencil")
+        }
+        if listing.status == "hidden" || listing.status == "draft" {
+            Button {
+                Task { await updateStatus(listing, status: "published") }
+            } label: {
+                Label(L("listingRepublish", language), systemImage: "arrow.up.circle")
+            }
+        } else if listing.status == "published" || listing.status == "reserved" {
+            Button {
+                Task { await updateStatus(listing, status: "hidden") }
+            } label: {
+                Label(L("listingHideTemporarily", language), systemImage: "eye.slash")
+            }
+            Button {
+                Task { await updateStatus(listing, status: completionStatus(for: listing)) }
+            } label: {
+                Label(completionLabel(for: listing), systemImage: "checkmark.circle")
+            }
+        }
+        Button(role: .destructive) {
+            pendingDelete = listing
+        } label: {
+            Label(L("delete", language), systemImage: "trash")
+        }
+    }
+
     private func row(_ listing: KaiXCityListingDTO) -> some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 5) {
@@ -158,9 +171,6 @@ struct MyCityListingsView: View {
                 }
             }
             Spacer(minLength: 0)
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
         }
         .padding(14)
         .kxGlassSurface(radius: KXRadius.lg)

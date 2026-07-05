@@ -1,6 +1,7 @@
 import SwiftData
 import SwiftUI
 import PhotosUI
+import UIKit
 
 struct EditProfileView: View {
     @Environment(\.dismiss) private var dismiss
@@ -15,6 +16,7 @@ struct EditProfileView: View {
     @State private var avatarColorName: String
     @State private var avatarItem: PhotosPickerItem?
     @State private var coverItem: PhotosPickerItem?
+    @State private var cropRequest: ProfileCropRequest?
     @State private var isSaving = false
     @State private var isPreparingMedia = false
     @State private var errorMessage: String?
@@ -61,10 +63,25 @@ struct EditProfileView: View {
         .kxPageBackground()
         .toolbar(.hidden, for: .navigationBar)
         .onChange(of: avatarItem) { _, item in
-            Task { await preparePickedImage(item, target: .avatar) }
+            Task { await loadForCrop(item, target: .avatar) }
         }
         .onChange(of: coverItem) { _, item in
-            Task { await preparePickedImage(item, target: .cover) }
+            Task { await loadForCrop(item, target: .cover) }
+        }
+        .fullScreenCover(item: $cropRequest) { request in
+            ImageCropView(
+                image: request.image,
+                aspectRatio: request.target == .avatar ? 1 : 2.1,
+                circular: request.target == .avatar,
+                title: request.target == .avatar
+                    ? KXListingCopy.pickText(language, "调整头像", "アバターを調整", "Adjust avatar")
+                    : KXListingCopy.pickText(language, "调整背景", "背景を調整", "Adjust cover"),
+                onCancel: { cropRequest = nil },
+                onCrop: { cropped in
+                    cropRequest = nil
+                    Task { await applyCroppedImage(cropped, target: request.target) }
+                }
+            )
         }
     }
 
@@ -111,12 +128,13 @@ struct EditProfileView: View {
         VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .bottomLeading) {
                 coverPreview
-                    .frame(height: 132)
+                    .frame(height: 150)
                     .clipShape(RoundedRectangle(cornerRadius: KXRadius.lg))
 
+                // Half-into-cover straddle in the editor too (74 / 2 = 37).
                 avatarPreview(size: 74)
                     .overlay(Circle().stroke(Color(.systemBackground).opacity(0.82), lineWidth: 5))
-                    .offset(x: 16, y: 34)
+                    .offset(x: 16, y: 37)
             }
 
             HStack(alignment: .bottom, spacing: 12) {
@@ -370,22 +388,42 @@ struct EditProfileView: View {
         return remote
     }
 
+    /// Load the picked photo and hand it to the crop sheet instead of
+    /// auto-cropping. The user chooses the visible range themselves.
     @MainActor
-    private func preparePickedImage(_ item: PhotosPickerItem?, target: PickedProfileImageTarget) async {
+    private func loadForCrop(_ item: PhotosPickerItem?, target: PickedProfileImageTarget) async {
         guard let item else { return }
         isPreparingMedia = true
         errorMessage = nil
         defer { isPreparingMedia = false }
-
         do {
-            guard let data = try await item.loadTransferable(type: Data.self) else {
+            guard let data = try await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data) else {
                 throw UploadService.UploadError.invalidMedia
             }
+            cropRequest = ProfileCropRequest(image: image, target: target)
+        } catch {
+            errorMessage = L("mediaFailed", language)
+        }
+    }
+
+    /// Bakes the user-chosen crop region into a JPEG and feeds it through the
+    /// same upload-prep path as before (near-full-res, no extra 640px squash).
+    /// Because the crop is baked in, the profile displays exactly the range the
+    /// user selected — avatar and cover alike.
+    @MainActor
+    private func applyCroppedImage(_ image: UIImage, target: PickedProfileImageTarget) async {
+        isPreparingMedia = true
+        errorMessage = nil
+        defer { isPreparingMedia = false }
+        guard let data = image.jpegData(compressionQuality: 0.92) else {
+            errorMessage = L("mediaFailed", language)
+            return
+        }
+        do {
             let draft = try await UploadService.shared.prepareImage(data: data)
             switch target {
             case .avatar:
-                // 头像不再压成 640px 小图(以前上传的是缩略图,放大就糊)。
-                // 与封面一致上传接近全分辨率的原图,清晰无损。
                 avatarURL = draft.localURL.path
             case .cover:
                 coverURL = draft.localURL.path
@@ -399,4 +437,10 @@ struct EditProfileView: View {
 private enum PickedProfileImageTarget {
     case avatar
     case cover
+}
+
+private struct ProfileCropRequest: Identifiable {
+    let id = UUID()
+    let image: UIImage
+    let target: PickedProfileImageTarget
 }
