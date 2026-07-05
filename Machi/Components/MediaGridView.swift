@@ -57,7 +57,7 @@ struct MediaGridView: View {
                                 // — parity with Web so a video always reads as tappable,
                                 // not a still image.
                                 Image(systemName: "play.fill")
-                                    .font(.system(size: 17, weight: .black))
+                                    .kxScaledFont(17, weight: .black)
                                     .foregroundStyle(.white)
                                     .frame(width: 46, height: 46)
                                     .background(.black.opacity(0.5), in: Circle())

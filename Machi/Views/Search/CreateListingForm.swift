@@ -865,7 +865,7 @@ struct CreateCityListingView: View {
             VStack(alignment: .leading, spacing: KXSpacing.md) {
                 HStack(spacing: KXSpacing.md) {
                     Text(region?.countryEmoji ?? "🌐")
-                        .font(.system(size: 30))
+                        .kxScaledFont(30)
                         .frame(width: 46, height: 46)
                         .background(KXColor.softBackground.opacity(0.9), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                     VStack(alignment: .leading, spacing: 3) {

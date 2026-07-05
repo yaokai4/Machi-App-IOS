@@ -123,7 +123,7 @@ struct GuideJLPTZoneView: View {
         ZStack(alignment: .topLeading) {
             // 极淡「日本語」kana 水印 — sits bottom-trailing, barely there.
             Text("日本語")
-                .font(.system(size: 96, weight: .black))
+                .kxScaledFont(96, weight: .black)
                 .foregroundStyle(KXColor.livingAccent.opacity(0.05))
                 .lineLimit(1)
                 .fixedSize()
@@ -238,7 +238,7 @@ struct GuideJLPTZoneView: View {
             VStack(alignment: .leading, spacing: 10) {
                 // 定级 = 主行动: 填充青图标 tile(白图标). 其余: accent-soft tile + 青图标.
                 Image(systemName: icon)
-                    .font(.system(size: 18, weight: .semibold))
+                    .kxScaledFont(18, weight: .semibold)
                     .foregroundStyle(enabled ? (primary ? KXColor.onAccent : KXColor.livingAccent) : KXColor.livingMuted)
                     .frame(width: 40, height: 40)
                     .background(
@@ -337,7 +337,7 @@ struct GuideJLPTZoneView: View {
         return HStack(alignment: .center, spacing: KXSpacing.md) {
             // 徽章 — 底色按难度逐级加深一点点.
             Text(lv.label)
-                .font(.system(size: 17, weight: .black, design: .rounded))
+                .kxScaledFont(17, weight: .black, design: .rounded)
                 .foregroundStyle(KXColor.livingAccent)
                 .frame(width: 46, height: 46)
                 .background(level.badgeTint, in: RoundedRectangle(cornerRadius: 13, style: .continuous))

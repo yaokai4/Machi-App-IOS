@@ -584,7 +584,7 @@ struct CityListingDetailView: View {
                     .minimumScaleFactor(0.7)
                 if ratingCount > 0 {
                     HStack(spacing: 3) {
-                        Image(systemName: "star.fill").font(.system(size: 10, weight: .black)).foregroundStyle(.orange)
+                        Image(systemName: "star.fill").kxScaledFont(10, weight: .black).foregroundStyle(.orange)
                         Text(String(format: "%.1f", ratingAvg)).font(.caption2.weight(.black)).foregroundStyle(KXColor.livingInk)
                         Text("(\(ratingCount))").font(.caption2.weight(.semibold)).foregroundStyle(KXColor.livingMuted)
                     }
@@ -2310,7 +2310,7 @@ struct ListingPublishSuccessSheet: View {
                 VStack(alignment: .leading, spacing: KXSpacing.lg) {
                     VStack(spacing: 10) {
                         Image(systemName: receipt.published ? "checkmark.seal.fill" : "clock.badge.checkmark.fill")
-                            .font(.system(size: 44))
+                            .kxScaledFont(44)
                             .foregroundStyle(receipt.published ? KXColor.accent : .orange)
                         Text(receipt.published
                              ? pick("发布成功", "公開しました", "Published")

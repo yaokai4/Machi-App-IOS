@@ -444,7 +444,7 @@ private struct GuestMessagesPanel: View {
         VStack(spacing: KXSpacing.lg) {
             Spacer()
             Image(systemName: "bubble.left.and.bubble.right")
-                .font(.system(size: 44, weight: .light))
+                .kxScaledFont(44, weight: .light)
                 .foregroundStyle(KXColor.accent.opacity(0.85))
             Text(text("登录后即可开始私信", "ログインしてメッセージを始めよう", "Log in to start messaging"))
                 .font(.title3.weight(.bold))

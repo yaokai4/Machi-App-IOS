@@ -172,7 +172,7 @@ struct GuideProductReviewsSection: View {
             HStack(alignment: .center, spacing: 18) {
                 VStack(spacing: KXSpacing.xs) {
                     Text(summary.ratingCount > 0 ? String(format: "%.1f", summary.ratingAvg) : "—")
-                        .font(.system(size: 40, weight: .bold, design: .rounded))
+                        .kxScaledFont(40, weight: .bold, design: .rounded)
                     GuideStarRow(rating: summary.ratingAvg, size: 13)
                     Text(guideText(language, "\(summary.ratingCount) 条评价", "\(summary.ratingCount) 件", "\(summary.ratingCount) reviews"))
                         .font(.caption)
@@ -197,7 +197,7 @@ struct GuideProductReviewsSection: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 10, alignment: .trailing)
             Image(systemName: "star.fill")
-                .font(.system(size: 9))
+                .kxScaledFont(9)
                 .foregroundStyle(KXColor.rankGold)
             GeometryReader { geo in
                 ZStack(alignment: .leading) {

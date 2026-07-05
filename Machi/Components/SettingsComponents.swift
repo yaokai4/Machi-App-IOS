@@ -132,7 +132,7 @@ struct SettingsRowContent: View {
             // saturated gradient square with a coloured drop-shadow — iOS-14-era
             // "Shortcuts" look that made the settings list feel busy).
             Image(systemName: icon)
-                .font(.system(size: 17, weight: .semibold))
+                .kxScaledFont(17, weight: .semibold)
                 .foregroundStyle(tint)
                 .frame(width: 36, height: 36)
                 .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: KXRadius.sm, style: .continuous))

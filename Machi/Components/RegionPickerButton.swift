@@ -36,7 +36,7 @@ struct RegionPickerButton: View {
                     .truncationMode(.tail)
                     .layoutPriority(1)
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 10, weight: .bold))
+                    .kxScaledFont(10, weight: .bold)
                     .foregroundStyle(KXColor.accent.opacity(compact ? 0.85 : 0.7))
             }
             .padding(.leading, compact ? 10 : 12)

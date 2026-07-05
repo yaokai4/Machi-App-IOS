@@ -78,7 +78,7 @@ struct HomeJourneyNextStepCard: View {
                 } label: {
                     HStack(spacing: KXSpacing.md) {
                         Image(systemName: guideJourneySymbol(hint.icon))
-                            .font(.system(size: 15, weight: .bold))
+                            .kxScaledFont(15, weight: .bold)
                             .foregroundStyle(KXColor.accent)
                             .frame(width: 36, height: 36)
                             .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 11, style: .continuous))

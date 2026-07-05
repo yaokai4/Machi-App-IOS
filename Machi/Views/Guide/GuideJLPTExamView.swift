@@ -141,7 +141,7 @@ struct GuideJLPTExamView: View {
 
     private func examMetaChip(icon: String, text: String) -> some View {
         HStack(spacing: 3) {
-            Image(systemName: icon).font(.system(size: 9, weight: .bold))
+            Image(systemName: icon).kxScaledFont(9, weight: .bold)
             Text(text).font(.caption2.weight(.semibold))
         }
         .foregroundStyle(KXColor.livingMuted)
@@ -156,7 +156,7 @@ struct GuideJLPTExamView: View {
             HStack(spacing: KXSpacing.md) {
                 // Score chip — passing = accent tile, failing = warm tile.
                 Text("\(item.score ?? 0)")
-                    .font(.system(size: 17, weight: .black, design: .rounded))
+                    .kxScaledFont(17, weight: .black, design: .rounded)
                     .foregroundStyle((item.passed ?? false) ? KXColor.livingAccent : KXColor.livingWarm)
                     .frame(width: 44, height: 44)
                     .background(((item.passed ?? false) ? KXColor.livingAccent : KXColor.livingWarm).opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))

@@ -19,7 +19,7 @@ struct CityPrimaryCategoryTabs: View {
                     } label: {
                         HStack(spacing: 5) {
                             Image(systemName: primary.icon)
-                                .font(.system(size: 12, weight: .bold))
+                                .kxScaledFont(12, weight: .bold)
                             Text(primary.title(language))
                                 .font(.subheadline.weight(.semibold))
                                 .lineLimit(1)

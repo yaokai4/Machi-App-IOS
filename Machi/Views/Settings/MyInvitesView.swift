@@ -275,7 +275,7 @@ struct MyInvitesView: View {
         ZStack {
             Circle().fill(Color.kaixNamed("blue").gradient)
             Text(avatarInitial(invitee))
-                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .kxScaledFont(16, weight: .bold, design: .rounded)
                 .foregroundStyle(.white)
             if let url = invitee.avatarUrl.kaixMediaURL {
                 CachedMediaImageView(url: url, targetPixelSize: 120, failureMode: .transparent)

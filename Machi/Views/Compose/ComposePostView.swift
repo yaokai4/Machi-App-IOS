@@ -254,7 +254,7 @@ struct ComposePostView: View {
                     Circle()
                         .fill(spec.tint.opacity(0.16))
                     Image(systemName: spec.icon)
-                        .font(.system(size: 14, weight: .semibold))
+                        .kxScaledFont(14, weight: .semibold)
                         .foregroundStyle(spec.tint)
                 }
                 .frame(width: 30, height: 30)
@@ -301,7 +301,7 @@ struct ComposePostView: View {
             } label: {
                 HStack(spacing: KXSpacing.sm) {
                     Image(systemName: "mappin.circle.fill")
-                        .font(.system(size: 14, weight: .medium))
+                        .kxScaledFont(14, weight: .medium)
                         .foregroundStyle(KXColor.accent)
                     if let region = viewModel.selectedRegion {
                         Text("\(region.countryEmoji) \(region.cityName)")
@@ -341,7 +341,7 @@ struct ComposePostView: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "character.bubble")
-                        .font(.system(size: 13, weight: .semibold))
+                        .kxScaledFont(13, weight: .semibold)
                         .foregroundStyle(KXColor.accent)
                     Text(viewModel.selectedLanguage.title(language))
                         .font(.subheadline.weight(.semibold))

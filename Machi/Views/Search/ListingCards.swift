@@ -348,7 +348,7 @@ struct ListingMediaPlaceholder: View {
                 .offset(x: 150, y: 90)
             VStack(spacing: 11) {
                 Image(systemName: type == "video" ? "play.rectangle.fill" : KXListingCopy.icon(for: type))
-                    .font(.system(size: 34, weight: .bold))
+                    .kxScaledFont(34, weight: .bold)
                     .foregroundStyle(KXColor.livingAccent.opacity(0.8))
                 Text(type == "video"
                      ? KXListingCopy.pickText(language, "视频封面生成中", "動画カバーを生成中", "Generating video cover")

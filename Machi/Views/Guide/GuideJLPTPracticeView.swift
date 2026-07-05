@@ -148,7 +148,7 @@ struct GuideJLPTPracticeView: View {
             ZStack {
                 Circle().fill(KXColor.livingAccentSoft).frame(width: 76, height: 76)
                 Image(systemName: "checkmark.seal.fill")
-                    .font(.system(size: 32, weight: .semibold))
+                    .kxScaledFont(32, weight: .semibold)
                     .foregroundStyle(KXColor.livingAccent)
             }
             Text(guideText(language, "本组已完成！", "このセットが完了！", "Set complete!"))

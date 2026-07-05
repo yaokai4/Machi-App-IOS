@@ -1046,7 +1046,7 @@ struct KXCoverPhotoCount: View {
     var body: some View {
         HStack(spacing: 3) {
             Image(systemName: "square.stack.fill")
-                .font(.system(size: 9, weight: .bold))
+                .kxScaledFont(9, weight: .bold)
             Text("\(count)")
                 .font(.caption2.weight(.black))
         }

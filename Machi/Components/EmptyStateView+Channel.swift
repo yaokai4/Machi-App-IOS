@@ -68,7 +68,7 @@ struct ChannelEmptyState: View {
     var body: some View {
         VStack(spacing: 14) {
             Image(systemName: copy.icon)
-                .font(.system(size: 32, weight: .semibold))
+                .kxScaledFont(32, weight: .semibold)
                 .foregroundStyle(copy.tint)
                 .frame(width: 64, height: 64)
                 .background(copy.tint.opacity(0.12), in: Circle())

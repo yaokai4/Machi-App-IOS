@@ -239,7 +239,7 @@ struct MediaVideoView: View {
                         Color(red: 0.055, green: 0.071, blue: 0.102)
                         VStack(spacing: 10) {
                             Image(systemName: playbackFailed ? "exclamationmark.arrow.triangle.2.circlepath" : "video.fill")
-                                .font(.system(size: 36, weight: .bold))
+                                .kxScaledFont(36, weight: .bold)
                             Text(playbackFailed ? L("videoLoadFailedRetry", language) : L("video", language))
                                 .font(.caption.weight(.bold))
                         }

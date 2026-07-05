@@ -306,7 +306,7 @@ private struct KXListingsEmptyActionPanel: View {
     var body: some View {
         VStack(spacing: 18) {
             Image(systemName: icon)
-                .font(.system(size: 25, weight: .bold))
+                .kxScaledFont(25, weight: .bold)
                 .foregroundStyle(tint)
                 .frame(width: 64, height: 64)
                 .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 22, style: .continuous))

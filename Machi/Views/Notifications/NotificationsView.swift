@@ -319,7 +319,7 @@ private struct NotificationCard: View {
             // Floating type badge: a soft gradient pill at the avatar's corner
             // with a colored shadow, instead of a flat solid circle.
             Image(systemName: icon)
-                .font(.system(size: 9, weight: .black))
+                .kxScaledFont(9, weight: .black)
                 .foregroundStyle(.white)
                 .frame(width: 20, height: 20)
                 .background(

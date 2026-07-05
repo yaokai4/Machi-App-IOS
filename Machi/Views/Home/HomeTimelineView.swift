@@ -168,7 +168,7 @@ struct HomeTimelineView: View {
     private var localPickRegionState: some View {
         VStack(spacing: KXSpacing.md) {
             Image(systemName: "mappin.and.ellipse")
-                .font(.system(size: 36, weight: .regular))
+                .kxScaledFont(36, weight: .regular)
                 .foregroundStyle(KXColor.accent)
             Text(L("pickRegion", language))
                 .font(.headline.weight(.semibold))

@@ -114,7 +114,11 @@ struct BottomTabBarView: View {
                 .frame(width: 30, height: 30, alignment: .center)
         } else {
             Image(systemName: tab.icon)
-                .font(.system(size: 22, weight: .semibold))
+                .kxScaledFont(22, weight: .semibold)
+                // Scales for accessibility but capped so a very large Dynamic
+                // Type size can't blow the icon out of the fixed-height bar
+                // (matches the label cap above).
+                .dynamicTypeSize(...DynamicTypeSize.xxLarge)
                 .symbolRenderingMode(.monochrome)
                 .frame(width: 30, height: 30, alignment: .center)
         }

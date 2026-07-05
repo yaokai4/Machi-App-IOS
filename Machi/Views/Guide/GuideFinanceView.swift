@@ -372,7 +372,7 @@ struct GuideFinanceView: View {
                             }
                             .frame(height: 88, alignment: .bottom)
                             Text(String(m.month.suffix(2)) + guideOSText(language, "月", "月", ""))
-                                .font(.system(size: 9, weight: .bold))
+                                .kxScaledFont(9, weight: .bold)
                                 .foregroundStyle(isCurrent ? KXColor.accent : .secondary)
                         }
                         .frame(maxWidth: .infinity)

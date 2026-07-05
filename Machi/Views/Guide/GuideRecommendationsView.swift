@@ -55,7 +55,7 @@ struct GuideRecommendationsView: View {
                     Button { router.open(.guideProduct(slug: item.slug)) } label: {
                         HStack(alignment: .top, spacing: 10) {
                             Image(systemName: item.isService ? "sparkles" : "doc.text.fill")
-                                .font(.system(size: 13, weight: .bold))
+                                .kxScaledFont(13, weight: .bold)
                                 .foregroundStyle(.white)
                                 .frame(width: 30, height: 30)
                                 .background(item.isService ? Color.purple : KXColor.accent, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
@@ -134,7 +134,7 @@ struct GuideOSRecommendationStrip: View {
                                 VStack(alignment: .leading, spacing: KXSpacing.sm) {
                                     HStack(spacing: 7) {
                                         Image(systemName: item.isService ? "sparkles" : "doc.text.fill")
-                                            .font(.system(size: 13, weight: .bold))
+                                            .kxScaledFont(13, weight: .bold)
                                             .foregroundStyle(.white)
                                             .frame(width: 28, height: 28)
                                             .background(item.isService ? Color.purple : KXColor.accent, in: RoundedRectangle(cornerRadius: 9, style: .continuous))

@@ -75,7 +75,7 @@ struct ChatEmojiPanel: View {
 
     private func emojiButton(_ e: String) -> some View {
         Button { tap(e) } label: {
-            Text(e).font(.system(size: 30)).frame(width: 40, height: 40)
+            Text(e).kxScaledFont(30).frame(width: 40, height: 40)
         }
         .buttonStyle(.plain)
     }

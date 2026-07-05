@@ -199,7 +199,7 @@ private struct GuideReminderDateCard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 11) {
                 Image(systemName: icon)
-                    .font(.system(size: 18, weight: .bold))
+                    .kxScaledFont(18, weight: .bold)
                     .foregroundStyle(.white)
                     .frame(width: 40, height: 40)
                     .background(tint, in: RoundedRectangle(cornerRadius: 12, style: .continuous))

@@ -191,7 +191,7 @@ struct JLPTStreakBadge: View {
                 .foregroundStyle(KXColor.livingMuted)
             if today {
                 Image(systemName: "checkmark")
-                    .font(.system(size: 9, weight: .black))
+                    .kxScaledFont(9, weight: .black)
                     .foregroundStyle(KXColor.livingWarm)
             }
         }
@@ -267,7 +267,7 @@ struct JLPTWeekStrip: View {
                     .overlay {
                         if day.done {
                             Image(systemName: "checkmark")
-                                .font(.system(size: 10, weight: .black))
+                                .kxScaledFont(10, weight: .black)
                                 .foregroundStyle(KXColor.livingSurface)
                         }
                     }
@@ -312,7 +312,7 @@ struct JLPTCountdownBar: View {
             Spacer(minLength: 0)
             HStack(alignment: .firstTextBaseline, spacing: KXSpacing.xxs) {
                 Text("\(max(0, countdown.daysRemaining ?? 0))")
-                    .font(.system(size: 30, weight: .black, design: .rounded))
+                    .kxScaledFont(30, weight: .black, design: .rounded)
                     .foregroundStyle(KXColor.livingAccent)
                 Text(guideText(language, "天", "日", "d"))
                     .font(.caption.weight(.bold))
@@ -628,7 +628,7 @@ struct JLPTQuestionCard: View {
                         Text(guideText(language, "AI 讲解", "AI 解説", "AI explanation"))
                             .font(.caption.weight(.bold))
                         if !isMember {
-                            Image(systemName: "lock.fill").font(.system(size: 9, weight: .bold))
+                            Image(systemName: "lock.fill").kxScaledFont(9, weight: .bold)
                         }
                     }
                     .foregroundStyle(KXColor.rankViolet)
@@ -824,7 +824,7 @@ struct JLPTStateView: View {
                     ProgressView().controlSize(.large).tint(KXColor.livingAccent)
                 } else {
                     Image(systemName: systemImage)
-                        .font(.system(size: 26, weight: .semibold))
+                        .kxScaledFont(26, weight: .semibold)
                         .foregroundStyle(KXColor.livingAccent)
                 }
             }

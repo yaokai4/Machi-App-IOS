@@ -2320,7 +2320,7 @@ struct AboutKaiXView: View {
     var body: some View {
         SettingsFormPage(title: L("aboutKaiX", language)) {
             Text("Machi")
-                .font(.system(size: 38, weight: .black, design: .rounded))
+                .kxScaledFont(38, weight: .black, design: .rounded)
             Text(L("aboutSubtitle", language))
                 .foregroundStyle(.secondary)
             Text("\(L("version", language)) \(KaiXBackend.appVersionDisplay)")

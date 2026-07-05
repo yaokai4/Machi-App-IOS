@@ -237,7 +237,7 @@ struct GuideAIChatView: View {
             if viewModel.membershipActive {
                 HStack(spacing: 5) {
                     Image(systemName: "crown.fill")
-                        .font(.system(size: 10))
+                        .kxScaledFont(10)
                         .foregroundStyle(KXColor.livingAccent)
                     Text(guideText(language, "Machi 会员 · 更高每日额度", "Machi メンバー · 1日の枠アップ", "Machi member · higher daily limit"))
                         .font(.caption2.weight(.semibold))
@@ -249,7 +249,7 @@ struct GuideAIChatView: View {
                 let low = remaining <= 2
                 HStack(spacing: 6) {
                     Image(systemName: low ? "bolt.slash.fill" : "bolt.fill")
-                        .font(.system(size: 10))
+                        .kxScaledFont(10)
                         .foregroundStyle(low ? KXColor.livingWarm : KXColor.livingAccent)
                     Text(guideText(language,
                                    "今日还可咨询 \(remaining) 次",
@@ -331,9 +331,9 @@ struct GuideAIChatView: View {
                             } label: {
                                 HStack(spacing: KXSpacing.xs) {
                                     if locked {
-                                        Image(systemName: "lock.fill").font(.system(size: 10))
+                                        Image(systemName: "lock.fill").kxScaledFont(10)
                                     } else if on {
-                                        Image(systemName: "checkmark").font(.system(size: 10, weight: .bold))
+                                        Image(systemName: "checkmark").kxScaledFont(10, weight: .bold)
                                     }
                                     Text(ability.title).font(.caption.weight(.semibold))
                                 }
@@ -436,7 +436,7 @@ struct GuideAIChatView: View {
                         .tint(.white)
                 } else {
                     Image(systemName: "paperplane.fill")
-                        .font(.system(size: 17, weight: .semibold))
+                        .kxScaledFont(17, weight: .semibold)
                         .foregroundStyle(.white)
                         .offset(x: -1, y: 1)
                 }

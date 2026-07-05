@@ -192,7 +192,7 @@ struct OnboardingView: View {
         } label: {
             HStack(spacing: 14) {
                 Image(systemName: option.icon)
-                    .font(.system(size: 18, weight: .bold))
+                    .kxScaledFont(18, weight: .bold)
                     .foregroundStyle(KXColor.accent)
                     .frame(width: 44, height: 44)
                     .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -222,7 +222,7 @@ struct OnboardingView: View {
         VStack(spacing: 24) {
             Spacer()
             Image(systemName: card.icon)
-                .font(.system(size: 60, weight: .bold))
+                .kxScaledFont(60, weight: .bold)
                 .foregroundStyle(.white)
                 .frame(width: 124, height: 124)
                 .background(

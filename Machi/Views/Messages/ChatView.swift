@@ -1180,7 +1180,7 @@ private struct ChatEmptyView: View {
         VStack(spacing: KXSpacing.md) {
             Spacer()
             Image(systemName: "bubble.left.and.bubble.right")
-                .font(.system(size: 38, weight: .light))
+                .kxScaledFont(38, weight: .light)
                 .foregroundStyle(KXColor.livingMuted.opacity(0.5))
             Text(language == .ja ? "まだメッセージはありません。話しかけてみましょう。"
                  : language == .en ? "No messages yet — say hello."
@@ -1203,7 +1203,7 @@ private struct ChatLoadErrorView: View {
         VStack(spacing: KXSpacing.md) {
             Spacer()
             Image(systemName: "wifi.exclamationmark")
-                .font(.system(size: 34, weight: .light))
+                .kxScaledFont(34, weight: .light)
                 .foregroundStyle(.secondary)
             Text(language == .ja ? "メッセージを読み込めませんでした"
                  : language == .en ? "Couldn't load messages" : "消息暂时加载失败")
@@ -1239,7 +1239,7 @@ private struct ChatUploadProgressRing: View {
                 .stroke(.white, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                 .rotationEffect(.degrees(-90))
             Text("\(Int(clamped * 100))%")
-                .font(.system(size: 11, weight: .heavy))
+                .kxScaledFont(11, weight: .heavy)
                 .foregroundStyle(.white)
                 .monospacedDigit()
         }

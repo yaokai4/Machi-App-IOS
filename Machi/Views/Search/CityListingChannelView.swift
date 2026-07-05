@@ -806,7 +806,7 @@ struct CityListingChannelView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .black))
+                    .kxScaledFont(9, weight: .black)
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal, KXSpacing.md)
@@ -870,7 +870,7 @@ struct CityListingChannelView: View {
         } label: {
             VStack(spacing: 6) {
                 Image(systemName: icon)
-                    .font(.system(size: 19, weight: .semibold))
+                    .kxScaledFont(19, weight: .semibold)
                     .frame(height: 22)
                 Text(title)
                     .font(.caption2.weight(selected ? .heavy : .semibold))
@@ -927,7 +927,7 @@ struct CityListingChannelView: View {
                     .overlay(Circle().stroke(sheetFilterCount > 0 ? Color.clear : KXColor.livingInk.opacity(0.08), lineWidth: 0.8))
                 if sheetFilterCount > 0 {
                     Text("\(sheetFilterCount)")
-                        .font(.system(size: 10, weight: .black))
+                        .kxScaledFont(10, weight: .black)
                         .foregroundStyle(KXColor.livingAccent)
                         .frame(minWidth: 17, minHeight: 17)
                         .background(Color.white, in: Circle())

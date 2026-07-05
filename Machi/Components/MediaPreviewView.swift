@@ -66,7 +66,7 @@ struct MediaPreviewView: View {
         } else {
             VStack(spacing: KXSpacing.lg) {
                 Image(systemName: media.placeholderSymbol.isEmpty ? "photo.fill" : media.placeholderSymbol)
-                    .font(.system(size: 72, weight: .bold))
+                    .kxScaledFont(72, weight: .bold)
                 Text(media.placeholderTitle.isEmpty ? L("mediaPreview", language) : media.placeholderTitle)
                     .font(.title2.weight(.semibold))
             }

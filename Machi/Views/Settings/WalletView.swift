@@ -123,7 +123,7 @@ struct WalletView: View {
     private var needsLoginCard: some View {
         VStack(spacing: 10) {
             Image(systemName: "person.crop.circle.badge.exclamationmark")
-                .font(.system(size: 30)).foregroundStyle(.secondary)
+                .kxScaledFont(30).foregroundStyle(.secondary)
             Text(wl("登录后可使用 Machi 币钱包", "Sign in to use your wallet", "ログインするとウォレットを利用できます"))
                 .font(.headline).multilineTextAlignment(.center)
             Text(wl("登录后即可查看余额、充值和消费记录。", "Sign in to see your balance, top up, and view activity.", "ログインすると残高の確認・チャージ・履歴の表示ができます。"))
@@ -143,7 +143,7 @@ struct WalletView: View {
 
     private func stateCard(icon: String, title: String, message: String) -> some View {
         VStack(spacing: 10) {
-            Image(systemName: icon).font(.system(size: 30)).foregroundStyle(.secondary)
+            Image(systemName: icon).kxScaledFont(30).foregroundStyle(.secondary)
             Text(title).font(.headline).multilineTextAlignment(.center)
             Text(message).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
             Button {

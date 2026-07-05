@@ -326,7 +326,7 @@ private struct KXStayCoverArtwork: View {
                 .offset(x: 118, y: 76)
             VStack(spacing: 9) {
                 Image(systemName: isStay ? "bed.double.fill" : "house.fill")
-                    .font(.system(size: 30, weight: .semibold))
+                    .kxScaledFont(30, weight: .semibold)
                     .foregroundStyle(KXColor.livingAccent.opacity(0.78))
                 Text(isStay ? "精选住宿" : "精选房源")
                     .font(.caption.weight(.black))

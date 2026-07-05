@@ -268,7 +268,7 @@ struct GuideJLPTWordCard: View {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 // 日文大字 — the star of the card.
                 Text(word.word)
-                    .font(.system(size: 26, weight: .bold))
+                    .kxScaledFont(26, weight: .bold)
                     .foregroundStyle(KXColor.livingInk)
                 if revealed, let reading = word.reading, !reading.isEmpty {
                     Text(reading)
@@ -389,7 +389,7 @@ struct GuideJLPTVocabQuizView: View {
                         .foregroundStyle(KXColor.livingMuted)
                     // 日文大字题干.
                     Text(q.stem)
-                        .font(.system(size: 28, weight: .bold))
+                        .kxScaledFont(28, weight: .bold)
                         .foregroundStyle(KXColor.livingInk)
                     if let reading = q.reading, !reading.isEmpty {
                         Text(reading)

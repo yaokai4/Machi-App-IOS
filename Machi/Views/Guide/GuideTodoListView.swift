@@ -113,7 +113,7 @@ struct GuideOSTodoCard: View {
                     HStack(spacing: 7) {
                         Button { toggleStep(step) } label: {
                             Image(systemName: step.done ? "checkmark.circle.fill" : "circle")
-                                .font(.system(size: 16, weight: .semibold))
+                                .kxScaledFont(16, weight: .semibold)
                                 .foregroundStyle(step.done ? KXColor.accent : Color.secondary.opacity(0.6))
                         }
                         .buttonStyle(.fullArea)
@@ -227,7 +227,7 @@ struct GuideOSTodoCard: View {
         HStack(alignment: .top, spacing: 10) {
             Button(action: onComplete) {
                 Image(systemName: todo.isDone ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 23, weight: .semibold))
+                    .kxScaledFont(23, weight: .semibold)
                     .foregroundStyle(todo.isDone ? KXColor.accent : tint.opacity(0.65))
                     .frame(width: 36, height: 36)
             }
@@ -561,7 +561,7 @@ private struct GuideSwipeDeleteTodoRow<Content: View>: View {
             } label: {
                 VStack(spacing: 5) {
                     Image(systemName: isDeleting ? "hourglass" : "trash.fill")
-                        .font(.system(size: 18, weight: .bold))
+                        .kxScaledFont(18, weight: .bold)
                     Text(isDeleting ? guideOSText(language, "删除中", "削除中", "Deleting") : guideOSText(language, "删除", "削除", "Delete"))
                         .font(.caption2.weight(.black))
                 }
@@ -664,7 +664,7 @@ private struct GuideTodoDetailHeroCard: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: KXSpacing.md) {
                 Image(systemName: todo.isDone ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 30, weight: .semibold))
+                    .kxScaledFont(30, weight: .semibold)
                     .foregroundStyle(todo.isDone ? KXColor.accent : tint.opacity(0.75))
                     .frame(width: 44, height: 44)
                     .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 16, style: .continuous))

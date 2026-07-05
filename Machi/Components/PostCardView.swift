@@ -616,7 +616,7 @@ private struct OfficialSourceChip: View {
 
     var body: some View {
         Text(title)
-            .font(.system(size: 9, weight: .bold))
+            .kxScaledFont(9, weight: .bold)
             .foregroundStyle(KXColor.official)
             .lineLimit(1)
             .padding(.horizontal, 5)
@@ -734,7 +734,7 @@ private struct MetricButton: View {
         Button(action: action) {
             HStack(spacing: 5) {
                 Image(systemName: icon)
-                    .font(.system(size: 15, weight: .regular))
+                    .kxScaledFont(15, weight: .regular)
                     .symbolRenderingMode(.hierarchical)
                     // Smoothly cross-fade the heart/bookmark glyph
                     // when the user toggles it instead of snapping.

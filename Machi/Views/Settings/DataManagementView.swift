@@ -223,7 +223,7 @@ struct DataManagementView: View {
                         .frame(width: 98, height: 98)
 
                     Image(systemName: cache.isWorking ? "arrow.triangle.2.circlepath" : "externaldrive.connected.to.line.below.fill")
-                        .font(.system(size: 22, weight: .semibold))
+                        .kxScaledFont(22, weight: .semibold)
                         .foregroundStyle(KXColor.accent)
                         .frame(width: 48, height: 48)
                         .background(.ultraThinMaterial, in: Circle())
@@ -383,7 +383,7 @@ struct DataManagementView: View {
         } label: {
             HStack(spacing: KXSpacing.md) {
                 Image(systemName: target.icon)
-                    .font(.system(size: 16, weight: .bold))
+                    .kxScaledFont(16, weight: .bold)
                     .foregroundStyle(target.tint)
                     .frame(width: 38, height: 38)
                     .background(target.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
@@ -525,7 +525,7 @@ private struct StorageMetricRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: KXSpacing.md) {
             Image(systemName: metric.icon)
-                .font(.system(size: 17, weight: .bold))
+                .kxScaledFont(17, weight: .bold)
                 .foregroundStyle(metric.tint)
                 .frame(width: 42, height: 42)
                 .background(metric.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))

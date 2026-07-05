@@ -130,7 +130,7 @@ struct KXSplashView: View {
 
                     VStack(spacing: KXSpacing.sm) {
                         Text("Machi")
-                            .font(.system(size: 32, weight: .black, design: .rounded))
+                            .kxScaledFont(32, weight: .black, design: .rounded)
                             .foregroundStyle(.primary)
                         Text(L("splashTagline", language))
                             .font(.subheadline.weight(.semibold))
@@ -220,7 +220,7 @@ private struct KXSplashLogoMark: View {
                 }
                 .overlay(
                     Text("M")
-                        .font(.system(size: 38, weight: .black, design: .rounded))
+                        .kxScaledFont(38, weight: .black, design: .rounded)
                         .foregroundStyle(Color(red: 0.122, green: 0.541, blue: 0.424))
                 )
                 .shadow(color: KXColor.accent.opacity(0.22), radius: 24, y: 12)
@@ -274,7 +274,7 @@ struct ErrorStateView: View {
     var body: some View {
         VStack(spacing: KXSpacing.md) {
             Image(systemName: systemImage)
-                .font(.system(size: 26, weight: .semibold))
+                .kxScaledFont(26, weight: .semibold)
                 .foregroundStyle(KXColor.accent)
                 .frame(width: 56, height: 56)
                 .background(KXColor.accent.opacity(0.10), in: Circle())
@@ -441,7 +441,7 @@ struct EmptyStateView: View {
                     .padding(.bottom, KXSpacing.xs)
             } else {
                 Image(systemName: systemImage)
-                    .font(.system(size: 24, weight: .semibold))
+                    .kxScaledFont(24, weight: .semibold)
                     .foregroundStyle(.secondary)
                     .frame(width: 52, height: 52)
                     .background(KXColor.softBackground, in: Circle())
@@ -472,7 +472,7 @@ struct KXStatePanel: View {
     var body: some View {
         VStack(spacing: KXSpacing.sm) {
             Image(systemName: systemImage)
-                .font(.system(size: 26, weight: .semibold))
+                .kxScaledFont(26, weight: .semibold)
                 .foregroundStyle(accent)
                 .frame(width: 52, height: 52)
                 .background(accent.opacity(0.10), in: Circle())

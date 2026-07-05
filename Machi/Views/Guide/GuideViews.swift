@@ -551,7 +551,7 @@ struct GuideArticleDetailView: View {
                                 Text(sourceLabel ?? guideText(language, "来源", "出典", "Source"))
                                     .font(.caption.weight(.semibold))
                                     .lineLimit(1)
-                                Image(systemName: "arrow.up.right").font(.system(size: 9, weight: .bold))
+                                Image(systemName: "arrow.up.right").kxScaledFont(9, weight: .bold)
                             }
                             .foregroundStyle(KXColor.accent)
                             .padding(.horizontal, 9)
@@ -1700,7 +1700,7 @@ private struct GuideAIEntryCard: View {
                                 .font(.title3.weight(.bold))
                                 .foregroundStyle(KXColor.livingInk)
                             Text("Beta")
-                                .font(.system(size: 10, weight: .bold))
+                                .kxScaledFont(10, weight: .bold)
                                 .foregroundStyle(KXColor.livingAccent)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, KXSpacing.xxs)
@@ -1795,7 +1795,7 @@ private struct GuideLibraryDualEntry: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 9) {
                 Image(systemName: icon)
-                    .font(.system(size: 25, weight: .bold))
+                    .kxScaledFont(25, weight: .bold)
                     .foregroundStyle(.white)
                 Text(title)
                     .font(.headline.weight(.bold))
@@ -2448,7 +2448,7 @@ struct GuideProductCard: View {
         if let label,
            !(product.isFree || product.isComingSoon || product.isAppointmentOnly == true || product.isPriceHidden == true) {
             HStack(spacing: KXSpacing.xs) {
-                Image(systemName: "checkmark.seal.fill").font(.system(size: 9)).foregroundStyle(.blue)
+                Image(systemName: "checkmark.seal.fill").kxScaledFont(9).foregroundStyle(.blue)
                 Text(isMember
                      ? guideText(language, "会员价 \(label)", "会員価格 \(label)", "Member \(label)")
                      : guideText(language, "会员价 \(label)", "会員価格 \(label)", "Member price \(label)"))

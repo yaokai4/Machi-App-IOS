@@ -721,7 +721,7 @@ private struct CurrentRegionCard: View {
         Button(action: onChange) {
             HStack(spacing: KXSpacing.md) {
                 Text(region?.flagEmoji ?? "⌖")
-                    .font(.system(size: 28))
+                    .kxScaledFont(28)
                     .frame(width: 46, height: 46)
                     .background(KXColor.softBackground, in: Circle())
 
@@ -886,7 +886,7 @@ private struct DiscoverCategoryCell: View {
         VStack(alignment: .leading, spacing: KXSpacing.md) {
             HStack(alignment: .top) {
                 Image(systemName: category.icon)
-                    .font(.system(size: 19, weight: .semibold))
+                    .kxScaledFont(19, weight: .semibold)
                     .foregroundStyle(.white)
                     .frame(width: 44, height: 44)
                     .background(
@@ -939,7 +939,7 @@ private struct DiscoverCategoryCell: View {
     private var normalCard: some View {
         HStack(spacing: KXSpacing.sm) {
             Image(systemName: category.icon)
-                .font(.system(size: 18, weight: .bold))
+                .kxScaledFont(18, weight: .bold)
                 .foregroundStyle(category.tint.opacity(0.9))
                 .frame(width: 36, height: 36)
                 .background(category.tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
@@ -971,7 +971,7 @@ private struct DiscoverMoreCell: View {
     var body: some View {
         HStack(spacing: KXSpacing.sm) {
             Image(systemName: "ellipsis.circle")
-                .font(.system(size: 18, weight: .bold))
+                .kxScaledFont(18, weight: .bold)
                 .foregroundStyle(KXColor.accent)
                 .frame(width: 36, height: 36)
                 .background(KXColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 11, style: .continuous))

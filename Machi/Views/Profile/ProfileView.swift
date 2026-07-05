@@ -103,7 +103,7 @@ struct ProfileView: View {
         VStack(spacing: KXSpacing.lg) {
             Spacer()
             Image(systemName: "person.crop.circle.badge.plus")
-                .font(.system(size: 58, weight: .semibold))
+                .kxScaledFont(58, weight: .semibold)
                 .foregroundStyle(KXColor.accent)
             Text(L("guestProfileTitle", language))
                 .font(.title3.weight(.bold))

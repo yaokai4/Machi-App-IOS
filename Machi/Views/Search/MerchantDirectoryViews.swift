@@ -251,7 +251,7 @@ private struct ListingCoverArtwork: View {
                 .offset(x: 110, y: 56)
             VStack(spacing: KXSpacing.sm) {
                 Image(systemName: placeholderIcon)
-                    .font(.system(size: 28, weight: .semibold))
+                    .kxScaledFont(28, weight: .semibold)
                     .foregroundStyle(KXColor.livingWarm.opacity(0.78))
                 Text(category.isEmpty ? "本地精选" : KXListingCopy.categoryLabel(category, .zh))
                     .font(.caption.weight(.black))

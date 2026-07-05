@@ -180,7 +180,7 @@ struct ContentTypePickerView: View {
                     Circle()
                         .fill(spec.tint.opacity(isCurrent ? 0.20 : 0.12))
                     Image(systemName: spec.icon)
-                        .font(.system(size: 20, weight: .semibold))
+                        .kxScaledFont(20, weight: .semibold)
                         .foregroundStyle(spec.tint)
                 }
                 .frame(width: 48, height: 48)

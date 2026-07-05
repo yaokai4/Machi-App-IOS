@@ -201,7 +201,7 @@ private struct GuideLibraryMaterialRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: KXSpacing.md) {
             Image(systemName: "doc.text.fill")
-                .font(.system(size: 17, weight: .bold))
+                .kxScaledFont(17, weight: .bold)
                 .foregroundStyle(KXColor.accent)
                 .frame(width: 40, height: 40)
                 .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -244,7 +244,7 @@ private struct GuideLibraryServiceRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: KXSpacing.md) {
             Image(systemName: "bag.fill")
-                .font(.system(size: 17, weight: .bold))
+                .kxScaledFont(17, weight: .bold)
                 .foregroundStyle(.purple)
                 .frame(width: 40, height: 40)
                 .background(Color.purple.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -294,7 +294,7 @@ private struct GuideLibraryOrderRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: KXSpacing.md) {
             Image(systemName: order.isTopUp ? "creditcard.fill" : "doc.text.fill")
-                .font(.system(size: 17, weight: .bold))
+                .kxScaledFont(17, weight: .bold)
                 .foregroundStyle(order.isTopUp ? Color.orange : KXColor.accent)
                 .frame(width: 40, height: 40)
                 .background((order.isTopUp ? Color.orange : KXColor.accent).opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))

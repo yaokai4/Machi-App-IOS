@@ -306,7 +306,7 @@ struct PersonalWorkbenchView: View {
     private func affairTile(_ affair: Affair) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Image(systemName: affair.icon)
-                .font(.system(size: 20, weight: .bold))
+                .kxScaledFont(20, weight: .bold)
                 .foregroundStyle(.white)
                 .frame(width: 42, height: 42)
                 .background(affair.tint, in: RoundedRectangle(cornerRadius: 14, style: .continuous))

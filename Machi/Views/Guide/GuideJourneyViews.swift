@@ -135,7 +135,7 @@ struct GuideJourneyCard: View {
             VStack(alignment: .leading, spacing: 9) {
                 HStack {
                     Image(systemName: guideJourneySymbol(journey.icon))
-                        .font(.system(size: 18, weight: .bold))
+                        .kxScaledFont(18, weight: .bold)
                         .foregroundStyle(.white)
                         .frame(width: 40, height: 40)
                         .background(
@@ -509,7 +509,7 @@ struct GuideJourneyDetailView: View {
         return VStack(alignment: .leading, spacing: KXSpacing.md) {
             HStack(spacing: KXSpacing.md) {
                 Image(systemName: guideJourneySymbol(journey.icon))
-                    .font(.system(size: 22, weight: .bold))
+                    .kxScaledFont(22, weight: .bold)
                     .foregroundStyle(.white)
                     .frame(width: 54, height: 54)
                     .background(
@@ -561,7 +561,7 @@ struct GuideJourneyDetailView: View {
         return VStack(alignment: .leading, spacing: KXSpacing.md) {
             HStack(spacing: KXSpacing.md) {
                 Image(systemName: "party.popper.fill")
-                    .font(.system(size: 20, weight: .bold))
+                    .kxScaledFont(20, weight: .bold)
                     .foregroundStyle(.white)
                     .frame(width: 46, height: 46)
                     .background(
@@ -635,7 +635,7 @@ private struct GuideJourneyStepRow: View {
                     withAnimation(.spring(response: 0.32, dampingFraction: 0.62)) { onToggle() }
                 } label: {
                     Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 24, weight: .semibold))
+                        .kxScaledFont(24, weight: .semibold)
                         .foregroundStyle(isDone ? tint : Color.secondary.opacity(0.5))
                         .scaleEffect(isDone ? 1.08 : 1)
                         .frame(width: 38, height: 38)
@@ -829,7 +829,7 @@ struct GuideJourneyNextStepCard: View {
             Button { router.open(.guideJourney(key: key)) } label: {
                 HStack(spacing: KXSpacing.md) {
                     Image(systemName: "signpost.right.fill")
-                        .font(.system(size: 18, weight: .bold))
+                        .kxScaledFont(18, weight: .bold)
                         .foregroundStyle(.white)
                         .frame(width: 42, height: 42)
                         .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 13, style: .continuous))

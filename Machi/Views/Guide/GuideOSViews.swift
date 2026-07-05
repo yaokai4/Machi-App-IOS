@@ -78,7 +78,7 @@ struct GuideOSActionTile: View {
         Button(action: action) {
             HStack(spacing: 9) {
                 Image(systemName: icon)
-                    .font(.system(size: 16, weight: .bold))
+                    .kxScaledFont(16, weight: .bold)
                     .foregroundStyle(.white)
                     .frame(width: 32, height: 32)
                     .background(tint, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -116,7 +116,7 @@ struct GuideOSQuickRow: View {
                 Button(action: item.action) {
                     HStack(spacing: 10) {
                         Image(systemName: item.icon)
-                            .font(.system(size: 19, weight: .semibold))
+                            .kxScaledFont(19, weight: .semibold)
                             .frame(width: 30, height: 30)
                         Text(item.title)
                             .font(.caption.weight(.bold))
@@ -537,7 +537,7 @@ struct GuideManageView: View {
                             Button(action: item.action) {
                                 VStack(alignment: .leading, spacing: 10) {
                                     Image(systemName: item.icon)
-                                        .font(.system(size: 21, weight: .bold))
+                                        .kxScaledFont(21, weight: .bold)
                                         .foregroundStyle(.white)
                                         .frame(width: 42, height: 42)
                                         .background(item.tint, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -809,7 +809,7 @@ private struct GuideContractRow: View {
         VStack(alignment: .leading, spacing: KXSpacing.md) {
             HStack(alignment: .top, spacing: 11) {
                 Image(systemName: "doc.text.fill")
-                    .font(.system(size: 18, weight: .bold))
+                    .kxScaledFont(18, weight: .bold)
                     .foregroundStyle(KXColor.accent)
                     .frame(width: 42, height: 42)
                     .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
@@ -995,7 +995,7 @@ private struct GuideDocumentRow: View {
         VStack(alignment: .leading, spacing: KXSpacing.md) {
             HStack(alignment: .top, spacing: 11) {
                 Image(systemName: "person.text.rectangle.fill")
-                    .font(.system(size: 18, weight: .bold))
+                    .kxScaledFont(18, weight: .bold)
                     .foregroundStyle(.cyan)
                     .frame(width: 42, height: 42)
                     .background(Color.cyan.opacity(0.12), in: RoundedRectangle(cornerRadius: 13, style: .continuous))

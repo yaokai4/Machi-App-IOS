@@ -23,6 +23,9 @@ struct ErrorBanner: View {
                     .frame(width: 28, height: 28)
                     .background(item.state.tint.opacity(0.12))
                     .clipShape(Circle())
+                    // Decorative — the title + message text already carry the
+                    // meaning; don't make VoiceOver read a bare symbol name.
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                     Text(item.state.title)
