@@ -947,7 +947,7 @@ struct ListingReviewsSectionView: View {
     private var writeSheet: some View {
         NavigationStack {
             Form {
-                Section("评分") {
+                Section(KXListingCopy.pickText(language, "评分", "評価", "Rating")) {
                     HStack(spacing: KXSpacing.sm) {
                         ForEach(1...5, id: \.self) { star in
                             Button {

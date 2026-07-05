@@ -101,7 +101,7 @@ struct AccountPasswordSettingsView: View {
                         .kxInputField()
                 } else {
                     HStack(spacing: 10) {
-                        TextField("输入当前邮箱验证码", text: $passwordCode)
+                        TextField(settingsText(language, "输入当前邮箱验证码", "現在のメール認証コードを入力", "Enter your current email code"), text: $passwordCode)
                             .keyboardType(.numberPad)
                             .kxInputField()
                         Button {
