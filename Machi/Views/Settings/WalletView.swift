@@ -254,8 +254,8 @@ struct WalletView: View {
             }
             .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
             .padding(14)
-            .background(RoundedRectangle(cornerRadius: 14).fill(KXColor.cardBackground))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(KXColor.separator, lineWidth: 0.8))
+            .background(RoundedRectangle(cornerRadius: KXRadius.md).fill(KXColor.cardBackground))
+            .overlay(RoundedRectangle(cornerRadius: KXRadius.md).stroke(KXColor.separator, lineWidth: 0.8))
         }
         .buttonStyle(.plain)
         // Also disabled while a paid charge awaits server confirmation —
@@ -276,7 +276,7 @@ struct WalletView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: 14).fill(KXColor.softBackground))
+        .background(RoundedRectangle(cornerRadius: KXRadius.md).fill(KXColor.softBackground))
     }
 
     private var ledgerSection: some View {
@@ -300,8 +300,8 @@ struct WalletView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: 14).fill(KXColor.cardBackground))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(KXColor.separator, lineWidth: 0.8))
+        .background(RoundedRectangle(cornerRadius: KXRadius.md).fill(KXColor.cardBackground))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.md).stroke(KXColor.separator, lineWidth: 0.8))
     }
 
     private func ledgerLabel(_ entryType: String) -> String {

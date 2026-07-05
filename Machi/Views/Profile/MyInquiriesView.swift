@@ -147,7 +147,7 @@ struct MyInquiriesView: View {
                     }
                 }
                 .padding(10)
-                .background(KXColor.softBackground.opacity(0.7), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(KXColor.softBackground.opacity(0.7), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             }
 
             if !cleanMessage.isEmpty {

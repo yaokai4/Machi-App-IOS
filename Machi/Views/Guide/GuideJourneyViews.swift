@@ -433,7 +433,7 @@ struct GuideJourneyDetailView: View {
                         .buttonStyle(.fullArea)
         .contentShape(Rectangle())
                         .foregroundStyle(.white)
-                        .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .background(KXColor.accent, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                         .disabled(model.isStartingPlan)
 
                         Button { router.open(.guidePlan) } label: {
@@ -445,7 +445,7 @@ struct GuideJourneyDetailView: View {
                         .buttonStyle(.fullArea)
         .contentShape(Rectangle())
                         .foregroundStyle(KXColor.accent)
-                        .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                     }
                     if let sync = model.syncMessage, !sync.isEmpty {
                         Text(sync)
@@ -592,7 +592,7 @@ struct GuideJourneyDetailView: View {
                 .buttonStyle(.fullArea)
                 .contentShape(Rectangle())
                 .foregroundStyle(.white)
-                .background(tint, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(tint, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
 
                 Button {
                     withAnimation { showCompletionCard = false }
@@ -605,7 +605,7 @@ struct GuideJourneyDetailView: View {
                 .buttonStyle(.fullArea)
                 .contentShape(Rectangle())
                 .foregroundStyle(.secondary)
-                .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             }
         }
         .padding(15)

@@ -302,8 +302,8 @@ struct ProfileView: View {
                     .foregroundStyle(.tertiary)
             }
             .padding(KXSpacing.lg)
-            .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator.opacity(0.6), lineWidth: 0.8))
+            .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous).stroke(KXColor.separator.opacity(0.6), lineWidth: 0.8))
         }
         .buttonStyle(.fullArea)
         .contentShape(Rectangle())

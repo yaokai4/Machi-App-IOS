@@ -104,7 +104,7 @@ struct KXStayListingCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 ZStack(alignment: .topTrailing) {
                     KXStayCoverArtwork(listing: listing, isStay: variant == .stay)
-                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
                     if coverIsVideo {
                         Image(systemName: "play.fill")
                             .font(.subheadline.weight(.black))
@@ -209,7 +209,7 @@ struct KXStayListingCard: View {
                                     .foregroundStyle(KXColor.livingMuted)
                                     .padding(.horizontal, 7)
                                     .padding(.vertical, KXSpacing.xs)
-                                    .background(KXColor.livingSoft, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                    .background(KXColor.livingSoft, in: RoundedRectangle(cornerRadius: KXRadius.xs, style: .continuous))
                             }
                             // 闪耀标签：星域 partner 自定义标签，金色描边小药丸。
                             ForEach(Array(listing.machiBadgeList.prefix(3)), id: \.self) { badge in
@@ -218,8 +218,8 @@ struct KXStayListingCard: View {
                                     .foregroundStyle(KXColor.rankGold)
                                     .padding(.horizontal, 7)
                                     .padding(.vertical, KXSpacing.xs)
-                                    .background(KXColor.rankGold.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(KXColor.rankGold.opacity(0.35), lineWidth: 0.7))
+                                    .background(KXColor.rankGold.opacity(0.14), in: RoundedRectangle(cornerRadius: KXRadius.xs, style: .continuous))
+                                    .overlay(RoundedRectangle(cornerRadius: KXRadius.xs, style: .continuous).stroke(KXColor.rankGold.opacity(0.35), lineWidth: 0.7))
                             }
                         }
                         .padding(.top, KXSpacing.xxs)

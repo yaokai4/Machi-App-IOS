@@ -383,9 +383,9 @@ private struct SettingsInlineStat: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, KXSpacing.sm)
-        .background(KXColor.softBackground.opacity(0.86), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(KXColor.softBackground.opacity(0.86), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
                 .stroke(KXColor.separator.opacity(0.45), lineWidth: 0.55)
         }
     }

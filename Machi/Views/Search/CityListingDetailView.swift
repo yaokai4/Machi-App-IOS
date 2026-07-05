@@ -202,11 +202,11 @@ struct ListingBookingSection: View {
             .padding(.horizontal, 14).padding(.vertical, 10)
             .foregroundStyle(chipForeground(booked: booked, full: full))
             .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
                     .fill(booked ? AnyShapeStyle(KXColor.livingAccent.opacity(0.14)) : AnyShapeStyle(KXColor.livingSurface))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
                     .stroke(booked ? KXColor.livingAccent : (full ? Color.secondary.opacity(0.25) : KXColor.livingAccent.opacity(0.45)),
                             lineWidth: 1.2)
             )
@@ -584,7 +584,7 @@ struct CityListingDetailView: View {
                     .minimumScaleFactor(0.7)
                 if ratingCount > 0 {
                     HStack(spacing: 3) {
-                        Image(systemName: "star.fill").kxScaledFont(10, weight: .black).foregroundStyle(.orange)
+                        Image(systemName: "star.fill").kxScaledFont(10, weight: .black).foregroundStyle(KXColor.rankGold)
                         Text(String(format: "%.1f", ratingAvg)).font(.caption2.weight(.black)).foregroundStyle(KXColor.livingInk)
                         Text("(\(ratingCount))").font(.caption2.weight(.semibold)).foregroundStyle(KXColor.livingMuted)
                     }
@@ -736,7 +736,7 @@ struct CityListingDetailView: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(KXSpacing.md)
-                            .background(KXColor.livingSoft.opacity(0.5), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .background(KXColor.livingSoft.opacity(0.5), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                         }
                     }
                 }
@@ -2103,7 +2103,7 @@ private struct ListingIntakeSheet: View {
                             .lineLimit(3...6)
                             .font(.subheadline.weight(.semibold))
                             .padding(KXSpacing.md)
-                            .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                     }
                     .padding(KXSpacing.md)
                     .background(KXColor.softBackground.opacity(0.62), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -2163,7 +2163,7 @@ private struct ListingIntakeSheet: View {
                 .datePickerStyle(.compact)
                 .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
                 .padding(.horizontal, KXSpacing.md)
-                .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 // Seed the stored value so a required date validates even if the
                 // user accepts the default without opening the picker.
                 .onAppear {
@@ -2176,7 +2176,7 @@ private struct ListingIntakeSheet: View {
                     .font(.subheadline.weight(.semibold))
                     .padding(.horizontal, KXSpacing.md)
                     .frame(minHeight: 42)
-                    .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             } else {
                 Picker(ListingIntakeLocalizer.text(field.label, language), selection: binding(for: field)) {
                     Text(ListingIntakeLocalizer.text("请选择", language)).tag("")
@@ -2188,7 +2188,7 @@ private struct ListingIntakeSheet: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, KXSpacing.sm)
                 .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
-                .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             }
         }
         .padding(KXSpacing.md)

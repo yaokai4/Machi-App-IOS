@@ -158,7 +158,7 @@ struct GuideCalendarView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, KXSpacing.md)
                             .padding(.vertical, 10)
-                            .background(KXColor.livingSurface.opacity(0.68), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .background(KXColor.livingSurface.opacity(0.68), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                     }
 
                     switch mode {
@@ -468,7 +468,7 @@ private struct GuideCalendarWeekBoard: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.horizontal, KXSpacing.sm)
                                 .padding(.vertical, 6)
-                                .background(item.status == "done" ? KXColor.softBackground : KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                .background(item.status == "done" ? KXColor.softBackground : KXColor.accentSoft, in: RoundedRectangle(cornerRadius: KXRadius.sm, style: .continuous))
                                 .draggable(item.id)
                         }
                         if items.count > 4 {
@@ -701,7 +701,7 @@ private struct GuideCalendarEventComposer: View {
                 }
                 .buttonStyle(.fullArea)
                 .foregroundStyle(.white)
-                .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(KXColor.accent, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 .disabled(model.isSaving || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .opacity(model.isSaving || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.55 : 1)
             }
@@ -840,7 +840,7 @@ private struct GuideCalendarEventEditor: View {
                         }
                         .buttonStyle(.fullArea)
                         .foregroundStyle(.red)
-                        .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                     }
                     .padding(KXSpacing.screen)
                 }

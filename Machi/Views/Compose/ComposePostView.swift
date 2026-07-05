@@ -600,7 +600,7 @@ struct ComposePostView: View {
             .foregroundStyle(.red)
             .padding(KXSpacing.md)
             .background(Color.red.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .clipShape(RoundedRectangle(cornerRadius: KXRadius.md))
         }
 
         if viewModel.shouldShowUploadProgress {

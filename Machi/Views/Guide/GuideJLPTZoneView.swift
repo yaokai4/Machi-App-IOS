@@ -161,9 +161,9 @@ struct GuideJLPTZoneView: View {
             .padding(KXSpacing.xl)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(JLPTStyle.hairline, lineWidth: 0.8))
+        .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: KXRadius.sheet, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: KXRadius.sheet, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.sheet, style: .continuous).stroke(JLPTStyle.hairline, lineWidth: 0.8))
         .shadow(color: Color.black.opacity(0.06), radius: 16, y: 6)
     }
 

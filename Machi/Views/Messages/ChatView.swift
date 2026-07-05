@@ -592,7 +592,7 @@ struct ChatView: View {
         let isUploading = viewModel.isSending && viewModel.sendUploadProgress != nil
         return CachedMediaImageView(url: draft.thumbnailURL)
             .frame(width: 82, height: 82)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             .overlay(alignment: .bottomLeading) {
                 if draft.type == .video {
                     Image(systemName: "play.fill")
@@ -606,14 +606,14 @@ struct ChatView: View {
             .overlay {
                 if isUploading, let progress = viewModel.sendUploadProgress {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
                             .fill(.black.opacity(0.46))
                         ChatUploadProgressRing(progress: progress)
                     }
                 }
             }
             .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
                     .stroke(KXColor.separator.opacity(0.22), lineWidth: 0.6)
             )
             .overlay(alignment: .topTrailing) {
@@ -930,11 +930,11 @@ private struct ChatInputBar: View {
                 .padding(.vertical, 10)
                 .frame(minHeight: 44)
                 .background(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous)
                         .fill(KXColor.elevatedBackground.opacity(0.96))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous)
                         .stroke(KXColor.separator.opacity(0.24), lineWidth: 0.7)
                 )
 

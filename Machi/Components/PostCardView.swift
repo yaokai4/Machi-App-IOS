@@ -69,6 +69,9 @@ struct PostCardView: View, Equatable {
         && lhs.originalPost?.repostCount == rhs.originalPost?.repostCount
         && lhs.originalPost?.bookmarkCount == rhs.originalPost?.bookmarkCount
         && lhs.originalPost?.commentCount == rhs.originalPost?.commentCount
+        && lhs.originalPost?.isLikedByCurrentUser == rhs.originalPost?.isLikedByCurrentUser
+        && lhs.originalPost?.isBookmarkedByCurrentUser == rhs.originalPost?.isBookmarkedByCurrentUser
+        && lhs.originalPost?.isRepostedByCurrentUser == rhs.originalPost?.isRepostedByCurrentUser
         && lhs.originalAuthor?.id == rhs.originalAuthor?.id
         && lhs.originalAuthor?.updatedAt == rhs.originalAuthor?.updatedAt
         && lhs.originalMediaItems.map(\.id) == rhs.originalMediaItems.map(\.id)

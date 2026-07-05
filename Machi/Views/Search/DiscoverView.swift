@@ -766,11 +766,11 @@ private struct CurrentRegionCard: View {
             .padding(.vertical, KXSpacing.md)
             .frame(maxWidth: .infinity, minHeight: 84, alignment: .leading)
             .background {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous)
                     .fill(KXColor.cardBackground)
             }
             .overlay {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous)
                     .stroke(KXColor.glassStroke.opacity(0.72), lineWidth: 0.8)
             }
             .shadow(color: KXColor.glassShadow.opacity(0.48), radius: 7, y: 2)
@@ -895,7 +895,7 @@ private struct DiscoverCategoryCell: View {
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
-                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
                     )
                     .shadow(color: category.tint.opacity(0.32), radius: 6, y: 3)
                 Spacer(minLength: 0)
@@ -1995,7 +1995,7 @@ private struct DiscoverContentCard: View {
         .padding(KXSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
         .kxGlassSurface(radius: KXRadius.card)
-        .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
         .gesture(TapGesture().onEnded { onOpen() }, including: .gesture)
     }
 
@@ -2523,7 +2523,7 @@ struct DiscoverTypeCard: View {
             Image(systemName: icon)
                 .foregroundStyle(tint)
                 .frame(width: 34, height: 34)
-                .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: KXRadius.sm, style: .continuous))
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.subheadline.weight(.bold))

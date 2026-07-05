@@ -131,8 +131,8 @@ struct MyWorkbenchView: View {
             }
         }
         .padding(KXSpacing.lg)
-        .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator.opacity(0.5), lineWidth: 0.7))
+        .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous).stroke(KXColor.separator.opacity(0.5), lineWidth: 0.7))
     }
 
     private func pendingChip(_ label: String, _ count: Int) -> some View {

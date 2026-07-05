@@ -1029,9 +1029,13 @@ struct kaiziTests {
         #expect(userStore.followerCounts[target.id] == 0)
     }
 
-    @Test func passwordStorageHashesAndUpgradesLegacyPlaintext() async throws {
+    @Test func passwordStorageIsSaltedAndRejectsPlaintextHashes() async throws {
         let context = try makeContext()
         let repository = UserRepository(context: context)
+
+        // A legacy plaintext-stored hash must NOT authenticate: the insecure
+        // plaintext-equality fallback was removed, so such a value fails to
+        // verify (a stray plaintext value can no longer match the raw password).
         let legacyUser = UserEntity(
             id: "legacy-user",
             username: "legacy",
@@ -1040,16 +1044,24 @@ struct kaiziTests {
         )
         context.insert(legacyUser)
         try context.save()
+        #expect(try await repository.login(username: "legacy", password: "secret123") == nil)
+        #expect(!PasswordHasher.verify("secret123", storedHash: "secret123"))
 
-        let loggedInLegacy = try await repository.login(username: "legacy", password: "secret123")
-        #expect(loggedInLegacy?.id == legacyUser.id)
-        #expect(legacyUser.passwordHash != "secret123")
-        #expect(PasswordHasher.verify("secret123", storedHash: legacyUser.passwordHash))
-
+        // Fresh registration stores a salted hash (not plaintext) that verifies,
+        // and the wrong password is rejected.
         let registered = try await repository.register(username: "new_user", displayName: "New User", password: "another-secret")
         #expect(registered.passwordHash != "another-secret")
+        #expect(registered.passwordHash.hasPrefix("v2$"))
         #expect(PasswordHasher.verify("another-secret", storedHash: registered.passwordHash))
         #expect(try await repository.login(username: "new_user", password: "wrong") == nil)
+
+        // Per-hash salting: the same password hashes to different stored values,
+        // both of which still verify.
+        let h1 = PasswordHasher.hash("same-pass")
+        let h2 = PasswordHasher.hash("same-pass")
+        #expect(h1 != h2)
+        #expect(PasswordHasher.verify("same-pass", storedHash: h1))
+        #expect(PasswordHasher.verify("same-pass", storedHash: h2))
     }
 
     @Test func usernameUpdateValidatesAndRejectsDuplicates() async throws {

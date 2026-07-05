@@ -95,8 +95,8 @@ struct GuideDigestCardView: View {
             }
         }
         .padding(KXSpacing.lg)
-        .background(KXColor.livingSurface.opacity(0.8), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(KXColor.separator.opacity(0.8), lineWidth: 0.8))
+        .background(KXColor.livingSurface.opacity(0.8), in: RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous).stroke(KXColor.separator.opacity(0.8), lineWidth: 0.8))
     }
 
     private func digestStat(_ label: String, _ value: Int, tone: Color) -> some View {
@@ -107,7 +107,7 @@ struct GuideDigestCardView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
-        .background(KXColor.accentSoft.opacity(0.4), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(KXColor.accentSoft.opacity(0.4), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
     }
 
     private struct DigestRow: Identifiable {
@@ -161,8 +161,8 @@ struct GuideDigestCardView: View {
             }
         }
         .padding(KXSpacing.lg)
-        .background(KXColor.accentSoft.opacity(0.55), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(KXColor.accent.opacity(0.3), lineWidth: 1))
+        .background(KXColor.accentSoft.opacity(0.55), in: RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous).stroke(KXColor.accent.opacity(0.3), lineWidth: 1))
     }
 
     private func setupButton(_ profile: String, _ label: String) -> some View {

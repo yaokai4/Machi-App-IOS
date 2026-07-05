@@ -426,20 +426,24 @@ struct KXAvatar: View {
 }
 
 struct KXVerifiedBadge: View {
+    @Environment(\.appLanguage) private var language
     var body: some View {
         Image(systemName: "checkmark.seal.fill")
             .font(.caption2.weight(.semibold))
             .foregroundStyle(.blue)
-            .accessibilityLabel("Verified")
+            // Localized so zh/ja VoiceOver users don't hear English on a badge
+            // that sits beside author names across feeds/profiles/comments.
+            .accessibilityLabel(KXListingCopy.pickText(language, "已认证", "認証済み", "Verified"))
     }
 }
 
 struct KXOfficialBadge: View {
+    @Environment(\.appLanguage) private var language
     var body: some View {
         Image(systemName: "checkmark.shield.fill")
             .font(.caption2.weight(.semibold))
             .foregroundStyle(KXColor.official)
-            .accessibilityLabel("Machi Official")
+            .accessibilityLabel(KXListingCopy.pickText(language, "Machi 官方", "Machi 公式", "Machi Official"))
     }
 }
 
@@ -839,9 +843,9 @@ extension View {
             .padding(.horizontal, 14)
             .frame(minHeight: 48)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(KXColor.softBackground.opacity(0.7), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(KXColor.softBackground.opacity(0.7), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
                     .stroke(focused ? KXColor.accent.opacity(0.5) : KXColor.separator.opacity(0.7), lineWidth: focused ? 1.4 : 1)
             }
     }

@@ -179,8 +179,8 @@ struct GuideAIChatView: View {
             }
             .padding(18)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(KXColor.livingAccentSoft, lineWidth: 1))
+            .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous).stroke(KXColor.livingAccentSoft, lineWidth: 1))
 
             usageStatusLine
 
@@ -369,9 +369,9 @@ struct GuideAIChatView: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .frame(minHeight: 44)
-                .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous)
                         .stroke(inputFocused ? KXColor.livingAccent.opacity(0.5) : KXColor.livingInk.opacity(0.08),
                                 lineWidth: inputFocused ? 1.3 : 0.8)
                 )

@@ -81,7 +81,7 @@ struct GuideOSActionTile: View {
                     .kxScaledFont(16, weight: .bold)
                     .foregroundStyle(.white)
                     .frame(width: 32, height: 32)
-                    .background(tint, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .background(tint, in: RoundedRectangle(cornerRadius: KXRadius.sm, style: .continuous))
                 Text(title)
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.primary)
@@ -272,7 +272,7 @@ struct GuideQuickTodoComposer: View {
             }
         }
         .padding(KXSpacing.md)
-        .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
         .onChange(of: defaultDate ?? "") { _, newValue in
             selectedDate = newValue.isEmpty ? nil : newValue
         }
@@ -360,7 +360,7 @@ struct GuideOSNotice: View {
             .padding(.horizontal, KXSpacing.md)
             .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
     }
 }
 
@@ -540,7 +540,7 @@ struct GuideManageView: View {
                                         .kxScaledFont(21, weight: .bold)
                                         .foregroundStyle(.white)
                                         .frame(width: 42, height: 42)
-                                        .background(item.tint, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                        .background(item.tint, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                                     Text(item.title)
                                         .font(.subheadline.weight(.bold))
                                         .foregroundStyle(.primary)
@@ -554,8 +554,8 @@ struct GuideManageView: View {
                                 }
                                 .frame(maxWidth: .infinity, minHeight: 166, alignment: .topLeading)
                                 .padding(14)
-                                .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
+                                .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
                             }
                             .buttonStyle(.fullArea)
                             .contentShape(Rectangle())
@@ -674,7 +674,7 @@ struct GuideContractsView: View {
                 .padding(.horizontal, 10)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .frame(minHeight: 32)
-                .background(KXColor.accentSoft.opacity(0.5), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .background(KXColor.accentSoft.opacity(0.5), in: RoundedRectangle(cornerRadius: KXRadius.sm, style: .continuous))
             Picker(guideOSText(language, "合同类型", "契約の種類", "Contract type"), selection: $category) {
                 ForEach(categories, id: \.0) { key, label in Text(label).tag(key) }
             }
@@ -1075,7 +1075,7 @@ struct GuideGoalsView: View {
                     .buttonStyle(.fullArea)
                     .contentShape(Rectangle())
                     .foregroundStyle(.white)
-                    .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .background(KXColor.accent, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
 
                     if showingCreate {
                         VStack(alignment: .leading, spacing: KXSpacing.md) {

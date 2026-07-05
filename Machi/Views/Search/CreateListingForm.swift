@@ -1202,7 +1202,7 @@ struct CreateCityListingView: View {
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(typeAccent.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(typeAccent.opacity(0.08), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
 
             Label(KXListingCopy.pickText(language, "二级分类", "サブカテゴリ", "Subcategory"), systemImage: "line.3.horizontal.decrease.circle")
                 .font(.caption.weight(.black))
@@ -2063,9 +2063,9 @@ private struct KXListingFormField: View {
             .padding(.horizontal, KXSpacing.md)
             .padding(.vertical, 11)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(KXColor.softBackground.opacity(0.78), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(KXColor.softBackground.opacity(0.78), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
                     .stroke(KXColor.separator.opacity(0.58), lineWidth: 0.65)
             }
         }
@@ -2129,9 +2129,9 @@ private struct KXListingToggleChip: View {
             .padding(.horizontal, KXSpacing.md)
             .frame(maxWidth: .infinity)
             .frame(height: 42)
-            .background(isOn ? tint.opacity(0.11) : KXColor.softBackground.opacity(0.76), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(isOn ? tint.opacity(0.11) : KXColor.softBackground.opacity(0.76), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
                     .stroke(isOn ? tint.opacity(0.32) : KXColor.separator.opacity(0.58), lineWidth: 0.75)
             }
         }

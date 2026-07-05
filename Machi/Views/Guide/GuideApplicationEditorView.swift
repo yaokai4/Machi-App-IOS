@@ -501,7 +501,7 @@ private struct GuideApplicationBoard: View {
                                 .font(.caption)
                                 .foregroundStyle(.tertiary)
                                 .frame(maxWidth: .infinity, minHeight: 72)
-                                .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                         } else {
                             ForEach(items) { app in
                                 GuideOSApplicationRow(

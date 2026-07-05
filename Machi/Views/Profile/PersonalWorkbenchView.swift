@@ -199,7 +199,7 @@ struct PersonalWorkbenchView: View {
                 .padding(.horizontal, KXSpacing.lg)
                 .frame(height: 48)
                 .frame(maxWidth: .infinity)
-                .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(KXColor.accent, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             }
             .buttonStyle(.fullArea)
             .contentShape(Rectangle())
@@ -224,7 +224,7 @@ struct PersonalWorkbenchView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, KXSpacing.md)
-            .background(KXColor.accentSoft.opacity(0.4), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(KXColor.accentSoft.opacity(0.4), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.fullArea)
@@ -309,7 +309,7 @@ struct PersonalWorkbenchView: View {
                 .kxScaledFont(20, weight: .bold)
                 .foregroundStyle(.white)
                 .frame(width: 42, height: 42)
-                .background(affair.tint, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(affair.tint, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             Text(affair.title)
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(.primary)
@@ -323,8 +323,8 @@ struct PersonalWorkbenchView: View {
         }
         .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
         .padding(14)
-        .background(KXColor.livingSurface.opacity(0.78), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
+        .background(KXColor.livingSurface.opacity(0.78), in: RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
     }
 
     private func routeKey(_ route: KXRoute) -> String {

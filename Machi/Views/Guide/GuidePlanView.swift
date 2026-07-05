@@ -51,6 +51,6 @@ struct GuideOSPlanCard: View {
             .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .padding(15)
-        .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
     }
 }

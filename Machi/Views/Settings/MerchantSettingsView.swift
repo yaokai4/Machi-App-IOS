@@ -337,7 +337,7 @@ struct MerchantSettingsView: View {
                                 }
                             }
                             .padding(10)
-                            .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                         }
                     }
                 }
@@ -626,7 +626,7 @@ private struct MerchantFormGroupHeader: View {
                 .font(.caption.weight(.bold))
                 .foregroundStyle(tint)
                 .frame(width: 24, height: 24)
-                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: KXRadius.xs, style: .continuous))
             Text(title)
                 .font(.subheadline.weight(.bold))
             Rectangle()

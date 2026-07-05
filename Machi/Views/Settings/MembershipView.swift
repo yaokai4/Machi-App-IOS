@@ -179,8 +179,8 @@ struct MembershipView: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: 128, alignment: .topLeading)
                     .padding(14)
-                    .background(RoundedRectangle(cornerRadius: 14).fill(selected ? KXColor.accentSoft : KXColor.cardBackground))
-                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(selected ? KXColor.accent : KXColor.separator, lineWidth: selected ? 1.2 : 0.7))
+                    .background(RoundedRectangle(cornerRadius: KXRadius.md).fill(selected ? KXColor.accentSoft : KXColor.cardBackground))
+                    .overlay(RoundedRectangle(cornerRadius: KXRadius.md).stroke(selected ? KXColor.accent : KXColor.separator, lineWidth: selected ? 1.2 : 0.7))
                 }
                 .buttonStyle(.plain)
             }
@@ -214,7 +214,7 @@ struct MembershipView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14).fill(KXColor.accentSoft))
+        .background(RoundedRectangle(cornerRadius: KXRadius.md).fill(KXColor.accentSoft))
     }
 
     private var untilText: String? {
@@ -242,7 +242,7 @@ struct MembershipView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14).fill(KXColor.softBackground))
+        .background(RoundedRectangle(cornerRadius: KXRadius.md).fill(KXColor.softBackground))
     }
 
     private func insightsCard(_ totals: KaiXMembershipInsightsTotals) -> some View {
@@ -263,7 +263,7 @@ struct MembershipView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, KXSpacing.sm)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(KXColor.softBackground))
+                    .background(RoundedRectangle(cornerRadius: KXRadius.sm).fill(KXColor.softBackground))
                 }
             }
         }
@@ -312,7 +312,7 @@ struct MembershipView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, KXSpacing.sm)
-                        .background(RoundedRectangle(cornerRadius: 10).fill(KXColor.softBackground))
+                        .background(RoundedRectangle(cornerRadius: KXRadius.sm).fill(KXColor.softBackground))
                     }
                 }
                 Text(ml("开通会员后可查看你发布内容的浏览、点赞、评论和收藏数据。",
@@ -544,7 +544,7 @@ struct MembershipView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: 14).fill(KXColor.softBackground))
+        .background(RoundedRectangle(cornerRadius: KXRadius.md).fill(KXColor.softBackground))
     }
 
     private var safetyNotice: some View {
@@ -555,7 +555,7 @@ struct MembershipView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: 14).fill(KXColor.softBackground))
+        .background(RoundedRectangle(cornerRadius: KXRadius.md).fill(KXColor.softBackground))
     }
 
     // Delegate to the cached KXDateParsing formatters instead of allocating a

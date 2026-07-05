@@ -309,7 +309,7 @@ private struct KXListingsEmptyActionPanel: View {
                 .kxScaledFont(25, weight: .bold)
                 .foregroundStyle(tint)
                 .frame(width: 64, height: 64)
-                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous))
 
             VStack(spacing: 7) {
                 Text(title)

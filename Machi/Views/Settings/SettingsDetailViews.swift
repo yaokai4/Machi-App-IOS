@@ -370,7 +370,7 @@ struct ContactSettingsView: View {
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(.white)
                 .frame(width: 42, height: 42)
-                .background(LinearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(LinearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 .shadow(color: .blue.opacity(0.18), radius: 10, x: 0, y: 6)
             VStack(alignment: .leading, spacing: 5) {
                 Text(settingsText(language, "安全修改联系方式", "連絡先を安全に変更", "Secure contact updates"))
@@ -427,9 +427,9 @@ struct ContactSettingsView: View {
             .font(.body.weight(.medium))
             .padding(.horizontal, KXSpacing.md)
             .frame(height: 46)
-            .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
                     .stroke(KXColor.separator.opacity(0.65), lineWidth: 0.65)
             }
     }
@@ -439,9 +439,9 @@ struct ContactSettingsView: View {
             .font(.body.weight(.medium))
             .padding(.horizontal, KXSpacing.md)
             .frame(height: 46)
-            .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
                     .stroke(KXColor.separator.opacity(0.65), lineWidth: 0.65)
             }
     }

@@ -348,7 +348,7 @@ struct GuideFinanceView: View {
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, KXSpacing.md).padding(.vertical, 10)
-            .background(KXColor.accentSoft.opacity(0.5), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(KXColor.accentSoft.opacity(0.5), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
         }
     }
 
@@ -395,8 +395,8 @@ struct GuideFinanceView: View {
                 }
             }
             .padding(KXSpacing.lg)
-            .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
+            .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
         }
     }
 
@@ -457,7 +457,7 @@ struct GuideFinanceView: View {
             }
             .padding(.horizontal, KXSpacing.md)
             .frame(height: 52)
-            .background(KXColor.accentSoft.opacity(0.5), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(KXColor.accentSoft.opacity(0.5), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
 
             Picker(guideOSText(language, "分类", "カテゴリ", "Category"), selection: $category) {
                 ForEach(currentCats) { c in
@@ -488,8 +488,8 @@ struct GuideFinanceView: View {
             .disabled((Int(amountText) ?? 0) <= 0)
         }
         .padding(KXSpacing.lg)
-        .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
+        .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
     }
 
     // MARK: Category bars
@@ -525,7 +525,7 @@ struct GuideFinanceView: View {
                         }
                     }
                     .padding(KXSpacing.md)
-                    .background(KXColor.livingSurface.opacity(0.7), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .background(KXColor.livingSurface.opacity(0.7), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 }
             }
         }
@@ -562,8 +562,8 @@ struct GuideFinanceView: View {
             .background(KXColor.livingSurface.opacity(0.7), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .padding(KXSpacing.lg)
-        .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
+        .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
     }
 
     // MARK: Ledger
@@ -590,7 +590,7 @@ struct GuideFinanceView: View {
                         .foregroundStyle(t.isIncome ? KXColor.accent : Color.primary)
                 }
                 .padding(KXSpacing.md)
-                .background(KXColor.livingSurface.opacity(0.7), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(KXColor.livingSurface.opacity(0.7), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 .swipeActions(edge: .trailing) {
                     Button(role: .destructive) { Task { await vm.delete(t) } } label: {
                         Label(guideOSText(language, "删除", "削除", "Delete"), systemImage: "trash")

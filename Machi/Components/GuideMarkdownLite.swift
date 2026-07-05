@@ -116,7 +116,7 @@ struct GuideMarkdownLite: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, KXSpacing.xs)
                 .frame(minWidth: 0, alignment: .leading)
-                .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             }
         }
     }

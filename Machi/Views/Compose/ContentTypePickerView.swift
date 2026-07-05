@@ -114,7 +114,7 @@ struct ContentTypePickerView: View {
         }
         .padding(.horizontal, 14)
         .frame(height: 44)
-        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
         .padding(.horizontal, KaiXTheme.horizontalPadding)
     }
 
@@ -200,14 +200,14 @@ struct ContentTypePickerView: View {
             .padding(.vertical, 10)
             .padding(.horizontal, KXSpacing.xs)
             .background {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
                     .fill(isCurrent ? spec.tint.opacity(0.08) : Color.clear)
             }
             .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
                     .stroke(isCurrent ? spec.tint.opacity(0.5) : KXColor.glassStroke, lineWidth: isCurrent ? 1.0 : 0.5)
             }
-            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
         }
         .buttonStyle(.plain)
         .foregroundStyle(.primary)

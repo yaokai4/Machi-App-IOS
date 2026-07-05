@@ -17,13 +17,13 @@ struct KXRatingStarsView: View {
                 ForEach(1...5, id: \.self) { star in
                     Image(systemName: "star.fill")
                         .font(.system(size: starSize, weight: .bold))
-                        .foregroundStyle(star <= Int(value.rounded()) ? Color.orange : Color.secondary.opacity(0.24))
+                        .foregroundStyle(star <= Int(value.rounded()) ? KXColor.rankGold : Color.secondary.opacity(0.24))
                 }
             }
             if showsValue, value > 0 {
                 Text(String(format: "%.1f", value))
                     .font(.system(size: starSize + 1, weight: .black))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(KXColor.rankGold)
             }
             if let count, count > 0 {
                 Text("(\(count))")
@@ -78,7 +78,7 @@ struct KXServiceListingCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 ZStack(alignment: .topTrailing) {
                     ListingCoverArtwork(listing: listing)
-                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
                     HStack(spacing: 6) {
                         if !category.isEmpty {
                             Text(KXListingCopy.categoryLabel(category, language))
@@ -113,7 +113,7 @@ struct KXServiceListingCard: View {
                         Spacer(minLength: 4)
                         if ratingCount > 0 {
                             HStack(spacing: 3) {
-                                Image(systemName: "star.fill").font(.caption2.weight(.semibold)).foregroundStyle(.orange)
+                                Image(systemName: "star.fill").font(.caption2.weight(.semibold)).foregroundStyle(KXColor.rankGold)
                                 Text(String(format: "%.1f", ratingAvg)).font(.caption.weight(.semibold)).foregroundStyle(.primary)
                                 Text("(\(ratingCount))").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                             }
@@ -379,8 +379,8 @@ private struct MerchantStripCard: View {
         }
         .padding(10)
         .frame(width: 196, alignment: .leading)
-        .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KXColor.glassStroke.opacity(0.7), lineWidth: 0.7))
+        .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous).stroke(KXColor.glassStroke.opacity(0.7), lineWidth: 0.7))
     }
 }
 
@@ -921,7 +921,7 @@ struct ListingReviewsSectionView: View {
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, KXSpacing.sm)
-                .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             }
             Spacer()
             if !isOwn {

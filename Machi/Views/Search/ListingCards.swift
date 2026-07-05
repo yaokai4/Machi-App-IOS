@@ -74,7 +74,7 @@ struct KXBigPhotoSkeletonCard: View {
             Color.clear
                 .frame(maxWidth: .infinity)
                 .aspectRatio(4.0 / 3.0, contentMode: .fit)
-                .overlay { RoundedRectangle(cornerRadius: 20, style: .continuous).fill(KXColor.softBackground) }
+                .overlay { RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous).fill(KXColor.softBackground) }
             // Mirror the real stay/service card: title+rating row, station,
             // price+CTA row — so the swap to content doesn't shift layout.
             VStack(alignment: .leading, spacing: KXSpacing.sm) {

@@ -195,7 +195,7 @@ struct OnboardingView: View {
                     .kxScaledFont(18, weight: .bold)
                     .foregroundStyle(KXColor.accent)
                     .frame(width: 44, height: 44)
-                    .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                     Text(option.title)
                         .font(.subheadline.weight(.bold))

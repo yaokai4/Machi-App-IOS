@@ -373,7 +373,7 @@ private struct GuideInlineStatus: View {
             .padding(.horizontal, KXSpacing.md)
             .padding(.vertical, 9)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(KXColor.heat.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(KXColor.heat.opacity(0.08), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
     }
 }
 
@@ -969,7 +969,7 @@ struct GuideMemberResourcesView: View {
                         .foregroundStyle(KXColor.accent)
                         .padding(10)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 }
                 HStack(spacing: KXSpacing.sm) {
                     Image(systemName: "magnifyingglass")
@@ -1524,8 +1524,8 @@ private struct GuideLibraryHero: View {
             }
         }
         .padding(15)
-        .background(KXColor.livingSoft, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(KXColor.livingInk.opacity(0.06), lineWidth: 0.8))
+        .background(KXColor.livingSoft, in: RoundedRectangle(cornerRadius: KXRadius.sheet, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.sheet, style: .continuous).stroke(KXColor.livingInk.opacity(0.06), lineWidth: 0.8))
         .shadow(color: Color.black.opacity(0.05), radius: 14, y: 7)
     }
 }
@@ -1733,9 +1733,9 @@ private struct GuideAIEntryCard: View {
             }
             .padding(KXSpacing.lg)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous)
                     .stroke(KXColor.livingInk.opacity(0.06), lineWidth: 1)
             )
             .shadow(color: Color.black.opacity(0.06), radius: 14, y: 6)
@@ -1818,7 +1818,7 @@ private struct GuideLibraryDualEntry: View {
             .padding(KXSpacing.lg)
             .background(
                 LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing),
-                in: RoundedRectangle(cornerRadius: 22, style: .continuous)
+                in: RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous)
             )
             .shadow(color: (colors.first ?? .clear).opacity(0.3), radius: 12, y: 6)
         }
@@ -1843,7 +1843,7 @@ private struct GuidePersonalWorkbenchCTA: View {
                     .font(.title3.weight(.bold))
                     .foregroundStyle(KXColor.accent)
                     .frame(width: 44, height: 44)
-                    .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(guideText(language, "需要管理 Todo、日历和申请？", "Todo・カレンダー・申請を管理？", "Manage todos, calendar & applications?"))
                         .font(.subheadline.weight(.bold))
@@ -2425,8 +2425,8 @@ struct GuideProductCard: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, minHeight: 138, alignment: .topLeading)
-            .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
+            .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
         }
         .buttonStyle(.fullArea)
         .contentShape(Rectangle())
@@ -2515,8 +2515,8 @@ struct GuideSchoolCard: View {
                 }
             }
             .padding(14)
-            .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
+            .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
         }
         .buttonStyle(.fullArea)
         .contentShape(Rectangle())
@@ -2577,8 +2577,8 @@ struct GuideCompanyCard: View {
                 }
             }
             .padding(14)
-            .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
+            .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
         }
         .buttonStyle(.fullArea)
         .contentShape(Rectangle())
@@ -2667,8 +2667,8 @@ struct GuideInterviewReviewCard: View {
                 .foregroundStyle(.secondary)
         }
         .padding(14)
-        .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
+        .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
     }
 }
 
@@ -2696,8 +2696,8 @@ struct GuideWorkReviewCard: View {
             }
         }
         .padding(14)
-        .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
+        .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
     }
 }
 

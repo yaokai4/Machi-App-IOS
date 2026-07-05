@@ -51,7 +51,7 @@ struct ChatEmojiPanel: View {
                             .font(.title3)
                             .frame(width: 34, height: 30)
                             .background(category == index ? KXColor.accent.opacity(0.14) : Color.clear,
-                                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                        in: RoundedRectangle(cornerRadius: KXRadius.xs, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(pick(cat.title))
@@ -69,8 +69,8 @@ struct ChatEmojiPanel: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 10)
-        .background(KXColor.cardBackground.opacity(0.96), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator.opacity(0.24), lineWidth: 0.7))
+        .background(KXColor.cardBackground.opacity(0.96), in: RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous).stroke(KXColor.separator.opacity(0.24), lineWidth: 0.7))
     }
 
     private func emojiButton(_ e: String) -> some View {
