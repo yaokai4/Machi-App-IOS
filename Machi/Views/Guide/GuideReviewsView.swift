@@ -14,7 +14,7 @@ struct GuideStarRow: View {
     var color: Color = KXColor.rankGold
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: KXSpacing.xxs) {
             ForEach(1...5, id: \.self) { i in
                 symbol(for: i)
                     .font(.system(size: size))
@@ -104,7 +104,7 @@ struct GuideProductReviewsSection: View {
                     )
                     .frame(maxWidth: .infinity, minHeight: 160, maxHeight: .infinity)
                 } else {
-                    VStack(spacing: 12) {
+                    VStack(spacing: KXSpacing.md) {
                         ForEach(items) { review in
                             GuideReviewCard(
                                 review: review,
@@ -170,7 +170,7 @@ struct GuideProductReviewsSection: View {
     private func summaryCard(_ summary: KaiXGuideRatingSummaryDTO) -> some View {
         KXCard(padding: 18, radius: 22) {
             HStack(alignment: .center, spacing: 18) {
-                VStack(spacing: 4) {
+                VStack(spacing: KXSpacing.xs) {
                     Text(summary.ratingCount > 0 ? String(format: "%.1f", summary.ratingAvg) : "—")
                         .font(.system(size: 40, weight: .bold, design: .rounded))
                     GuideStarRow(rating: summary.ratingAvg, size: 13)
@@ -191,7 +191,7 @@ struct GuideProductReviewsSection: View {
 
     private func distributionBar(star: Int, count: Int, total: Int) -> some View {
         let fraction = total > 0 ? Double(count) / Double(total) : 0
-        return HStack(spacing: 8) {
+        return HStack(spacing: KXSpacing.sm) {
             Text("\(star)")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
@@ -222,7 +222,7 @@ struct GuideProductReviewsSection: View {
             Button {
                 showWriteSheet = true
             } label: {
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     Image(systemName: myReview == nil ? "square.and.pencil" : "pencil")
                     Text(writeButtonLabel)
                         .font(.subheadline.weight(.bold))
@@ -396,7 +396,7 @@ struct GuideReviewCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {
                     GuideReviewAvatar(author: review.author, anonymous: review.anonymous)
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                         Text(displayName)
                             .font(.subheadline.weight(.semibold))
                         GuideStarRow(rating: Double(review.rating), size: 12)
@@ -555,12 +555,12 @@ struct GuideWriteReviewSheet: View {
                         GuideStarPicker(rating: $rating)
                     }
 
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: KXSpacing.sm) {
                         Text(guideText(language, "评价内容（可选）", "レビュー本文（任意）", "Your review (optional)"))
                             .font(.subheadline.weight(.semibold))
                         TextEditor(text: $text)
                             .frame(minHeight: 130)
-                            .padding(8)
+                            .padding(KXSpacing.sm)
                             .kxGlassSurface(radius: KXRadius.card)
                             .overlay(alignment: .topLeading) {
                                 if text.isEmpty {
@@ -568,7 +568,7 @@ struct GuideWriteReviewSheet: View {
                                         .font(.callout)
                                         .foregroundStyle(.secondary)
                                         .padding(.horizontal, 13)
-                                        .padding(.vertical, 16)
+                                        .padding(.vertical, KXSpacing.lg)
                                         .allowsHitTesting(false)
                                 }
                             }

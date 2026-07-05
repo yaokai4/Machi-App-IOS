@@ -301,7 +301,7 @@ private struct NotificationCard: View {
                 RoundedRectangle(cornerRadius: 2, style: .continuous)
                     .fill(KXColor.accent)
                     .frame(width: 3.5)
-                    .padding(.vertical, 12)
+                    .padding(.vertical, KXSpacing.md)
                     .padding(.leading, 1)
             }
         }

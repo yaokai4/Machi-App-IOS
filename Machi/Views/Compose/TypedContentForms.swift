@@ -17,7 +17,7 @@ struct TypedFormSection<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
             Label(L(titleKey, language), systemImage: icon)
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(.primary)
@@ -74,7 +74,7 @@ struct TypedTextField: View {
                 .autocorrectionDisabled()
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(axis == .vertical ? 6 : 1)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, KXSpacing.md)
                 .frame(minHeight: axis == .vertical ? 72 : 40)
                 .kxGlassSurface(radius: KXRadius.md)
         }
@@ -88,11 +88,11 @@ struct TypedChoiceRow: View {
     let options: [(value: String, labelKey: String)]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
             Text(L(titleKey, language))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-            FlowLayout(spacing: 8) {
+            FlowLayout(spacing: KXSpacing.sm) {
                 ForEach(options, id: \.value) { option in
                     Button {
                         selection = option.value

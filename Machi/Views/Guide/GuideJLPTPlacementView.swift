@@ -51,7 +51,7 @@ struct GuideJLPTPlacementView: View {
     private var allAnswered: Bool { answeredCount >= questions.count && !questions.isEmpty }
 
     private var quizView: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: KXSpacing.lg) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {
                     Image(systemName: "gauge.with.dots.needle.50percent")
@@ -66,7 +66,7 @@ struct GuideJLPTPlacementView: View {
                         .foregroundStyle(KXColor.livingMuted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     ProgressView(value: Double(answeredCount), total: Double(max(1, questions.count)))
                         .tint(KXColor.livingAccent)
                     Text("\(answeredCount)/\(questions.count)")
@@ -74,7 +74,7 @@ struct GuideJLPTPlacementView: View {
                         .foregroundStyle(KXColor.livingMuted)
                 }
             }
-            .padding(16)
+            .padding(KXSpacing.lg)
             .jlptSurface(radius: KXRadius.hero)
 
             ForEach(Array(questions.enumerated()), id: \.element.id) { idx, q in
@@ -93,7 +93,7 @@ struct GuideJLPTPlacementView: View {
             }
 
             if submitFailed {
-                HStack(alignment: .top, spacing: 8) {
+                HStack(alignment: .top, spacing: KXSpacing.sm) {
                     Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(KXColor.livingWarm)
                     Text(guideText(language, "提交失败，请检查网络后重试——你的答案已保留。",
                                    "提出に失敗しました。通信を確認して再試行してください。回答は保持されています。",
@@ -118,7 +118,7 @@ struct GuideJLPTPlacementView: View {
 
             JLPTComplianceNote()
         }
-        .padding(16)
+        .padding(KXSpacing.lg)
     }
 
     // MARK: result
@@ -127,7 +127,7 @@ struct GuideJLPTPlacementView: View {
     private func resultView(_ r: KaiXJLPTPlacementResult) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             // 级别大徽章 hero.
-            VStack(spacing: 12) {
+            VStack(spacing: KXSpacing.md) {
                 JLPTEyebrow(text: guideText(language, "定级结果", "判定結果", "Your level"))
                 JLPTLevelBadge(level: r.recommendedLevel ?? "N5", size: 92)
                 Text(guideText(language, "推荐备考等级", "おすすめ学習レベル", "Recommended level"))
@@ -141,7 +141,7 @@ struct GuideJLPTPlacementView: View {
                           systemImage: "clock.fill")
                         .font(.footnote.weight(.bold))
                         .foregroundStyle(KXColor.livingAccent)
-                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .padding(.horizontal, KXSpacing.md).padding(.vertical, 7)
                         .background(KXColor.livingAccentSoft, in: Capsule())
                 }
             }
@@ -171,7 +171,7 @@ struct GuideJLPTPlacementView: View {
                         Image(systemName: "target")
                             .font(.subheadline.weight(.bold))
                             .foregroundStyle(KXColor.livingWarm)
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                             Text(guideText(language, "薄弱环节", "弱点", "Focus areas"))
                                 .font(.caption.weight(.bold))
                                 .foregroundStyle(KXColor.livingWarm)
@@ -224,11 +224,11 @@ struct GuideJLPTPlacementView: View {
 
             JLPTComplianceNote()
         }
-        .padding(16)
+        .padding(KXSpacing.lg)
     }
 
     private func ctaLabel(icon: String, title: String, filled: Bool) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: KXSpacing.sm) {
             Image(systemName: icon).font(.subheadline.weight(.bold))
             Text(title).font(.subheadline.weight(.bold))
             Spacer(minLength: 0)

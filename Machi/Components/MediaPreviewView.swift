@@ -64,7 +64,7 @@ struct MediaPreviewView: View {
             // target pixel size genuinely changes).
             .id("\(media.id)-\(originalImageIDs.contains(media.id))")
         } else {
-            VStack(spacing: 16) {
+            VStack(spacing: KXSpacing.lg) {
                 Image(systemName: media.placeholderSymbol.isEmpty ? "photo.fill" : media.placeholderSymbol)
                     .font(.system(size: 72, weight: .bold))
                 Text(media.placeholderTitle.isEmpty ? L("mediaPreview", language) : media.placeholderTitle)
@@ -88,7 +88,7 @@ struct MediaPreviewView: View {
                 Text(counterText)
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, KXSpacing.md)
                     .frame(height: 34)
                     .background(.black.opacity(0.45), in: Capsule())
 

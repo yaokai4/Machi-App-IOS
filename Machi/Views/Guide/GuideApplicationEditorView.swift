@@ -142,7 +142,7 @@ struct GuideApplicationPlannerView: View {
             }
         } savedSection: {
             if !model.applications.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: KXSpacing.sm) {
                     HStack {
                         Text(guideOSText(language, "我的申请", "マイ申請", "My applications"))
                             .font(.subheadline.weight(.bold))
@@ -251,7 +251,7 @@ struct GuideOSApplicationRow: View {
             .contentShape(Rectangle())
             .accessibilityLabel(guideOSText(language, "删除 \(app.name)", "\(app.name)を削除", "Delete \(app.name)"))
         }
-        .padding(12)
+        .padding(KXSpacing.md)
         .kxGlassSurface(radius: KXRadius.md)
         .confirmationDialog(guideOSText(language, "删除该申请？", "この申請を削除しますか？", "Delete this application?"), isPresented: $confirming, titleVisibility: .visible) {
             Button(guideOSText(language, "删除（含倒排待办）", "削除（逆算ToDoも含む）", "Delete (incl. countdown todos)"), role: .destructive, action: onDelete)
@@ -370,7 +370,7 @@ struct GuideApplicationEditorSheet: View {
                                     .fill(KXColor.accent)
                                     .frame(width: 8, height: 8)
                                     .padding(.top, 5)
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                                     Text(guideApplicationStageTitle(item.stage, language))
                                         .font(.subheadline.weight(.semibold))
                                     if !item.note.isEmpty {
@@ -482,10 +482,10 @@ private struct GuideApplicationBoard: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: KXSpacing.md) {
                 ForEach(visibleStages, id: \.key) { stage in
                     let items = applications.filter { ($0.stage ?? "saved") == stage.key }
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: KXSpacing.sm) {
                         HStack {
                             Text(guideApplicationStageTitle(stage.key, language))
                                 .font(.caption.weight(.bold))
@@ -494,7 +494,7 @@ private struct GuideApplicationBoard: View {
                                 .font(.caption2.weight(.bold))
                                 .foregroundStyle(.secondary)
                         }
-                        .padding(.horizontal, 2)
+                        .padding(.horizontal, KXSpacing.xxs)
 
                         if items.isEmpty {
                             Text(guideOSText(language, "暂无", "なし", "None"))
@@ -515,7 +515,7 @@ private struct GuideApplicationBoard: View {
                     .frame(width: 286)
                 }
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, KXSpacing.xxs)
         }
     }
 }
@@ -556,7 +556,7 @@ struct GuideOSLibraryPickerField: View {
             Text(label)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 TextField(placeholder, text: $text)
                     .font(.subheadline)
                     .textInputAutocapitalization(.never)
@@ -577,7 +577,7 @@ struct GuideOSLibraryPickerField: View {
                     .accessibilityLabel(guideOSText(language, "清除", "クリア", "Clear"))
                 }
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, KXSpacing.md)
             .frame(height: 44)
             .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
 
@@ -589,7 +589,7 @@ struct GuideOSLibraryPickerField: View {
                             text = suggestion.name
                             suggestions = []
                         } label: {
-                            HStack(spacing: 8) {
+                            HStack(spacing: KXSpacing.sm) {
                                 Image(systemName: type == "school" ? "graduationcap.fill" : "building.2.fill")
                                     .font(.caption)
                                     .foregroundStyle(KXColor.accent)
@@ -607,7 +607,7 @@ struct GuideOSLibraryPickerField: View {
                                 }
                                 Spacer(minLength: 0)
                             }
-                            .padding(.horizontal, 12)
+                            .padding(.horizontal, KXSpacing.md)
                             .padding(.vertical, 10)
                             .contentShape(Rectangle())
                         }
@@ -621,8 +621,8 @@ struct GuideOSLibraryPickerField: View {
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, KXSpacing.md)
+                        .padding(.vertical, KXSpacing.sm)
                 }
                 .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(KXColor.accent.opacity(0.18), lineWidth: 1))

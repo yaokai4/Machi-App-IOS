@@ -23,7 +23,7 @@ struct GuideStudyPlanView: View {
                         title: guideOSText(language, "JLPT 学习计划", "JLPT 学習計画", "JLPT study plan"),
                         subtitle: guideOSText(language, "把考级目标变成每天的学习习惯：词汇、语法、模考、复盘", "目標を毎日の学習習慣に：語彙・文法・模試・復習", "Turn your goal into daily habits: vocab, grammar, mock tests, review")
                     )
-                    VStack(spacing: 12) {
+                    VStack(spacing: KXSpacing.md) {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(guideOSText(language, "目标级别", "目標レベル", "Target level")).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                             Picker("", selection: $level) {
@@ -78,7 +78,7 @@ private struct GuideStudyTodoRow: View {
                 HStack(spacing: 6) {
                     if let r = todo.recurrenceLabel {
                         Text(guideOSText(language, r + "循环", r + "（繰り返し）", r + " · repeating")).font(.caption2.weight(.bold)).foregroundStyle(KXColor.accent)
-                            .padding(.horizontal, 7).padding(.vertical, 2)
+                            .padding(.horizontal, 7).padding(.vertical, KXSpacing.xxs)
                             .background(KXColor.accent.opacity(0.12), in: Capsule())
                     } else if let d = todo.displayDate, !d.isEmpty {
                         Text(GuideOSDate.short(d)).font(.caption2).foregroundStyle(.secondary)
@@ -90,7 +90,7 @@ private struct GuideStudyTodoRow: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(12)
+        .padding(KXSpacing.md)
         .kxGlassSurface(radius: KXRadius.md)
     }
 }

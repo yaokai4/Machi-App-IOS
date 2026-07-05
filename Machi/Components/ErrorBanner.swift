@@ -24,7 +24,7 @@ struct ErrorBanner: View {
                     .background(item.state.tint.opacity(0.12))
                     .clipShape(Circle())
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                     Text(item.state.title)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)

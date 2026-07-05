@@ -100,7 +100,7 @@ struct PostCardView: View, Equatable {
                                     .lineLimit(1)
                             }
                             .foregroundStyle(.secondary)
-                            .padding(.leading, 2)
+                            .padding(.leading, KXSpacing.xxs)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
@@ -125,7 +125,7 @@ struct PostCardView: View, Equatable {
 
                         Button(action: onAuthor) {
                             VStack(alignment: .leading, spacing: KXSpacing.xxs) {
-                                HStack(spacing: 4) {
+                                HStack(spacing: KXSpacing.xs) {
                                     Text(authorPresentation.displayName)
                                         .font(.subheadline.weight(.semibold))
                                         .foregroundStyle(.primary)
@@ -641,7 +641,7 @@ private struct CategoryChip: View {
                 .lineLimit(1)
         }
         .foregroundStyle(tint)
-        .padding(.horizontal, 8)
+        .padding(.horizontal, KXSpacing.sm)
         .frame(height: 22)
         .background(tint.opacity(0.095), in: Capsule())
         .overlay(Capsule().stroke(tint.opacity(0.14), lineWidth: 0.6))
@@ -712,13 +712,13 @@ struct KXInteractionBar: View {
     let onBookmark: () -> Void
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: KXSpacing.xxs) {
             MetricButton(icon: "bubble.left", value: post.commentCount, isActive: false, label: L("comments", language), tint: .teal, action: onComment)
             MetricButton(icon: "arrow.2.squarepath", value: post.repostCount, isActive: post.isRepostedByCurrentUser, label: L("repost", language), tint: .green, action: onRepost)
             MetricButton(icon: post.isLikedByCurrentUser ? "heart.fill" : "heart", value: post.likeCount, isActive: post.isLikedByCurrentUser, label: L("like", language), tint: .pink, action: onLike)
             MetricButton(icon: post.isBookmarkedByCurrentUser ? "bookmark.fill" : "bookmark", value: post.bookmarkCount, isActive: post.isBookmarkedByCurrentUser, label: L("bookmark", language), tint: .blue, action: onBookmark)
         }
-        .padding(.top, 4)
+        .padding(.top, KXSpacing.xs)
     }
 }
 
@@ -779,7 +779,7 @@ struct TagWrapView: View {
         // Refined soft-accent pill chips: a tinted capsule + hairline rim
         // reads more polished than flat inline text, while the low-opacity
         // fill keeps the card calm even with several tags.
-        FlowLayout(spacing: 8) {
+        FlowLayout(spacing: KXSpacing.sm) {
             ForEach(displayTags, id: \.self) { tag in
                 Button {
                     onTap(tag)

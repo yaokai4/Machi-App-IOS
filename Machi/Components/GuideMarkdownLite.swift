@@ -20,7 +20,7 @@ struct GuideMarkdownLite: View {
     var bodyFont: Font = .body
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
             ForEach(blocks) { block in
                 blockView(block)
             }
@@ -50,7 +50,7 @@ struct GuideMarkdownLite: View {
                     HStack(alignment: .top, spacing: 9) {
                         Circle().fill(accentColor)
                             .frame(width: 5, height: 5)
-                            .padding(.top, 8)
+                            .padding(.top, KXSpacing.sm)
                         Text(inlineAttributed(item))
                             .font(bodyFont)
                             .foregroundStyle(inkColor.opacity(0.92))
@@ -105,7 +105,7 @@ struct GuideMarkdownLite: View {
                                     .foregroundStyle(rowIndex == 0 ? inkColor : inkColor.opacity(0.9))
                                     .fixedSize(horizontal: false, vertical: true)
                                     .frame(minWidth: 60, alignment: .leading)
-                                    .padding(.vertical, 8)
+                                    .padding(.vertical, KXSpacing.sm)
                             }
                         }
                         if rowIndex < rows.count - 1 {
@@ -114,7 +114,7 @@ struct GuideMarkdownLite: View {
                     }
                 }
                 .padding(.horizontal, 14)
-                .padding(.vertical, 4)
+                .padding(.vertical, KXSpacing.xs)
                 .frame(minWidth: 0, alignment: .leading)
                 .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }

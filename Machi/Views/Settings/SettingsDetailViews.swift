@@ -48,7 +48,7 @@ struct AccountPasswordSettingsView: View {
 
     var body: some View {
         SettingsFormPage(title: L("accountPassword", language)) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: KXSpacing.sm) {
                 Text(L("username", language))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
@@ -115,7 +115,7 @@ struct AccountPasswordSettingsView: View {
                         }
                             }
                             .foregroundStyle(KXColor.accent)
-                            .padding(.horizontal, 16)
+                            .padding(.horizontal, KXSpacing.lg)
                             .frame(height: 48)
                             .kxGlassCapsule()
                         }
@@ -365,7 +365,7 @@ struct ContactSettingsView: View {
     }
 
     private var contactHero: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: KXSpacing.md) {
             Image(systemName: "lock.shield.fill")
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(.white)
@@ -383,7 +383,7 @@ struct ContactSettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(12)
+        .padding(KXSpacing.md)
         .background(KXColor.softBackground.opacity(0.9), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -393,7 +393,7 @@ struct ContactSettingsView: View {
 
     private func formBlock<Content: View>(title: String, subtitle: String, icon: String, tint: Color, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: KXSpacing.sm) {
                 Image(systemName: icon)
                     .font(.caption.weight(.bold))
                     .foregroundStyle(tint)
@@ -411,7 +411,7 @@ struct ContactSettingsView: View {
                 .fixedSize(horizontal: false, vertical: true)
             content()
         }
-        .padding(12)
+        .padding(KXSpacing.md)
         .background(KXColor.softBackground.opacity(0.72), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -425,7 +425,7 @@ struct ContactSettingsView: View {
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
             .font(.body.weight(.medium))
-            .padding(.horizontal, 12)
+            .padding(.horizontal, KXSpacing.md)
             .frame(height: 46)
             .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay {
@@ -437,7 +437,7 @@ struct ContactSettingsView: View {
     private func secureField(_ placeholder: String, text: Binding<String>) -> some View {
         SecureField(placeholder, text: text)
             .font(.body.weight(.medium))
-            .padding(.horizontal, 12)
+            .padding(.horizontal, KXSpacing.md)
             .frame(height: 46)
             .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay {
@@ -501,7 +501,7 @@ struct ContactSettingsView: View {
     }
 
     private func statusBanner(_ text: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: KXSpacing.sm) {
             Image(systemName: "info.circle.fill")
                 .foregroundStyle(KXColor.accent)
             Text(text)
@@ -509,7 +509,7 @@ struct ContactSettingsView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(12)
+        .padding(KXSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(KXColor.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
@@ -1370,7 +1370,7 @@ struct DraftsSettingsView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(spacing: 12) {
+            LazyVStack(spacing: KXSpacing.md) {
                 switch viewModel.state {
                 case .loading, .idle:
                     LoadingView()
@@ -1578,7 +1578,7 @@ private struct DraftCard: View {
     let delete: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
             HStack {
                 AvatarView(user: currentUser, size: 42)
                 VStack(alignment: .leading, spacing: 3) {
@@ -1609,7 +1609,7 @@ private struct DraftCard: View {
             }
             .font(.subheadline.weight(.bold))
         }
-        .padding(16)
+        .padding(KXSpacing.lg)
         .kxGlassSurface(radius: KaiXTheme.cardRadius)
     }
 }
@@ -1639,7 +1639,7 @@ private struct DraftEditorView: View {
                 TextEditor(text: $content)
                     .font(.title3)
                     .scrollContentBackground(.hidden)
-                    .padding(16)
+                    .padding(KXSpacing.lg)
                     .frame(minHeight: 220)
                     .kxGlassSurface(radius: KXRadius.lg)
                     .padding(KaiXTheme.horizontalPadding)
@@ -1707,7 +1707,7 @@ struct AppearanceSettingsView: View {
                                 .fontWeight(.black)
                         }
                     }
-                    .padding(.vertical, 8)
+                    .padding(.vertical, KXSpacing.sm)
                 }
                 .buttonStyle(.plain)
                 Divider()
@@ -1731,7 +1731,7 @@ struct NotificationPreferencesView: View {
     var body: some View {
         SettingsFormPage(title: L("notificationSettings", language)) {
             if systemPermissionDenied {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: KXSpacing.sm) {
                     Label(L("notifPermissionOff", language), systemImage: "bell.slash.fill")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.orange)
@@ -1849,7 +1849,7 @@ struct PrivacySettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: KXSpacing.sm) {
                 Text(L("dmPermission", language))
                     .font(.subheadline.weight(.semibold))
                 Picker(L("dmPermission", language), selection: allowDMBinding) {
@@ -1862,7 +1862,7 @@ struct PrivacySettingsView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-            .padding(.top, 4)
+            .padding(.top, KXSpacing.xs)
 
             Divider()
 
@@ -1968,7 +1968,7 @@ struct LoginDevicesView: View {
             Image(systemName: "desktopcomputer")
                 .foregroundStyle(KXColor.accent)
                 .frame(width: 28)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                 Text(device.displayName)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
@@ -2115,7 +2115,7 @@ struct BlocklistSettingsView: View {
         return HStack(spacing: KXSpacing.md) {
             AvatarView(user: user, size: 38)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                 Text(user?.displayName ?? L("unknownUser", language))
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
@@ -2293,7 +2293,7 @@ struct FeedbackView: View {
             // Fallback channel if the user prefers email or is offline.
             if let mail = URL(string: "mailto:\(KaiXBackend.supportEmail)") {
                 LegalLinkRow(icon: "envelope.fill", title: L("contactSupport", language), subtitle: KaiXBackend.supportEmail, url: mail)
-                    .padding(.top, 4)
+                    .padding(.top, KXSpacing.xs)
             }
         }
     }
@@ -2326,7 +2326,7 @@ struct AboutKaiXView: View {
             Text("\(L("version", language)) \(KaiXBackend.appVersionDisplay)")
                 .font(.footnote.weight(.bold))
 
-            Divider().padding(.vertical, 4)
+            Divider().padding(.vertical, KXSpacing.xs)
 
             Text(L("legalAndSupport", language))
                 .font(.headline.weight(.semibold))
@@ -2351,12 +2351,12 @@ struct LegalLinkRow: View {
 
     var body: some View {
         Link(destination: url) {
-            HStack(spacing: 12) {
+            HStack(spacing: KXSpacing.md) {
                 Image(systemName: icon)
                     .font(.subheadline)
                     .foregroundStyle(KXColor.accent)
                     .frame(width: 24)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                     Text(title)
                         .font(.body)
                         .foregroundStyle(.primary)
@@ -2372,7 +2372,7 @@ struct LegalLinkRow: View {
                     .foregroundStyle(.tertiary)
             }
             .contentShape(Rectangle())
-            .padding(.vertical, 4)
+            .padding(.vertical, KXSpacing.xs)
         }
     }
 }
@@ -2508,11 +2508,11 @@ struct SettingsFormPage<Content: View>: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: KXSpacing.lg) {
                 content
             }
             .font(.body)
-            .padding(16)
+            .padding(KXSpacing.lg)
             .frame(maxWidth: .infinity, alignment: .leading)
             .kxGlassSurface(radius: KXRadius.sheet)
             .padding(KaiXTheme.horizontalPadding)

@@ -187,9 +187,9 @@ struct DataManagementView: View {
 
     private var storageHero: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top, spacing: 16) {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 8) {
+            HStack(alignment: .top, spacing: KXSpacing.lg) {
+                VStack(alignment: .leading, spacing: KXSpacing.sm) {
+                    HStack(spacing: KXSpacing.sm) {
                         Image(systemName: cache.isWorking ? "sparkles" : "internaldrive.fill")
                             .font(.caption.weight(.bold))
                         Text(cache.isWorking
@@ -234,7 +234,7 @@ struct DataManagementView: View {
                 .accessibilityHidden(true)
             }
 
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 metricChip(metrics[0])
                 metricChip(metrics[1])
                 metricChip(metrics[2])
@@ -259,7 +259,7 @@ struct DataManagementView: View {
                     }
                 }
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, KXSpacing.xs)
             .premiumPanel()
         }
     }
@@ -283,14 +283,14 @@ struct DataManagementView: View {
     }
 
     private var restartNotice: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: KXSpacing.md) {
             Image(systemName: "restart.circle.fill")
                 .font(.title3)
                 .foregroundStyle(.orange)
                 .frame(width: 34, height: 34)
                 .background(KXColor.warningSoft, in: Circle())
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: KXSpacing.xs) {
                 Text(T("重启后完成清除", "再起動後に完了", "Finishes after restart"))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
@@ -311,7 +311,7 @@ struct DataManagementView: View {
     }
 
     private var safetyNote: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: KXSpacing.md) {
             Image(systemName: "checkmark.shield.fill")
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(KXColor.accent)
@@ -325,13 +325,13 @@ struct DataManagementView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 4)
-        .padding(.top, 2)
+        .padding(.horizontal, KXSpacing.xs)
+        .padding(.top, KXSpacing.xxs)
     }
 
     private func sectionHeader(title: String, subtitle: String) -> some View {
         HStack(alignment: .lastTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                 Text(title)
                     .font(KXTypography.section)
                     .foregroundStyle(.primary)
@@ -341,7 +341,7 @@ struct DataManagementView: View {
             }
             Spacer()
         }
-        .padding(.horizontal, 4)
+        .padding(.horizontal, KXSpacing.xs)
     }
 
     @ViewBuilder
@@ -381,7 +381,7 @@ struct DataManagementView: View {
         Button {
             pending = target
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: KXSpacing.md) {
                 Image(systemName: target.icon)
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(target.tint)
@@ -409,7 +409,7 @@ struct DataManagementView: View {
                     Text(T("已安排", "予約済み", "Scheduled"))
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(.orange)
-                        .padding(.horizontal, 8)
+                        .padding(.horizontal, KXSpacing.sm)
                         .frame(height: 24)
                         .background(KXColor.warningSoft, in: Capsule())
                 } else if cache.isWorking {
@@ -523,7 +523,7 @@ private struct StorageMetricRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: KXSpacing.md) {
             Image(systemName: metric.icon)
                 .font(.system(size: 17, weight: .bold))
                 .foregroundStyle(metric.tint)
@@ -531,8 +531,8 @@ private struct StorageMetricRow: View {
                 .background(metric.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
 
             VStack(alignment: .leading, spacing: 7) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: KXSpacing.sm) {
+                    VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                         Text(metric.title)
                             .font(.subheadline.weight(.semibold))
                             .lineLimit(1)
@@ -546,7 +546,7 @@ private struct StorageMetricRow: View {
 
                     Spacer(minLength: 8)
 
-                    VStack(alignment: .trailing, spacing: 2) {
+                    VStack(alignment: .trailing, spacing: KXSpacing.xxs) {
                         Text(KaiXCacheManager.formatted(metric.bytes))
                             .font(.subheadline.weight(.bold))
                             .monospacedDigit()
@@ -572,7 +572,7 @@ private struct StorageMetricRow: View {
             }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.vertical, KXSpacing.md)
         .accessibilityElement(children: .combine)
     }
 

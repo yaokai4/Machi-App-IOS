@@ -104,7 +104,7 @@ struct GuideJourneyGrid: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            .padding(.top, 2)
+            .padding(.top, KXSpacing.xxs)
 
             LazyVGrid(columns: columns, spacing: 10) {
                 ForEach(orderedJourneys) { journey in
@@ -148,7 +148,7 @@ struct GuideJourneyCard: View {
                         Text(doneCount > 0 ? "\(doneCount)/\(total)" : "\(total) 步")
                             .font(.caption2.weight(.bold))
                             .foregroundStyle(doneCount > 0 ? tint : .secondary)
-                            .padding(.horizontal, 8)
+                            .padding(.horizontal, KXSpacing.sm)
                             .frame(height: 22)
                             .background(doneCount > 0 ? tint.opacity(0.14) : KXColor.softBackground, in: Capsule())
                     }
@@ -168,7 +168,7 @@ struct GuideJourneyCard: View {
                 }
             }
             .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
-            .padding(12)
+            .padding(KXSpacing.md)
             .kxGlassSurface(radius: KXRadius.card)
         }
         .buttonStyle(.fullArea)
@@ -227,7 +227,7 @@ struct GuideJourneySpotlight: View {
                             .frame(width: 190)
                         }
                     }
-                    .padding(.vertical, 2)
+                    .padding(.vertical, KXSpacing.xxs)
                 }
             }
         }
@@ -411,7 +411,7 @@ struct GuideJourneyDetailView: View {
             }
         } else if let detail = model.detail {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: KXSpacing.lg) {
                     header(detail.journey, steps: detail.steps)
                     if showCompletionCard {
                         completionCard(detail.journey)
@@ -487,7 +487,7 @@ struct GuideJourneyDetailView: View {
                         Text(disclaimer)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
-                            .padding(.top, 4)
+                            .padding(.top, KXSpacing.xs)
                     }
                 }
                 .padding(KXSpacing.screen)
@@ -506,8 +506,8 @@ struct GuideJourneyDetailView: View {
         let total = steps.count
         let done = min(model.doneCount(steps: steps), total)
         let tint = guideHexColor(journey.color)
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
+        return VStack(alignment: .leading, spacing: KXSpacing.md) {
+            HStack(spacing: KXSpacing.md) {
                 Image(systemName: guideJourneySymbol(journey.icon))
                     .font(.system(size: 22, weight: .bold))
                     .foregroundStyle(.white)
@@ -558,8 +558,8 @@ struct GuideJourneyDetailView: View {
     /// 全局发帖器并预选 guide 类型(与频道空态的 requestCompose 同一条通道)。
     private func completionCard(_ journey: KaiXGuideJourneyDTO) -> some View {
         let tint = guideHexColor(journey.color)
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
+        return VStack(alignment: .leading, spacing: KXSpacing.md) {
+            HStack(spacing: KXSpacing.md) {
                 Image(systemName: "party.popper.fill")
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(.white)
@@ -630,7 +630,7 @@ private struct GuideJourneyStepRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: KXSpacing.md) {
                 Button {
                     withAnimation(.spring(response: 0.32, dampingFraction: 0.62)) { onToggle() }
                 } label: {
@@ -644,7 +644,7 @@ private struct GuideJourneyStepRow: View {
         .contentShape(Rectangle())
                 .sensoryFeedback(.success, trigger: isDone)
                 .accessibilityLabel(guideOSText(language, "完成", "完了", "Done"))
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: KXSpacing.xs) {
                     HStack(spacing: 6) {
                         Text(journeyText(language, "第 \(index) 步", "ステップ \(index)", "Step \(index)"))
                             .font(.caption2.weight(.bold))
@@ -740,7 +740,7 @@ private struct GuideJourneyStepRow: View {
                         }
                     }
                 }
-                .padding(.top, 2)
+                .padding(.top, KXSpacing.xxs)
             }
 
             if step.actionType == "journey", !step.actionTarget.isEmpty {
@@ -827,13 +827,13 @@ struct GuideJourneyNextStepCard: View {
     var body: some View {
         if let key = guideJourneyKey(forCategory: categoryKey) {
             Button { router.open(.guideJourney(key: key)) } label: {
-                HStack(spacing: 12) {
+                HStack(spacing: KXSpacing.md) {
                     Image(systemName: "signpost.right.fill")
                         .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(.white)
                         .frame(width: 42, height: 42)
                         .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                         Text(journeyText(language, "下一步", "次のステップ", "Next step"))
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.secondary)

@@ -38,7 +38,7 @@ struct MerchantSettingsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: KXSpacing.lg) {
                 hero
                 dashboardCard
                 applicationForm
@@ -46,7 +46,7 @@ struct MerchantSettingsView: View {
                 reviewNoteSection
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
-            .padding(.top, 12)
+            .padding(.top, KXSpacing.md)
             .kxTabBarSafeBottomPadding()
         }
         .navigationTitle(L("merchantServiceConsoleTitle", language))
@@ -70,8 +70,8 @@ struct MerchantSettingsView: View {
     }
 
     private var hero: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
+            HStack(spacing: KXSpacing.md) {
                 Image(systemName: statusIcon)
                     .font(.title2.weight(.bold))
                     .foregroundStyle(.white)
@@ -102,13 +102,13 @@ struct MerchantSettingsView: View {
                         .font(.footnote.weight(.semibold))
                 }
                 .foregroundStyle(messageIsPositive ? Color.green : KXColor.heat)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, KXSpacing.md)
                 .padding(.vertical, 9)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background((messageIsPositive ? Color.green : KXColor.heat).opacity(0.09), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }
-        .padding(16)
+        .padding(KXSpacing.lg)
         .kxGlassSurface(radius: KXRadius.hero, elevated: true)
     }
 
@@ -149,7 +149,7 @@ struct MerchantSettingsView: View {
                     MerchantMetricTile(title: L("merchantMetricInquiries", language), value: dashboard?.metrics.inquiries ?? business?.inquiry_count ?? 0, icon: "bubble.left.and.bubble.right.fill", tint: .orange)
                     MerchantMetricTile(title: L("merchantMetricNewInquiries", language), value: dashboard?.metrics.new_inquiries ?? 0, icon: "sparkles", tint: .purple)
                 }
-                .padding(12)
+                .padding(KXSpacing.md)
             }
         }
     }
@@ -209,7 +209,7 @@ struct MerchantSettingsView: View {
                 MerchantField(icon: "bubble.left.and.text.bubble.right", title: L("merchantPublicContact", language), text: $contactMethod, placeholder: L("merchantPublicContactPlaceholder", language))
 
                 MerchantFormGroupHeader(icon: "sparkles", title: L("merchantServiceContent", language), tint: .orange)
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: KXSpacing.sm) {
                     MerchantFieldTitle(title: L("merchantServiceCategories", language), required: true)
                     FlowTags(values: serviceCategories, selected: $selectedCategories, labelForValue: categoryLabel)
                 }
@@ -220,7 +220,7 @@ struct MerchantSettingsView: View {
                     Button {
                         Task { await save(submit: true) }
                     } label: {
-                        HStack(spacing: 8) {
+                        HStack(spacing: KXSpacing.sm) {
                             if isSaving {
                                 KXSpinner(size: 16, lineWidth: 2.2)
                             } else {
@@ -255,7 +255,7 @@ struct MerchantSettingsView: View {
                     .buttonStyle(KXPressableStyle())
                     .disabled(isSaving || isUploading)
                 }
-                .padding(.top, 2)
+                .padding(.top, KXSpacing.xxs)
             }
             .padding(14)
         }
@@ -263,7 +263,7 @@ struct MerchantSettingsView: View {
 
     private var documentSection: some View {
         SettingsSectionCard(title: L("merchantDocuments", language)) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: KXSpacing.md) {
                 Text(L("merchantDocsHelp", language))
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(.secondary)
@@ -272,7 +272,7 @@ struct MerchantSettingsView: View {
                 Button {
                     isImporterPresented = true
                 } label: {
-                    HStack(spacing: 8) {
+                    HStack(spacing: KXSpacing.sm) {
                         if isUploading {
                             KXSpinner(size: 16, lineWidth: 2.2)
                         } else {
@@ -302,12 +302,12 @@ struct MerchantSettingsView: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                 } else {
-                    VStack(spacing: 8) {
+                    VStack(spacing: KXSpacing.sm) {
                         ForEach(docs) { doc in
                             HStack(spacing: 10) {
                                 Image(systemName: doc.contentType == "application/pdf" ? "doc.richtext.fill" : "photo.fill")
                                     .foregroundStyle(.green)
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                                     Text(doc.documentType ?? L("merchantDocumentDefault", language))
                                         .font(.subheadline.weight(.bold))
                                     Text("\(formatBytes(doc.fileSize ?? 0)) · \(doc.status ?? doc.documentStatus ?? "submitted")")
@@ -318,7 +318,7 @@ struct MerchantSettingsView: View {
                                 Text(L("privateBadge", language))
                                     .font(.caption2.weight(.black))
                                     .foregroundStyle(.green)
-                                    .padding(.horizontal, 8)
+                                    .padding(.horizontal, KXSpacing.sm)
                                     .frame(height: 22)
                                     .background(Color.green.opacity(0.12), in: Capsule())
                                 if let documentId = doc.documentId {
@@ -342,7 +342,7 @@ struct MerchantSettingsView: View {
                     }
                 }
             }
-            .padding(12)
+            .padding(KXSpacing.md)
         }
     }
 
@@ -353,7 +353,7 @@ struct MerchantSettingsView: View {
                 Text(note)
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .padding(12)
+                    .padding(KXSpacing.md)
             }
         }
     }
@@ -592,7 +592,7 @@ private struct MerchantMetricTile: View {
     let tint: Color
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
             Image(systemName: icon)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(tint)
@@ -606,7 +606,7 @@ private struct MerchantMetricTile: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
+        .padding(KXSpacing.md)
         .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
@@ -621,7 +621,7 @@ private struct MerchantFormGroupHeader: View {
     let tint: Color
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: KXSpacing.sm) {
             Image(systemName: icon)
                 .font(.caption.weight(.bold))
                 .foregroundStyle(tint)
@@ -633,7 +633,7 @@ private struct MerchantFormGroupHeader: View {
                 .fill(KXColor.separator.opacity(0.7))
                 .frame(height: 0.7)
         }
-        .padding(.top, 4)
+        .padding(.top, KXSpacing.xs)
     }
 }
 
@@ -695,7 +695,7 @@ private struct MerchantField: View {
                     .accessibilityLabel(KXListingCopy.pickText(language, "清空", "クリア", "Clear"))
                 }
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, KXSpacing.md)
             .padding(.vertical, 11)
             .background(KXColor.softBackground.opacity(focused ? 0.55 : 1), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
             .overlay {
@@ -735,8 +735,8 @@ private struct MerchantTapField: View {
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.tertiary)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 12)
+                .padding(.horizontal, KXSpacing.md)
+                .padding(.vertical, KXSpacing.md)
                 .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 13, style: .continuous)
@@ -787,8 +787,8 @@ private struct MerchantPickerField: View {
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.tertiary)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 12)
+                .padding(.horizontal, KXSpacing.md)
+                .padding(.vertical, KXSpacing.md)
                 .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 13, style: .continuous)
@@ -832,8 +832,8 @@ private struct MerchantTextEditor: View {
                     .font(.subheadline)
                     .frame(minHeight: 96)
                     .scrollContentBackground(.hidden)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 2)
+                    .padding(.horizontal, KXSpacing.xs)
+                    .padding(.vertical, KXSpacing.xxs)
                     .focused($focused)
             }
             .background(KXColor.softBackground.opacity(focused ? 0.55 : 1), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
@@ -852,7 +852,7 @@ private struct FlowTags: View {
     var labelForValue: (String) -> String = { $0 }
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 8)], spacing: 8) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: KXSpacing.sm)], spacing: KXSpacing.sm) {
             ForEach(values, id: \.self) { value in
                 let isOn = selected.contains(value)
                 Button {
@@ -864,7 +864,7 @@ private struct FlowTags: View {
                         }
                     }
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: KXSpacing.xs) {
                         if isOn {
                             Image(systemName: "checkmark")
                                 .font(.caption2.weight(.black))

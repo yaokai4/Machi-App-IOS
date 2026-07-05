@@ -86,7 +86,7 @@ struct GuideLifePlannerView: View {
             }
         } savedSection: {
             if !model.lifeItems.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: KXSpacing.sm) {
                     Text(guideOSText(language, "我的生活事项", "マイ生活項目", "My life items"))
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.primary)
@@ -148,7 +148,7 @@ struct GuideOSLifeItemRow: View {
     @State private var showingPayment = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "yensign.circle.fill")
                     .font(.subheadline)
@@ -208,7 +208,7 @@ struct GuideOSLifeItemRow: View {
             }
             GuideAttachmentSection(entityType: "guide_life_item", entityId: item.id, title: guideOSText(language, "缴费附件", "支払い添付", "Payment attachments"))
         }
-        .padding(12)
+        .padding(KXSpacing.md)
         .kxGlassSurface(radius: KXRadius.md)
         .confirmationDialog(guideOSText(language, "删除该生活事项？", "この生活項目を削除しますか？", "Delete this life item?"), isPresented: $confirming, titleVisibility: .visible) {
             Button(guideOSText(language, "删除（含待办）", "削除（タスクも含む）", "Delete (incl. todos)"), role: .destructive, action: onDelete)
@@ -267,7 +267,7 @@ private struct GuideLifePaymentSheet: View {
                     } else {
                         ForEach(payments) { payment in
                             HStack {
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                                     Text(GuideOSDate.short(payment.paidAt))
                                         .font(.subheadline.weight(.semibold))
                                     Text(payment.paymentMethod.isEmpty ? guideOSText(language, "未注明方式", "方法未記入", "Method not specified") : payment.paymentMethod)

@@ -645,7 +645,7 @@ struct CreateCityListingView: View {
         VStack(spacing: 0) {
             createHeader
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: KXSpacing.lg) {
                     createHero
                     if needsMembership { membershipBanner }
                     if showsListingQuota, let remaining = listingQuotaRemaining { listingQuotaBanner(remaining) }
@@ -792,7 +792,7 @@ struct CreateCityListingView: View {
     /// on a gated type — so they learn the requirement before filling it all in.
     private var membershipBanner: some View {
         Button { showMembershipGate = true } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: KXSpacing.md) {
                 Image(systemName: "checkmark.seal.fill")
                     .font(.title3)
                     .foregroundStyle(KXColor.accent)
@@ -827,7 +827,7 @@ struct CreateCityListingView: View {
             Image(systemName: depleted ? "calendar.badge.exclamationmark" : "checkmark.seal.fill")
                 .font(.body.weight(.semibold))
                 .foregroundStyle(depleted ? KXColor.heat : KXColor.accent)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                 Text(depleted
                      ? KXListingCopy.pickText(language, "本月该类型发布额度已用完", "今月のこのカテゴリの投稿枠を使い切りました", "This month's quota for this type is used up")
                      : KXListingCopy.pickText(language, "本月还可发布 \(remaining) 条", "今月はあと \(remaining) 件投稿できます", "\(remaining) posts left this month"))
@@ -862,8 +862,8 @@ struct CreateCityListingView: View {
     /// Deliberately distinct from the free-text 展示位置 field below (车站/地址…).
     private var publishRegionCard: some View {
         KXListingSection(title: KXListingCopy.pickText(language, "发布地区", "公開エリア", "Publish area"), icon: "mappin.circle.fill") {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: KXSpacing.md) {
+                HStack(spacing: KXSpacing.md) {
                     Text(region?.countryEmoji ?? "🌐")
                         .font(.system(size: 30))
                         .frame(width: 46, height: 46)
@@ -927,7 +927,7 @@ struct CreateCityListingView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(KXListingCopy.pickText(language, "返回", "戻る", "Back"))
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                 Text(isEditing ? KXListingCopy.pickText(language, "编辑发布", "投稿を編集", "Edit listing") : KXListingCopy.createTitle(for: listingType, language))
                     .font(.headline.weight(.semibold))
                 Text(region.map { KaiXRegionDirectory.localizedHeaderLabel($0, language: language) } ?? KXListingCopy.pickText(language, "选择城市后发布", "都市を選んで投稿", "Choose a city to post"))
@@ -937,8 +937,8 @@ struct CreateCityListingView: View {
             Spacer()
         }
         .padding(.horizontal, KaiXTheme.horizontalPadding)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
+        .padding(.top, KXSpacing.sm)
+        .padding(.bottom, KXSpacing.md)
         .kxGlassBar(ignoresTopSafeArea: true)
         .overlay(alignment: .bottom) { Divider().opacity(0.18) }
     }
@@ -952,7 +952,7 @@ struct CreateCityListingView: View {
                 .frame(width: 52, height: 52)
                 .background(typeAccent.opacity(0.12), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: KXSpacing.sm) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(isEditing ? KXListingCopy.pickText(language, "完善并保存修改", "内容を整えて保存", "Review and save changes") : KXListingCopy.createTitle(for: listingType, language))
                         .font(.title3.weight(.black))
@@ -978,7 +978,7 @@ struct CreateCityListingView: View {
 
     private var photoSection: some View {
         KXListingSection(title: KXListingCopy.pickText(language, "图片与视频", "写真・動画", "Photos & video"), icon: "photo.on.rectangle") {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: KXSpacing.md) {
                 PhotosPicker(selection: $pickerItems, maxSelectionCount: imageLimit, matching: .any(of: [.images, .videos])) {
                     HStack(spacing: KXSpacing.md) {
                         Image(systemName: "plus")
@@ -986,7 +986,7 @@ struct CreateCityListingView: View {
                             .foregroundStyle(typeAccent)
                             .frame(width: 42, height: 42)
                             .background(typeAccent.opacity(0.12), in: Circle())
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: KXSpacing.xs) {
                             Text(mediaDrafts.isEmpty ? KXListingCopy.pickText(language, "添加图片或视频", "写真または動画を追加", "Add photos or video") : KXListingCopy.pickText(language, "继续添加媒体", "メディアを追加", "Add more media"))
                                 .font(.subheadline.weight(.bold))
                                 .foregroundStyle(.primary)
@@ -1117,7 +1117,7 @@ struct CreateCityListingView: View {
 
     private var basicInfoSection: some View {
         KXListingSection(title: KXListingCopy.pickText(language, "基本信息", "基本情報", "Basic info"), icon: "square.and.pencil") {
-            VStack(spacing: 12) {
+            VStack(spacing: KXSpacing.md) {
                 KXListingFormField(title: KXListingCopy.pickText(language, "标题", "タイトル", "Title"), placeholder: KXListingCopy.titlePlaceholder(for: listingType, language), icon: "text.cursor", text: $title)
                 KXListingFormField(title: KXListingCopy.pickText(language, "分类", "カテゴリ", "Category"), placeholder: KXListingCopy.categoryPlaceholder(for: listingType, language), icon: "square.grid.2x2", text: categoryBinding)
                 listingCategorySelector
@@ -1164,7 +1164,7 @@ struct CreateCityListingView: View {
                 .font(.caption.weight(.black))
                 .foregroundStyle(.secondary)
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     ForEach(KXListingCopy.serviceCreateSections) { section in
                         let isSelected = activeSection.id == section.id
                         Button {
@@ -1172,7 +1172,7 @@ struct CreateCityListingView: View {
                                 selectServiceCreateSection(section)
                             }
                         } label: {
-                            HStack(spacing: 8) {
+                            HStack(spacing: KXSpacing.sm) {
                                 Image(systemName: section.icon)
                                     .font(.caption.weight(.black))
                                 Text(section.label(language))
@@ -1190,7 +1190,7 @@ struct CreateCityListingView: View {
                 }
             }
 
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .top, spacing: KXSpacing.sm) {
                 Image(systemName: "sparkles")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(typeAccent)
@@ -1207,7 +1207,7 @@ struct CreateCityListingView: View {
             Label(KXListingCopy.pickText(language, "二级分类", "サブカテゴリ", "Subcategory"), systemImage: "line.3.horizontal.decrease.circle")
                 .font(.caption.weight(.black))
                 .foregroundStyle(.secondary)
-            FlowLayout(spacing: 8) {
+            FlowLayout(spacing: KXSpacing.sm) {
                 ForEach(serviceCategories(for: activeSection), id: \.self) { chip in
                     Button {
                         withAnimation(.easeOut(duration: 0.18)) {
@@ -1217,7 +1217,7 @@ struct CreateCityListingView: View {
                         Text(taxonomyCategoryLabel(chip))
                             .font(.caption.weight(.bold))
                             .foregroundStyle(category == chip ? Color.white : .primary)
-                            .padding(.horizontal, 12)
+                            .padding(.horizontal, KXSpacing.md)
                             .frame(height: 34)
                             .background(category == chip ? typeAccent : KXColor.softBackground.opacity(0.82), in: Capsule())
                             .overlay(Capsule().stroke(category == chip ? Color.clear : KXColor.separator.opacity(0.58), lineWidth: 0.65))
@@ -1272,7 +1272,7 @@ struct CreateCityListingView: View {
     }
 
     private var submitBar: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: KXSpacing.sm) {
             if !canSubmit {
                 Text(hasBlockingMediaUpload ? KXListingCopy.pickText(language, "有媒体上传失败，请删除后重新选择。", "アップロードに失敗したメディアがあります。削除して選び直してください。", "Some media failed to upload. Remove it and choose again.") : missingRequiredCopy)
                     .font(.caption.weight(.semibold))
@@ -1286,7 +1286,7 @@ struct CreateCityListingView: View {
                 // upgrade gate.
                 Task { await submit() }
             } label: {
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     if isSubmitting { KXSpinner(size: 18, lineWidth: 2.2, tint: .white) }
                     Text(isSubmitting ? KXListingCopy.pickText(language, "提交中", "送信中", "Submitting") : isEditing ? KXListingCopy.pickText(language, "保存修改", "変更を保存", "Save changes") : KXListingCopy.submitLabel(for: listingType, language))
                         .font(.headline.weight(.bold))
@@ -1310,7 +1310,7 @@ struct CreateCityListingView: View {
     private var typeFields: some View {
         if listingType == "rental" {
             KXListingSection(title: "房源信息", icon: "house") {
-                VStack(spacing: 12) {
+                VStack(spacing: KXSpacing.md) {
                     HStack(spacing: 10) {
                         KXListingFormField(title: "户型", placeholder: "1K / 2LDK", icon: "square.split.2x2", text: $layout)
                         KXListingFormField(title: "面积", placeholder: "24", icon: "ruler", text: $area, keyboard: .decimalPad)
@@ -1328,7 +1328,7 @@ struct CreateCityListingView: View {
             }
         } else if listingType == "work" || listingType == "job" || listingType == "hiring" {
             KXListingSection(title: "职位信息", icon: "briefcase") {
-                VStack(spacing: 12) {
+                VStack(spacing: KXSpacing.md) {
                     KXListingFormField(title: "公司 / 店铺名", placeholder: "例如 新宿咖啡店 / 株式会社...", icon: "building.2", text: $companyName)
                     KXListingFormField(title: "工作时间", placeholder: "例如 周末 10:00-18:00", icon: "clock", text: $workingHours)
                     KXListingFormField(title: "休日休假", placeholder: "完全周休二日 / 轮班制", icon: "calendar", text: $jobHolidays)
@@ -1348,7 +1348,7 @@ struct CreateCityListingView: View {
         } else if listingType == "local_service" {
             if let vertical = serviceVertical {
                 KXListingSection(title: KXListingCopy.serviceVerticalLabel(vertical, language), icon: "calendar.badge.clock") {
-                    VStack(spacing: 12) {
+                    VStack(spacing: KXSpacing.md) {
                         KXListingFormField(title: "服务方名称", placeholder: "个人 / 店铺 / 公司名称", icon: "person.crop.square", text: $serviceBusinessName)
                         KXListingChoiceRow(
                             title: "细分类 / 服务类型",
@@ -1506,7 +1506,7 @@ struct CreateCityListingView: View {
             }
         } else if listingType == "discount" {
             KXListingSection(title: "商家优惠字段", icon: "tag") {
-                VStack(spacing: 12) {
+                VStack(spacing: KXSpacing.md) {
                     KXListingFormField(title: "商家名称", placeholder: "店铺 / 品牌 / 公司名称", icon: "storefront", text: $merchantName)
                     KXListingFormField(title: "优惠内容", placeholder: "例如 学生出示证件 9 折，套餐减 500 日元", icon: "tag", text: $discountInfo, lineLimit: 3...6)
                     KXListingFormField(title: "有效期", placeholder: "例如 2026-08-31", icon: "calendar", text: $validUntil)
@@ -1516,7 +1516,7 @@ struct CreateCityListingView: View {
             }
         } else {
             KXListingSection(title: "交易字段", icon: "shippingbox") {
-                VStack(spacing: 12) {
+                VStack(spacing: KXSpacing.md) {
                     KXListingChoiceRow(title: "发布类型", icon: "arrow.left.arrow.right.circle", options: ["出售", "免费送", "求购"], selection: $listingMode, tint: typeAccent)
                     KXListingFormField(title: "品牌 / 型号", placeholder: "可选，例如 日文配列键盘 / 白色书桌 / 13 寸笔记本", icon: "tag", text: $brandModel)
                     KXListingChoiceRow(title: "新旧程度", icon: "sparkles", options: ["全新", "几乎全新", "良好", "有使用痕迹", "可用"], selection: $condition, tint: typeAccent)
@@ -2060,7 +2060,7 @@ private struct KXListingFormField: View {
             .font(.subheadline.weight(.semibold))
             .textInputAutocapitalization(.never)
             .disableAutocorrection(true)
-            .padding(.horizontal, 12)
+            .padding(.horizontal, KXSpacing.md)
             .padding(.vertical, 11)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(KXColor.softBackground.opacity(0.78), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -2085,7 +2085,7 @@ private struct KXListingChoiceRow: View {
             Label(KXListingCopy.formText(title, language), systemImage: icon)
                 .font(.caption.weight(.black))
                 .foregroundStyle(.secondary)
-            FlowLayout(spacing: 8) {
+            FlowLayout(spacing: KXSpacing.sm) {
                 ForEach(options, id: \.self) { option in
                     Button {
                         selection = option
@@ -2093,7 +2093,7 @@ private struct KXListingChoiceRow: View {
                         Text(KXListingCopy.formText(option, language))
                             .font(.caption.weight(.bold))
                             .foregroundStyle(selection == option ? Color.white : .primary)
-                            .padding(.horizontal, 12)
+                            .padding(.horizontal, KXSpacing.md)
                             .frame(height: 34)
                             .background(selection == option ? tint : KXColor.softBackground.opacity(0.82), in: Capsule())
                             .overlay(Capsule().stroke(selection == option ? Color.clear : KXColor.separator.opacity(0.58), lineWidth: 0.65))
@@ -2117,7 +2117,7 @@ private struct KXListingToggleChip: View {
         Button {
             isOn.toggle()
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 Image(systemName: isOn ? "checkmark.circle.fill" : icon)
                     .font(.subheadline.weight(.bold))
                 Text(KXListingCopy.formText(title, language))
@@ -2126,7 +2126,7 @@ private struct KXListingToggleChip: View {
                     .minimumScaleFactor(0.85)
             }
             .foregroundStyle(isOn ? tint : .secondary)
-            .padding(.horizontal, 12)
+            .padding(.horizontal, KXSpacing.md)
             .frame(maxWidth: .infinity)
             .frame(height: 42)
             .background(isOn ? tint.opacity(0.11) : KXColor.softBackground.opacity(0.76), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -2146,7 +2146,7 @@ private struct KXListingHintRow: View {
     let tint: Color
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: KXSpacing.sm) {
             Image(systemName: icon)
                 .font(.caption.weight(.bold))
                 .foregroundStyle(tint)

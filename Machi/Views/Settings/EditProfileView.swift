@@ -52,7 +52,7 @@ struct EditProfileView: View {
                         Text(errorMessage)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.red)
-                            .padding(.horizontal, 4)
+                            .padding(.horizontal, KXSpacing.xs)
                     }
                 }
                 .padding(.horizontal, KaiXTheme.horizontalPadding)
@@ -116,7 +116,7 @@ struct EditProfileView: View {
             .disabled(!canSave)
         }
         .padding(.horizontal, KaiXTheme.horizontalPadding)
-        .padding(.top, 8)
+        .padding(.top, KXSpacing.sm)
         .padding(.bottom, 10)
         .kxGlassBar(ignoresTopSafeArea: true)
         .overlay(alignment: .bottom) {
@@ -137,7 +137,7 @@ struct EditProfileView: View {
                     .offset(x: 16, y: 37)
             }
 
-            HStack(alignment: .bottom, spacing: 12) {
+            HStack(alignment: .bottom, spacing: KXSpacing.md) {
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 5) {
                         Text(displayName.isEmpty ? user.displayName : displayName)
@@ -157,14 +157,14 @@ struct EditProfileView: View {
                 }
             }
             .padding(.top, 42)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 16)
+            .padding(.horizontal, KXSpacing.lg)
+            .padding(.bottom, KXSpacing.lg)
         }
         .kxGlassSurface(radius: KXRadius.lg)
     }
 
     private var formCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: KXSpacing.lg) {
             mediaPickers
             Divider().opacity(0.5)
             labeledField(title: L("displayName", language), text: $displayName, axis: .horizontal)
@@ -184,7 +184,7 @@ struct EditProfileView: View {
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(.secondary)
 
-            FlowLayout(spacing: 8) {
+            FlowLayout(spacing: KXSpacing.sm) {
                 ForEach(["sparkles", "star.fill", "person.fill", "newspaper.fill", "tram.fill", "fork.knife", "camera.fill", "bolt.fill"], id: \.self) { symbol in
                     Button {
                         avatarSymbol = symbol
@@ -202,7 +202,7 @@ struct EditProfileView: View {
                 }
             }
 
-            FlowLayout(spacing: 8) {
+            FlowLayout(spacing: KXSpacing.sm) {
                 ForEach(["pink", "orange", "blue", "green", "purple", "teal", "red", "black"], id: \.self) { colorName in
                     Button {
                         avatarColorName = colorName
@@ -222,7 +222,7 @@ struct EditProfileView: View {
     }
 
     private var mediaPickers: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
             Text(L("avatarAndCover", language))
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(.secondary)
@@ -282,7 +282,7 @@ struct EditProfileView: View {
     }
 
     private func labeledField(title: String, text: Binding<String>, axis: Axis) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
             Text(title)
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(.secondary)
@@ -290,8 +290,8 @@ struct EditProfileView: View {
             TextField(title, text: text, axis: axis)
                 .font(.body)
                 .lineLimit(axis == .vertical ? 3...6 : 1...1)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 12)
+                .padding(.horizontal, KXSpacing.md)
+                .padding(.vertical, KXSpacing.md)
                 .kxGlassSurface(radius: KXRadius.md)
         }
     }

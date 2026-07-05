@@ -440,7 +440,7 @@ struct CityListingChannelView: View {
             // while listings scroll under; secondary rows condense on scroll.
             listingControls
                 .padding(.horizontal, KaiXTheme.horizontalPadding)
-                .padding(.top, 12)
+                .padding(.top, KXSpacing.md)
                 .padding(.bottom, 10)
             if mapMode {
                 ListingMapView(listings: visibleItems) { id in
@@ -448,7 +448,7 @@ struct CityListingChannelView: View {
                 }
             } else {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 16) {
+                    LazyVStack(alignment: .leading, spacing: KXSpacing.lg) {
                         if let fallbackNoticeLabel, !visibleItems.isEmpty {
                             fallbackNotice(fallbackNoticeLabel)
                         }
@@ -469,7 +469,7 @@ struct CityListingChannelView: View {
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, 20)
+                                .padding(.vertical, KXSpacing.xl)
                         }
                     }
                     .padding(.horizontal, KaiXTheme.horizontalPadding)
@@ -492,7 +492,7 @@ struct CityListingChannelView: View {
                         .background(KXColor.cardBackground.opacity(0.96), in: Capsule())
                         .overlay(Capsule().stroke(KXColor.glassStroke.opacity(0.6), lineWidth: 0.7))
                         .shadow(color: KXColor.glassShadow.opacity(0.3), radius: 8, y: 3)
-                        .padding(.top, 8)
+                        .padding(.top, KXSpacing.sm)
                         .transition(.move(edge: .top).combined(with: .opacity))
                     }
                 }
@@ -538,7 +538,7 @@ struct CityListingChannelView: View {
     /// 服务端空结果回退提示：请求范围没有内容,已自动展示更大范围
     /// (data.filters.fallback / fallback_label 契约)。纯信息行,不可点。
     private func fallbackNotice(_ label: String) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: KXSpacing.sm) {
             Image(systemName: "info.circle.fill")
                 .foregroundStyle(KXColor.livingAccent)
             Text(KXListingCopy.pickText(language,
@@ -550,7 +550,7 @@ struct CityListingChannelView: View {
                 .lineLimit(2)
             Spacer(minLength: 4)
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, KXSpacing.md)
         .padding(.vertical, 10)
         .background(KXColor.livingAccentSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
         .transition(.opacity)
@@ -568,7 +568,7 @@ struct CityListingChannelView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(KXListingCopy.pickText(language, "返回", "戻る", "Back"))
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                 Text("\(region.map { KaiXRegionDirectory.localizedShortLabel($0, language: language) } ?? L("currentRegion", language)) · \(KXListingCopy.title(for: baseType, language))")
                     .font(.headline.weight(.semibold))
                     .lineLimit(1)
@@ -602,8 +602,8 @@ struct CityListingChannelView: View {
             .accessibilityLabel(L("compose", language))
         }
         .padding(.horizontal, KaiXTheme.horizontalPadding)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
+        .padding(.top, KXSpacing.sm)
+        .padding(.bottom, KXSpacing.md)
         .kxGlassBar(ignoresTopSafeArea: true)
         .overlay(alignment: .bottom) { Divider().opacity(0.18) }
     }
@@ -629,7 +629,7 @@ struct CityListingChannelView: View {
             )
             .font(.subheadline.weight(.black))
             .foregroundStyle(.white)
-            .padding(.horizontal, 20)
+            .padding(.horizontal, KXSpacing.xl)
             .frame(height: 46)
             .background(KXColor.livingInk, in: Capsule())
             .shadow(color: .black.opacity(0.22), radius: 10, y: 4)
@@ -639,12 +639,12 @@ struct CityListingChannelView: View {
 
     /// 住房频道三标签：长租 / 买房 / 民宿。
     private var rentalTabSwitcher: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: KXSpacing.xs) {
             rentalTabButton(.homes, title: KXListingCopy.pickText(language, "长租", "長期賃貸", "Rentals"), icon: "house")
             rentalTabButton(.forsale, title: KXListingCopy.pickText(language, "买房", "物件購入", "Buy"), icon: "building.2")
             rentalTabButton(.stays, title: KXListingCopy.pickText(language, "民宿", "民泊", "Homestays"), icon: "bed.double")
         }
-        .padding(4)
+        .padding(KXSpacing.xs)
         .background(KXColor.softBackground.opacity(0.82), in: Capsule())
         .overlay(Capsule().stroke(KXColor.separator.opacity(0.6), lineWidth: 0.7))
         .frame(maxWidth: .infinity)
@@ -702,13 +702,13 @@ struct CityListingChannelView: View {
             let subs = Self.serviceSections.first { $0.key == serviceSection }?.categories ?? []
             if !subs.isEmpty {
                 KXFadingHScroll {
-                    HStack(spacing: 8) {
+                    HStack(spacing: KXSpacing.sm) {
                         serviceSubChip(ListingFilterLocalizer.text("全部", language), value: "全部")
                         ForEach(subs, id: \.self) { cat in
                             serviceSubChip(ListingFilterLocalizer.text(cat, language), value: cat)
                         }
                     }
-                    .padding(.horizontal, 2)
+                    .padding(.horizontal, KXSpacing.xxs)
                 }
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -750,7 +750,7 @@ struct CityListingChannelView: View {
                 .disableAutocorrection(true)
                 .submitLabel(.search)
                 .font(.subheadline.weight(.semibold))
-                .padding(.leading, 8)
+                .padding(.leading, KXSpacing.sm)
                 .onSubmit { Task { await load(quiet: true) } }
             if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Button {
@@ -765,8 +765,8 @@ struct CityListingChannelView: View {
                 .accessibilityLabel(L("clear", language))
             }
         }
-        .padding(.leading, 8)
-        .padding(.trailing, 16)
+        .padding(.leading, KXSpacing.sm)
+        .padding(.trailing, KXSpacing.lg)
         .frame(height: 56)
         .background(KXColor.livingSurface, in: Capsule())
         .overlay(Capsule().stroke(KXColor.livingInk.opacity(0.09), lineWidth: 0.8))
@@ -809,7 +809,7 @@ struct CityListingChannelView: View {
                     .font(.system(size: 9, weight: .black))
                     .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, KXSpacing.md)
             .frame(maxWidth: 150)
             .frame(height: 40)
             .background(KXColor.livingSoft.opacity(0.9), in: Capsule())
@@ -829,9 +829,9 @@ struct CityListingChannelView: View {
 
     /// 爱彼迎标志性的图标类目滑栏 + 末端固定的排序 / 筛选按钮。
     private var categoryIconRail: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: KXSpacing.sm) {
             KXFadingHScroll {
-                HStack(spacing: 2) {
+                HStack(spacing: KXSpacing.xxs) {
                     if baseType == "local_service" {
                         ForEach(Self.serviceSections, id: \.key) { section in
                             categoryIconItem(
@@ -857,7 +857,7 @@ struct CityListingChannelView: View {
                         }
                     }
                 }
-                .padding(.horizontal, 2)
+                .padding(.horizontal, KXSpacing.xxs)
             }
             sortButton
             filtersButton
@@ -882,8 +882,8 @@ struct CityListingChannelView: View {
             }
             .foregroundStyle(selected ? KXColor.livingInk : KXColor.livingMuted)
             .padding(.horizontal, 9)
-            .padding(.top, 4)
-            .padding(.bottom, 2)
+            .padding(.top, KXSpacing.xs)
+            .padding(.bottom, KXSpacing.xxs)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -967,7 +967,7 @@ struct CityListingChannelView: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 4)
+        .padding(.horizontal, KXSpacing.xs)
     }
 
     /// 「保存此搜索」——把当前频道条件订阅成 saved search(新匹配上架时通知),
@@ -1114,14 +1114,14 @@ struct CityListingChannelView: View {
         .buttonStyle(KXPressableStyle(scale: 0.97))
         .padding(.horizontal, KaiXTheme.horizontalPadding)
         .padding(.top, 10)
-        .padding(.bottom, 12)
+        .padding(.bottom, KXSpacing.md)
         .background(.ultraThinMaterial)
         .overlay(alignment: .top) { Divider().opacity(0.4) }
     }
 
     private var scopeFilterPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
+            VStack(alignment: .leading, spacing: KXSpacing.sm) {
                 Text(ListingFilterLocalizer.text(baseType == "rental" ? (lodgingActive ? "每晚价格" : "月租范围") : isWorkChannel ? "薪资范围" : "价格范围", language))
                     .font(.caption.weight(.black))
                     .foregroundStyle(.secondary)
@@ -1243,7 +1243,7 @@ struct CityListingChannelView: View {
                 Text(ListingFilterLocalizer.text("热门城市", language))
                     .font(.caption.weight(.black))
                     .foregroundStyle(.secondary)
-                FlowLayout(spacing: 8) {
+                FlowLayout(spacing: KXSpacing.sm) {
                     ForEach(listingScopeHotCityCodes, id: \.self) { code in
                         if let city = KaiXRegionDirectory.resolve(regionCode: code) {
                             Button {
@@ -1252,7 +1252,7 @@ struct CityListingChannelView: View {
                                 Text(KaiXRegionDirectory.localizedShortLabel(city, language: language))
                                     .font(.caption.weight(.bold))
                                     .foregroundStyle(scopeMode == .selectedCity && selectedScopeRegionCode == city.regionCode ? Color.white : .primary)
-                                    .padding(.horizontal, 12)
+                                    .padding(.horizontal, KXSpacing.md)
                                     .frame(height: 32)
                                     .background(scopeMode == .selectedCity && selectedScopeRegionCode == city.regionCode ? KXColor.accent : KXColor.softBackground.opacity(0.88), in: Capsule())
                                     .overlay(Capsule().stroke(KXColor.separator.opacity(0.55), lineWidth: 0.7))
@@ -1264,7 +1264,7 @@ struct CityListingChannelView: View {
             }
 
         }
-        .padding(12)
+        .padding(KXSpacing.md)
         .background(KXColor.softBackground.opacity(0.58), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
@@ -1275,7 +1275,7 @@ struct CityListingChannelView: View {
                 Image(systemName: selected ? "checkmark.circle.fill" : "circle")
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(selected ? KXColor.accent : .secondary)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                     Text(title)
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.primary)
@@ -1286,7 +1286,7 @@ struct CityListingChannelView: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, KXSpacing.md)
             .frame(height: 54)
             .background(KXColor.softBackground.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
@@ -1305,7 +1305,7 @@ struct CityListingChannelView: View {
                     Text(metroCircleTitle(circle.code))
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(.tertiary)
-                    FlowLayout(spacing: 8) {
+                    FlowLayout(spacing: KXSpacing.sm) {
                         ForEach(circle.provinceCodes, id: \.self) { pc in
                             if let prov = KaiXRegionDirectory.provinces(for: "jp").first(where: { $0.code == pc }) {
                                 provinceChip(prov)
@@ -1325,7 +1325,7 @@ struct CityListingChannelView: View {
             Text(KaiXRegionDirectory.localizedProvinceName(countryCode: "jp", province: province, language: language))
                 .font(.caption.weight(.bold))
                 .foregroundStyle(selected ? Color.white : .primary)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, KXSpacing.md)
                 .frame(height: 32)
                 .background(selected ? KXColor.accent : KXColor.softBackground.opacity(0.88), in: Capsule())
                 .overlay(Capsule().stroke(KXColor.separator.opacity(0.55), lineWidth: 0.7))
@@ -1382,7 +1382,7 @@ struct CityListingChannelView: View {
                 .font(.subheadline.weight(.bold))
                 .onSubmit { Task { await load(quiet: true) } }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, KXSpacing.md)
         .frame(height: 42)
         .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(KXColor.separator.opacity(0.7), lineWidth: 0.7))
@@ -1393,11 +1393,11 @@ struct CityListingChannelView: View {
         options: [(value: String, label: String)],
         selection: Binding<String>
     ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
             Text(ListingFilterLocalizer.text(title, language))
                 .font(.caption.weight(.black))
                 .foregroundStyle(.secondary)
-            FlowLayout(spacing: 8) {
+            FlowLayout(spacing: KXSpacing.sm) {
                 ForEach(options, id: \.value) { option in
                     Button {
                         selection.wrappedValue = option.value
@@ -1405,7 +1405,7 @@ struct CityListingChannelView: View {
                         Text(ListingFilterLocalizer.text(option.label, language))
                             .font(.caption.weight(.bold))
                             .foregroundStyle(selection.wrappedValue == option.value ? Color.white : .primary)
-                            .padding(.horizontal, 12)
+                            .padding(.horizontal, KXSpacing.md)
                             .frame(height: 32)
                             .background(selection.wrappedValue == option.value ? KXColor.accent : Color(.systemBackground), in: Capsule())
                             .overlay(Capsule().stroke(selection.wrappedValue == option.value ? Color.clear : KXColor.separator.opacity(0.65), lineWidth: 0.7))
@@ -1417,11 +1417,11 @@ struct CityListingChannelView: View {
     }
 
     private func filterToggleSection(title: String, toggles: [(key: String, label: String)]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
             Text(ListingFilterLocalizer.text(title, language))
                 .font(.caption.weight(.black))
                 .foregroundStyle(.secondary)
-            FlowLayout(spacing: 8) {
+            FlowLayout(spacing: KXSpacing.sm) {
                 ForEach(toggles, id: \.key) { item in
                     filterToggle(title: ListingFilterLocalizer.text(item.label, language), isOn: attrToggleBinding(item.key))
                 }
@@ -1508,7 +1508,7 @@ struct CityListingChannelView: View {
             // Indeed-style job cards, Airbnb layout: each role is its own
             // elevated card with breathing room — no outer surface (which
             // would nest card-in-card with KXJobListingRow's own surface).
-            LazyVStack(spacing: 12) {
+            LazyVStack(spacing: KXSpacing.md) {
                 ForEach(visibleItems) { item in
                     KXJobListingRow(listing: item) {
                         router.open(.cityListingDetail(listingId: item.id))
@@ -1552,7 +1552,7 @@ struct CityListingChannelView: View {
             }
         } else if baseType == "local_service" {
             // 服务卡片：评分、类目、价位、预约 CTA。
-            LazyVStack(spacing: 12) {
+            LazyVStack(spacing: KXSpacing.md) {
                 ForEach(visibleItems) { item in
                     KXServiceListingCard(listing: item) {
                         router.open(.cityListingDetail(listingId: item.id))
@@ -1561,7 +1561,7 @@ struct CityListingChannelView: View {
                 }
             }
         } else {
-            LazyVStack(spacing: 12) {
+            LazyVStack(spacing: KXSpacing.md) {
                 ForEach(visibleItems) { item in
                     KXStructuredListingRow(listing: item) {
                         router.open(.cityListingDetail(listingId: item.id))
@@ -1866,7 +1866,7 @@ struct UserListingsView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(KXListingCopy.pickText(language, "返回", "戻る", "Back"))
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                 Text(title)
                     .font(.headline.weight(.bold))
                     .foregroundStyle(KXColor.livingInk)
@@ -1877,8 +1877,8 @@ struct UserListingsView: View {
             Spacer()
         }
         .padding(.horizontal, KaiXTheme.horizontalPadding)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
+        .padding(.top, KXSpacing.sm)
+        .padding(.bottom, KXSpacing.md)
         .background(KXColor.livingBackground.opacity(0.94))
         .overlay(alignment: .bottom) { Divider().opacity(0.18) }
     }
@@ -1888,7 +1888,7 @@ struct UserListingsView: View {
         ScrollView {
             Group {
                 if baseType == "secondhand" {
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 14) {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: KXSpacing.md), GridItem(.flexible(), spacing: KXSpacing.md)], spacing: 14) {
                         ForEach(items) { item in
                             KXSecondhandListingCard(listing: item) { router.open(.cityListingDetail(listingId: item.id)) }
                         }
@@ -1902,19 +1902,19 @@ struct UserListingsView: View {
                         }
                     }
                 } else if baseType == "job" {
-                    LazyVStack(spacing: 12) {
+                    LazyVStack(spacing: KXSpacing.md) {
                         ForEach(items) { item in
                             KXJobListingRow(listing: item) { router.open(.cityListingDetail(listingId: item.id)) }
                         }
                     }
                 } else if baseType == "local_service" {
-                    LazyVStack(spacing: 12) {
+                    LazyVStack(spacing: KXSpacing.md) {
                         ForEach(items) { item in
                             KXServiceListingCard(listing: item) { router.open(.cityListingDetail(listingId: item.id)) }
                         }
                     }
                 } else {
-                    LazyVStack(spacing: 12) {
+                    LazyVStack(spacing: KXSpacing.md) {
                         ForEach(items) { item in
                             KXStructuredListingRow(listing: item) { router.open(.cityListingDetail(listingId: item.id)) }
                         }
@@ -1967,7 +1967,7 @@ private struct ChannelLoadingSkeleton: View {
         // Fewer skeleton cards: only the first-screen count needs to render on
         // the push frame; the rest arrive with real data.
         if isWorkChannel {
-            LazyVStack(spacing: 12) {
+            LazyVStack(spacing: KXSpacing.md) {
                 ForEach(0..<3, id: \.self) { _ in KXJobSkeletonRow() }
             }
         } else if baseType == "secondhand" {
@@ -1985,7 +1985,7 @@ private struct ChannelLoadingSkeleton: View {
                 ForEach(0..<2, id: \.self) { _ in KXBigPhotoSkeletonCard() }
             }
         } else {
-            LazyVStack(spacing: 12) {
+            LazyVStack(spacing: KXSpacing.md) {
                 ForEach(0..<2, id: \.self) { _ in KXBigPhotoSkeletonCard() }
             }
         }

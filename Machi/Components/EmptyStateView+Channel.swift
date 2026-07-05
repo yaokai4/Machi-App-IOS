@@ -94,7 +94,7 @@ struct ChannelEmptyState: View {
                         .foregroundStyle(.white)
                 }
                 .buttonStyle(.plain)
-                .padding(.top, 4)
+                .padding(.top, KXSpacing.xs)
             }
         }
         .padding(.horizontal, KXSpacing.lg)

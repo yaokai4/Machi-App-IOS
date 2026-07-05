@@ -61,7 +61,7 @@ struct GuideDigestCardView: View {
                 Button(guideOSText(language, "收支详情", "家計簿", "Finance")) { router.open(.guideFinance) }
                     .font(.caption.weight(.bold)).foregroundStyle(KXColor.accent)
             }
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 digestStat(guideOSText(language, "收入", "収入", "Income"), d.finance.income, tone: .primary)
                 digestStat(guideOSText(language, "支出", "支出", "Spent"), d.finance.expense,
                            tone: d.finance.income > 0 && d.finance.expense > d.finance.income ? .red : .primary)
@@ -72,11 +72,11 @@ struct GuideDigestCardView: View {
             if rows.isEmpty {
                 Text(guideOSText(language, "近期没有要扣款的账单、解约窗口或到期证件，继续保持 👍", "近々の支払い・解約期限・証明書の期限はありません 👍", "No upcoming charges, cancellation windows, or expiries. Nice 👍"))
                     .font(.footnote).foregroundStyle(.secondary)
-                    .padding(12)
+                    .padding(KXSpacing.md)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(KXColor.accentSoft.opacity(0.4), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             } else {
-                VStack(spacing: 2) {
+                VStack(spacing: KXSpacing.xxs) {
                     ForEach(rows) { row in
                         Button { router.open(row.route) } label: {
                             HStack(spacing: 10) {
@@ -86,7 +86,7 @@ struct GuideDigestCardView: View {
                                     .lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
                                 Image(systemName: "chevron.right").font(.caption2.weight(.bold)).foregroundStyle(.tertiary)
                             }
-                            .padding(.vertical, 8).padding(.horizontal, 8)
+                            .padding(.vertical, KXSpacing.sm).padding(.horizontal, KXSpacing.sm)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.fullArea)
@@ -94,7 +94,7 @@ struct GuideDigestCardView: View {
                 }
             }
         }
-        .padding(16)
+        .padding(KXSpacing.lg)
         .background(KXColor.livingSurface.opacity(0.8), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(KXColor.separator.opacity(0.8), lineWidth: 0.8))
     }
@@ -149,18 +149,18 @@ struct GuideDigestCardView: View {
     // MARK: 30s cold start
 
     private var setupCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
             Label(guideOSText(language, "30 秒搭好你的生活管理", "30秒で生活管理をセットアップ", "Set up in 30s"), systemImage: "wand.and.stars")
                 .font(.headline.weight(.bold))
             Text(guideOSText(language, "选一个最接近你的身份，先帮你设好一份月度预算模板，记账时自动对照。之后填上真实数字即可。", "近い身分を選ぶと月予算テンプレートを用意します。後で実際の数字を入れてください。", "Pick what fits you and we'll seed a monthly budget template; fill in real numbers later."))
                 .font(.footnote).foregroundStyle(.secondary)
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 setupButton("student", guideOSText(language, "我是学生", "学生です", "Student"))
                 setupButton("worker", guideOSText(language, "我在工作", "働いています", "Working"))
                 setupButton("general", guideOSText(language, "其他", "その他", "Other"))
             }
         }
-        .padding(16)
+        .padding(KXSpacing.lg)
         .background(KXColor.accentSoft.opacity(0.55), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(KXColor.accent.opacity(0.3), lineWidth: 1))
     }

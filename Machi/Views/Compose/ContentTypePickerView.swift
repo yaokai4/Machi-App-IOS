@@ -25,7 +25,7 @@ struct ContentTypePickerView: View {
     private static let commonCount = 9
 
     private let columns: [GridItem] = Array(
-        repeating: GridItem(.flexible(), spacing: 12),
+        repeating: GridItem(.flexible(), spacing: KXSpacing.md),
         count: 4
     )
 
@@ -94,7 +94,7 @@ struct ContentTypePickerView: View {
     }
 
     private var searchField: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: KXSpacing.sm) {
             Image(systemName: "magnifyingglass")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
@@ -126,7 +126,7 @@ struct ContentTypePickerView: View {
                     .foregroundStyle(.primary)
                     .padding(.horizontal, KaiXTheme.horizontalPadding)
             }
-            LazyVGrid(columns: columns, spacing: 12) {
+            LazyVGrid(columns: columns, spacing: KXSpacing.md) {
                 ForEach(types, id: \.self) { type in
                     cell(for: type)
                 }
@@ -198,7 +198,7 @@ struct ContentTypePickerView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
-            .padding(.horizontal, 4)
+            .padding(.horizontal, KXSpacing.xs)
             .background {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(isCurrent ? spec.tint.opacity(0.08) : Color.clear)

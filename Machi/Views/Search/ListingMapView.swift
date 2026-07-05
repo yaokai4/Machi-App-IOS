@@ -100,7 +100,7 @@ struct ListingMapView: View {
     }
 
     private func notice(_ text: String, spinner: Bool) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: KXSpacing.sm) {
             if spinner { KXSpinner(size: 16, lineWidth: 2.2) }
             Text(text)
                 .font(.caption.weight(.bold))
@@ -111,16 +111,16 @@ struct ListingMapView: View {
         .background(.regularMaterial, in: Capsule())
         .overlay(Capsule().stroke(KXColor.livingInk.opacity(0.08), lineWidth: 0.7))
         .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
-        .padding(.top, 12)
+        .padding(.top, KXSpacing.md)
     }
 
     private func selectedCard(_ pin: ListingMapPin) -> some View {
         Button { onOpen(pin.id) } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: KXSpacing.md) {
                 cover(pin.listing)
                     .frame(width: 76, height: 76)
                     .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: KXSpacing.xs) {
                     Text(KXListingCopy.priceLabel(pin.listing, language))
                         .font(.subheadline.weight(.black))
                         .foregroundStyle(KXColor.livingWarm)

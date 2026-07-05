@@ -21,7 +21,7 @@ struct RegionSettingsView: View {
                     HStack(spacing: 10) {
                         Text(region.countryEmoji)
                             .font(.title3)
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                             Text(region.displayName)
                                 .font(.subheadline.weight(.semibold))
                             Text(region.regionCode)

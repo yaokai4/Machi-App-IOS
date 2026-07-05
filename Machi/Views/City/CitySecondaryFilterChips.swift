@@ -10,7 +10,7 @@ struct CitySecondaryFilterChips: View {
 
     var body: some View {
         KXFadingHScroll {
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 ForEach(primary.channels) { entry in
                     Button {
                         withAnimation(KXMotion.select) {
@@ -20,7 +20,7 @@ struct CitySecondaryFilterChips: View {
                         Text(entry.title(language))
                             .font(.footnote.weight(.semibold))
                             .lineLimit(1)
-                            .padding(.horizontal, 12)
+                            .padding(.horizontal, KXSpacing.md)
                             .frame(height: 30)
                             .kxGlassCapsule(isSelected: channel == entry)
                             .foregroundStyle(channel == entry ? KXColor.accent : .primary)

@@ -76,13 +76,13 @@ struct HomeJourneyNextStepCard: View {
                 Button {
                     router.open(.guideJourney(key: hint.journeyKey), in: .home)
                 } label: {
-                    HStack(spacing: 12) {
+                    HStack(spacing: KXSpacing.md) {
                         Image(systemName: guideJourneySymbol(hint.icon))
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(KXColor.accent)
                             .frame(width: 36, height: 36)
                             .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                             Text(KXListingCopy.pickText(language, "下一步该办什么", "次にやること", "Next step"))
                                 .font(.caption2.weight(.bold))
                                 .foregroundStyle(.secondary)
@@ -96,7 +96,7 @@ struct HomeJourneyNextStepCard: View {
                             Text("\(done)/\(total)")
                                 .font(.caption.weight(.bold))
                                 .foregroundStyle(KXColor.accent)
-                                .padding(.horizontal, 8)
+                                .padding(.horizontal, KXSpacing.sm)
                                 .frame(height: 22)
                                 .background(KXColor.accentSoft, in: Capsule())
                         }
@@ -104,7 +104,7 @@ struct HomeJourneyNextStepCard: View {
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.tertiary)
                     }
-                    .padding(12)
+                    .padding(KXSpacing.md)
                     .contentShape(Rectangle())
                     .kxGlassSurface(radius: KXRadius.lg)
                 }

@@ -37,7 +37,7 @@ struct MyWorkbenchView: View {
                     .kxWorkbenchEntrance(didEnter, index: 3)
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
-            .padding(.top, 12)
+            .padding(.top, KXSpacing.md)
             .kxTabBarSafeBottomPadding()
         }
         .navigationTitle(L("workbenchTitle", language))
@@ -84,15 +84,15 @@ struct MyWorkbenchView: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(16)
+        .padding(KXSpacing.lg)
         .kxGlassSurface(radius: KXRadius.hero, elevated: true)
     }
 
     /// 经营概览 / 今日待处理 — all counts from /api/my/workbench/summary.
     private var overviewCard: some View {
         let s = summary ?? KaiXWorkbenchSummaryDTO()
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
+        return VStack(alignment: .leading, spacing: KXSpacing.md) {
+            HStack(spacing: KXSpacing.sm) {
                 Image(systemName: "tray.full.fill")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(KXColor.accent)
@@ -114,7 +114,7 @@ struct MyWorkbenchView: View {
             }
             if s.pendingTotal > 0 {
                 KXFadingHScroll {
-                    HStack(spacing: 8) {
+                    HStack(spacing: KXSpacing.sm) {
                         if s.newConsults > 0 { pendingChip(KXListingCopy.pickText(language, "新咨询", "新規問合せ", "Inquiries"), s.newConsults) }
                         if s.newApplications > 0 { pendingChip(KXListingCopy.pickText(language, "新申请", "新規応募", "Applications"), s.newApplications) }
                         if s.newBookings > 0 { pendingChip(KXListingCopy.pickText(language, "新预约", "新規予約", "Bookings"), s.newBookings) }
@@ -130,7 +130,7 @@ struct MyWorkbenchView: View {
                 statTile(L("followers", language), s.followers)
             }
         }
-        .padding(16)
+        .padding(KXSpacing.lg)
         .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator.opacity(0.5), lineWidth: 0.7))
     }
@@ -306,7 +306,7 @@ struct PublishListingTypeChooserView: View {
                 }
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
-            .padding(.top, 12)
+            .padding(.top, KXSpacing.md)
             .kxTabBarSafeBottomPadding()
         }
         .navigationTitle(L("workbenchPublishCity", language))

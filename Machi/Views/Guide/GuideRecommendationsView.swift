@@ -19,7 +19,7 @@ struct GuideRecommendationsView: View {
         ZStack {
             GuideBackground()
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 16) {
+                LazyVStack(alignment: .leading, spacing: KXSpacing.lg) {
                     GuideOSHeaderRow(
                         title: guideOSText(language, "资料与服务推荐", "資料・サービスのおすすめ", "Recommended materials & services"),
                         subtitle: guideOSText(language, "根据你的提醒设置、计划和 Todo 推荐真正需要的资料与人工服务。", "リマインダー設定・計画・Todoに合わせて必要な資料とサービスを推薦します。", "Matched to your reminders, plan, and todos.")
@@ -69,7 +69,7 @@ struct GuideRecommendationsView: View {
                             Spacer(minLength: 0)
                             Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
                         }
-                        .padding(12)
+                        .padding(KXSpacing.md)
                         .kxGlassSurface(radius: KXRadius.md)
                     }
                     .buttonStyle(.fullArea)
@@ -109,7 +109,7 @@ struct GuideOSRecommendationStrip: View {
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: 9) {
                 HStack {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                         Text(guideOSText(language, "相关资料与服务", "関連資料・サービス", "Related materials & services"))
                             .font(.subheadline.weight(.bold))
                         Text(guideOSText(language, "按你的 Todo 自动推荐资料和服务", "Todoに合わせて資料とサービスを推薦", "Recommended from your todos"))
@@ -131,7 +131,7 @@ struct GuideOSRecommendationStrip: View {
                             Button {
                                 onOpenProduct(item.slug)
                             } label: {
-                                VStack(alignment: .leading, spacing: 8) {
+                                VStack(alignment: .leading, spacing: KXSpacing.sm) {
                                     HStack(spacing: 7) {
                                         Image(systemName: item.isService ? "sparkles" : "doc.text.fill")
                                             .font(.system(size: 13, weight: .bold))
@@ -155,7 +155,7 @@ struct GuideOSRecommendationStrip: View {
                                         .multilineTextAlignment(.leading)
                                 }
                                 .frame(width: 176, alignment: .leading)
-                                .padding(12)
+                                .padding(KXSpacing.md)
                                 .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -166,7 +166,7 @@ struct GuideOSRecommendationStrip: View {
         .contentShape(Rectangle())
                         }
                     }
-                    .padding(.trailing, 2)
+                    .padding(.trailing, KXSpacing.xxs)
                 }
             }
         }

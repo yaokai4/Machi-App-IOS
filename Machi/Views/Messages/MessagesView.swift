@@ -183,7 +183,7 @@ struct MessagesView: View {
     }
 
     private var inboxModePicker: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: KXSpacing.sm) {
             ForEach(MessageInboxMode.allCases) { item in
                 Button {
                     withAnimation(.snappy(duration: 0.2)) {
@@ -201,7 +201,7 @@ struct MessagesView: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(4)
+        .padding(KXSpacing.xs)
         .background(KXColor.cardBackground.opacity(0.78), in: Capsule())
         .overlay(Capsule().stroke(KXColor.separator, lineWidth: 0.7))
         .padding(.horizontal, KXSpacing.screen)
@@ -252,7 +252,7 @@ struct MessagesView: View {
                 .padding(.horizontal, KXSpacing.md)
                 .frame(height: 42)
                 .kxGlassCapsule()
-                .padding(.bottom, 2)
+                .padding(.bottom, KXSpacing.xxs)
 
                 ForEach(contacts) { user in
                     Button {
@@ -423,7 +423,7 @@ private struct ConversationSkeletonRow: View {
             Spacer()
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.vertical, KXSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
         .redacted(reason: .placeholder)
         .accessibilityHidden(true)
@@ -441,7 +441,7 @@ private struct GuestMessagesPanel: View {
     }
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: KXSpacing.lg) {
             Spacer()
             Image(systemName: "bubble.left.and.bubble.right")
                 .font(.system(size: 44, weight: .light))
@@ -458,7 +458,7 @@ private struct GuestMessagesPanel: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 8)
+                .padding(.horizontal, KXSpacing.sm)
             Button(action: onLogin) {
                 Text(L("login", language))
                     .font(.subheadline.weight(.bold))
@@ -469,7 +469,7 @@ private struct GuestMessagesPanel: View {
                     .shadow(color: KXColor.accent.opacity(0.24), radius: 10, y: 4)
             }
             .buttonStyle(.plain)
-            .padding(.top, 4)
+            .padding(.top, KXSpacing.xs)
             Spacer()
             Spacer()
         }
@@ -522,8 +522,8 @@ private struct MessagesHeaderView: View {
             .accessibilityLabel(L("notifications", language))
         }
         .padding(.horizontal, KXSpacing.screen)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
+        .padding(.top, KXSpacing.sm)
+        .padding(.bottom, KXSpacing.md)
         .kxGlassBar(ignoresTopSafeArea: true)
         .overlay(alignment: .bottom) {
             Divider().opacity(0.35)
@@ -619,7 +619,7 @@ private struct NewConversationView: View {
                                         Text(L("mutualFriendBadge", language))
                                             .font(.caption2.weight(.black))
                                             .foregroundStyle(KXColor.accent)
-                                            .padding(.horizontal, 8)
+                                            .padding(.horizontal, KXSpacing.sm)
                                             .frame(height: 24)
                                             .background(KXColor.accent.opacity(0.10), in: Capsule())
                                         Image(systemName: "chevron.right")
@@ -687,7 +687,7 @@ private struct MessageContactCard: View {
             Text(L("mutualFriendBadge", language))
                 .font(.caption2.weight(.black))
                 .foregroundStyle(KXColor.accent)
-                .padding(.horizontal, 8)
+                .padding(.horizontal, KXSpacing.sm)
                 .frame(height: 24)
                 .background(KXColor.accent.opacity(0.10), in: Capsule())
             Image(systemName: "bubble.left.and.bubble.right.fill")
@@ -717,7 +717,7 @@ private struct MessageConversationCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.vertical, KXSpacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
             .kxGlassSurface(radius: KXRadius.lg)

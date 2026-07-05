@@ -123,7 +123,7 @@ struct JLPTEyebrow: View {
 struct JLPTSectionHeader: View {
     let title: String
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: KXSpacing.sm) {
             RoundedRectangle(cornerRadius: 2, style: .continuous)
                 .fill(KXColor.livingAccent)
                 .frame(width: 3, height: 15)
@@ -139,7 +139,7 @@ struct JLPTComplianceNote: View {
     @Environment(\.appLanguage) private var language
     var text: String?
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: KXSpacing.sm) {
             Image(systemName: "checkmark.shield")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(KXColor.livingMuted)
@@ -152,7 +152,7 @@ struct JLPTComplianceNote: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(12)
+        .padding(KXSpacing.md)
         .background(KXColor.livingSoft.opacity(0.7), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous).stroke(JLPTStyle.hairline, lineWidth: 0.8))
     }
@@ -207,8 +207,8 @@ struct JLPTStreakBadge: View {
     }
 
     private var fullCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
+            HStack(spacing: KXSpacing.md) {
                 Image(systemName: today ? "flame.fill" : "flame")
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(KXColor.livingWarm)
@@ -231,7 +231,7 @@ struct JLPTStreakBadge: View {
                         .foregroundStyle(today ? KXColor.livingWarm : KXColor.livingMuted)
                 }
                 Spacer(minLength: 0)
-                VStack(alignment: .trailing, spacing: 2) {
+                VStack(alignment: .trailing, spacing: KXSpacing.xxs) {
                     Text(guideText(language, "最长 \(streak.longestStreak ?? 0) 天", "最長 \(streak.longestStreak ?? 0) 日", "Best \(streak.longestStreak ?? 0)d"))
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(KXColor.livingMuted)
@@ -242,7 +242,7 @@ struct JLPTStreakBadge: View {
             }
             JLPTWeekStrip(days: streak.last7days ?? [], todayDone: today)
         }
-        .padding(16)
+        .padding(KXSpacing.lg)
         .frame(maxWidth: .infinity)
         .jlptSurface(radius: KXRadius.hero)
     }
@@ -290,13 +290,13 @@ struct JLPTCountdownBar: View {
     let countdown: KaiXJLPTCountdown
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: KXSpacing.md) {
             Image(systemName: "calendar.badge.clock")
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(KXColor.onAccent)
                 .frame(width: 44, height: 44)
                 .background(KXColor.livingAccent, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                 Text(guideText(language,
                                "距 \(countdown.sessionLabel ?? "") 考试",
                                "\(countdown.sessionLabel ?? "") 試験まで",
@@ -310,7 +310,7 @@ struct JLPTCountdownBar: View {
                 }
             }
             Spacer(minLength: 0)
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: KXSpacing.xxs) {
                 Text("\(max(0, countdown.daysRemaining ?? 0))")
                     .font(.system(size: 30, weight: .black, design: .rounded))
                     .foregroundStyle(KXColor.livingAccent)
@@ -409,7 +409,7 @@ struct JLPTPassPill: View {
                 .font(.caption.weight(.bold))
         }
         .foregroundStyle(passed ? KXColor.livingAccent : KXColor.livingWarm)
-        .padding(.horizontal, 12).padding(.vertical, 6)
+        .padding(.horizontal, KXSpacing.md).padding(.vertical, 6)
         .background((passed ? KXColor.livingAccent : KXColor.livingWarm).opacity(0.12), in: Capsule())
         .overlay(Capsule().stroke((passed ? KXColor.livingAccent : KXColor.livingWarm).opacity(0.28), lineWidth: 0.8))
     }
@@ -421,7 +421,7 @@ struct JLPTLevelPicker: View {
     @Binding var selection: JLPTLevel
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 ForEach(JLPTLevel.allCases) { lv in
                     let active = lv == selection
                     Button {
@@ -431,7 +431,7 @@ struct JLPTLevelPicker: View {
                             .font(.subheadline.weight(.bold))
                             .foregroundStyle(active ? KXColor.onAccent : KXColor.livingInk)
                             .frame(minWidth: 46)
-                            .padding(.horizontal, 16)
+                            .padding(.horizontal, KXSpacing.lg)
                             .padding(.vertical, 9)
                             .background {
                                 if active {
@@ -446,8 +446,8 @@ struct JLPTLevelPicker: View {
                     .buttonStyle(KXPressableStyle(scale: 0.94))
                 }
             }
-            .padding(.horizontal, 2)
-            .padding(.vertical, 2)
+            .padding(.horizontal, KXSpacing.xxs)
+            .padding(.vertical, KXSpacing.xxs)
         }
         .sensoryFeedback(.selection, trigger: selection)
     }
@@ -459,7 +459,7 @@ struct JLPTSectionPicker: View {
     @Binding var selection: JLPTSection
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 ForEach(JLPTSection.allCases) { sec in
                     let active = sec == selection
                     Button {
@@ -469,7 +469,7 @@ struct JLPTSectionPicker: View {
                             .font(.caption.weight(.bold))
                             .foregroundStyle(active ? KXColor.onAccent : KXColor.livingInk)
                             .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
+                            .padding(.vertical, KXSpacing.sm)
                             .background {
                                 if active {
                                     Capsule().fill(KXColor.livingAccent)
@@ -483,8 +483,8 @@ struct JLPTSectionPicker: View {
                     .buttonStyle(KXPressableStyle(scale: 0.94))
                 }
             }
-            .padding(.horizontal, 2)
-            .padding(.vertical, 2)
+            .padding(.horizontal, KXSpacing.xxs)
+            .padding(.vertical, KXSpacing.xxs)
         }
         .sensoryFeedback(.selection, trigger: selection)
     }
@@ -525,7 +525,7 @@ struct JLPTPrimaryButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 if loading {
                     ProgressView().controlSize(.small).tint(KXColor.onAccent)
                 } else if let icon {
@@ -540,7 +540,7 @@ struct JLPTPrimaryButton: View {
             .foregroundStyle(enabled ? KXColor.onAccent : KXColor.livingMuted)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 15)
-            .padding(.horizontal, 16)
+            .padding(.horizontal, KXSpacing.lg)
             .background(
                 enabled ? KXColor.livingAccent : KXColor.livingSoft,
                 in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
@@ -577,7 +577,7 @@ struct JLPTQuestionCard: View {
     var explanationText: String? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: KXSpacing.lg) {
             header
 
             if let passage = question.passage, !passage.isEmpty {
@@ -664,7 +664,7 @@ struct JLPTQuestionCard: View {
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: KXSpacing.sm) {
             Text("\(index + 1)")
                 .font(.caption.weight(.black))
                 .foregroundStyle(KXColor.livingAccent)
@@ -675,7 +675,7 @@ struct JLPTQuestionCard: View {
                 Text(sl)
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(KXColor.livingAccent)
-                    .padding(.horizontal, 8).padding(.vertical, 3)
+                    .padding(.horizontal, KXSpacing.sm).padding(.vertical, 3)
                     .background(KXColor.livingAccentSoft, in: Capsule())
             }
             Spacer(minLength: 0)
@@ -731,7 +731,7 @@ struct JLPTChoiceRow: View {
         Button {
             onTap?()
         } label: {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: KXSpacing.md) {
                 Text(letter)
                     .font(.caption.weight(.black))
                     .foregroundStyle(badgeForeground)
@@ -849,7 +849,7 @@ struct JLPTStateView: View {
                         .shadow(color: KXColor.livingAccent.opacity(0.24), radius: 8, y: 3)
                 }
                 .buttonStyle(KXPressableStyle(scale: 0.96))
-                .padding(.top, 2)
+                .padding(.top, KXSpacing.xxs)
             }
         }
         .padding(32)

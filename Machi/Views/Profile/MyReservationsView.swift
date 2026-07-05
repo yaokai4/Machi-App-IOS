@@ -31,7 +31,7 @@ struct MyReservationsView: View {
             ErrorStateView(message: message) { Task { await load() } }
         case .empty:
             ScrollView {
-                VStack(spacing: 16) {
+                VStack(spacing: KXSpacing.lg) {
                     Spacer(minLength: 96)
                     KXEmptyActionPanel(
                         icon: "calendar.badge.clock",
@@ -49,7 +49,7 @@ struct MyReservationsView: View {
             .kxReadableWidth()
         case .loaded:
             ScrollView {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: KXSpacing.md) {
                     ForEach(items) { booking in
                         row(booking)
                     }
@@ -70,7 +70,7 @@ struct MyReservationsView: View {
             }
         } label: {
             HStack(spacing: 14) {
-                VStack(spacing: 2) {
+                VStack(spacing: KXSpacing.xxs) {
                     Text(dayNumber(booking.startDate))
                         .font(.title3.weight(.black))
                     Text(monthLabel(booking.startDate))
@@ -83,7 +83,7 @@ struct MyReservationsView: View {
                         .fill((cancelled ? Color.secondary : KXColor.accent).opacity(0.12))
                 )
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: KXSpacing.xs) {
                     Text(booking.listingTitle ?? KXListingCopy.pickText(language, "预约", "予約", "Reservation"))
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(KXColor.livingInk)
@@ -105,7 +105,7 @@ struct MyReservationsView: View {
                             Text(KXListingCopy.pickText(language, "取消", "取消", "Cancel"))
                                 .font(.caption.weight(.bold))
                                 .foregroundStyle(KXColor.livingWarm)
-                                .padding(.horizontal, 12).padding(.vertical, 7)
+                                .padding(.horizontal, KXSpacing.md).padding(.vertical, 7)
                                 .background(Capsule().fill(KXColor.livingWarm.opacity(0.12)))
                         }
                         .buttonStyle(.plain)
@@ -128,7 +128,7 @@ struct MyReservationsView: View {
         return Text(text)
             .font(.caption2.weight(.semibold))
             .foregroundStyle(color)
-            .padding(.horizontal, 8).padding(.vertical, 3)
+            .padding(.horizontal, KXSpacing.sm).padding(.vertical, 3)
             .background(Capsule().fill(color.opacity(0.12)))
     }
 
@@ -244,7 +244,7 @@ struct MySlotManagerListView: View {
                 ErrorStateView(message: message) { Task { await load() } }
             case .empty:
                 ScrollView {
-                    VStack(spacing: 16) {
+                    VStack(spacing: KXSpacing.lg) {
                         Spacer(minLength: 96)
                         KXEmptyActionPanel(
                             icon: "calendar.badge.plus",
@@ -267,13 +267,13 @@ struct MySlotManagerListView: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 4)
-                            .padding(.bottom, 2)
+                            .padding(.horizontal, KXSpacing.xs)
+                            .padding(.bottom, KXSpacing.xxs)
                         ForEach(listings) { listing in
                             Button {
                                 router.open(.cityListingDetail(listingId: listing.id))
                             } label: {
-                                HStack(spacing: 12) {
+                                HStack(spacing: KXSpacing.md) {
                                     Image(systemName: listing.type == "rental" ? "house.fill" : "storefront.fill")
                                         .font(.subheadline.weight(.bold))
                                         .foregroundStyle(KXColor.accent)

@@ -111,7 +111,7 @@ struct CityChannelView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(KXListingCopy.pickText(language, "返回", "戻る", "Back"))
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                 Text(viewModel.region.map { "\($0.countryEmoji) \(KaiXRegionDirectory.localizedMetroName(for: $0, language: language) ?? KaiXRegionDirectory.localizedShortLabel($0, language: language))" } ?? L("selectCity", language))
                     .font(.headline.weight(.semibold))
                     .lineLimit(1)

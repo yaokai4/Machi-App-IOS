@@ -28,7 +28,7 @@ struct PersonalWorkbenchView: View {
         ZStack {
             GuideBackground()
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 16) {
+                LazyVStack(alignment: .leading, spacing: KXSpacing.lg) {
                     header
 
                     if isGuest {
@@ -79,7 +79,7 @@ struct PersonalWorkbenchView: View {
     // MARK: Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
             HStack(spacing: 6) {
                 Image(systemName: "square.grid.2x2.fill")
                 Text(guideText(language, "今日管理", "今日の管理", "Today"))
@@ -106,7 +106,7 @@ struct PersonalWorkbenchView: View {
     }
 
     private var guestNotice: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: KXSpacing.md) {
             Image(systemName: "lock.badge.clock")
                 .font(.title3.weight(.bold))
                 .foregroundStyle(KXColor.accent)
@@ -165,7 +165,7 @@ struct PersonalWorkbenchView: View {
 
     private var todaySummaryCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 // 逾期 / 今日 land on the todo list (逾期 group tops "我的一天");
                 // 即将到期 lands on the calendar agenda of the coming days.
                 summaryStat("\(overdueCount)", guideText(language, "逾期", "期限切れ", "Overdue"), tint: overdueCount > 0 ? .red : .secondary) {
@@ -196,7 +196,7 @@ struct PersonalWorkbenchView: View {
                 }
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(.white)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, KXSpacing.lg)
                 .frame(height: 48)
                 .frame(maxWidth: .infinity)
                 .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -205,13 +205,13 @@ struct PersonalWorkbenchView: View {
             .contentShape(Rectangle())
             .accessibilityIdentifier("workbench.continue")
         }
-        .padding(16)
+        .padding(KXSpacing.lg)
         .kxGlassSurface(radius: KXRadius.hero, elevated: true)
     }
 
     private func summaryStat(_ value: String, _ label: String, tint: Color, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            VStack(spacing: 4) {
+            VStack(spacing: KXSpacing.xs) {
                 Text(value)
                     .kxScaledFont(22, relativeTo: .title2, weight: .black, design: .rounded)
                     .foregroundStyle(tint)
@@ -223,7 +223,7 @@ struct PersonalWorkbenchView: View {
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
+            .padding(.vertical, KXSpacing.md)
             .background(KXColor.accentSoft.opacity(0.4), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .contentShape(Rectangle())
         }
@@ -283,7 +283,7 @@ struct PersonalWorkbenchView: View {
     }
 
     private var affairsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
             GuideSectionHeader(
                 title: guideText(language, "我的事务", "マイタスク", "My affairs"),
                 subtitle: guideText(language, "需要时进入对应管理页，日期会自动同步到 Todo 和日历。", "必要に応じて各管理ページへ。日付はTodoとカレンダーに同期。", "Open any tool when you need it; dates sync into Tasks and Calendar.")

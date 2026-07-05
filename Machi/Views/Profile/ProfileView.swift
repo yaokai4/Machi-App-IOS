@@ -100,7 +100,7 @@ struct ProfileView: View {
     /// Shown on the "我的" tab when browsing as a guest: a clear login /
     /// register call-to-action instead of an empty placeholder profile.
     private var guestProfilePrompt: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: KXSpacing.lg) {
             Spacer()
             Image(systemName: "person.crop.circle.badge.plus")
                 .font(.system(size: 58, weight: .semibold))
@@ -139,7 +139,7 @@ struct ProfileView: View {
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 36)
-            .padding(.top, 4)
+            .padding(.top, KXSpacing.xs)
             Spacer()
             Spacer()
         }
@@ -250,7 +250,7 @@ struct ProfileView: View {
                         favoritesEntry
                     }
                     PersonalProfileTabPicker(tabs: availableTabs, selection: $profileTab)
-                        .padding(.horizontal, 2)
+                        .padding(.horizontal, KXSpacing.xxs)
                     stateContent
                 }
                 .padding(.horizontal, KaiXTheme.horizontalPadding)
@@ -301,7 +301,7 @@ struct ProfileView: View {
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(.tertiary)
             }
-            .padding(16)
+            .padding(KXSpacing.lg)
             .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator.opacity(0.6), lineWidth: 0.8))
         }
@@ -674,7 +674,7 @@ struct ProfileView: View {
     }
 
     private var profileStatsStrip: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
             // Tight, X-style metric strip — only the four numbers the
             // user actually checks on themselves and others. "总热度",
             // "被收藏", "活跃城市" earlier filled the card with
@@ -718,7 +718,7 @@ struct ProfileView: View {
                 }
             }
         }
-        .padding(.top, 2)
+        .padding(.top, KXSpacing.xxs)
     }
 
     /// Tappable per-type listing counts — open this user's published items of a
@@ -752,7 +752,7 @@ struct ProfileView: View {
                     .buttonStyle(KXPressableStyle(scale: 0.96))
                 }
             }
-            .padding(.top, 4)
+            .padding(.top, KXSpacing.xs)
         }
     }
 
@@ -789,7 +789,7 @@ struct ProfileView: View {
                         .kxGlassCapsule()
                 }
             }
-            .padding(.top, 4)
+            .padding(.top, KXSpacing.xs)
         }
     }
 
@@ -799,7 +799,7 @@ struct ProfileView: View {
     private var achievementsRow: some View {
         let badges = computedAchievements
         if !badges.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: KXSpacing.sm) {
                 HStack {
                     Image(systemName: "trophy.fill")
                         .foregroundStyle(KXColor.heat)
@@ -808,7 +808,7 @@ struct ProfileView: View {
                         .font(.subheadline.weight(.bold))
                     Spacer()
                 }
-                FlowLayout(spacing: 8) {
+                FlowLayout(spacing: KXSpacing.sm) {
                     ForEach(badges, id: \.self) { badge in
                         HStack(spacing: 5) {
                             Image(systemName: badge.icon)
@@ -834,7 +834,7 @@ struct ProfileView: View {
     private var activeRegionsRow: some View {
         let regions = profileUser.recentRegionCodes.prefix(6).compactMap { KaiXRegionDirectory.resolve(regionCode: $0) }
         if !regions.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: KXSpacing.sm) {
                 HStack {
                     Image(systemName: "map")
                         .foregroundStyle(KXColor.accent)
@@ -843,7 +843,7 @@ struct ProfileView: View {
                         .font(.subheadline.weight(.bold))
                     Spacer()
                 }
-                FlowLayout(spacing: 8) {
+                FlowLayout(spacing: KXSpacing.sm) {
                     ForEach(regions, id: \.regionCode) { region in
                         Button {
                             RegionStore.shared.setCurrent(region)
@@ -872,7 +872,7 @@ struct ProfileView: View {
     private var topTopicsRow: some View {
         let topTopics = computedTopTopics
         if !topTopics.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: KXSpacing.sm) {
                 HStack {
                     Image(systemName: "number")
                         .foregroundStyle(KXColor.accent)
@@ -881,7 +881,7 @@ struct ProfileView: View {
                         .font(.subheadline.weight(.bold))
                     Spacer()
                 }
-                FlowLayout(spacing: 8) {
+                FlowLayout(spacing: KXSpacing.sm) {
                     ForEach(topTopics, id: \.self) { topic in
                         Button {
                             router.open(.topic(tag: topic))
@@ -996,7 +996,7 @@ struct ProfileView: View {
             }
             .buttonStyle(.plain)
         } else {
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 Button {
                     guard GuestSession.requireSignedIn(currentUser, reason: KXListingCopy.pickText(language, "登录后可以发私信。", "ログインするとメッセージを送れます。", "Sign in to send messages.")) else { return }
                     guard !isBlocked else {
@@ -1275,7 +1275,7 @@ private struct ProfileMetricInline: View {
     let title: String
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
+        HStack(alignment: .firstTextBaseline, spacing: KXSpacing.xs) {
             Text(value)
                 .font(.callout.weight(.bold))
                 .foregroundStyle(.primary)
@@ -1286,7 +1286,7 @@ private struct ProfileMetricInline: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.82)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, KXSpacing.xs)
         .contentShape(Rectangle())
     }
 }
@@ -1423,7 +1423,7 @@ private struct ReputationDetailSheet: View {
                         }
                     }
                     section(pick("如何提升信誉", "信頼の上げ方", "How to level up")) {
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: KXSpacing.md) {
                             ForEach(levelUpTips, id: \.text) { tip in
                                 HStack(alignment: .top, spacing: 10) {
                                     Image(systemName: tip.icon)
@@ -1444,9 +1444,9 @@ private struct ReputationDetailSheet: View {
                               "Reputation builds community trust — higher levels unlock more posting and participation perks; violations lower it."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .padding(.horizontal, 4)
+                        .padding(.horizontal, KXSpacing.xs)
                 }
-                .padding(16)
+                .padding(KXSpacing.lg)
             }
             .background(Color(.systemGroupedBackground).ignoresSafeArea())
             .navigationTitle(isSelf ? pick("我的信誉", "信頼レベル", "My reputation") : pick("信誉等级", "信頼レベル", "Reputation"))
@@ -1490,7 +1490,7 @@ private struct ReputationDetailSheet: View {
             }
             if isSelf { progressView }
         }
-        .padding(16)
+        .padding(KXSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
@@ -1530,7 +1530,7 @@ private struct ReputationDetailSheet: View {
         let name = KXListingCopy.pickText(language, lv.nameZh ?? "", lv.nameJa ?? "", lv.nameEn ?? "")
         let isCurrent = lv.level == currentLevel
         let reached = lv.level <= currentLevel
-        return HStack(spacing: 12) {
+        return HStack(spacing: KXSpacing.md) {
             ZStack {
                 Circle()
                     .fill(reached ? KXColor.accent : KXColor.separator.opacity(0.28))
@@ -1539,7 +1539,7 @@ private struct ReputationDetailSheet: View {
                     .font(.caption.weight(.heavy))
                     .foregroundStyle(reached ? .white : .secondary)
             }
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                 Text(name)
                     .font(.subheadline.weight(isCurrent ? .bold : .semibold))
                     .foregroundStyle(.primary)
@@ -1552,7 +1552,7 @@ private struct ReputationDetailSheet: View {
                 Text(pick("当前", "現在", "Now"))
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(KXColor.accent)
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, KXSpacing.sm)
                     .frame(height: 22)
                     .background(KXColor.accent.opacity(0.12), in: Capsule())
             }
@@ -1575,7 +1575,7 @@ private struct ReputationDetailSheet: View {
             Text(title)
                 .font(.headline.weight(.bold))
                 .foregroundStyle(.primary)
-                .padding(.horizontal, 4)
+                .padding(.horizontal, KXSpacing.xs)
             content()
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1650,7 +1650,7 @@ private struct FollowListView: View {
                     self.transientMessage = nil
                 }
                 .padding(.horizontal, KaiXTheme.horizontalPadding)
-                .padding(.top, 8)
+                .padding(.top, KXSpacing.sm)
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
@@ -1767,7 +1767,7 @@ private struct FollowUserCard: View {
             .accessibilityLabel(user.displayName)
 
             Button(action: onOpenProfile) {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: KXSpacing.xs) {
                     HStack(spacing: 6) {
                         Text(user.displayName)
                             .font(.subheadline.weight(.bold))
@@ -1789,7 +1789,7 @@ private struct FollowUserCard: View {
             .buttonStyle(.plain)
 
             if !isCurrentUser {
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     Button(action: onMessage) {
                         Image(systemName: "envelope")
                             .font(.subheadline.weight(.bold))
@@ -1806,7 +1806,7 @@ private struct FollowUserCard: View {
                             .foregroundStyle(isFollowing ? Color.primary : .white)
                             .lineLimit(1)
                             .minimumScaleFactor(0.82)
-                            .padding(.horizontal, 12)
+                            .padding(.horizontal, KXSpacing.md)
                             .frame(height: 34)
                             .background(isFollowing ? Color(.secondarySystemBackground) : KXColor.accent, in: Capsule())
                             .overlay(Capsule().strokeBorder(Color.primary.opacity(isFollowing ? 0.08 : 0), lineWidth: 1))
@@ -1817,7 +1817,7 @@ private struct FollowUserCard: View {
                 }
             }
         }
-        .padding(12)
+        .padding(KXSpacing.md)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
@@ -1928,7 +1928,7 @@ struct FavoritesHubView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
+            HStack(spacing: KXSpacing.md) {
                 KXSegmentedControl(
                     [Segment.listings, .posts],
                     selection: $segment
@@ -1944,7 +1944,7 @@ struct FavoritesHubView: View {
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
             .padding(.top, 14)
-            .padding(.bottom, 8)
+            .padding(.bottom, KXSpacing.sm)
 
             Divider().opacity(0.4)
 

@@ -261,7 +261,7 @@ private struct GuidePermanentResidencyHint: View {
                     .foregroundStyle(.orange)
             }
         }
-        .padding(12)
+        .padding(KXSpacing.md)
         .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }

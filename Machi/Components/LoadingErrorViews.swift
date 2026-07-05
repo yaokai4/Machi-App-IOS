@@ -123,12 +123,12 @@ struct KXSplashView: View {
             .ignoresSafeArea()
 
             if reveal {
-                VStack(spacing: 20) {
+                VStack(spacing: KXSpacing.xl) {
                     KXSplashLogoMark(shimmer: shimmer)
                         .scaleEffect(breathing ? 1.0 : 0.986)
                         .opacity(appeared ? 1 : 0)
 
-                    VStack(spacing: 8) {
+                    VStack(spacing: KXSpacing.sm) {
                         Text("Machi")
                             .font(.system(size: 32, weight: .black, design: .rounded))
                             .foregroundStyle(.primary)
@@ -139,7 +139,7 @@ struct KXSplashView: View {
                     .opacity(appeared ? 1 : 0)
 
                     KXSplashProgressRail(isActive: progressActive)
-                        .padding(.top, 4)
+                        .padding(.top, KXSpacing.xs)
                         .opacity(appeared ? 1 : 0)
                 }
                 .padding(.horizontal, 36)
@@ -279,7 +279,7 @@ struct ErrorStateView: View {
                 .frame(width: 56, height: 56)
                 .background(KXColor.accent.opacity(0.10), in: Circle())
                 .symbolEffect(.bounce, value: appeared)
-            VStack(spacing: 4) {
+            VStack(spacing: KXSpacing.xs) {
                 Text(L("error", language))
                     .font(.headline.weight(.semibold))
                 Text(message)

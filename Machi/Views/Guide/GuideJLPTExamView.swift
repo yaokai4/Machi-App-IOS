@@ -33,7 +33,7 @@ struct GuideJLPTExamView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: KXSpacing.lg) {
                 Toggle(isOn: $levelFilterOn) {
                     Text(guideText(language, "按等级筛选", "レベルで絞り込む", "Filter by level"))
                         .font(.footnote.weight(.semibold)).foregroundStyle(KXColor.livingInk)
@@ -46,7 +46,7 @@ struct GuideJLPTExamView: View {
                 }
                 content
             }
-            .padding(16)
+            .padding(KXSpacing.lg)
         }
         .background(KXColor.livingBackground.ignoresSafeArea())
         .navigationTitle(guideText(language, "模拟考试", "模擬試験", "Mock exams"))
@@ -101,7 +101,7 @@ struct GuideJLPTExamView: View {
         Button {
             Task { await start(exam) }
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: KXSpacing.md) {
                 JLPTLevelBadge(level: exam.level ?? "", size: 48)
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 6) {
@@ -153,7 +153,7 @@ struct GuideJLPTExamView: View {
         NavigationLink {
             GuideJLPTExamReviewView(sessionId: item.sessionId, title: item.title ?? "")
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: KXSpacing.md) {
                 // Score chip — passing = accent tile, failing = warm tile.
                 Text("\(item.score ?? 0)")
                     .font(.system(size: 17, weight: .black, design: .rounded))
@@ -173,7 +173,7 @@ struct GuideJLPTExamView: View {
                     .frame(width: 24, height: 24)
                     .background(KXColor.livingSoft, in: Circle())
             }
-            .padding(12)
+            .padding(KXSpacing.md)
             .frame(maxWidth: .infinity)
             .jlptSurface(radius: KXRadius.hero)
         }
@@ -285,7 +285,7 @@ struct GuideJLPTExamSessionView: View {
     @ViewBuilder
     private var sessionBody: some View {
         let q = questions[cursor]
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: KXSpacing.lg) {
             HStack(spacing: 10) {
                 ProgressView(value: Double(cursor), total: Double(max(1, questions.count)))
                     .tint(KXColor.livingAccent)
@@ -327,7 +327,7 @@ struct GuideJLPTExamSessionView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(KXColor.livingAccent)
-                    .padding(.horizontal, 16).padding(.vertical, 11)
+                    .padding(.horizontal, KXSpacing.lg).padding(.vertical, 11)
                     .background(KXColor.livingAccentSoft, in: Capsule())
                 }
                 Spacer(minLength: 0)
@@ -347,7 +347,7 @@ struct GuideJLPTExamSessionView: View {
                             Text(guideText(language, "交卷", "提出", "Submit")).font(.subheadline.weight(.bold))
                         }
                         .foregroundStyle(.white)
-                        .padding(.horizontal, 20).padding(.vertical, 11)
+                        .padding(.horizontal, KXSpacing.xl).padding(.vertical, 11)
                         .background(KXColor.livingAccent, in: Capsule())
                     }
                     .buttonStyle(.plain)
@@ -364,7 +364,7 @@ struct GuideJLPTExamSessionView: View {
 
             JLPTComplianceNote()
         }
-        .padding(16)
+        .padding(KXSpacing.lg)
     }
 
     /// Shown once the clock hits 0:00. Auto-submit runs; if it fails the user
@@ -462,7 +462,7 @@ struct JLPTExamResultContent: View {
     let result: KaiXJLPTExamResult
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: KXSpacing.lg) {
             scoreCard
             ForEach(Array((result.questions ?? []).enumerated()), id: \.element.id) { idx, q in
                 JLPTQuestionCard(
@@ -477,7 +477,7 @@ struct JLPTExamResultContent: View {
             }
             JLPTComplianceNote(text: result.disclaimer)
         }
-        .padding(16)
+        .padding(KXSpacing.lg)
     }
 
     private var scoreCard: some View {

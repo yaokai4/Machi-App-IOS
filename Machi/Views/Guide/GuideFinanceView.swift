@@ -229,7 +229,7 @@ struct GuideFinanceView: View {
 
     private var controlsRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 monthChip
                 Menu {
                     ForEach(kxFinanceCurrencies, id: \.code) { c in
@@ -284,7 +284,7 @@ struct GuideFinanceView: View {
             .disabled(vm.month >= GuideFinanceViewModel.currentMonth())
             .accessibilityLabel(guideOSText(language, "下个月", "翌月", "Next month"))
         }
-        .padding(.horizontal, 4)
+        .padding(.horizontal, KXSpacing.xs)
         .frame(height: 36)
         .background(KXColor.livingSurface.opacity(0.76), in: Capsule())
         .overlay(Capsule().stroke(KXColor.separator.opacity(0.8), lineWidth: 0.8))
@@ -309,7 +309,7 @@ struct GuideFinanceView: View {
             Image(systemName: icon).font(.caption.weight(.bold)).foregroundStyle(KXColor.accent)
             Text(text).font(.caption.weight(.bold)).foregroundStyle(.primary)
         }
-        .padding(.horizontal, 12).frame(height: 36)
+        .padding(.horizontal, KXSpacing.md).frame(height: 36)
         .background(KXColor.livingSurface.opacity(0.76), in: Capsule())
         .overlay(Capsule().stroke(KXColor.separator.opacity(0.8), lineWidth: 0.8))
     }
@@ -326,7 +326,7 @@ struct GuideFinanceView: View {
         if let s = vm.summary, s.income > 0 || !s.byCategory.isEmpty {
             let savingsRate = s.income > 0 ? Int((Double(s.net) / Double(s.income) * 100).rounded()) : 0
             let fixedShare = s.income > 0 ? Int((Double(s.fixedMonthly) / Double(s.income) * 100).rounded()) : 0
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 Image(systemName: "sparkles").font(.caption.weight(.bold)).foregroundStyle(KXColor.accent)
                 if s.income > 0 {
                     Text(guideOSText(language, "储蓄率 ", "貯蓄率 ", "Savings ")).font(.caption.weight(.semibold))
@@ -347,7 +347,7 @@ struct GuideFinanceView: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 12).padding(.vertical, 10)
+            .padding(.horizontal, KXSpacing.md).padding(.vertical, 10)
             .background(KXColor.accentSoft.opacity(0.5), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
     }
@@ -357,14 +357,14 @@ struct GuideFinanceView: View {
     @ViewBuilder private var trendChart: some View {
         if vm.trend.count > 1 {
             let maxV = max(1, vm.trend.flatMap { [$0.income, $0.expense] }.max() ?? 1)
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: KXSpacing.md) {
                 Text(guideOSText(language, "近 6 个月趋势", "直近6か月の推移", "Last 6 months"))
                     .font(.headline.weight(.bold))
                 HStack(alignment: .bottom, spacing: 6) {
                     ForEach(vm.trend) { m in
                         let isCurrent = m.month == vm.month
                         VStack(spacing: 5) {
-                            HStack(alignment: .bottom, spacing: 2) {
+                            HStack(alignment: .bottom, spacing: KXSpacing.xxs) {
                                 Capsule().fill(KXColor.accent.opacity(0.85))
                                     .frame(width: 9, height: max(3, CGFloat(m.income) / CGFloat(maxV) * 88))
                                 Capsule().fill(Color.red.opacity(0.7))
@@ -394,7 +394,7 @@ struct GuideFinanceView: View {
                     legendDot(color: Color.red.opacity(0.7), text: guideOSText(language, "支出", "支出", "Spent"))
                 }
             }
-            .padding(16)
+            .padding(KXSpacing.lg)
             .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
         }
@@ -434,7 +434,7 @@ struct GuideFinanceView: View {
     // MARK: Quick add
 
     private var quickAdd: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
             Text(guideOSText(language, "记一笔", "記録する", "Add"))
                 .font(.headline.weight(.bold))
             Picker("", selection: $kind) {
@@ -445,7 +445,7 @@ struct GuideFinanceView: View {
             .onChange(of: kind) { _, newValue in
                 category = newValue == "income" ? "salary" : "rent"
             }
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 Text(kxCurrencySymbol(vm.currency)).font(.title2.weight(.black)).foregroundStyle(.secondary)
                 TextField("0", text: $amountText)
                     .keyboardType(.numberPad)
@@ -455,7 +455,7 @@ struct GuideFinanceView: View {
                         if digits != v { amountText = digits }
                     }
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, KXSpacing.md)
             .frame(height: 52)
             .background(KXColor.accentSoft.opacity(0.5), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
 
@@ -469,7 +469,7 @@ struct GuideFinanceView: View {
 
             GuideOSDateField(title: guideOSText(language, "日期", "日付", "Date"), date: $occurredOn)
             TextField(guideOSText(language, "备注（可选）", "メモ（任意）", "Note (optional)"), text: $note)
-                .padding(.horizontal, 12).frame(height: 40)
+                .padding(.horizontal, KXSpacing.md).frame(height: 40)
                 .background(KXColor.livingSurface.opacity(0.7), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
             Button {
@@ -487,7 +487,7 @@ struct GuideFinanceView: View {
             .tint(KXColor.accent)
             .disabled((Int(amountText) ?? 0) <= 0)
         }
-        .padding(16)
+        .padding(KXSpacing.lg)
         .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
     }
@@ -496,7 +496,7 @@ struct GuideFinanceView: View {
 
     @ViewBuilder private var categoryBars: some View {
         if let s = vm.summary, !s.byCategory.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: KXSpacing.sm) {
                 Text(guideOSText(language, "本月分类支出", "今月のカテゴリ別支出", "By category"))
                     .font(.headline.weight(.bold))
                 GuideCategoryDonut(segments: s.byCategory, total: s.expense, money: money) { vm.label(language, code: $0) }
@@ -524,7 +524,7 @@ struct GuideFinanceView: View {
                             .frame(height: 6)
                         }
                     }
-                    .padding(12)
+                    .padding(KXSpacing.md)
                     .background(KXColor.livingSurface.opacity(0.7), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
             }
@@ -544,7 +544,7 @@ struct GuideFinanceView: View {
             }
             .pickerStyle(.menu)
             .frame(maxWidth: .infinity, alignment: .leading)
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 Text(kxCurrencySymbol(vm.currency)).font(.headline.weight(.bold)).foregroundStyle(.secondary)
                 TextField(guideOSText(language, "每月上限（0=取消）", "上限（0で解除）", "Monthly limit (0 = off)"), text: $budgetLimitText)
                     .keyboardType(.numberPad)
@@ -558,10 +558,10 @@ struct GuideFinanceView: View {
                 .buttonStyle(.bordered)
                 .tint(KXColor.accent)
             }
-            .padding(.horizontal, 12).frame(height: 44)
+            .padding(.horizontal, KXSpacing.md).frame(height: 44)
             .background(KXColor.livingSurface.opacity(0.7), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
-        .padding(16)
+        .padding(KXSpacing.lg)
         .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
     }
@@ -578,8 +578,8 @@ struct GuideFinanceView: View {
             )
         } else {
             ForEach(vm.transactions) { t in
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: KXSpacing.md) {
+                    VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                         Text(vm.label(language, code: t.category) + (t.note.isEmpty ? "" : " · \(t.note)"))
                             .font(.subheadline.weight(.semibold)).lineLimit(1)
                         Text(t.occurredOn ?? "").font(.caption2).foregroundStyle(.secondary)
@@ -589,7 +589,7 @@ struct GuideFinanceView: View {
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(t.isIncome ? KXColor.accent : Color.primary)
                 }
-                .padding(12)
+                .padding(KXSpacing.md)
                 .background(KXColor.livingSurface.opacity(0.7), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .swipeActions(edge: .trailing) {
                     Button(role: .destructive) { Task { await vm.delete(t) } } label: {
@@ -627,7 +627,7 @@ private struct GuideCategoryDonut: View {
 
     var body: some View {
         if total > 0 {
-            HStack(spacing: 16) {
+            HStack(spacing: KXSpacing.lg) {
                 ZStack {
                     ForEach(Array(donutStops().enumerated()), id: \.offset) { _, seg in
                         Circle()
@@ -680,7 +680,7 @@ private struct GuideFinanceStat: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 4) {
+            HStack(spacing: KXSpacing.xs) {
                 Image(systemName: icon).font(.caption2.weight(.bold))
                     .foregroundStyle(positive ? KXColor.accent : Color.red)
                 Text(label).font(.caption2.weight(.bold)).foregroundStyle(.secondary)
@@ -689,7 +689,7 @@ private struct GuideFinanceStat: View {
             if let sub { Text(sub).font(.caption2.weight(.semibold)).foregroundStyle(.secondary).lineLimit(1) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
+        .padding(KXSpacing.md)
         .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KXColor.separator.opacity(0.7), lineWidth: 0.7))
     }

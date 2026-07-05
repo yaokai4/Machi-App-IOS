@@ -71,13 +71,13 @@ struct WalletView: View {
         Button {
             showMembershipSheet = true
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: KXSpacing.md) {
                 Image(systemName: "checkmark.seal.fill")
                     .font(.title3)
                     .foregroundStyle(.blue)
                     .frame(width: 40, height: 40)
                     .background(Circle().fill(KXColor.accentSoft))
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                     Text(wl("会员享 Machi 币会员价", "Members get member pricing", "会員は会員価格で購入"))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
@@ -91,7 +91,7 @@ struct WalletView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.tertiary)
             }
-            .padding(16)
+            .padding(KXSpacing.lg)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.cardBackground))
             .overlay(RoundedRectangle(cornerRadius: 16).stroke(KXColor.separator, lineWidth: 0.8))
@@ -136,7 +136,7 @@ struct WalletView: View {
             .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity)
-        .padding(20)
+        .padding(KXSpacing.xl)
         .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.cardBackground))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(KXColor.separator, lineWidth: 0.8))
     }
@@ -155,7 +155,7 @@ struct WalletView: View {
             .disabled(store.state == .loading)
         }
         .frame(maxWidth: .infinity)
-        .padding(20)
+        .padding(KXSpacing.xl)
         .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.cardBackground))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(KXColor.separator, lineWidth: 0.8))
     }
@@ -163,7 +163,7 @@ struct WalletView: View {
     // MARK: - balance
 
     private var balanceCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
             HStack(spacing: 6) {
                 Image(systemName: "circle.hexagongrid.fill").foregroundStyle(.orange)
                 Text(wl("当前余额", "Balance", "残高")).font(.subheadline).foregroundStyle(.secondary)
@@ -174,7 +174,7 @@ struct WalletView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
+        .padding(KXSpacing.lg)
         .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.accentSoft))
     }
 
@@ -265,7 +265,7 @@ struct WalletView: View {
     }
 
     private var disclaimerCard: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: KXSpacing.sm) {
             Image(systemName: "checkmark.shield").foregroundStyle(KXColor.accent)
             Text(store.disclaimer.isEmpty
                  ? wl("Machi 币仅可用于 Machi 内的数字资料与平台服务，不可提现、不可转让、不可兑换现金，且不会过期。iOS 端充值通过 App Store 完成。",
@@ -280,7 +280,7 @@ struct WalletView: View {
     }
 
     private var ledgerSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
             Text(wl("最近记录", "Recent activity", "最近の記録")).font(.headline)
             if store.recentEntries.isEmpty {
                 Text(wl("暂无记录。", "No activity yet.", "記録はありません。")).font(.caption).foregroundStyle(.secondary)

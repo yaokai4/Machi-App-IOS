@@ -486,7 +486,7 @@ struct PostDetailView: View {
         let isExpanded = expandedReplyIds.contains(comment.id)
         let visibleReplies = isExpanded ? replies : Array(replies.prefix(2))
 
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: KXSpacing.sm) {
             CommentRowView(
                 comment: comment,
                 author: viewModel.commentAuthors[comment.authorId],
@@ -573,7 +573,7 @@ struct PostDetailView: View {
                         .font(.caption.weight(.semibold))
                 }
                 .foregroundStyle(isResolved ? Color.green : KXColor.accent)
-                .padding(.horizontal, 8)
+                .padding(.horizontal, KXSpacing.sm)
                 .padding(.vertical, 3)
                 .background((isResolved ? Color.green : KXColor.accent).opacity(0.12), in: Capsule())
             }
@@ -583,7 +583,7 @@ struct PostDetailView: View {
             }
             .frame(width: 148)
         }
-        .padding(.top, 4)
+        .padding(.top, KXSpacing.xs)
     }
 
     private var commentInput: some View {
@@ -792,14 +792,14 @@ private struct CommentRowView: View {
                             .foregroundStyle(.primary)
                         KXUserBadge(user: author)
                         if comment.isAccepted {
-                            HStack(spacing: 2) {
+                            HStack(spacing: KXSpacing.xxs) {
                                 Image(systemName: "checkmark.seal.fill")
                                 Text(L("acceptedBadge", language))
                             }
                             .font(.caption2.weight(.bold))
                             .foregroundStyle(Color.green)
                             .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
+                            .padding(.vertical, KXSpacing.xxs)
                             .background(Color.green.opacity(0.12), in: Capsule())
                         }
                         Text(DateFormatterUtils.relativeText(from: comment.createdAt, language: language))
@@ -949,7 +949,7 @@ private struct CommentActionButton: View {
                 .foregroundStyle(tint)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
-                .padding(.horizontal, 8)
+                .padding(.horizontal, KXSpacing.sm)
                 .frame(minHeight: 30)
                 .background(KXColor.softBackground, in: Capsule())
         }

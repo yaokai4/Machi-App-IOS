@@ -63,7 +63,7 @@ struct CachedMediaImageView: View {
             } label: {
                 ZStack {
                     KXColor.softBackground
-                    VStack(spacing: 8) {
+                    VStack(spacing: KXSpacing.sm) {
                         Image(systemName: "photo")
                             .font(.title3.weight(.semibold))
                         Image(systemName: "arrow.clockwise")

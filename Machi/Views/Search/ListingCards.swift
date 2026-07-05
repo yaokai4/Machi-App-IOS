@@ -29,7 +29,7 @@ struct KXSecondhandSkeletonCard: View {
             KXSkeletonBone(width: 96, height: 9)
         }
         .padding(7)
-        .padding(.bottom, 2)
+        .padding(.bottom, KXSpacing.xxs)
         .frame(width: width, alignment: .leading)
         .kxLivingSurface(radius: KXRadius.lg)
         .kxShimmer()
@@ -38,8 +38,8 @@ struct KXSecondhandSkeletonCard: View {
 
 struct KXJobSkeletonRow: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
+            HStack(spacing: KXSpacing.md) {
                 RoundedRectangle(cornerRadius: 15, style: .continuous)
                     .fill(KXColor.softBackground)
                     .frame(width: 50, height: 50)
@@ -77,7 +77,7 @@ struct KXBigPhotoSkeletonCard: View {
                 .overlay { RoundedRectangle(cornerRadius: 20, style: .continuous).fill(KXColor.softBackground) }
             // Mirror the real stay/service card: title+rating row, station,
             // price+CTA row — so the swap to content doesn't shift layout.
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: KXSpacing.sm) {
                 HStack {
                     KXSkeletonBone(width: 160, height: 14)
                     Spacer()
@@ -90,9 +90,9 @@ struct KXBigPhotoSkeletonCard: View {
                     KXSkeletonBone(width: 72, height: 28, radius: 14)
                 }
             }
-            .padding(.horizontal, 2)
+            .padding(.horizontal, KXSpacing.xxs)
         }
-        .padding(8)
+        .padding(KXSpacing.sm)
         .kxLivingSurface(radius: KXRadius.hero, elevated: true)
         .kxShimmer()
     }
@@ -157,7 +157,7 @@ struct KXSecondhandListingCard: View {
                     .frame(width: innerWidth, alignment: .leading)
                 let badges = KXListingCopy.secondhandCardBadges(for: listing, language)
                 if !badges.isEmpty {
-                    HStack(spacing: 4) {
+                    HStack(spacing: KXSpacing.xs) {
                         ForEach(badges.prefix(2), id: \.self) { badge in
                             Text(badge)
                                 .font(.caption2.weight(.semibold))
@@ -171,7 +171,7 @@ struct KXSecondhandListingCard: View {
                     }
                     .frame(width: innerWidth, alignment: .leading)
                 }
-                HStack(spacing: 4) {
+                HStack(spacing: KXSpacing.xs) {
                     Image(systemName: "mappin.and.ellipse")
                         .font(.caption2.weight(.bold))
                     Text(KXListingCopy.compactMeta(listing, language))
@@ -183,7 +183,7 @@ struct KXSecondhandListingCard: View {
                 .frame(width: innerWidth, alignment: .leading)
             }
             .padding(7)
-            .padding(.bottom, 2)
+            .padding(.bottom, KXSpacing.xxs)
             .contentShape(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
             .frame(maxWidth: width ?? .infinity, alignment: .leading)
             .kxLivingSurface(radius: KXRadius.lg)
@@ -262,7 +262,7 @@ struct KXSecondhandListingCard: View {
         }
         .modifier(KXSquareCover(side: innerWidth))
         .overlay(alignment: .topLeading) {
-            HStack(spacing: 4) {
+            HStack(spacing: KXSpacing.xs) {
                 Circle()
                     .fill(KXListingCopy.statusColor(listing.status))
                     .frame(width: 6, height: 6)
@@ -272,7 +272,7 @@ struct KXSecondhandListingCard: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, KXSpacing.sm)
             .frame(height: 24)
             .kxCoverBadge(in: Capsule())
             .frame(maxWidth: statusBadgeMaxWidth, alignment: .leading)
@@ -313,7 +313,7 @@ struct ListingMediaPage: View {
                 Text("\(index + 1)/\(total)")
                     .font(.caption2.weight(.black))
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, KXSpacing.sm)
                     .frame(height: 24)
                     .background(.black.opacity(0.55), in: Capsule())
                     .padding(10)
@@ -433,7 +433,7 @@ struct KXJobListingRow: View {
             onOpen()
         } label: {
             VStack(alignment: .leading, spacing: 11) {
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: KXSpacing.md) {
                     Text(companyInitial.isEmpty ? "M" : companyInitial)
                         .font(.title3.weight(.bold))
                         .foregroundStyle(KXColor.livingAccent)
@@ -545,7 +545,7 @@ struct KXStructuredListingRow: View {
             openTaps += 1
             onOpen()
         } label: {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: KXSpacing.md) {
                 ZStack(alignment: .bottomLeading) {
                     if let url = listing.coverURL {
                         MediaImageView(url: url)
@@ -596,7 +596,7 @@ struct KXStructuredListingRow: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(12)
+            .padding(KXSpacing.md)
             .kxLivingSurface(radius: KXRadius.card, elevated: true)   // unify: all listing cards share the warm surface
         }
         .buttonStyle(.plain)
@@ -612,7 +612,7 @@ struct KXListingAttributeSection: View {
         KXListingSection(title: KXListingCopy.pickText(language, "核心字段", "基本情報", "Key details"), icon: KXListingCopy.icon(for: listing.type)) {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 10) {
                 ForEach(KXListingCopy.attributes(for: listing, language), id: \.0) { item in
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: KXSpacing.xs) {
                         Text(KXListingCopy.attributeLabel(item.0, language))
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.secondary)
@@ -637,7 +637,7 @@ struct KXListingSection<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
             Label(KXListingCopy.formText(title, language), systemImage: icon)
                 .font(.headline.weight(.bold))
             content
@@ -657,7 +657,7 @@ struct KXListingBadge: View {
             .foregroundStyle(tint)
             .lineLimit(1)
             .minimumScaleFactor(0.82)
-            .padding(.horizontal, 8)
+            .padding(.horizontal, KXSpacing.sm)
             .frame(height: 24)
             .background(tint.opacity(0.08), in: Capsule())
             .overlay {

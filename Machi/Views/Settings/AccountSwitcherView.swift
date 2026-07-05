@@ -13,7 +13,7 @@ struct AccountSwitcherView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 12) {
+            LazyVStack(alignment: .leading, spacing: KXSpacing.md) {
                 switch state {
                 case .loading, .idle:
                     LoadingView()
@@ -34,7 +34,7 @@ struct AccountSwitcherView: View {
                             HStack(spacing: 14) {
                                 AvatarView(user: user, size: 54)
 
-                                VStack(alignment: .leading, spacing: 4) {
+                                VStack(alignment: .leading, spacing: KXSpacing.xs) {
                                     HStack(spacing: 5) {
                                         Text(user.displayName)
                                             .font(.headline.weight(.semibold))

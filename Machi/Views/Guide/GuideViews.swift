@@ -196,7 +196,7 @@ struct GuideCategoryView: View {
                 }
             } else {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 16) {
+                    LazyVStack(alignment: .leading, spacing: KXSpacing.lg) {
                         categoryHeader
                         subCategoryTabs
                         if isRefreshing {
@@ -238,13 +238,13 @@ struct GuideCategoryView: View {
 
     private var categoryHeader: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: KXSpacing.md) {
                 Image(systemName: GuideCopy.symbol(for: category?.icon))
                     .font(.title3.weight(.bold))
                     .foregroundStyle(KXColor.livingAccent)
                     .frame(width: 48, height: 48)
                     .background(KXColor.livingAccentSoft, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: KXSpacing.xs) {
                     Text("MACHI GUIDE")
                         .font(.caption2.weight(.black))
                         .tracking(1.4)
@@ -281,7 +281,7 @@ struct GuideCategoryView: View {
                     .font(.caption)
                     .foregroundStyle(KXColor.livingMuted)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(12)
+                    .padding(KXSpacing.md)
                     .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
         }
@@ -294,7 +294,7 @@ struct GuideCategoryView: View {
         let subs = category?.subCategories ?? []
         if !subs.isEmpty {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     GuidePillButton(title: guideText(language, "全部", "すべて", "All"), isSelected: selectedSubCategory.isEmpty) {
                         selectedSubCategory = ""
                     }
@@ -304,7 +304,7 @@ struct GuideCategoryView: View {
                         }
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, KXSpacing.xxs)
             }
         }
     }
@@ -350,14 +350,14 @@ private struct GuideRefreshIndicator: View {
     @Environment(\.appLanguage) private var language
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: KXSpacing.sm) {
             KXSpinner(size: 14, lineWidth: 2)
             Text(guideText(language, "正在更新内容", "内容を更新しています", "Updating content"))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             Spacer()
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, KXSpacing.md)
         .frame(height: 34)
         .background(KXColor.softBackground.opacity(0.72), in: Capsule())
     }
@@ -370,7 +370,7 @@ private struct GuideInlineStatus: View {
         Text(message)
             .font(.caption.weight(.semibold))
             .foregroundStyle(KXColor.heat)
-            .padding(.horizontal, 12)
+            .padding(.horizontal, KXSpacing.md)
             .padding(.vertical, 9)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(KXColor.heat.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -411,7 +411,7 @@ struct GuideArticleDetailView: View {
             } else if let article = response?.article {
                 GeometryReader { outer in
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: KXSpacing.lg) {
                             articleHeader(article)
                             articleTrustPanel(article)
                             articleActionBar(article)
@@ -476,8 +476,8 @@ struct GuideArticleDetailView: View {
                 Text(guideText(language, "指南", "ガイド", "Guide"))
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(KXColor.accent)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, KXSpacing.sm)
+                    .padding(.vertical, KXSpacing.xs)
                     .background(KXColor.accentSoft, in: Capsule())
                 Text(article.authorName)
                     .font(.caption.weight(.semibold))
@@ -521,7 +521,7 @@ struct GuideArticleDetailView: View {
         let sourceLabel = (article.sourceLabel?.isEmpty == false) ? article.sourceLabel! : nil
         let hasAny = updated != nil || verified != nil || sourceURL != nil || sourceLabel != nil
         if hasAny {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: KXSpacing.sm) {
                 if isStale(article) {
                     HStack(spacing: 6) {
                         Image(systemName: "exclamationmark.triangle.fill")
@@ -591,7 +591,7 @@ struct GuideArticleDetailView: View {
     private func articleActionBar(_ article: KaiXGuideArticleDTO) -> some View {
         let progress = max(0, min(100, article.progressPercent ?? article.readingProgress?.progressPercent ?? 0))
         let saved = article.saved == true
-        return VStack(alignment: .leading, spacing: 12) {
+        return VStack(alignment: .leading, spacing: KXSpacing.md) {
             HStack(spacing: 10) {
                 Button {
                     Task { await toggleSave(article) }
@@ -602,7 +602,7 @@ struct GuideArticleDetailView: View {
                 }
                 .buttonStyle(.fullArea)
                 .frame(minHeight: 46)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, KXSpacing.md)
                 .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KXColor.separator.opacity(0.55), lineWidth: 1))
                 .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -618,7 +618,7 @@ struct GuideArticleDetailView: View {
                 }
                 .buttonStyle(.fullArea)
                 .frame(minHeight: 46)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, KXSpacing.md)
                 .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KXColor.separator.opacity(0.55), lineWidth: 1))
                 .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -808,14 +808,14 @@ struct GuideServicesView: View {
                     LazyVStack(alignment: .leading, spacing: 14) {
                         servicesHeader
                         ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
+                            HStack(spacing: KXSpacing.sm) {
                                 ForEach(filters, id: \.0) { value, title in
                                     GuidePillButton(title: title, isSelected: productType == value) {
                                         productType = value
                                     }
                                 }
                             }
-                            .padding(.vertical, 2)
+                            .padding(.vertical, KXSpacing.xxs)
                         }
                         if isLoading {
                             LoadingView()
@@ -845,7 +845,7 @@ struct GuideServicesView: View {
 
     private var servicesHeader: some View {
         KXCard(padding: 16, radius: 22) {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: KXSpacing.md) {
                 GuideIconBubble(icon: "shippingbox.fill", color: KXColor.heat)
                 VStack(alignment: .leading, spacing: 5) {
                     Text(guideText(language, "商城", "ストア", "Store"))
@@ -946,8 +946,8 @@ struct GuideMemberResourcesView: View {
 
     private var header: some View {
         KXCard(padding: 16, radius: 22) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: KXSpacing.md) {
+                HStack(alignment: .top, spacing: KXSpacing.md) {
                     GuideIconBubble(icon: "crown.fill", color: KXColor.accent)
                     VStack(alignment: .leading, spacing: 5) {
                         Text(guideText(language, "会员专属资料", "会員専用資料", "Member resources"))
@@ -971,14 +971,14 @@ struct GuideMemberResourcesView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
                     TextField(guideText(language, "搜索会员资料", "会員資料を検索", "Search member resources"), text: $keyword)
                         .textInputAutocapitalization(.never)
                         .onSubmit { Task { await load() } }
                 }
-                .padding(12)
+                .padding(KXSpacing.md)
                 .background(KXColor.softBackground.opacity(0.8), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
         }
@@ -986,14 +986,14 @@ struct GuideMemberResourcesView: View {
 
     private var filterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 ForEach(filters, id: \.0) { value, title in
                     GuidePillButton(title: title, isSelected: categoryKey == value) {
                         categoryKey = value
                     }
                 }
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, KXSpacing.xxs)
         }
     }
 
@@ -1213,7 +1213,7 @@ struct GuideProductDetailView: View {
     }
 
     private func productDescription(_ product: KaiXGuideProductDTO) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
             if !product.description.isEmpty {
                 Text(product.description)
                     .font(.body)
@@ -1263,7 +1263,7 @@ struct GuideProductDetailView: View {
     private func previewPanel(_ preview: String, product: KaiXGuideProductDTO) -> some View {
         let locked = product.hasPurchaseContent == true
         KXCard(padding: 18, radius: 22) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: KXSpacing.sm) {
                 Label(guideText(language, "预览内容", "プレビュー", "Preview"), systemImage: "lock.fill")
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(.secondary)
@@ -1348,7 +1348,7 @@ struct GuideComingSoonView: View {
     var empty: KaiXGuideEmptyStateDTO?
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: KXSpacing.lg) {
             Spacer(minLength: 40)
             GuideIconBubble(icon: "airplane.departure", color: KXColor.rankSky, size: 68)
             Text(empty?.title ?? guideText(language, "Machi 指南目前只开放日本地区", "Machi Guide は現在日本エリアのみ公開中です", "Machi Guide is currently available for Japan only"))
@@ -1391,7 +1391,7 @@ struct GuideSchoolFilterSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: KXSpacing.xl) {
                     group(guideText(language, "学校类型", "学校種別", "School type"), options: [("", guideText(language, "全部", "すべて", "All")), ("university", guideText(language, "大学", "大学", "University")), ("graduate_school", guideText(language, "大学院", "大学院", "Graduate school")), ("junior_college", guideText(language, "短大", "短大", "Junior college")), ("college_of_technology", guideText(language, "高专", "高専", "College of technology")), ("vocational_school", guideText(language, "专门学校", "専門学校", "Vocational school")), ("language_school", guideText(language, "语言学校", "語学学校", "Language school"))], selection: $schoolType, toggle: false)
                     group(guideText(language, "圈域", "エリア", "Area"), options: [("capital_area", guideText(language, "首都圈", "首都圏", "Capital area")), ("kansai_area", guideText(language, "关西圈", "関西圏", "Kansai area"))], selection: $regionGroup, toggle: true)
                     group(guideText(language, "都道府县", "都道府県", "Prefecture"), options: [("", guideText(language, "全部", "すべて", "All")), ("tokyo", "Tokyo"), ("kanagawa", "Kanagawa"), ("chiba", "Chiba"), ("saitama", "Saitama"), ("kyoto", "Kyoto"), ("osaka", "Osaka"), ("hyogo", "Hyogo")], selection: $prefecture, toggle: false)
@@ -1420,7 +1420,7 @@ struct GuideSchoolFilterSheet: View {
     private func group(_ title: String, options: [(String, String)], selection: Binding<String>, toggle: Bool) -> some View {
         VStack(alignment: .leading, spacing: 9) {
             Text(title).font(.subheadline.weight(.bold))
-            FlowLayout(spacing: 8) {
+            FlowLayout(spacing: KXSpacing.sm) {
                 ForEach(options, id: \.0) { value, label in
                     GuidePillButton(title: label, isSelected: selection.wrappedValue == value) {
                         if toggle {
@@ -1476,7 +1476,7 @@ private struct GuideLibraryHero: View {
             .foregroundStyle(KXColor.livingMuted)
             .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(KXColor.livingAccent)
                 TextField(resolvedPlaceholder, text: $searchText)
@@ -1609,7 +1609,7 @@ private struct GuideSearchResultsSection: View {
                 .background(KXColor.livingAccentSoft, in: Capsule())
             Spacer(minLength: 0)
         }
-        .padding(.top, 4)
+        .padding(.top, KXSpacing.xs)
     }
 }
 
@@ -1657,7 +1657,7 @@ private struct GuideCategoryGrid: View {
     var body: some View {
         if !categories.isEmpty {
             Divider()
-                .padding(.top, 4)
+                .padding(.top, KXSpacing.xs)
             GuideSectionHeader(
                 title: guideText(language, "六大指南", "6つのガイド", "Guide categories"),
                 subtitle: guideText(
@@ -1667,7 +1667,7 @@ private struct GuideCategoryGrid: View {
                     "Browse structured guides by goal, then open resources and services."
                 )
             )
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: KXSpacing.md), GridItem(.flexible(), spacing: KXSpacing.md)], spacing: KXSpacing.md) {
                 ForEach(categories) { category in
                     GuideCategoryCard(category: category)
                 }
@@ -1690,7 +1690,7 @@ private struct GuideAIEntryCard: View {
             router.open(.guideAI, in: .guide)
         } label: {
             VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 12) {
+                HStack(spacing: KXSpacing.md) {
                     MachiAIMark(size: 52)
                         .shadow(color: KXColor.livingAccent.opacity(0.32), radius: 7, y: 3)
 
@@ -1703,7 +1703,7 @@ private struct GuideAIEntryCard: View {
                                 .font(.system(size: 10, weight: .bold))
                                 .foregroundStyle(KXColor.livingAccent)
                                 .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
+                                .padding(.vertical, KXSpacing.xxs)
                                 .background(KXColor.livingAccent.opacity(0.14), in: Capsule())
                         }
                         Text(guideText(language,
@@ -1724,14 +1724,14 @@ private struct GuideAIEntryCard: View {
                         .shadow(color: KXColor.livingAccent.opacity(0.3), radius: 5, y: 2)
                 }
 
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     chip(guideText(language, "生活手续", "生活手続き", "Life admin"))
                     chip(guideText(language, "升学规划", "進学プラン", "Study plan"))
                     chip(guideText(language, "就职准备", "就職準備", "Job prep"))
                     Spacer(minLength: 0)
                 }
             }
-            .padding(16)
+            .padding(KXSpacing.lg)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             .overlay(
@@ -1761,7 +1761,7 @@ private struct GuideLibraryDualEntry: View {
     @EnvironmentObject private var router: AppRouter
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
             GuideSectionHeader(
                 title: guideText(language, "核心资料库", "コア資料庫", "Core libraries"),
                 subtitle: guideText(
@@ -1771,7 +1771,7 @@ private struct GuideLibraryDualEntry: View {
                     "Start with schools and foreigner-friendly employers."
                 )
             )
-            HStack(spacing: 12) {
+            HStack(spacing: KXSpacing.md) {
                 card(
                     title: guideText(language, "日本学校库", "学校データベース", "School library"),
                     subtitle: guideText(language, "大学、大学院、专门学校、语言学校", "大学・大学院・専門・語学", "Universities, grad, vocational, language"),
@@ -1807,7 +1807,7 @@ private struct GuideLibraryDualEntry: View {
                     .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
-                HStack(spacing: 4) {
+                HStack(spacing: KXSpacing.xs) {
                     Text(guideText(language, "进入", "開く", "Open"))
                     Image(systemName: "arrow.right")
                 }
@@ -1815,7 +1815,7 @@ private struct GuideLibraryDualEntry: View {
                 .foregroundStyle(.white)
             }
             .frame(maxWidth: .infinity, minHeight: 172, alignment: .topLeading)
-            .padding(16)
+            .padding(KXSpacing.lg)
             .background(
                 LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing),
                 in: RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -1838,7 +1838,7 @@ private struct GuidePersonalWorkbenchCTA: View {
         Button {
             router.open(.personalWorkbench)
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: KXSpacing.md) {
                 Image(systemName: "square.grid.2x2.fill")
                     .font(.title3.weight(.bold))
                     .foregroundStyle(KXColor.accent)
@@ -1899,7 +1899,7 @@ private struct GuideGoalsSection: View {
         if !entries.isEmpty {
             GuideSectionHeader(title: goals, subtitle: guideText(language, "按你的目标快速进入", "目的別にすばやく移動", "Jump in by goal"))
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     ForEach(entries) { entry in
                         Button {
                             router.open(.guideCategory(categoryKey: entry.categoryKey))
@@ -1911,7 +1911,7 @@ private struct GuideGoalsSection: View {
                                     .lineLimit(1)
                             }
                             .font(.caption.weight(.semibold))
-                            .padding(.horizontal, 12)
+                            .padding(.horizontal, KXSpacing.md)
                             .frame(height: 38)
                             .background(KXColor.cardBackground, in: Capsule())
                             .overlay(Capsule().stroke(KXColor.separator, lineWidth: 0.8))
@@ -1920,7 +1920,7 @@ private struct GuideGoalsSection: View {
         .contentShape(Rectangle())
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, KXSpacing.xxs)
             }
         }
     }
@@ -2002,7 +2002,7 @@ struct GuideProductsSection: View {
                             .frame(width: 236)
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, KXSpacing.xxs)
             }
         }
     }
@@ -2041,7 +2041,7 @@ private struct GuideDualEntrySection: View {
 
     private func entryTile(icon: String, tint: Color, title: String, subtitle: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: KXSpacing.sm) {
                 HStack {
                     GuideIconBubble(icon: icon, color: tint)
                     Spacer()
@@ -2213,7 +2213,7 @@ private struct GuideCategoryCard: View {
                 }
             }
             .frame(maxWidth: .infinity, minHeight: 122, alignment: .topLeading)
-            .padding(12)
+            .padding(KXSpacing.md)
             .kxGlassSurface(radius: KXRadius.hero)
         }
         .buttonStyle(.fullArea)
@@ -2231,7 +2231,7 @@ struct GuideArticleCard: View {
         Button {
             router.open(.guideArticle(slug: article.slug))
         } label: {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: KXSpacing.sm) {
                 HStack(spacing: 6) {
                     Text(guideText(language, "指南", "ガイド", "Guide"))
                         .font(.caption2.weight(.bold))
@@ -2260,7 +2260,7 @@ struct GuideArticleCard: View {
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 7)
-                            .padding(.vertical, 4)
+                            .padding(.vertical, KXSpacing.xs)
                             .background(KXColor.softBackground, in: Capsule())
                     }
                 }
@@ -2315,7 +2315,7 @@ struct GuideMemberPriceRow: View {
             EmptyView()
         } else if let memberLabel {
             if isMember {
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     Image(systemName: "checkmark.seal.fill")
                         .font(.caption)
                         .foregroundStyle(.blue)
@@ -2331,13 +2331,13 @@ struct GuideMemberPriceRow: View {
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 12)
+                .padding(.horizontal, KXSpacing.md)
                 .padding(.vertical, 9)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             } else {
                 Button(action: onUpgrade) {
-                    HStack(spacing: 8) {
+                    HStack(spacing: KXSpacing.sm) {
                         Image(systemName: "checkmark.seal.fill")
                             .font(.caption)
                             .foregroundStyle(.blue)
@@ -2353,11 +2353,11 @@ struct GuideMemberPriceRow: View {
                              : guideText(language, "开通会员", "会員登録", "Get membership"))
                             .font(.caption2.weight(.bold))
                             .foregroundStyle(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
+                            .padding(.horizontal, KXSpacing.sm)
+                            .padding(.vertical, KXSpacing.xs)
                             .background(KXColor.accent, in: Capsule())
                     }
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, KXSpacing.md)
                     .padding(.vertical, 9)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -2447,7 +2447,7 @@ struct GuideProductCard: View {
         }()
         if let label,
            !(product.isFree || product.isComingSoon || product.isAppointmentOnly == true || product.isPriceHidden == true) {
-            HStack(spacing: 4) {
+            HStack(spacing: KXSpacing.xs) {
                 Image(systemName: "checkmark.seal.fill").font(.system(size: 9)).foregroundStyle(.blue)
                 Text(isMember
                      ? guideText(language, "会员价 \(label)", "会員価格 \(label)", "Member \(label)")
@@ -2456,8 +2456,8 @@ struct GuideProductCard: View {
                     .foregroundStyle(KXColor.accent)
                     .lineLimit(1)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.horizontal, KXSpacing.sm)
+            .padding(.vertical, KXSpacing.xs)
             .background(KXColor.accentSoft, in: Capsule())
         }
     }
@@ -2491,7 +2491,7 @@ struct GuideSchoolCard: View {
                     Text(GuideCopy.schoolTypeLabel(school.schoolType, language: language))
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(KXColor.rankSky)
-                        .padding(.horizontal, 8)
+                        .padding(.horizontal, KXSpacing.sm)
                         .padding(.vertical, 5)
                         .background(KXColor.rankSky.opacity(0.10), in: Capsule())
                 }
@@ -2549,7 +2549,7 @@ struct GuideCompanyCard: View {
                     Text(company.industry.isEmpty ? guideText(language, "公司", "会社", "Company") : company.industry)
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
-                        .padding(.horizontal, 8)
+                        .padding(.horizontal, KXSpacing.sm)
                         .padding(.vertical, 5)
                         .background(KXColor.softBackground, in: Capsule())
                 }
@@ -2733,7 +2733,7 @@ struct GuideSectionHeader: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.top, 2)
+        .padding(.top, KXSpacing.xxs)
     }
 }
 
@@ -2762,7 +2762,7 @@ struct GuidePillButton: View {
             Text(title)
                 .font(.caption.weight(.bold))
                 .foregroundStyle(isSelected ? Color.white : .primary.opacity(0.76))
-                .padding(.horizontal, 12)
+                .padding(.horizontal, KXSpacing.md)
                 .frame(height: 34)
                 .background(isSelected ? KXColor.accent : KXColor.cardBackground, in: Capsule())
                 .overlay(Capsule().stroke(isSelected ? Color.clear : KXColor.separator, lineWidth: 0.8))
@@ -2785,8 +2785,8 @@ struct GuideBadge: View {
         Text(text)
             .font(.caption2.weight(.bold))
             .foregroundStyle(tint)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.horizontal, KXSpacing.sm)
+            .padding(.vertical, KXSpacing.xs)
             .background(tint.opacity(0.10), in: Capsule())
     }
 }

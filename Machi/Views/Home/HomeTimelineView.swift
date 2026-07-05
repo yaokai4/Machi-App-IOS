@@ -195,7 +195,7 @@ struct HomeTimelineView: View {
     private var feed: some View {
         let feedPosts = visibleFeedPosts
         return ScrollView {
-            LazyVStack(spacing: 8) {
+            LazyVStack(spacing: KXSpacing.sm) {
                 // "下一步该办什么" Guide-journey hook. Renders nothing when
                 // there is no journey hint, and loads independently — it can
                 // never delay the feed. Sits above the ForEach so the
@@ -271,12 +271,12 @@ struct HomeTimelineView: View {
                     .padding(.top, 18)
 
                 ForEach(viewModel.recommendedUsers.prefix(5)) { user in
-                    HStack(spacing: 12) {
+                    HStack(spacing: KXSpacing.md) {
                         Button {
                             router.open(.profile(userId: user.id))
                         } label: {
                             AvatarView(user: user, size: 50)
-                            VStack(alignment: .leading, spacing: 4) {
+                            VStack(alignment: .leading, spacing: KXSpacing.xs) {
                                 Text(user.displayName)
                                     .font(.headline.weight(.semibold))
                                 Text("@\(user.username)")
@@ -307,7 +307,7 @@ struct HomeTimelineView: View {
                 }
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
-            .padding(.top, 12)
+            .padding(.top, KXSpacing.md)
             .padding(.bottom, chrome.bottomContentPadding)
         }
     }

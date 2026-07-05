@@ -160,7 +160,7 @@ struct ListingBookingSection: View {
                     .buttonStyle(KXPressableStyle())
                 }
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, KXSpacing.xxs)
         }
     }
 
@@ -576,7 +576,7 @@ struct CityListingDetailView: View {
         let ratingCount = listing.rating_count ?? listing.ratingCount ?? 0
         let ratingAvg = listing.rating_avg ?? listing.ratingAvg ?? 0
         return HStack(alignment: .center, spacing: 14) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                 Text(KXListingCopy.priceLabel(listing, language))
                     .font(.title3.weight(.black))
                     .foregroundStyle(isWork ? KXColor.livingAccent : KXColor.livingWarm)
@@ -616,7 +616,7 @@ struct CityListingDetailView: View {
         }
         .padding(.horizontal, KaiXTheme.horizontalPadding)
         .padding(.top, 10)
-        .padding(.bottom, 8)
+        .padding(.bottom, KXSpacing.sm)
         .background {
             Rectangle()
                 .fill(.ultraThinMaterial)
@@ -652,7 +652,7 @@ struct CityListingDetailView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(KXListingCopy.pickText(language, "返回", "戻る", "Back"))
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                 Text(KXListingCopy.title(for: listing?.type ?? "secondhand", language))
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(KXColor.livingInk)
@@ -686,8 +686,8 @@ struct CityListingDetailView: View {
             .accessibilityLabel(L("like", language))
         }
         .padding(.horizontal, KaiXTheme.horizontalPadding)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
+        .padding(.top, KXSpacing.sm)
+        .padding(.bottom, KXSpacing.md)
         .background(KXColor.livingBackground.opacity(0.94))
         .overlay(alignment: .bottom) { Divider().opacity(0.18) }
     }
@@ -712,11 +712,11 @@ struct CityListingDetailView: View {
                             Text(KXListingCopy.pickText(language, "暂不支持线上购买", "オンライン購入は未対応", "Online purchase unavailable"))
                                 .font(.caption2.weight(.bold))
                                 .foregroundStyle(.secondary)
-                                .padding(.horizontal, 8).padding(.vertical, 4)
+                                .padding(.horizontal, KXSpacing.sm).padding(.vertical, KXSpacing.xs)
                                 .background(KXColor.livingSoft, in: Capsule())
                         }
                         ForEach(packages) { pkg in
-                            VStack(alignment: .leading, spacing: 4) {
+                            VStack(alignment: .leading, spacing: KXSpacing.xs) {
                                 HStack(alignment: .firstTextBaseline) {
                                     Text(pkg.title ?? "").font(.subheadline.weight(.black)).foregroundStyle(.primary)
                                     Spacer(minLength: 8)
@@ -735,7 +735,7 @@ struct CityListingDetailView: View {
                                 }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(12)
+                            .padding(KXSpacing.md)
                             .background(KXColor.livingSoft.opacity(0.5), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                         }
                     }
@@ -747,7 +747,7 @@ struct CityListingDetailView: View {
                     VStack(spacing: 0) {
                         ForEach(Array(dishes.enumerated()), id: \.offset) { idx, dish in
                             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                                     Text(dish.name ?? "").font(.subheadline.weight(.bold)).foregroundStyle(.primary)
                                     if let d = dish.desc, !d.isEmpty {
                                         Text(d).font(.caption2).foregroundStyle(.secondary)
@@ -793,13 +793,13 @@ struct CityListingDetailView: View {
 
     private func detailContent(_ listing: KaiXCityListingDTO) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: KXSpacing.lg) {
                 imageStrip(listing)
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 6) {
                             if listing.isMachiRecommended {
-                                HStack(spacing: 4) {
+                                HStack(spacing: KXSpacing.xs) {
                                     Image(systemName: "sparkles")
                                     Text(KXListingCopy.pickText(language, "Machi推荐", "Machiおすすめ", "Machi Pick"))
                                 }
@@ -821,7 +821,7 @@ struct CityListingDetailView: View {
                         Spacer()
                         KXListingBadge(title: KXListingCopy.statusLabel(listing.status, type: listing.type, language), tint: KXListingCopy.statusColor(listing.status))
                     }
-                    FlowLayout(spacing: 8) {
+                    FlowLayout(spacing: KXSpacing.sm) {
                         ForEach(KXListingCopy.badges(for: listing, language), id: \.self) { badge in
                             KXListingBadge(title: badge, tint: KXColor.livingAccent)
                         }
@@ -851,7 +851,7 @@ struct CityListingDetailView: View {
 
                 KXListingSection(title: KXListingCopy.pickText(language, "发布者", "投稿者", "Poster"), icon: "person.crop.circle") {
                     VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 12) {
+                        HStack(spacing: KXSpacing.md) {
                             Circle()
                                 .fill(KXColor.livingAccentSoft)
                                 .frame(width: 44, height: 44)
@@ -889,7 +889,7 @@ struct CityListingDetailView: View {
                         : KXListingCopy.pickText(language, "安全提醒", "安全の注意", "Safety tips"),
                     icon: KXListingCopy.isHighRisk(listing.type) ? "exclamationmark.shield.fill" : "shield.checkered"
                 ) {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: KXSpacing.sm) {
                         if KXListingCopy.isHighRisk(listing.type) {
                             Text(KXListingCopy.pickText(language,
                                 "Machi 只是信息平台，不代收任何押金 / 订金 / 货款，任何要求提前转账的都要高度警惕。",
@@ -911,7 +911,7 @@ struct CityListingDetailView: View {
                     Text(msg)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(KXColor.livingAccent)
-                        .padding(.horizontal, 2)
+                        .padding(.horizontal, KXSpacing.xxs)
                         .task(id: msg) {
                             // Auto-dismiss the transient status/error line so it
                             // doesn't linger after the action it described is done.
@@ -935,8 +935,8 @@ struct CityListingDetailView: View {
     private func reservationContactCard(_ contact: KaiXReservationContactDTO) -> some View {
         let name = (contact.name ?? contact.nameJa)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         KXListingSection(title: KXListingCopy.pickText(language, "预约联系人", "予約担当", "Reservation contact"), icon: "person.crop.circle.badge.checkmark") {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: KXSpacing.md) {
+                HStack(spacing: KXSpacing.md) {
                     contactAvatar(contact, name: name)
                     VStack(alignment: .leading, spacing: 3) {
                         if !name.isEmpty {
@@ -953,7 +953,7 @@ struct CityListingDetailView: View {
                     Spacer(minLength: 0)
                 }
 
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: KXSpacing.sm) {
                     if let phone = cleanContactValue(contact.phone) {
                         Link(destination: URL(string: "tel:\(phone.filter { !$0.isWhitespace })") ?? URL(string: "tel:")!) {
                             contactRowLabel(icon: "phone.fill", value: phone, tappable: true)
@@ -1106,7 +1106,7 @@ struct CityListingDetailView: View {
                         Text("\(shown)/\(mediaItems.count)")
                             .font(.caption2.weight(.black))
                             .foregroundStyle(.white)
-                            .padding(.horizontal, 8)
+                            .padding(.horizontal, KXSpacing.sm)
                             .frame(height: 24)
                             .background(.black.opacity(0.55), in: Capsule())
                             .padding(10)
@@ -1127,7 +1127,7 @@ struct CityListingDetailView: View {
         let spec = ListingIntakeSpec.forType(listing.type, category: listing.category)
         let ownListing = isOwnListing(listing)
         return KXListingSection(title: KXListingCopy.pickText(language, "申请/预约/咨询", "応募・予約・問い合わせ", "Apply, book or inquire"), icon: "tray.full") {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: KXSpacing.md) {
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: ownListing ? "person.crop.circle.badge.checkmark" : "doc.badge.clock")
                         .font(.headline.weight(.bold))
@@ -1180,7 +1180,7 @@ struct CityListingDetailView: View {
                 }
 
                 if listing.type == "secondhand", !ownListing {
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: KXSpacing.sm), GridItem(.flexible(), spacing: KXSpacing.sm)], spacing: KXSpacing.sm) {
                         ForEach(quickInquiries(for: listing)) { item in
                             Button {
                                 Task { await submitInquiry(message: item.message, details: item.details) }
@@ -1198,7 +1198,7 @@ struct CityListingDetailView: View {
                     }
                 }
 
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     Button {
                         guard GuestSession.requireSignedIn(currentUser, reason: KXListingCopy.pickText(language, "登录后可以举报异常信息。", "ログインすると問題を報告できます。", "Sign in to report a listing.")) else { return }
                         reportConfirmOpen = true
@@ -1248,7 +1248,7 @@ struct CityListingDetailView: View {
     private func trustChipRow(_ listing: KaiXCityListingDTO) -> some View {
         let verified = sellerVerified(listing)
         let heat = Int(listing.seller?.total_heat ?? 0)
-        HStack(spacing: 8) {
+        HStack(spacing: KXSpacing.sm) {
             trustChip(
                 icon: verified ? "checkmark.seal.fill" : "seal",
                 text: verified
@@ -1273,8 +1273,8 @@ struct CityListingDetailView: View {
         }
         .font(.caption2.weight(.bold))
         .foregroundStyle(tint)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, KXSpacing.sm)
+        .padding(.vertical, KXSpacing.xs)
         .background(tint.opacity(0.12), in: Capsule())
     }
 
@@ -1368,7 +1368,7 @@ struct CityListingDetailView: View {
     private func listingRail(title: String, icon: String, items: [KaiXCityListingDTO]) -> some View {
         KXListingSection(title: title, icon: icon) {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: KXSpacing.md) {
                     ForEach(items) { item in
                         KXSecondhandListingCard(listing: item, width: 150) {
                             router.open(.cityListingDetail(listingId: item.id))
@@ -1520,13 +1520,13 @@ private struct ListingInquirySuccessSheet: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: KXSpacing.md) {
                     Image(systemName: "checkmark.seal.fill")
                         .font(.title.weight(.black))
                         .foregroundStyle(KXColor.accent)
                         .frame(width: 52, height: 52)
                         .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: KXSpacing.xs) {
                         Text(receipt.successTitle)
                             .font(.title3.weight(.black))
                             .fixedSize(horizontal: false, vertical: true)
@@ -1563,14 +1563,14 @@ private struct ListingInquirySuccessSheet: View {
             .background(KXColor.softBackground.opacity(0.72), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
 
             if !receipt.details.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: KXSpacing.sm) {
                     Text(KXListingCopy.pickText(language, "提交摘要", "送信内容", "Submission summary"))
                         .font(.subheadline.weight(.black))
                     ForEach(Array(receipt.details.prefix(8).enumerated()), id: \.offset) { _, item in
                         let label = ListingIntakeLocalizer.text(item["label"] ?? "", language)
                         let value = item["value"] ?? ""
                         if !label.isEmpty || !value.isEmpty {
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            HStack(alignment: .firstTextBaseline, spacing: KXSpacing.sm) {
                                 Text(label)
                                     .font(.caption.weight(.black))
                                     .foregroundStyle(.secondary)
@@ -2078,7 +2078,7 @@ private struct ListingIntakeSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: KXSpacing.lg) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(ListingIntakeLocalizer.text(spec.title, language))
                             .font(.title3.weight(.black))
@@ -2102,10 +2102,10 @@ private struct ListingIntakeSheet: View {
                         TextField(ListingIntakeLocalizer.text("补充说明（选填）", language), text: $note, axis: .vertical)
                             .lineLimit(3...6)
                             .font(.subheadline.weight(.semibold))
-                            .padding(12)
+                            .padding(KXSpacing.md)
                             .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     }
-                    .padding(12)
+                    .padding(KXSpacing.md)
                     .background(KXColor.softBackground.opacity(0.62), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
 
                     if let errorMessage {
@@ -2118,7 +2118,7 @@ private struct ListingIntakeSheet: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(KXColor.heat)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(12)
+                        .padding(KXSpacing.md)
                         .background(KXColor.heat.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
 
                     Button(action: submit) {
@@ -2162,7 +2162,7 @@ private struct ListingIntakeSheet: View {
                 .labelsHidden()
                 .datePickerStyle(.compact)
                 .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, KXSpacing.md)
                 .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 // Seed the stored value so a required date validates even if the
                 // user accepts the default without opening the picker.
@@ -2174,7 +2174,7 @@ private struct ListingIntakeSheet: View {
             } else if field.options.isEmpty {
                 TextField(ListingIntakeLocalizer.text(field.placeholder.isEmpty ? field.label : field.placeholder, language), text: binding(for: field))
                     .font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, KXSpacing.md)
                     .frame(minHeight: 42)
                     .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             } else {
@@ -2186,12 +2186,12 @@ private struct ListingIntakeSheet: View {
                 }
                 .pickerStyle(.menu)
                 .padding(.horizontal, 10)
-                .padding(.vertical, 8)
+                .padding(.vertical, KXSpacing.sm)
                 .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
                 .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
         }
-        .padding(12)
+        .padding(KXSpacing.md)
         .background(KXColor.softBackground.opacity(0.62), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
@@ -2385,7 +2385,7 @@ struct ListingPublishSuccessSheet: View {
     }
 
     private func row(_ label: String, _ value: String) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: KXSpacing.md) {
             Text(label)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)

@@ -28,7 +28,7 @@ struct PostSpecificDetailSection: View {
         if rows.isEmpty {
             EmptyView()
         } else {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: KXSpacing.md) {
                 HStack(spacing: 6) {
                     Image(systemName: post.contentType.spec.icon)
                         .font(.subheadline.weight(.bold))
@@ -105,7 +105,7 @@ struct PostSpecificDetailSection: View {
                                     : KXListingCopy.pickText(language, "报名参加", "参加する", "Join")))
                             .font(.subheadline.weight(.bold))
                     }
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, KXSpacing.lg)
                     .frame(height: 36)
                     .foregroundStyle(meetupJoined ? KXColor.accent : .white)
                     .background(meetupJoined ? KXColor.accentSoft : KXColor.accent, in: Capsule())
@@ -114,7 +114,7 @@ struct PostSpecificDetailSection: View {
                 .disabled(meetupBusy || (full && !meetupJoined))
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, KXSpacing.md)
         .padding(.vertical, 10)
         .background(KXColor.accentSoft.opacity(0.5), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
@@ -148,7 +148,7 @@ struct PostSpecificDetailSection: View {
             Text(L("status_\(status)", language))
                 .font(.caption2.weight(.bold))
                 .foregroundStyle(statusColor(for: status))
-                .padding(.horizontal, 8)
+                .padding(.horizontal, KXSpacing.sm)
                 .frame(height: 20)
                 .background(statusColor(for: status).opacity(0.12), in: Capsule())
         }
@@ -180,7 +180,7 @@ struct PostSpecificDetailSection: View {
     }
 
     private var contactBar: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: KXSpacing.sm) {
             Button {
                 Task { await openConversation() }
             } label: {
@@ -235,7 +235,7 @@ struct PostSpecificDetailSection: View {
             .foregroundStyle(.primary)
             .accessibilityLabel(KXListingCopy.pickText(language, "举报", "通報", "Report"))
         }
-        .padding(.top, 4)
+        .padding(.top, KXSpacing.xs)
     }
 
     // MARK: - DM

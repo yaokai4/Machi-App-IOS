@@ -68,7 +68,7 @@ struct GuideAIChatView: View {
     // MARK: - header
 
     private var header: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: KXSpacing.md) {
             Button { dismiss() } label: {
                 Image(systemName: "chevron.left")
                     .font(.body.weight(.semibold))
@@ -106,8 +106,8 @@ struct GuideAIChatView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(guideText(language, "历史会话", "履歴", "History"))
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, KXSpacing.md)
+        .padding(.vertical, KXSpacing.sm)
     }
 
     // MARK: - conversation body
@@ -140,14 +140,14 @@ struct GuideAIChatView: View {
                             message: viewModel.quotaMessage,
                             onUpgrade: { router.open(.guideMemberResources, in: .guide) }
                         )
-                        .padding(.top, 4)
+                        .padding(.top, KXSpacing.xs)
                     }
 
                     Color.clear.frame(height: 1).id(Self.bottomAnchor)
                 }
                 .padding(.horizontal, KXSpacing.screen)
                 .padding(.top, 14)
-                .padding(.bottom, 12)
+                .padding(.bottom, KXSpacing.md)
             }
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: viewModel.messages.count) { _, _ in scrollToBottom(proxy, animated: true) }
@@ -160,7 +160,7 @@ struct GuideAIChatView: View {
 
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: KXSpacing.md) {
                 GuideAIAvatar(size: 52)
                 Text(guideText(language,
                                "在日本遇到的问题，先问 Machi AI",
@@ -197,7 +197,7 @@ struct GuideAIChatView: View {
                     .font(.caption2)
                     .foregroundStyle(KXColor.livingMuted)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 2)
+                    .padding(.top, KXSpacing.xxs)
             }
         }
     }
@@ -244,7 +244,7 @@ struct GuideAIChatView: View {
                         .foregroundStyle(KXColor.livingMuted)
                     Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 4)
+                .padding(.horizontal, KXSpacing.xs)
             } else if let remaining = viewModel.remainingFreeUses {
                 let low = remaining <= 2
                 HStack(spacing: 6) {
@@ -269,7 +269,7 @@ struct GuideAIChatView: View {
                     }
                     Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 4)
+                .padding(.horizontal, KXSpacing.xs)
                 .transition(.opacity)
             }
         }
@@ -295,11 +295,11 @@ struct GuideAIChatView: View {
     // MARK: - input bar
 
     private var inputBar: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: KXSpacing.sm) {
             quotaPill
 
             if let error = viewModel.errorMessage, !error.isEmpty {
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(KXColor.livingWarm)
                     Text(error)
@@ -314,22 +314,22 @@ struct GuideAIChatView: View {
                     .font(.caption.weight(.bold))
                     .foregroundStyle(KXColor.livingAccent)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                .padding(.horizontal, KXSpacing.md)
+                .padding(.vertical, KXSpacing.sm)
                 .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
             if !viewModel.abilities.isEmpty && !viewModel.quotaReached {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
+                    HStack(spacing: KXSpacing.sm) {
                         ForEach(viewModel.abilities) { ability in
                             let on = viewModel.activeAbility == ability.key
                             let locked = (ability.memberOnly ?? false) && !viewModel.membershipActive
                             Button {
                                 viewModel.selectAbility(ability)
                             } label: {
-                                HStack(spacing: 4) {
+                                HStack(spacing: KXSpacing.xs) {
                                     if locked {
                                         Image(systemName: "lock.fill").font(.system(size: 10))
                                     } else if on {
@@ -337,7 +337,7 @@ struct GuideAIChatView: View {
                                     }
                                     Text(ability.title).font(.caption.weight(.semibold))
                                 }
-                                .padding(.horizontal, 12)
+                                .padding(.horizontal, KXSpacing.md)
                                 .padding(.vertical, 7)
                                 .foregroundStyle(on ? KXColor.livingAccent : KXColor.livingMuted)
                                 .background(
@@ -351,7 +351,7 @@ struct GuideAIChatView: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    .padding(.horizontal, 2)
+                    .padding(.horizontal, KXSpacing.xxs)
                 }
             }
 
@@ -380,8 +380,8 @@ struct GuideAIChatView: View {
                 sendButton
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 8)
+        .padding(.horizontal, KXSpacing.md)
+        .padding(.top, KXSpacing.sm)
         .padding(.bottom, 10)
         .background(
             KXColor.livingBackground.opacity(0.96)
@@ -530,7 +530,7 @@ private struct GuideAIMessageRow: View {
                 if message.isPending {
                     GuideAITypingDots()
                         .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
+                        .padding(.vertical, KXSpacing.md)
                         .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 } else {
                     MachiAIMarkdownText(text: message.content)
@@ -552,7 +552,7 @@ private struct GuideAIMessageRow: View {
     }
 
     private var actionRow: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: KXSpacing.lg) {
             Button(action: onCopy) {
                 Image(systemName: "doc.on.doc")
             }
@@ -577,7 +577,7 @@ private struct GuideAIMessageRow: View {
         .font(.footnote)
         .foregroundStyle(KXColor.livingMuted)
         .buttonStyle(.plain)
-        .padding(.leading, 2)
+        .padding(.leading, KXSpacing.xxs)
         .padding(.top, 1)
     }
 }
@@ -631,7 +631,7 @@ private struct MachiAIMarkdownText: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: KXSpacing.xs) {
             ForEach(blocks) { block in
                 switch block.kind {
                 case .gap:
@@ -639,16 +639,16 @@ private struct MachiAIMarkdownText: View {
                 case .heading:
                     inline(block.content)
                         .font(.callout.weight(.bold))
-                        .padding(.top, 2)
+                        .padding(.top, KXSpacing.xxs)
                 case .bullet:
-                    HStack(alignment: .top, spacing: 8) {
+                    HStack(alignment: .top, spacing: KXSpacing.sm) {
                         Circle().fill(KXColor.livingAccent)
                             .frame(width: 5, height: 5)
-                            .padding(.top, 8)
+                            .padding(.top, KXSpacing.sm)
                         inline(block.content)
                     }
                 case .numbered:
-                    HStack(alignment: .top, spacing: 8) {
+                    HStack(alignment: .top, spacing: KXSpacing.sm) {
                         Text(block.marker ?? "•")
                             .font(.body.weight(.bold))
                             .foregroundStyle(KXColor.livingAccent)
@@ -728,7 +728,7 @@ private struct GuideAISourcesView: View {
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(KXColor.livingMuted)
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     ForEach(sources) { source in
                         Button { onOpen(source) } label: {
                             HStack(spacing: 5) {
@@ -754,7 +754,7 @@ private struct GuideAISourcesView: View {
                 .padding(.vertical, 1)
             }
         }
-        .padding(.top, 2)
+        .padding(.top, KXSpacing.xxs)
     }
 }
 
@@ -768,7 +768,7 @@ private struct GuideAIQuotaCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 Image(systemName: "moon.stars.fill")
                     .foregroundStyle(KXColor.livingAccent)
                 Text(title)
@@ -796,7 +796,7 @@ private struct GuideAIQuotaCard: View {
                 }
             }
         }
-        .padding(16)
+        .padding(KXSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(KXColor.livingAccentSoft, lineWidth: 1))
@@ -885,15 +885,15 @@ private struct FlowChips: View {
     let onTap: (String) -> Void
 
     var body: some View {
-        FlexibleChipLayout(spacing: 8, lineSpacing: 8) {
+        FlexibleChipLayout(spacing: KXSpacing.sm, lineSpacing: 8) {
             ForEach(items, id: \.self) { item in
                 Button { onTap(item) } label: {
                     Text(item)
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(KXColor.livingInk)
                         .lineLimit(1)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, KXSpacing.md)
+                        .padding(.vertical, KXSpacing.sm)
                         .background(KXColor.livingSurface, in: Capsule())
                         .overlay(Capsule().stroke(KXColor.livingAccentSoft, lineWidth: 1))
                 }

@@ -56,7 +56,7 @@ struct ListingPhotoViewer: View {
                     Text("\(selection + 1)/\(media.count)")
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, KXSpacing.md)
                         .frame(height: 34)
                         .background(.black.opacity(0.45), in: Capsule())
                 }
@@ -88,7 +88,7 @@ struct ListingPhotoViewer: View {
                 }
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(.white)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, KXSpacing.lg)
                 .frame(height: 40)
                 .background(.black.opacity(0.55), in: Capsule())
             }

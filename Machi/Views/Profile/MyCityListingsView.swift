@@ -28,7 +28,7 @@ struct MyCityListingsView: View {
                 ErrorStateView(message: message) { Task { await load() } }
             case .empty:
                 ScrollView {
-                    VStack(spacing: 16) {
+                    VStack(spacing: KXSpacing.lg) {
                         Spacer(minLength: 96)
                         KXListingsEmptyActionPanel(
                             icon: "tray.full",
@@ -70,7 +70,7 @@ struct MyCityListingsView: View {
                     .padding(.horizontal, 14)
                     .frame(height: 38)
                     .background(.black.opacity(0.78), in: Capsule())
-                    .padding(.bottom, 16)
+                    .padding(.bottom, KXSpacing.lg)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
@@ -95,7 +95,7 @@ struct MyCityListingsView: View {
     /// so管理动作不再藏在长按里。长按整行仍会弹出同一组操作作为快捷方式。
     @ViewBuilder
     private func listingRow(_ listing: KaiXCityListingDTO) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: KXSpacing.sm) {
             Button {
                 router.open(.cityListingDetail(listingId: listing.id))
             } label: {
@@ -152,7 +152,7 @@ struct MyCityListingsView: View {
     }
 
     private func row(_ listing: KaiXCityListingDTO) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: KXSpacing.md) {
             VStack(alignment: .leading, spacing: 5) {
                 Text(listing.title)
                     .font(.subheadline.weight(.semibold))

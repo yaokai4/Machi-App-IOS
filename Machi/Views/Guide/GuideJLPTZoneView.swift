@@ -74,16 +74,16 @@ struct GuideJLPTZoneView: View {
             }
 
             if let levels = z.levels, !levels.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: KXSpacing.md) {
                     JLPTSectionHeader(title: guideText(language, "N5 – N1 等级阶梯", "N5〜N1 レベル", "N5 – N1 levels"))
-                    VStack(spacing: 8) {
+                    VStack(spacing: KXSpacing.sm) {
                         ForEach(levels) { lv in levelRow(lv) }
                     }
                 }
             }
 
             if let resources = z.resources, !resources.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: KXSpacing.md) {
                     JLPTSectionHeader(title: guideText(language, "资料与模拟题", "資料・模擬問題", "Resources & mock tests"))
                     VStack(spacing: 10) {
                         ForEach(resources) { GuideProductCard(product: $0) }
@@ -92,7 +92,7 @@ struct GuideJLPTZoneView: View {
             }
 
             if let articles = z.articles, !articles.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: KXSpacing.md) {
                     JLPTSectionHeader(title: guideText(language, "备考路线与方法", "学習ロードマップ", "Roadmaps & methods"))
                     VStack(spacing: 10) {
                         ForEach(articles) { GuideArticleCard(article: $0) }
@@ -101,9 +101,9 @@ struct GuideJLPTZoneView: View {
             }
 
             if let faq = z.faq, !faq.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: KXSpacing.md) {
                     JLPTSectionHeader(title: guideText(language, "常见问题", "よくある質問", "FAQ"))
-                    VStack(spacing: 8) {
+                    VStack(spacing: KXSpacing.sm) {
                         ForEach(faq) { item in faqRow(item) }
                     }
                 }
@@ -113,7 +113,7 @@ struct GuideJLPTZoneView: View {
                 JLPTComplianceNote(text: disclaimer)
             }
         }
-        .padding(16)
+        .padding(KXSpacing.lg)
     }
 
     // MARK: Hero
@@ -158,7 +158,7 @@ struct GuideJLPTZoneView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .padding(20)
+            .padding(KXSpacing.xl)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
@@ -171,7 +171,7 @@ struct GuideJLPTZoneView: View {
 
     @ViewBuilder
     private func practiceSection(_ core: KaiXJLPTZoneCore?) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
             JLPTSectionHeader(title: guideText(language, "练起来", "さっそく練習", "Start practicing"))
 
             let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
@@ -217,7 +217,7 @@ struct GuideJLPTZoneView: View {
                 .disabled(!(core?.hasExams ?? true))
             }
 
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 NavigationLink { GuideJLPTReviewView() } label: {
                     ghostChip(icon: "arrow.uturn.backward", title: guideText(language, "错题本", "間違いノート", "Review book"))
                 }
@@ -295,7 +295,7 @@ struct GuideJLPTZoneView: View {
         Button {
             router.open(.guidePlan)
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: KXSpacing.md) {
                 Image(systemName: "map.fill")
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(KXColor.onAccent)
@@ -334,7 +334,7 @@ struct GuideJLPTZoneView: View {
 
     private func levelRow(_ lv: KaiXGuideJLPTLevelDTO) -> some View {
         let level = JLPTLevel.from(lv.key)
-        return HStack(alignment: .center, spacing: 12) {
+        return HStack(alignment: .center, spacing: KXSpacing.md) {
             // 徽章 — 底色按难度逐级加深一点点.
             Text(lv.label)
                 .font(.system(size: 17, weight: .black, design: .rounded))
@@ -343,8 +343,8 @@ struct GuideJLPTZoneView: View {
                 .background(level.badgeTint, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(JLPTStyle.accentRim, lineWidth: 0.8))
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: KXSpacing.xs) {
+                HStack(spacing: KXSpacing.sm) {
                     Text(level.tierName(language))
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(KXColor.livingInk)
@@ -382,7 +382,7 @@ struct GuideJLPTZoneView: View {
                 .foregroundStyle(.secondary)
                 .lineSpacing(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 8)
+                .padding(.top, KXSpacing.sm)
         } label: {
             Text(item.question)
                 .font(.subheadline.weight(.bold))

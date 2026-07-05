@@ -48,7 +48,7 @@ struct ComposePostView: View {
                         mediaPreview
                     }
                     .padding(.horizontal, KaiXTheme.horizontalPadding)
-                    .padding(.top, 16)
+                    .padding(.top, KXSpacing.lg)
                     .padding(.bottom, 96)
                 }
 
@@ -129,7 +129,7 @@ struct ComposePostView: View {
     /// Inline notice shown when a member-only content type is selected by
     /// a non-member. Tapping the button opens the membership page.
     private var membershipGate: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
             HStack(spacing: 6) {
                 Image(systemName: "checkmark.seal.fill").foregroundStyle(.blue)
                 Text(L("composeMembershipRequired", language))
@@ -149,7 +149,7 @@ struct ComposePostView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
+        .padding(KXSpacing.md)
         .background(RoundedRectangle(cornerRadius: 12).fill(KXColor.softBackground))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(KXColor.accent.opacity(0.3), lineWidth: 0.8))
     }
@@ -231,7 +231,7 @@ struct ComposePostView: View {
         }
         .padding(.horizontal, 18)
         .padding(.top, 10)
-        .padding(.bottom, 12)
+        .padding(.bottom, KXSpacing.md)
         .kxGlassBar(ignoresTopSafeArea: true)
         .overlay(alignment: .bottom) {
             Divider().opacity(0.35)
@@ -271,8 +271,8 @@ struct ComposePostView: View {
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(.tertiary)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, KXSpacing.md)
+            .padding(.vertical, KXSpacing.sm)
             .kxGlassSurface(radius: KXRadius.md)
             .foregroundStyle(.primary)
         }
@@ -299,7 +299,7 @@ struct ComposePostView: View {
             Button {
                 isShowingRegionPicker = true
             } label: {
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     Image(systemName: "mappin.circle.fill")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(KXColor.accent)
@@ -318,7 +318,7 @@ struct ComposePostView: View {
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(.tertiary)
                 }
-                .padding(.horizontal, 12)
+                .padding(.horizontal, KXSpacing.md)
                 .frame(height: 40)
                 .kxGlassCapsule()
                 .foregroundStyle(.primary)
@@ -350,7 +350,7 @@ struct ComposePostView: View {
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(.tertiary)
                 }
-                .padding(.horizontal, 12)
+                .padding(.horizontal, KXSpacing.md)
                 .frame(height: 40)
                 .kxGlassCapsule()
                 .foregroundStyle(.primary)
@@ -372,12 +372,12 @@ struct ComposePostView: View {
     private var missingFieldsHint: some View {
         let missing = viewModel.missingRequiredAttributeKeys
         if !missing.isEmpty && viewModel.contentType.hasTypedForm {
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .top, spacing: KXSpacing.sm) {
                 Image(systemName: "exclamationmark.circle.fill")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(KXColor.heat)
-                    .padding(.top, 2)
-                VStack(alignment: .leading, spacing: 2) {
+                    .padding(.top, KXSpacing.xxs)
+                VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                     Text(L("composeMissingHeader", language))
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.primary)
@@ -438,7 +438,7 @@ struct ComposePostView: View {
     }
 
     private var composer: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: KXSpacing.md) {
             AvatarView(user: currentUser, size: 48)
             ZStack(alignment: .topLeading) {
                 TextEditor(text: $viewModel.content)
@@ -451,18 +451,18 @@ struct ComposePostView: View {
                     Text(L("placeholderPost", language))
                         .font(.title3)
                         .foregroundStyle(.secondary)
-                        .padding(.top, 8)
+                        .padding(.top, KXSpacing.sm)
                         .allowsHitTesting(false)
                 }
             }
         }
-        .padding(16)
+        .padding(KXSpacing.lg)
         .kxGlassSurface(radius: KXRadius.lg)
     }
 
     private var topicComposer: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 TextField(L("addTopicPlaceholder", language), text: $viewModel.topicDraft)
                     .font(.subheadline.weight(.semibold))
                     .textInputAutocapitalization(.never)
@@ -471,7 +471,7 @@ struct ComposePostView: View {
                     .onSubmit {
                         viewModel.commitTopicDraft()
                     }
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, KXSpacing.md)
                     .frame(height: 40)
                     .kxGlassCapsule()
 
@@ -490,7 +490,7 @@ struct ComposePostView: View {
             }
 
             if !viewModel.selectedTopics.isEmpty {
-                FlowLayout(spacing: 8) {
+                FlowLayout(spacing: KXSpacing.sm) {
                     ForEach(viewModel.selectedTopics, id: \.self) { topic in
                         Button {
                             viewModel.removeTopic(topic)
@@ -521,7 +521,7 @@ struct ComposePostView: View {
                     .font(.headline.weight(.semibold))
 
                 // 九宫格预览:三列方格,所选图片不再挤成一行小图。
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: KXSpacing.sm), count: 3), spacing: KXSpacing.sm) {
                     ForEach(viewModel.mediaDrafts) { draft in
                         ZStack(alignment: .topTrailing) {
                             Color.clear
@@ -539,7 +539,7 @@ struct ComposePostView: View {
                                             .font(.caption2.weight(.semibold))
                                             .foregroundStyle(.white)
                                             .padding(.horizontal, 7)
-                                            .padding(.vertical, 4)
+                                            .padding(.vertical, KXSpacing.xs)
                                             .background(mediaBadgeColor(for: status))
                                             .clipShape(Capsule())
                                             .padding(6)
@@ -558,8 +558,8 @@ struct ComposePostView: View {
                                             }
                                         }
                                         .frame(height: 4)
-                                        .padding(.horizontal, 8)
-                                        .padding(.bottom, 8)
+                                        .padding(.horizontal, KXSpacing.sm)
+                                        .padding(.bottom, KXSpacing.sm)
                                     }
                                 }
 
@@ -582,7 +582,7 @@ struct ComposePostView: View {
     @ViewBuilder
     private var uploadState: some View {
         if let errorMessage = viewModel.errorMessage {
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 Image(systemName: "xmark.octagon.fill")
                 Text(errorMessage)
                 Spacer()
@@ -598,7 +598,7 @@ struct ComposePostView: View {
             }
             .font(.footnote.weight(.semibold))
             .foregroundStyle(.red)
-            .padding(12)
+            .padding(KXSpacing.md)
             .background(Color.red.opacity(0.08))
             .clipShape(RoundedRectangle(cornerRadius: 14))
         }
@@ -628,7 +628,7 @@ struct ComposePostView: View {
                         .tint(KXColor.accent)
                 }
             }
-            .padding(12)
+            .padding(KXSpacing.md)
             .kxGlassSurface(radius: KXRadius.md)
         }
     }

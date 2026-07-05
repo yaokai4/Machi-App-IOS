@@ -48,7 +48,7 @@ struct SettingsView: View {
                             .kxGlassSurface(radius: KXRadius.lg)
                     }
                     .buttonStyle(.plain)
-                    .padding(.top, 4)
+                    .padding(.top, KXSpacing.xs)
                     .kxSettingsEntrance(didEnter, index: 5)
 
                     Text("Machi \(KaiXBackend.appVersion)")
@@ -58,7 +58,7 @@ struct SettingsView: View {
                         .kxSettingsEntrance(didEnter, index: 6)
                 }
                 .padding(.horizontal, KaiXTheme.horizontalPadding)
-                .padding(.top, 12)
+                .padding(.top, KXSpacing.md)
                 .padding(.bottom, 96)
                 .kxReadableWidth()
             }
@@ -85,7 +85,7 @@ struct SettingsView: View {
 
     private var topBar: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: KXSpacing.xs) {
                 Text(L("account", language))
                     .kxScaledFont(32, relativeTo: .largeTitle, weight: .bold)
                     .tracking(0)
@@ -106,7 +106,7 @@ struct SettingsView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(L("close", language))
         }
-        .padding(.top, 4)
+        .padding(.top, KXSpacing.xs)
     }
 
     private var accountSection: some View {
@@ -286,8 +286,8 @@ private struct SettingsAccountCard: View {
     let bookmarkCount: Int
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
+            HStack(alignment: .top, spacing: KXSpacing.md) {
                 AvatarView(user: user, size: 58)
                     .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 3))
                     .shadow(color: .black.opacity(0.055), radius: 8, x: 0, y: 4)
@@ -319,7 +319,7 @@ private struct SettingsAccountCard: View {
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 SettingsInlineStat(value: postCount, title: L("posts", language))
                 SettingsInlineStat(value: bookmarkCount, title: L("bookmarks", language))
                 SettingsInlineStat(value: draftCount, title: L("drafts", language))
@@ -341,7 +341,7 @@ private struct SettingsRolePill: View {
         }
         .font(.caption2.weight(.bold))
         .foregroundStyle(tint)
-        .padding(.horizontal, 8)
+        .padding(.horizontal, KXSpacing.sm)
         .frame(height: 24)
         .background(tint.opacity(0.10), in: Capsule())
     }
@@ -382,7 +382,7 @@ private struct SettingsInlineStat: View {
                 .minimumScaleFactor(0.78)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
+        .padding(.vertical, KXSpacing.sm)
         .background(KXColor.softBackground.opacity(0.86), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -404,7 +404,7 @@ struct ProfileCollectionView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(spacing: 12) {
+            LazyVStack(spacing: KXSpacing.md) {
                 if posts.isEmpty {
                     EmptyStateView(title: title, subtitle: L("noContent", language), systemImage: "tray")
                         .padding(.top, 32)

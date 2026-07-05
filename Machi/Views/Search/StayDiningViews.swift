@@ -116,7 +116,7 @@ struct KXStayListingCard: View {
                     // 封面左上角徽章：Machi 推荐金徽章叠在认证徽章之上，二者可同时出现。
                     VStack(alignment: .leading, spacing: 6) {
                         if listing.isMachiRecommended {
-                            HStack(spacing: 4) {
+                            HStack(spacing: KXSpacing.xs) {
                                 Image(systemName: "sparkles")
                                 Text(KXListingCopy.pickText(language, "Machi推荐", "Machiおすすめ", "Machi Pick"))
                             }
@@ -132,7 +132,7 @@ struct KXStayListingCard: View {
                             // Solid, bordered pill (was a borderless ultraThinMaterial
                             // that washed out over photos). Brand-green seal + hairline
                             // stroke + soft shadow keeps it legible on any cover.
-                            HStack(spacing: 4) {
+                            HStack(spacing: KXSpacing.xs) {
                                 Image(systemName: "checkmark.seal.fill")
                                     .foregroundStyle(KXColor.accent)
                                 Text(variant == .stay ? "认证房东" : "已核验")
@@ -144,13 +144,13 @@ struct KXStayListingCard: View {
                             .kxCoverBadge(in: Capsule())
                         }
                     }
-                    .padding(8)
+                    .padding(KXSpacing.sm)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     heartButton
                         .padding(3)   // 44pt frame absorbs the rest of the inset
                 }
                 VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .top, spacing: 8) {
+                    HStack(alignment: .top, spacing: KXSpacing.sm) {
                         Text(KXListingCopy.displayTitle(listing))
                             .kxScaledFont(16, relativeTo: .subheadline, weight: .semibold)   // mid-size title, not 19pt — no longer top-heavy
                             .foregroundStyle(.primary)
@@ -200,7 +200,7 @@ struct KXStayListingCard: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .padding(.top, 4)
+                    .padding(.top, KXSpacing.xs)
                     if !variantTags.isEmpty || !listing.machiBadgeList.isEmpty {
                         HStack(spacing: 6) {
                             ForEach(variantTags, id: \.self) { tag in
@@ -208,7 +208,7 @@ struct KXStayListingCard: View {
                                     .font(.caption2.weight(.medium))
                                     .foregroundStyle(KXColor.livingMuted)
                                     .padding(.horizontal, 7)
-                                    .padding(.vertical, 4)
+                                    .padding(.vertical, KXSpacing.xs)
                                     .background(KXColor.livingSoft, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                             }
                             // 闪耀标签：星域 partner 自定义标签，金色描边小药丸。
@@ -217,15 +217,15 @@ struct KXStayListingCard: View {
                                     .font(.caption2.weight(.semibold))
                                     .foregroundStyle(KXColor.rankGold)
                                     .padding(.horizontal, 7)
-                                    .padding(.vertical, 4)
+                                    .padding(.vertical, KXSpacing.xs)
                                     .background(KXColor.rankGold.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                                     .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(KXColor.rankGold.opacity(0.35), lineWidth: 0.7))
                             }
                         }
-                        .padding(.top, 2)
+                        .padding(.top, KXSpacing.xxs)
                     }
                 }
-                .padding(.horizontal, 4)
+                .padding(.horizontal, KXSpacing.xs)
             }
             .padding(10)
             .kxLivingSurface(radius: KXRadius.hero, elevated: true)

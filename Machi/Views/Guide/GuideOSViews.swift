@@ -21,7 +21,7 @@ struct GuidePlannerFormShell<Fields: View, Saved: View>: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
                     GuideOSHeaderRow(title: title, subtitle: subtitle)
-                    VStack(spacing: 12) { fields() }
+                    VStack(spacing: KXSpacing.md) { fields() }
                         .padding(15)
                         .kxGlassSurface(radius: KXRadius.hero)
                     if let message = model.message { GuideOSNotice(message: message) }
@@ -126,7 +126,7 @@ struct GuideOSQuickRow: View {
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 56)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, KXSpacing.md)
                     .foregroundStyle(KXColor.accent)
                     .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
                     .contentShape(Rectangle())
@@ -146,7 +146,7 @@ struct GuideOSTextField: View {
         TextField(title, text: $text)
             .font(.subheadline)
             .textInputAutocapitalization(.never)
-            .padding(.horizontal, 12)
+            .padding(.horizontal, KXSpacing.md)
             .frame(height: 44)
             .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
     }
@@ -160,7 +160,7 @@ struct GuideOSDateField: View {
     @Binding var date: Date
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: KXSpacing.xs) {
             Text(title)
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.secondary)
@@ -217,8 +217,8 @@ struct GuideQuickTodoComposer: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
+                HStack(spacing: KXSpacing.sm) {
                     Image(systemName: "plus.circle.fill")
                         .foregroundStyle(KXColor.accent)
                     TextField(guideOSText(language, "直接输入 Todo：明天提交 ES / 7月25日前交房租", "Todoを直接入力：明日ES提出 / 7月25日までに家賃", "Quick add: submit ES tomorrow / rent by Jul 25"), text: $text)
@@ -226,7 +226,7 @@ struct GuideQuickTodoComposer: View {
                         .submitLabel(.done)
                         .onSubmit(submit)
                 }
-                .padding(.horizontal, 12)
+                .padding(.horizontal, KXSpacing.md)
                 .frame(height: 46)
                 .background(KXColor.livingSurface.opacity(0.82), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(
@@ -247,7 +247,7 @@ struct GuideQuickTodoComposer: View {
             }
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     GuideQuickDateChip(title: guideOSText(language, "今天", "今日", "Today"), isSelected: selectedDate == shifted(0)) { selectedDate = shifted(0) }
                     GuideQuickDateChip(title: guideOSText(language, "明天", "明日", "Tomorrow"), isSelected: selectedDate == shifted(1)) { selectedDate = shifted(1) }
                     GuideQuickDateChip(title: guideOSText(language, "+7 天", "+7日", "+7 days"), isSelected: selectedDate == shifted(7)) { selectedDate = shifted(7) }
@@ -271,7 +271,7 @@ struct GuideQuickTodoComposer: View {
                 }
             }
         }
-        .padding(12)
+        .padding(KXSpacing.md)
         .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .onChange(of: defaultDate ?? "") { _, newValue in
             selectedDate = newValue.isEmpty ? nil : newValue
@@ -326,8 +326,8 @@ struct GuideOSDeleteCardChip: View {
         Text(text)
             .font(.caption2.weight(.medium))
             .foregroundStyle(.secondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.horizontal, KXSpacing.sm)
+            .padding(.vertical, KXSpacing.xs)
             .background(KXColor.softBackground, in: Capsule())
     }
 }
@@ -357,7 +357,7 @@ struct GuideOSNotice: View {
         Text(message)
             .font(.caption.weight(.semibold))
             .foregroundStyle(.orange)
-            .padding(.horizontal, 12)
+            .padding(.horizontal, KXSpacing.md)
             .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -421,7 +421,7 @@ struct GuideOSEmptyMini: View {
         Text(text)
             .font(.caption)
             .foregroundStyle(.secondary)
-            .padding(12)
+            .padding(KXSpacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
@@ -432,7 +432,7 @@ struct GuideOSEmptyPanel: View {
     let subtitle: String
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: KXSpacing.sm) {
             Image(systemName: "calendar.badge.clock")
                 .font(.title2)
                 .foregroundStyle(KXColor.accent)
@@ -657,7 +657,7 @@ struct GuideContractsView: View {
     }
 
     private var contractForm: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
             HStack {
                 Text(editingId == nil ? guideOSText(language, "添加合同", "契約を追加", "Add contract") : guideOSText(language, "编辑合同", "契約を編集", "Edit contract"))
                     .font(.headline.weight(.bold))
@@ -685,7 +685,7 @@ struct GuideContractsView: View {
                 GuideOSDateField(title: guideOSText(language, "开始日期", "開始日", "Start date"), date: $startDate)
                 GuideOSDateField(title: guideOSText(language, "到期日期", "満了日", "Expiry date"), date: $endDate)
             }
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: KXSpacing.sm) {
                 Text(guideOSText(language, "解约窗口", "解約期間", "Cancellation window"))
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.secondary)
@@ -705,7 +705,7 @@ struct GuideContractsView: View {
             GuideOSTextField(title: guideOSText(language, "联系方式", "連絡先", "Contact"), text: $contactInfo)
             TextField(guideOSText(language, "备注", "メモ", "Notes"), text: $notes, axis: .vertical)
                 .lineLimit(3...6)
-                .padding(12)
+                .padding(KXSpacing.md)
                 .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
             GuideOSPrimaryButton(title: model.isSaving ? guideOSText(language, "保存中", "保存中", "Saving") : guideOSText(language, "保存合同", "契約を保存", "Save contract")) {
                 Task {
@@ -806,7 +806,7 @@ private struct GuideContractRow: View {
     @State private var confirmingDelete = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
             HStack(alignment: .top, spacing: 11) {
                 Image(systemName: "doc.text.fill")
                     .font(.system(size: 18, weight: .bold))
@@ -843,7 +843,7 @@ private struct GuideContractRow: View {
             }
             GuideAttachmentSection(entityType: "guide_contract", entityId: item.id, title: guideOSText(language, "合同附件", "契約の添付", "Contract files"))
         }
-        .padding(12)
+        .padding(KXSpacing.md)
         .kxGlassSurface(radius: KXRadius.lg)
         .confirmationDialog(guideOSText(language, "删除该合同及关联提醒？", "この契約と関連リマインダーを削除しますか？", "Delete this contract and its reminders?"), isPresented: $confirmingDelete, titleVisibility: .visible) {
             Button(guideOSText(language, "删除", "削除", "Delete"), role: .destructive, action: onDelete)
@@ -918,7 +918,7 @@ struct GuideDocumentsView: View {
     }
 
     private var documentForm: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
             HStack {
                 Text(editingId == nil ? guideOSText(language, "添加证件提醒", "証明書リマインダーを追加", "Add document reminder") : guideOSText(language, "编辑证件提醒", "証明書リマインダーを編集", "Edit document reminder"))
                     .font(.headline.weight(.bold))
@@ -941,7 +941,7 @@ struct GuideDocumentsView: View {
             Stepper(guideOSText(language, "提前 \(reminderDays) 天提醒", "\(reminderDays)日前に通知", "Remind \(reminderDays) days before"), value: $reminderDays, in: 0...365)
             TextField(guideOSText(language, "备注", "メモ", "Notes"), text: $notes, axis: .vertical)
                 .lineLimit(3...6)
-                .padding(12)
+                .padding(KXSpacing.md)
                 .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
             GuideOSPrimaryButton(title: model.isSaving ? guideOSText(language, "保存中", "保存中", "Saving") : guideOSText(language, "保存提醒", "リマインダーを保存", "Save reminder")) {
                 Task {
@@ -992,7 +992,7 @@ private struct GuideDocumentRow: View {
     @State private var confirmingDelete = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
             HStack(alignment: .top, spacing: 11) {
                 Image(systemName: "person.text.rectangle.fill")
                     .font(.system(size: 18, weight: .bold))
@@ -1031,7 +1031,7 @@ private struct GuideDocumentRow: View {
             }
             GuideAttachmentSection(entityType: "guide_document", entityId: item.id, title: guideOSText(language, "可选附件", "任意の添付", "Optional files"))
         }
-        .padding(12)
+        .padding(KXSpacing.md)
         .kxGlassSurface(radius: KXRadius.lg)
         .confirmationDialog(guideOSText(language, "删除该证件提醒？", "この証明書リマインダーを削除しますか？", "Delete this document reminder?"), isPresented: $confirmingDelete, titleVisibility: .visible) {
             Button(guideOSText(language, "删除", "削除", "Delete"), role: .destructive, action: onDelete)
@@ -1057,7 +1057,7 @@ struct GuideGoalsView: View {
         ZStack {
             GuideBackground()
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 16) {
+                LazyVStack(alignment: .leading, spacing: KXSpacing.lg) {
                     GuideOSHeaderRow(
                         title: guideOSText(language, "路径", "目標", "Goals"),
                         subtitle: guideOSText(language, "目标只保存一份进度，Todo 是执行主线，日历负责时间。", "目標の進捗は一つ。実行はTodo、時間はカレンダーで管理します。", "One goal progress source; tasks drive execution and calendar owns time.")
@@ -1078,7 +1078,7 @@ struct GuideGoalsView: View {
                     .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
 
                     if showingCreate {
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: KXSpacing.md) {
                             GuideOSTextField(
                                 title: guideOSText(language, "目标名称", "目標名", "Goal title"),
                                 text: $goalTitle
@@ -1123,7 +1123,7 @@ struct GuideGoalsView: View {
                             GuideOSEmptyMini(text: guideOSText(language, "还没有进行中目标，从下方选择模板或创建自己的目标。", "進行中の目標はありません。", "No active goals yet. Pick a template or create your own."))
                         } else {
                             ForEach(activePlans) { plan in
-                                VStack(alignment: .leading, spacing: 12) {
+                                VStack(alignment: .leading, spacing: KXSpacing.md) {
                                     Button {
                                         if plan.sourceJourneyKey.isEmpty {
                                             router.open(.guideGoalPlan(planId: plan.id, title: plan.title))
@@ -1233,7 +1233,7 @@ struct GuideAttachmentSection: View {
     @State private var deleteTarget: KaiXUploadedFileDTO?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
             HStack(spacing: 10) {
                 Image(systemName: "paperclip")
                     .font(.subheadline.weight(.bold))
@@ -1244,7 +1244,7 @@ struct GuideAttachmentSection: View {
                     Text("\(files.count)")
                         .font(.caption.weight(.black))
                         .foregroundStyle(KXColor.accent)
-                        .padding(.horizontal, 8)
+                        .padding(.horizontal, KXSpacing.sm)
                         .padding(.vertical, 3)
                         .background(Capsule().fill(KXColor.accentSoft))
                 }
@@ -1255,7 +1255,7 @@ struct GuideAttachmentSection: View {
                     Label(isUploading ? guideOSText(language, "上传中", "アップロード中", "Uploading") : guideOSText(language, "上传", "アップロード", "Upload"), systemImage: isUploading ? "arrow.triangle.2.circlepath" : "square.and.arrow.up")
                         .font(.caption.weight(.black))
                         .frame(minHeight: 44)
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, KXSpacing.md)
                         .background(Capsule().fill(KXColor.accent))
                         .foregroundStyle(.white)
                 }
@@ -1273,10 +1273,10 @@ struct GuideAttachmentSection: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
+                    .padding(KXSpacing.md)
                     .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.softBackground))
             } else {
-                VStack(spacing: 8) {
+                VStack(spacing: KXSpacing.sm) {
                     ForEach(files, id: \.id) { file in
                         HStack(spacing: 10) {
                             Image(systemName: fileIcon(file))
@@ -1311,7 +1311,7 @@ struct GuideAttachmentSection: View {
                             .accessibilityLabel(guideOSText(language, "删除", "削除", "Delete"))
                         }
                         .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
+                        .padding(.vertical, KXSpacing.sm)
                         .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.cardBackground))
                         .overlay(RoundedRectangle(cornerRadius: 16).stroke(KXColor.separator.opacity(0.45), lineWidth: 1))
                     }

@@ -10,7 +10,7 @@ struct CityPrimaryCategoryTabs: View {
 
     var body: some View {
         KXFadingHScroll {
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 ForEach(CityChannel.Primary.tabbed) { primary in
                     Button {
                         withAnimation(.snappy(duration: 0.18)) {
@@ -33,7 +33,7 @@ struct CityPrimaryCategoryTabs: View {
                 }
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
-            .padding(.vertical, 8)
+            .padding(.vertical, KXSpacing.sm)
         }
         .background(KXColor.cardBackground.opacity(0.78))
         .overlay(alignment: .bottom) {

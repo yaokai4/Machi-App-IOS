@@ -35,11 +35,11 @@ struct GuideJLPTPracticeView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: KXSpacing.lg) {
                 controls
                 content
             }
-            .padding(16)
+            .padding(KXSpacing.lg)
         }
         .background(KXColor.livingBackground.ignoresSafeArea())
         .navigationTitle(guideText(language, "题库自测", "問題演習", "Practice"))
@@ -64,7 +64,7 @@ struct GuideJLPTPracticeView: View {
             JLPTLevelPicker(selection: $level)
             JLPTSectionPicker(selection: $section)
         }
-        .padding(12)
+        .padding(KXSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
         .jlptSurface(radius: KXRadius.hero)
         .onChange(of: level) { _, _ in Task { await load() } }
@@ -101,7 +101,7 @@ struct GuideJLPTPracticeView: View {
     @ViewBuilder
     private var questionArea: some View {
         if let q = currentQuestion {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: KXSpacing.lg) {
                 JLPTQuestionCard(
                     question: q,
                     index: cursor,
@@ -144,7 +144,7 @@ struct GuideJLPTPracticeView: View {
     }
 
     private var batchDoneView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: KXSpacing.lg) {
             ZStack {
                 Circle().fill(KXColor.livingAccentSoft).frame(width: 76, height: 76)
                 Image(systemName: "checkmark.seal.fill")
@@ -176,7 +176,7 @@ struct GuideJLPTPracticeView: View {
                 Text(guideText(language, "去错题本", "間違いノートへ", "Review book"))
                     .font(.footnote.weight(.bold))
                     .foregroundStyle(KXColor.livingAccent)
-                    .padding(.vertical, 4)
+                    .padding(.vertical, KXSpacing.xs)
             }
             .buttonStyle(.plain)
         }

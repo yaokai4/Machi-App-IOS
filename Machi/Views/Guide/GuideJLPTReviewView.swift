@@ -50,10 +50,10 @@ struct GuideJLPTReviewView: View {
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.lg) {
+            VStack(alignment: .leading, spacing: KXSpacing.md) {
                 Toggle(isOn: $levelFilterOn) {
-                    HStack(spacing: 8) {
+                    HStack(spacing: KXSpacing.sm) {
                         Image(systemName: "line.3.horizontal.decrease.circle.fill")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(KXColor.livingAccent)
@@ -94,7 +94,7 @@ struct GuideJLPTReviewView: View {
 
             JLPTComplianceNote()
         }
-        .padding(16)
+        .padding(KXSpacing.lg)
     }
 
     private func load() async {

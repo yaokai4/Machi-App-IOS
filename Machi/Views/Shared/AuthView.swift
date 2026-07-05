@@ -258,8 +258,8 @@ struct AuthView: View {
                         .foregroundStyle(.secondary)
                     }
                     .accessibilityIdentifier("auth.language")
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, KXSpacing.md)
+                    .padding(.vertical, KXSpacing.sm)
                     .kxGlassCapsule()
                 }
             }
@@ -500,7 +500,7 @@ struct AuthView: View {
                 Label(error, systemImage: "exclamationmark.circle")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, KXSpacing.md)
                     .padding(.vertical, 9)
                     .background(KXColor.warningSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -510,7 +510,7 @@ struct AuthView: View {
                 Label(info, systemImage: "checkmark.circle")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.green)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, KXSpacing.md)
                     .padding(.vertical, 9)
                     .background(KXColor.successSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -522,7 +522,7 @@ struct AuthView: View {
                 Label(registerMissingHint, systemImage: "info.circle")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, KXSpacing.md)
                     .padding(.vertical, 9)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
@@ -695,7 +695,7 @@ struct ForgotPasswordSheet: View {
             ZStack {
                 KXGlassBackground()
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: KXSpacing.xl) {
                         Text(L("authResetTitle", language))
                             .kxScaledFont(30, relativeTo: .largeTitle, weight: .bold, design: .rounded)
 
@@ -732,7 +732,7 @@ struct ForgotPasswordSheet: View {
     // MARK: steps
 
     private var requestStep: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: KXSpacing.lg) {
             Text(L("authResetEmailStep", language))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -761,7 +761,7 @@ struct ForgotPasswordSheet: View {
     }
 
     private var resetStep: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: KXSpacing.lg) {
             Text(L("authResetCodeStep", language))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -776,7 +776,7 @@ struct ForgotPasswordSheet: View {
                         .font(.subheadline.weight(.bold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, KXSpacing.md)
                         .frame(height: 52)
                         .foregroundStyle(cooldown == 0 && !isBusy ? KXColor.accent : .secondary)
                         .kxGlassCapsule(isSelected: cooldown == 0 && !isBusy)
@@ -839,7 +839,7 @@ struct ForgotPasswordSheet: View {
             Label(errorMessage, systemImage: "exclamationmark.circle")
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 12).padding(.vertical, 9)
+                .padding(.horizontal, KXSpacing.md).padding(.vertical, 9)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(KXColor.warningSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
         }
@@ -847,7 +847,7 @@ struct ForgotPasswordSheet: View {
             Label(infoMessage, systemImage: "checkmark.circle")
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.green)
-                .padding(.horizontal, 12).padding(.vertical, 9)
+                .padding(.horizontal, KXSpacing.md).padding(.vertical, 9)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(KXColor.successSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
         }
@@ -871,7 +871,7 @@ struct ForgotPasswordSheet: View {
     private func resetField(title: String, text: Binding<String>, icon: String,
                             keyboard: UIKeyboardType, secure: Bool, id: String,
                             trailing: AnyView? = nil) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
             Text(title)
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.secondary)
@@ -893,7 +893,7 @@ struct ForgotPasswordSheet: View {
                 .accessibilityIdentifier(id)
                 if let trailing { trailing }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, KXSpacing.lg)
             .frame(height: 52)
             .kxGlassSurface(radius: KXRadius.md, stroke: KXColor.glassStroke)
         }
@@ -902,7 +902,7 @@ struct ForgotPasswordSheet: View {
     private func primaryButton(title: String, systemImage: String, enabled: Bool,
                                id: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 if isBusy { KXSpinner(size: 20, lineWidth: 2.2) }
                 Text(title)
                 Image(systemName: systemImage)
@@ -1011,7 +1011,7 @@ private struct ForgotCaptchaField: View {
     let onRefresh: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
             Text(L("authCaptcha", language))
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.secondary)
@@ -1028,7 +1028,7 @@ private struct ForgotCaptchaField: View {
                         .focused(focus)
                         .accessibilityIdentifier("forgot.captcha")
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, KXSpacing.lg)
                 .frame(height: 52)
                 .frame(maxWidth: .infinity)
                 .kxGlassSurface(radius: KXRadius.md, stroke: KXColor.glassStroke)
@@ -1038,7 +1038,7 @@ private struct ForgotCaptchaField: View {
                         if loading {
                             KXSpinner(size: 22, lineWidth: 2.2)
                         } else if let image, let uiImage = UIImage(data: image) {
-                            Image(uiImage: uiImage).resizable().scaledToFit().padding(.horizontal, 4)
+                            Image(uiImage: uiImage).resizable().scaledToFit().padding(.horizontal, KXSpacing.xs)
                         } else {
                             Image(systemName: "arrow.clockwise")
                                 .font(.subheadline.weight(.bold))
@@ -1066,7 +1066,7 @@ private struct AuthCaptchaVerifiedRow: View {
     @Environment(\.appLanguage) private var language
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
             Text(L("authCaptcha", language))
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.secondary)
@@ -1079,7 +1079,7 @@ private struct AuthCaptchaVerifiedRow: View {
                     .foregroundStyle(.primary)
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, KXSpacing.lg)
             .frame(height: 56)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(KXColor.successSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
@@ -1102,7 +1102,7 @@ private struct AuthCodeField: View {
     let onSend: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
             Text(L("authVerificationCode", language))
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.secondary)
@@ -1117,7 +1117,7 @@ private struct AuthCodeField: View {
                         .keyboardType(.numberPad)
                         .accessibilityIdentifier("auth.code")
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, KXSpacing.lg)
                 .frame(height: 56)
                 .frame(maxWidth: .infinity)
                 .kxGlassSurface(radius: KXRadius.md, stroke: error == nil ? KXColor.glassStroke : Color.red.opacity(0.36))
@@ -1157,7 +1157,7 @@ private struct AuthCaptchaField: View {
     let onRefresh: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
             HStack(spacing: 6) {
                 Text(L("authCaptcha", language))
                     .font(.caption.weight(.bold))
@@ -1180,7 +1180,7 @@ private struct AuthCaptchaField: View {
                         .focused(focus)
                         .accessibilityIdentifier("auth.captcha")
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, KXSpacing.lg)
                 .frame(height: 56)
                 .frame(maxWidth: .infinity)
                 .kxGlassSurface(radius: KXRadius.md, stroke: error == nil ? KXColor.glassStroke : Color.red.opacity(0.36))
@@ -1193,9 +1193,9 @@ private struct AuthCaptchaField: View {
                             Image(uiImage: uiImage)
                                 .resizable()
                                 .scaledToFit()
-                                .padding(.horizontal, 4)
+                                .padding(.horizontal, KXSpacing.xs)
                         } else {
-                            VStack(spacing: 4) {
+                            VStack(spacing: KXSpacing.xs) {
                                 Image(systemName: "arrow.clockwise")
                                     .font(.subheadline.weight(.bold))
                                 Text(L("authCaptchaLoadFailed", language))
@@ -1205,7 +1205,7 @@ private struct AuthCaptchaField: View {
                                     .lineLimit(2)
                             }
                             .foregroundStyle(.secondary)
-                            .padding(.horizontal, 4)
+                            .padding(.horizontal, KXSpacing.xs)
                         }
                     }
                     .frame(width: 128, height: 56)
@@ -1237,7 +1237,7 @@ private struct AuthRegionField: View {
     let onTap: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
             Text(L("registerRegion", language))
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.secondary)
@@ -1249,7 +1249,7 @@ private struct AuthRegionField: View {
                         .foregroundStyle(.secondary)
                         .frame(width: 24)
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                         Text(region.map { KaiXRegionDirectory.localizedDisplayName($0, language: language) } ?? L("selectRegisterRegion", language))
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(region == nil ? .secondary : .primary)
@@ -1276,7 +1276,7 @@ private struct AuthRegionField: View {
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, KXSpacing.lg)
                 .frame(height: 60)
                 .kxGlassSurface(radius: KXRadius.md, stroke: error == nil ? KXColor.glassStroke : Color.red.opacity(0.36))
             }
@@ -1295,7 +1295,7 @@ private struct AuthModePicker: View {
     @Binding var selection: AuthViewModel.Mode
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: KXSpacing.xs) {
             ForEach(AuthViewModel.Mode.allCases) { mode in
                 Button {
                     selection = mode
@@ -1311,7 +1311,7 @@ private struct AuthModePicker: View {
                 .accessibilityIdentifier(mode == .login ? "auth.mode.login" : "auth.mode.register")
             }
         }
-        .padding(4)
+        .padding(KXSpacing.xs)
         .kxGlassCapsule()
     }
 }
@@ -1326,7 +1326,7 @@ private struct AuthInputField: View {
     var keyboardType: UIKeyboardType = .default
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
             Text(title)
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.secondary)
@@ -1343,7 +1343,7 @@ private struct AuthInputField: View {
                     .autocorrectionDisabled()
                     .accessibilityIdentifier(accessibilityIdentifier)
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, KXSpacing.lg)
             .frame(height: 56)
             .kxGlassSurface(radius: KXRadius.md, stroke: error == nil ? KXColor.glassStroke : Color.red.opacity(0.36))
 
@@ -1362,7 +1362,7 @@ private struct AuthPasswordField: View {
     var error: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
             Text(L("password", language))
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.secondary)
@@ -1392,7 +1392,7 @@ private struct AuthPasswordField: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(isVisible ? "隐藏密码" : "显示密码")
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, KXSpacing.lg)
             .frame(height: 56)
             .kxGlassSurface(radius: KXRadius.md, stroke: error == nil ? KXColor.glassStroke : Color.red.opacity(0.36))
 
@@ -1433,7 +1433,7 @@ private struct AuthFeature: View {
                 .minimumScaleFactor(0.72)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
+        .padding(.vertical, KXSpacing.md)
         .kxGlassSurface(radius: KXRadius.md)
     }
 }

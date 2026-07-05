@@ -105,7 +105,7 @@ struct RegionPickerButton: View {
 }
 
 #Preview {
-    VStack(spacing: 12) {
+    VStack(spacing: KXSpacing.md) {
         RegionPickerButton(region: nil) {}
         RegionPickerButton(
             region: KaiXRegionDirectory.resolve(regionCode: "ca.toronto")

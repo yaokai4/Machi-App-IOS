@@ -51,8 +51,8 @@ struct GuideMyLibraryView: View {
 
     private var header: some View {
         KXCard(padding: 16, radius: 22) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: KXSpacing.md) {
+                HStack(alignment: .top, spacing: KXSpacing.md) {
                     GuideIconBubble(icon: "books.vertical.fill", color: KXColor.accent)
                     VStack(alignment: .leading, spacing: 5) {
                         Text(guideText(language, "我的资料库", "マイ資料庫", "My library"))
@@ -76,7 +76,7 @@ struct GuideMyLibraryView: View {
     // MARK: Segment bar
 
     private var segmentBar: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: KXSpacing.sm) {
             segment(.materials, guideText(language, "我的资料", "資料", "Resources"), materials.count)
             segment(.services, guideText(language, "我的服务", "サービス", "Services"), services.count)
             segment(.orders, guideText(language, "我的订单", "注文", "Orders"), orders.count)
@@ -199,13 +199,13 @@ private struct GuideLibraryMaterialRow: View {
     let language: AppLanguage
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: KXSpacing.md) {
             Image(systemName: "doc.text.fill")
                 .font(.system(size: 17, weight: .bold))
                 .foregroundStyle(KXColor.accent)
                 .frame(width: 40, height: 40)
                 .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: KXSpacing.xs) {
                 HStack(spacing: 6) {
                     Text(material.title)
                         .font(.subheadline.weight(.bold))
@@ -242,13 +242,13 @@ private struct GuideLibraryServiceRow: View {
     let language: AppLanguage
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: KXSpacing.md) {
             Image(systemName: "bag.fill")
                 .font(.system(size: 17, weight: .bold))
                 .foregroundStyle(.purple)
                 .frame(width: 40, height: 40)
                 .background(Color.purple.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: KXSpacing.xs) {
                 Text(service.productTitle?.isEmpty == false ? service.productTitle! : guideText(language, "资料服务", "資料サービス", "Service"))
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(.primary)
@@ -292,13 +292,13 @@ private struct GuideLibraryOrderRow: View {
     let language: AppLanguage
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: KXSpacing.md) {
             Image(systemName: order.isTopUp ? "creditcard.fill" : "doc.text.fill")
                 .font(.system(size: 17, weight: .bold))
                 .foregroundStyle(order.isTopUp ? Color.orange : KXColor.accent)
                 .frame(width: 40, height: 40)
                 .background((order.isTopUp ? Color.orange : KXColor.accent).opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: KXSpacing.xs) {
                 Text(order.title?.isEmpty == false ? order.title! : guideText(language, "订单", "注文", "Order"))
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(.primary)
@@ -310,7 +310,7 @@ private struct GuideLibraryOrderRow: View {
                 }
             }
             Spacer(minLength: 0)
-            VStack(alignment: .trailing, spacing: 4) {
+            VStack(alignment: .trailing, spacing: KXSpacing.xs) {
                 Text(amountLabel)
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(.primary)

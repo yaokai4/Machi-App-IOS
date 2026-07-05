@@ -14,7 +14,7 @@ struct GuideOSTodoStrip: View {
 
     var body: some View {
         if !visible.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: KXSpacing.sm) {
                 Text(title)
                     .font(.subheadline.weight(.bold))
                 ForEach(visible) { todo in
@@ -143,19 +143,19 @@ struct GuideOSTodoCard: View {
                     }
                 }
             }
-            .padding(.top, 2)
+            .padding(.top, KXSpacing.xxs)
         }
     }
 
     @ViewBuilder private var noteSection: some View {
         if onUpdateNotes != nil {
             if noteOpen {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: KXSpacing.sm) {
                     TextEditor(text: $noteDraft)
                         .font(.caption)
                         .scrollContentBackground(.hidden)
                         .frame(minHeight: 72)
-                        .padding(8)
+                        .padding(KXSpacing.sm)
                         .background(KXColor.livingSurface.opacity(0.82), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                         .overlay(
                             RoundedRectangle(cornerRadius: 13, style: .continuous)
@@ -165,7 +165,7 @@ struct GuideOSTodoCard: View {
                         Button(action: saveNote) {
                             Text(guideOSText(language, "保存备注", "メモを保存", "Save note"))
                                 .font(.caption.weight(.bold))
-                                .padding(.horizontal, 12)
+                                .padding(.horizontal, KXSpacing.md)
                                 .frame(height: 30)
                         }
                         .buttonStyle(.fullArea)
@@ -185,7 +185,7 @@ struct GuideOSTodoCard: View {
                         .foregroundStyle(.secondary)
                     }
                 }
-                .padding(.top, 4)
+                .padding(.top, KXSpacing.xs)
             } else if !todo.notes.isEmpty {
                 Button(action: openNote) {
                     Text(todo.notes)
@@ -199,7 +199,7 @@ struct GuideOSTodoCard: View {
                 }
                 .buttonStyle(.fullArea)
                 .contentShape(Rectangle())
-                .padding(.top, 4)
+                .padding(.top, KXSpacing.xs)
             } else if !todo.isDone {
                 Button(action: openNote) {
                     Label(guideOSText(language, "备注", "メモ", "Note"), systemImage: "note.text")
@@ -209,7 +209,7 @@ struct GuideOSTodoCard: View {
                 }
                 .buttonStyle(.fullArea)
                 .contentShape(Rectangle())
-                .padding(.top, 2)
+                .padding(.top, KXSpacing.xxs)
             }
         } else if !todo.notes.isEmpty {
             Text(todo.notes)
@@ -219,7 +219,7 @@ struct GuideOSTodoCard: View {
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                .padding(.top, 4)
+                .padding(.top, KXSpacing.xs)
         }
     }
 
@@ -234,7 +234,7 @@ struct GuideOSTodoCard: View {
             .buttonStyle(.fullArea)
         .contentShape(Rectangle())
             .accessibilityLabel(guideOSText(language, "完成", "完了", "Done"))
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: KXSpacing.xs) {
                 HStack(spacing: 6) {
                     Text(todo.title)
                         .font(.subheadline.weight(.bold))
@@ -290,14 +290,14 @@ struct GuideOSTodoCard: View {
                         Label(guideOSText(language, r + "循环", r + "繰り返し", r + " repeat"), systemImage: "repeat")
                             .font(.caption2.weight(.bold))
                             .foregroundStyle(KXColor.accent)
-                            .padding(.horizontal, 7).padding(.vertical, 2)
+                            .padding(.horizontal, 7).padding(.vertical, KXSpacing.xxs)
                             .background(KXColor.accent.opacity(0.12), in: Capsule())
                     }
                     if todo.estimatedMinutes > 0 { GuideOSMiniBadge(text: guideOSText(language, "\(todo.estimatedMinutes) 分", "\(todo.estimatedMinutes) 分", "\(todo.estimatedMinutes) min")) }
                 }
             }
         }
-        .padding(12)
+        .padding(KXSpacing.md)
         .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -446,7 +446,7 @@ struct GuideTodoListView: View {
                         await model.createQuickTodo(content: content, plannedDate: plannedDate, planId: planId)
                     }
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
+                        HStack(spacing: KXSpacing.sm) {
                             GuideTodoFilterChip(title: guideOSText(language, "我的一天", "今日", "My Day"), value: "my_day", selection: $filter)
                             GuideTodoFilterChip(title: guideOSText(language, "重要", "重要", "Important"), value: "important", selection: $filter)
                             GuideTodoFilterChip(title: guideOSText(language, "计划中", "予定", "Planned"), value: "planned", selection: $filter)
@@ -456,7 +456,7 @@ struct GuideTodoListView: View {
                     }
                     if !customLists.isEmpty || !tags.isEmpty {
                         ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
+                            HStack(spacing: KXSpacing.sm) {
                                 GuideTodoFilterChip(title: guideOSText(language, "全部清单", "すべてのリスト", "All lists"), value: "", selection: Binding(
                                     get: { listFilter.isEmpty && tagFilter.isEmpty ? "" : "__none__" },
                                     set: { _ in listFilter = ""; tagFilter = "" }
@@ -662,7 +662,7 @@ private struct GuideTodoDetailHeroCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: KXSpacing.md) {
                 Image(systemName: todo.isDone ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 30, weight: .semibold))
                     .foregroundStyle(todo.isDone ? KXColor.accent : tint.opacity(0.75))
@@ -702,9 +702,9 @@ private struct GuideTodoDetailHeroCard: View {
                 }
             }
         }
-        .padding(16)
+        .padding(KXSpacing.lg)
         .kxLivingSurface(radius: KXRadius.sheet)
-        .padding(.horizontal, 2)
+        .padding(.horizontal, KXSpacing.xxs)
     }
 
     private var priorityLabel: String {
@@ -857,7 +857,7 @@ private struct GuideTodoDetailSheet: View {
                     TextEditor(text: $notes)
                         .frame(minHeight: 110)
                         .scrollContentBackground(.hidden)
-                        .padding(8)
+                        .padding(KXSpacing.sm)
                         .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
                 Section(guideOSText(language, "附件", "添付ファイル", "Attachments")) {

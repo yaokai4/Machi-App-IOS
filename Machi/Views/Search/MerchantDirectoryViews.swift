@@ -89,7 +89,7 @@ struct KXServiceListingCard: View {
                                 .kxCoverBadge(in: Capsule())
                         }
                         if listing.verification_status == "verified" {
-                            HStack(spacing: 4) {
+                            HStack(spacing: KXSpacing.xs) {
                                 Image(systemName: "checkmark.seal.fill").foregroundStyle(KXColor.accent)
                                 Text(L("verifiedMerchant", language)).foregroundStyle(.primary)
                             }
@@ -99,13 +99,13 @@ struct KXServiceListingCard: View {
                             .kxCoverBadge(in: Capsule())
                         }
                     }
-                    .padding(8)
+                    .padding(KXSpacing.sm)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     heartButton
                         .padding(3)   // 44pt frame absorbs the rest of the inset
                 }
                 VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .top, spacing: 8) {
+                    HStack(alignment: .top, spacing: KXSpacing.sm) {
                         Text(KXListingCopy.displayTitle(listing))
                             .kxScaledFont(16, relativeTo: .subheadline, weight: .semibold)   // mid-size title, not 19pt
                             .foregroundStyle(.primary)
@@ -149,9 +149,9 @@ struct KXServiceListingCard: View {
                             .frame(height: 30)
                             .background(KXColor.livingAccent, in: Capsule())
                     }
-                    .padding(.top, 4)
+                    .padding(.top, KXSpacing.xs)
                 }
-                .padding(.horizontal, 4)
+                .padding(.horizontal, KXSpacing.xs)
             }
             .padding(10)
             .kxLivingSurface(radius: KXRadius.hero, elevated: true)
@@ -249,7 +249,7 @@ private struct ListingCoverArtwork: View {
                 .fill(KXColor.livingAccent.opacity(0.09))
                 .frame(width: 160, height: 160)
                 .offset(x: 110, y: 56)
-            VStack(spacing: 8) {
+            VStack(spacing: KXSpacing.sm) {
                 Image(systemName: placeholderIcon)
                     .font(.system(size: 28, weight: .semibold))
                     .foregroundStyle(KXColor.livingWarm.opacity(0.78))
@@ -344,10 +344,10 @@ private struct MerchantStripCard: View {
     let business: KaiXBusinessPublicDTO
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
+            HStack(spacing: KXSpacing.sm) {
                 MerchantLogoView(business: business, size: 38)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                     HStack(spacing: 3) {
                         Text(business.business_name ?? L("merchantFallbackName", language))
                             .font(.caption.weight(.black))
@@ -429,7 +429,7 @@ struct MerchantDirectoryView: View {
         VStack(spacing: 0) {
             header
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
+                LazyVStack(alignment: .leading, spacing: KXSpacing.md) {
                     categoryChips
                     if isLoading {
                         KXInlineLoader()
@@ -455,7 +455,7 @@ struct MerchantDirectoryView: View {
                     }
                 }
                 .padding(.horizontal, KaiXTheme.horizontalPadding)
-                .padding(.top, 12)
+                .padding(.top, KXSpacing.md)
                 .kxTabBarSafeBottomPadding()
             }
             .refreshable { await load() }
@@ -477,7 +477,7 @@ struct MerchantDirectoryView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(KXListingCopy.pickText(language, "返回", "戻る", "Back"))
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                     Text("\(cityName) · \(L("verifiedMerchant", language))")
                         .font(.headline.weight(.semibold))
                         .lineLimit(1)
@@ -501,15 +501,15 @@ struct MerchantDirectoryView: View {
             .background(KXColor.softBackground.opacity(0.8), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
         }
         .padding(.horizontal, KaiXTheme.horizontalPadding)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
+        .padding(.top, KXSpacing.sm)
+        .padding(.bottom, KXSpacing.md)
         .kxGlassBar(ignoresTopSafeArea: true)
         .overlay(alignment: .bottom) { Divider().opacity(0.18) }
     }
 
     private var categoryChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 ForEach(categories, id: \.self) { item in
                     Button {
                         category = item
@@ -519,7 +519,7 @@ struct MerchantDirectoryView: View {
                             .font(.caption.weight(.bold))
                             .foregroundStyle(category == item ? Color.white : .primary)
                             .padding(.horizontal, 13)
-                            .padding(.vertical, 8)
+                            .padding(.vertical, KXSpacing.sm)
                             .background(category == item ? Color.green : KXColor.softBackground.opacity(0.88), in: Capsule())
                     }
                     .buttonStyle(.plain)
@@ -555,7 +555,7 @@ private struct MerchantDirectoryRow: View {
             HStack(spacing: 10) {
                 MerchantLogoView(business: business, size: 46)
                 VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 4) {
+                    HStack(spacing: KXSpacing.xs) {
                         Text(business.business_name ?? L("merchantFallbackName", language))
                             .font(.subheadline.weight(.black))
                             .foregroundStyle(.primary)
@@ -590,8 +590,8 @@ private struct MerchantDirectoryRow: View {
                         Text(item)
                             .font(.caption2.weight(.black))
                             .foregroundStyle(Color.green)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
+                            .padding(.horizontal, KXSpacing.sm)
+                            .padding(.vertical, KXSpacing.xs)
                             .background(Color.green.opacity(0.1), in: Capsule())
                     }
                 }
@@ -628,7 +628,7 @@ struct BusinessPublicProfileView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(KXListingCopy.pickText(language, "返回", "戻る", "Back"))
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                     Text(response?.business.business_name ?? L("merchantProfileTitle", language))
                         .font(.headline.weight(.semibold))
                         .lineLimit(1)
@@ -639,8 +639,8 @@ struct BusinessPublicProfileView: View {
                 Spacer()
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
-            .padding(.top, 8)
-            .padding(.bottom, 12)
+            .padding(.top, KXSpacing.sm)
+            .padding(.bottom, KXSpacing.md)
             .kxGlassBar(ignoresTopSafeArea: true)
             .overlay(alignment: .bottom) { Divider().opacity(0.18) }
 
@@ -669,8 +669,8 @@ struct BusinessPublicProfileView: View {
         return ScrollView {
             LazyVStack(alignment: .leading, spacing: 14) {
                 // 店铺名片
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: KXSpacing.md) {
+                    HStack(spacing: KXSpacing.md) {
                         MerchantLogoView(business: business, size: 60)
                         VStack(alignment: .leading, spacing: 5) {
                             HStack(spacing: 5) {
@@ -706,12 +706,12 @@ struct BusinessPublicProfileView: View {
                                     .font(.caption2.weight(.black))
                                     .foregroundStyle(Color.green)
                                     .padding(.horizontal, 9)
-                                    .padding(.vertical, 4)
+                                    .padding(.vertical, KXSpacing.xs)
                                     .background(Color.green.opacity(0.1), in: Capsule())
                             }
                         }
                     }
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: KXSpacing.sm) {
                         if let address = business.address, !address.isEmpty {
                             Label(address, systemImage: "mappin.and.ellipse")
                         }
@@ -732,8 +732,8 @@ struct BusinessPublicProfileView: View {
                 if !listings.isEmpty {
                     Text(KXListingCopy.pickText(language, "在线服务 (\(listings.count))", "公開サービス (\(listings.count))", "Online services (\(listings.count))"))
                         .font(.headline.weight(.black))
-                        .padding(.horizontal, 2)
-                    LazyVStack(spacing: 12) {
+                        .padding(.horizontal, KXSpacing.xxs)
+                    LazyVStack(spacing: KXSpacing.md) {
                         ForEach(listings) { listing in
                             KXServiceListingCard(listing: listing) {
                                 router.open(.cityListingDetail(listingId: listing.id))
@@ -746,7 +746,7 @@ struct BusinessPublicProfileView: View {
                 if !reviews.isEmpty {
                     Text(L("latestReviews", language))
                         .font(.headline.weight(.black))
-                        .padding(.horizontal, 2)
+                        .padding(.horizontal, KXSpacing.xxs)
                     LazyVStack(spacing: 10) {
                         ForEach(reviews) { review in
                             KXReviewRow(review: review, showsListingTitle: true)
@@ -781,10 +781,10 @@ struct KXReviewRow: View {
     var showsListingTitle = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
             HStack(spacing: 9) {
                 ReviewAuthorAvatar(author: review.author, size: 34)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                     Text(review.author?.display_name ?? "Machi 用户")
                         .font(.caption.weight(.black))
                         .foregroundStyle(.primary)
@@ -811,7 +811,7 @@ struct KXReviewRow: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let reply = review.owner_reply, !reply.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: KXSpacing.xs) {
                     Label(L("merchantReply", language), systemImage: "storefront")
                         .font(.caption2.weight(.black))
                         .foregroundStyle(.secondary)
@@ -875,7 +875,7 @@ struct ListingReviewsSectionView: View {
         Group {
             if Self.reviewableTypes.contains(listing.type) {
                 KXListingSection(title: L("userReviews", language), icon: "star.fill") {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: KXSpacing.md) {
                         summaryHeader
                         if let items = response?.items, !items.isEmpty {
                             ForEach(items.prefix(10)) { review in
@@ -906,11 +906,11 @@ struct ListingReviewsSectionView: View {
     }
 
     private var summaryHeader: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: KXSpacing.md) {
             let avg = response?.summary?.rating_avg ?? listing.rating_avg ?? 0
             let count = response?.summary?.rating_count ?? listing.rating_count ?? 0
             if count > 0 {
-                VStack(spacing: 2) {
+                VStack(spacing: KXSpacing.xxs) {
                     Text(String(format: "%.1f", avg))
                         .font(.title.weight(.black))
                         .foregroundStyle(.orange)
@@ -920,7 +920,7 @@ struct ListingReviewsSectionView: View {
                         .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 14)
-                .padding(.vertical, 8)
+                .padding(.vertical, KXSpacing.sm)
                 .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
             Spacer()
@@ -948,7 +948,7 @@ struct ListingReviewsSectionView: View {
         NavigationStack {
             Form {
                 Section("评分") {
-                    HStack(spacing: 8) {
+                    HStack(spacing: KXSpacing.sm) {
                         ForEach(1...5, id: \.self) { star in
                             Button {
                                 draftRating = star
@@ -1023,10 +1023,10 @@ struct MerchantReviewsManageView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 12) {
+            LazyVStack(alignment: .leading, spacing: KXSpacing.md) {
                 if let summary = response?.summary, (summary.count ?? 0) > 0 {
                     HStack(spacing: 14) {
-                        VStack(spacing: 2) {
+                        VStack(spacing: KXSpacing.xxs) {
                             Text(String(format: "%.1f", summary.rating_avg ?? 0))
                                 .font(.title.weight(.black))
                                 .foregroundStyle(.orange)
@@ -1061,7 +1061,7 @@ struct MerchantReviewsManageView: View {
                     .frame(maxWidth: .infinity, minHeight: 240)
                 } else {
                     ForEach(response?.items ?? []) { review in
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: KXSpacing.sm) {
                             KXReviewRow(review: review, showsListingTitle: true)
                             if (review.owner_reply ?? "").isEmpty {
                                 Button {
@@ -1073,14 +1073,14 @@ struct MerchantReviewsManageView: View {
                                         .foregroundStyle(KXColor.accent)
                                 }
                                 .buttonStyle(.plain)
-                                .padding(.leading, 4)
+                                .padding(.leading, KXSpacing.xs)
                             }
                         }
                     }
                 }
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
-            .padding(.top, 12)
+            .padding(.top, KXSpacing.md)
             .kxTabBarSafeBottomPadding()
         }
         .navigationTitle(KXListingCopy.pickText(language, "点评管理", "レビュー管理", "Review management"))

@@ -17,7 +17,7 @@ struct BottomTabBarView: View {
                         selection = tab
                     }
                 } label: {
-                    VStack(spacing: 2) {
+                    VStack(spacing: KXSpacing.xxs) {
                         tabIcon(tab, isSelected: isSelected)
                             .frame(width: 42, height: 32, alignment: .center)
                             .overlay(alignment: .topTrailing) {

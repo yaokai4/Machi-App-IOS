@@ -525,7 +525,7 @@ struct KXSegmentedControl<Item: Hashable, Label: View>: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(4)
+        .padding(KXSpacing.xs)
         .background {
             Capsule()
                 .fill(KXColor.softBackground.opacity(0.92))
@@ -961,7 +961,7 @@ struct KXFeedSkeleton: View {
     var count: Int = 4
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: KXSpacing.sm) {
             ForEach(0..<count, id: \.self) { _ in
                 KXSkeletonFeedCard()
             }
@@ -980,7 +980,7 @@ struct KXGuideListSkeleton: View {
     private var bone: some ShapeStyle { KXColor.softBackground }
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: KXSpacing.md) {
             RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous)
                 .fill(bone)
                 .frame(height: 96)
@@ -1030,7 +1030,7 @@ struct KXCarouselDots: View {
                     .frame(width: i == index ? 6.5 : 5, height: i == index ? 6.5 : 5)
             }
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, KXSpacing.sm)
         .padding(.vertical, 5)
         .background(.black.opacity(0.22), in: Capsule())
         .shadow(color: .black.opacity(0.16), radius: 3, y: 1)
@@ -1052,7 +1052,7 @@ struct KXCoverPhotoCount: View {
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 7)
-        .padding(.vertical, 4)
+        .padding(.vertical, KXSpacing.xs)
         .background(.black.opacity(0.42), in: Capsule())
     }
 }
@@ -1129,7 +1129,7 @@ struct KXCoverCarousel<Placeholder: View>: View {
                         if !interactive, urls.count > 1 {
                             KXCoverPhotoCount(count: urls.count)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                                .padding(8)
+                                .padding(KXSpacing.sm)
                         }
                     } else if urls.count > 1 {
                         // Swipeable gallery — detail screens only (interactive: true).

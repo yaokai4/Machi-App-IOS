@@ -37,8 +37,8 @@ struct SettingsSectionCard<Content: View>: View {
                 .font(.footnote.weight(.bold))
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
-                .padding(.horizontal, 4)
-                .padding(.top, 4)
+                .padding(.horizontal, KXSpacing.xs)
+                .padding(.top, KXSpacing.xs)
 
             VStack(spacing: 0) {
                 content
@@ -137,7 +137,7 @@ struct SettingsRowContent: View {
                 .frame(width: 36, height: 36)
                 .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: KXRadius.sm, style: .continuous))
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
@@ -199,7 +199,7 @@ struct SettingsDivider: View {
     var body: some View {
         Divider()
             .padding(.leading, 62)
-            .padding(.trailing, 12)
+            .padding(.trailing, KXSpacing.md)
     }
 }
 
@@ -224,7 +224,7 @@ struct ProfileMetricBox: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(8)
+        .padding(KXSpacing.sm)
         .kxGlassSurface(radius: KXRadius.sm, stroke: KaiXTheme.mutedGlassStroke)
     }
 }

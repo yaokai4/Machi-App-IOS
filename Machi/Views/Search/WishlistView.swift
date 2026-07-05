@@ -125,7 +125,7 @@ struct WishlistView: View {
                     }
                 } else {
                     ScrollView {
-                        LazyVStack(spacing: 12) {
+                        LazyVStack(spacing: KXSpacing.md) {
                             ForEach(store.items) { item in
                                 WishlistRow(
                                     item: item,
@@ -146,7 +146,7 @@ struct WishlistView: View {
                         self.removalNotice = nil
                     }
                     .padding(.horizontal, KaiXTheme.horizontalPadding)
-                    .padding(.top, 8)
+                    .padding(.top, KXSpacing.sm)
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
@@ -201,7 +201,7 @@ private struct WishlistRow: View {
 
     var body: some View {
         Button(action: onOpen) {
-            HStack(spacing: 12) {
+            HStack(spacing: KXSpacing.md) {
                 cover
                     .frame(width: 86, height: 86)
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))

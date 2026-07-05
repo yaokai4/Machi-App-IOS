@@ -118,7 +118,7 @@ struct MembershipView: View {
     }
 
     private var hero: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
             HStack(spacing: 6) {
                 Text(L("membershipTitle", language)).font(.title2.weight(.bold))
                 Image(systemName: "checkmark.seal.fill").foregroundStyle(.blue)
@@ -129,7 +129,7 @@ struct MembershipView: View {
             Text(priceText).font(.title.weight(.heavy))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
+        .padding(KXSpacing.lg)
         .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.softBackground))
     }
 
@@ -150,7 +150,7 @@ struct MembershipView: View {
                 Button {
                     store.selectPlan(plan)
                 } label: {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: KXSpacing.sm) {
                         HStack(alignment: .top) {
                             Text(plan.displayName)
                                 .font(.subheadline.weight(.bold))
@@ -162,7 +162,7 @@ struct MembershipView: View {
                                     .font(.caption2.weight(.bold))
                                     .foregroundStyle(.white)
                                     .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
+                                    .padding(.vertical, KXSpacing.xxs)
                                     .background(Capsule().fill(KXColor.accent))
                             }
                         }
@@ -201,9 +201,9 @@ struct MembershipView: View {
     }
 
     private var activeCard: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: KXSpacing.sm) {
             Image(systemName: "checkmark.seal.fill").foregroundStyle(.blue)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                 Text(L("membershipActiveTitle", language)).font(.subheadline.weight(.semibold))
                 if let until = untilText {
                     Text("\(L("membershipActiveUntil", language)) \(until)")
@@ -226,9 +226,9 @@ struct MembershipView: View {
     /// Shown to previously-paid users whose pass has lapsed: an honest
     /// "expired" state with the purchase entry restored right below.
     private var expiredCard: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: KXSpacing.sm) {
             Image(systemName: "clock.badge.exclamationmark").foregroundStyle(.orange)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                 Text(ml("会员已过期", "Membership expired", "メンバーシップの有効期限が切れています"))
                     .font(.subheadline.weight(.semibold))
                 if let until = untilText {
@@ -257,18 +257,18 @@ struct MembershipView: View {
             Text(L("membershipInsightsTitle", language)).font(.headline)
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                 ForEach(items, id: \.0) { item in
-                    VStack(spacing: 2) {
+                    VStack(spacing: KXSpacing.xxs) {
                         Text("\(item.1)").font(.title3.weight(.heavy))
                         Text(L(item.0, language)).font(.caption2).foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, KXSpacing.sm)
                     .background(RoundedRectangle(cornerRadius: 10).fill(KXColor.softBackground))
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
+        .padding(KXSpacing.lg)
         .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.cardBackground))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(KXColor.separator, lineWidth: 0.7))
     }
@@ -297,13 +297,13 @@ struct MembershipView: View {
                     Text(ml("会员专属", "Members only", "会員限定"))
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(KXColor.accent)
-                        .padding(.horizontal, 8)
+                        .padding(.horizontal, KXSpacing.sm)
                         .padding(.vertical, 3)
                         .background(Capsule().fill(KXColor.accentSoft))
                 }
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                     ForEach(sampleItems, id: \.0) { item in
-                        VStack(spacing: 2) {
+                        VStack(spacing: KXSpacing.xxs) {
                             Text(item.1)
                                 .font(.title3.weight(.heavy))
                                 .foregroundStyle(.primary)
@@ -311,7 +311,7 @@ struct MembershipView: View {
                             Text(L(item.0, language)).font(.caption2).foregroundStyle(.secondary)
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
+                        .padding(.vertical, KXSpacing.sm)
                         .background(RoundedRectangle(cornerRadius: 10).fill(KXColor.softBackground))
                     }
                 }
@@ -324,7 +324,7 @@ struct MembershipView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
+            .padding(KXSpacing.lg)
             .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.cardBackground))
             .overlay(RoundedRectangle(cornerRadius: 16).stroke(KXColor.separator, lineWidth: 0.7))
             .contentShape(RoundedRectangle(cornerRadius: 16))
@@ -337,11 +337,11 @@ struct MembershipView: View {
             Text(L("membershipBenefitsTitle", language)).font(.headline)
             if !remoteBenefits.isEmpty {
                 ForEach(remoteBenefits) { benefit in
-                    HStack(alignment: .top, spacing: 8) {
+                    HStack(alignment: .top, spacing: KXSpacing.sm) {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundStyle(.blue)
                             .font(.subheadline)
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                             Text(benefit.title).font(.subheadline.weight(.semibold))
                             Text(benefit.description).font(.caption).foregroundStyle(.secondary)
                         }
@@ -350,7 +350,7 @@ struct MembershipView: View {
                 }
             } else {
                 ForEach(benefitKeys, id: \.self) { key in
-                    HStack(alignment: .top, spacing: 8) {
+                    HStack(alignment: .top, spacing: KXSpacing.sm) {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundStyle(.blue)
                             .font(.subheadline)
@@ -361,7 +361,7 @@ struct MembershipView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
+        .padding(KXSpacing.lg)
         .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.cardBackground))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(KXColor.separator, lineWidth: 0.7))
     }
@@ -372,13 +372,13 @@ struct MembershipView: View {
         NavigationLink {
             GuideMemberResourcesView()
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: KXSpacing.md) {
                 Image(systemName: "books.vertical.fill")
                     .font(.title3)
                     .foregroundStyle(KXColor.accent)
                     .frame(width: 40, height: 40)
                     .background(Circle().fill(KXColor.accentSoft))
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                     Text(L("memberLibraryTitle", language))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
@@ -391,7 +391,7 @@ struct MembershipView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.tertiary)
             }
-            .padding(16)
+            .padding(KXSpacing.lg)
             .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.cardBackground))
             .overlay(RoundedRectangle(cornerRadius: 16).stroke(KXColor.separator, lineWidth: 0.7))
             .contentShape(Rectangle())
@@ -457,7 +457,7 @@ struct MembershipView: View {
             if store.state == .verifyFailedPendingCredit {
                 // Honest state: Apple charged, the server hasn't confirmed
                 // yet. NEVER phrased as "purchase failed, retry".
-                VStack(spacing: 8) {
+                VStack(spacing: KXSpacing.sm) {
                     Text(ml("已完成支付，正在确认到账，请勿重复购买。",
                             "Payment received — we're confirming it with the server. Please don't purchase again.",
                             "お支払いは完了しています。入金確認中のため、再度購入しないでください。"))
@@ -535,7 +535,7 @@ struct MembershipView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 16) {
+            HStack(spacing: KXSpacing.lg) {
                 Link(L("termsOfService", language), destination: KaiXBackend.termsOfServiceURL)
                 Link(L("privacyPolicy", language), destination: KaiXBackend.privacyPolicyURL)
             }
@@ -548,7 +548,7 @@ struct MembershipView: View {
     }
 
     private var safetyNotice: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: KXSpacing.sm) {
             Image(systemName: "exclamationmark.shield").foregroundStyle(.orange)
             Text(L("membershipSafetyNotice", language))
                 .font(.caption).foregroundStyle(.secondary)

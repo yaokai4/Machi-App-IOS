@@ -15,8 +15,8 @@ struct GuideOSPlanCard: View {
     let onOpenPlan: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
+            HStack(alignment: .top, spacing: KXSpacing.md) {
                 ZStack {
                     Circle().stroke(KXColor.accentSoft, lineWidth: 7)
                     Circle()
@@ -28,7 +28,7 @@ struct GuideOSPlanCard: View {
                         .foregroundStyle(KXColor.accent)
                 }
                 .frame(width: 58, height: 58)
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: KXSpacing.xs) {
                     Text(plan?.title ?? guideOSText(language, "进行中的目标", "進行中の目標", "Active goal"))
                         .font(.headline.weight(.bold))
                         .foregroundStyle(.primary)

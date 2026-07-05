@@ -142,7 +142,7 @@ struct DiscoverView: View {
                 KXInlineNotice(message: message) {
                     viewModel.followErrorMessage = nil
                 }
-                .padding(.top, 8)
+                .padding(.top, KXSpacing.sm)
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
@@ -349,7 +349,7 @@ struct DiscoverView: View {
     }
 
     private var discoverHeader: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
             HStack(spacing: KXSpacing.md) {
                 Button {
                     router.open(.profile(userId: currentUser.id))
@@ -413,8 +413,8 @@ struct DiscoverView: View {
             .accessibilityLabel(L("searchPlaceholder", language))
         }
         .padding(.horizontal, KaiXTheme.horizontalPadding)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
+        .padding(.top, KXSpacing.sm)
+        .padding(.bottom, KXSpacing.md)
         .kxGlassBar(ignoresTopSafeArea: true)
         .overlay(alignment: .bottom) {
             Divider().opacity(0.18)
@@ -752,7 +752,7 @@ private struct CurrentRegionCard: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                HStack(spacing: 4) {
+                HStack(spacing: KXSpacing.xs) {
                     Text(KXListingCopy.pickText(language, "切换城市", "都市を変更", "Change city"))
                         .font(.caption.weight(.bold))
                         .foregroundStyle(KXColor.accent)
@@ -787,8 +787,8 @@ private struct DiscoverCategoryGrid: View {
     let onMore: () -> Void
 
     private let columns = [
-        GridItem(.flexible(minimum: 0), spacing: 12),
-        GridItem(.flexible(minimum: 0), spacing: 12),
+        GridItem(.flexible(minimum: 0), spacing: KXSpacing.md),
+        GridItem(.flexible(minimum: 0), spacing: KXSpacing.md),
     ]
 
     var body: some View {
@@ -798,7 +798,7 @@ private struct DiscoverCategoryGrid: View {
                 DiscoverSectionTitle(title: KXListingCopy.pickText(language, "生活功能入口", "生活機能", "Life features"), trailing: nil)
                 Spacer(minLength: 10)
                 Button(action: onMore) {
-                    HStack(spacing: 4) {
+                    HStack(spacing: KXSpacing.xs) {
                         Image(systemName: "square.grid.2x2")
                         Text(KXListingCopy.pickText(language, "更多功能", "もっと", "More"))
                     }
@@ -810,7 +810,7 @@ private struct DiscoverCategoryGrid: View {
                 }
                 .buttonStyle(KXPressableStyle())
             }
-            LazyVGrid(columns: columns, spacing: 12) {
+            LazyVGrid(columns: columns, spacing: KXSpacing.md) {
                 ForEach(core) { category in
                     Button {
                         onOpen(category)
@@ -822,7 +822,7 @@ private struct DiscoverCategoryGrid: View {
             }
             if !secondaryCategories.isEmpty {
                 KXFadingHScroll {
-                    HStack(spacing: 8) {
+                    HStack(spacing: KXSpacing.sm) {
                         ForEach(secondaryCategories) { category in
                             Button { onOpen(category) } label: {
                                 HStack(spacing: 6) {
@@ -841,9 +841,9 @@ private struct DiscoverCategoryGrid: View {
                             .buttonStyle(KXPressableStyle(scale: 0.95))
                         }
                     }
-                    .padding(.horizontal, 2)
+                    .padding(.horizontal, KXSpacing.xxs)
                 }
-                .padding(.top, 2)
+                .padding(.top, KXSpacing.xxs)
             }
         }
     }
@@ -883,7 +883,7 @@ private struct DiscoverCategoryCell: View {
     /// perfectly even — the old version mixed 2-line wrapping text with
     /// a tag pill and produced the "ragged grid" the user flagged.
     private var highCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
             HStack(alignment: .top) {
                 Image(systemName: category.icon)
                     .font(.system(size: 19, weight: .semibold))
@@ -906,7 +906,7 @@ private struct DiscoverCategoryCell: View {
                     .background(category.tint.opacity(0.10), in: Circle())
             }
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: KXSpacing.xs) {
                 Text(category.title(language))
                     .font(.headline.weight(.bold))
                     .foregroundStyle(.primary)
@@ -1053,7 +1053,7 @@ private struct MoreChannelSheet: View {
                                 Text(groupTitle(group.0))
                                     .font(.subheadline.weight(.bold))
                                     .foregroundStyle(.secondary)
-                                    .padding(.horizontal, 2)
+                                    .padding(.horizontal, KXSpacing.xxs)
                                 LazyVGrid(columns: columns, spacing: 10) {
                                     ForEach(items) { category in
                                         Button {
@@ -1199,7 +1199,7 @@ private struct DiscoverRankingRow: View {
     var body: some View {
         HStack(spacing: KXSpacing.sm) {
             DiscoverRankBadge(rank: rank)
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: KXSpacing.xs) {
                 Text(post.discoverTitle)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
@@ -1290,7 +1290,7 @@ private struct DiscoverEditorialRow: View {
     var body: some View {
         HStack(spacing: KXSpacing.sm) {
             AvatarView(user: author, size: 38)
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: KXSpacing.xs) {
                 HStack(spacing: 6) {
                     Text(author?.displayName ?? KXListingCopy.pickText(language, "Machi 城市助手", "Machi 街のアシスタント", "Machi City Helper"))
                         .font(.subheadline.weight(.bold))
@@ -1450,7 +1450,7 @@ private struct HotPillRow: View {
     let onSelect: (String) -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: KXSpacing.sm) {
             ForEach(Array(zip(ids, labels)), id: \.0) { id, label in
                 let isOn = id == selected
                 Button { onSelect(id) } label: {
@@ -1472,7 +1472,7 @@ private struct HotBoardRow: View {
     let language: AppLanguage
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: KXSpacing.md) {
             DiscoverRankBadge(rank: item.rank)
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.title)
@@ -1495,7 +1495,7 @@ private struct HotBoardRow: View {
                 }
             }
             Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 2) {
+            VStack(alignment: .trailing, spacing: KXSpacing.xxs) {
                 Label("\(item.heatScore)", systemImage: "flame.fill")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(KXColor.heat)
@@ -1527,7 +1527,7 @@ private struct HotBoardRow: View {
 
 private struct HotBoardSkeletonRow: View {
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: KXSpacing.md) {
             Circle().fill(KXColor.softBackground).frame(width: 22, height: 22)
             VStack(alignment: .leading, spacing: 6) {
                 RoundedRectangle(cornerRadius: 4).fill(KXColor.softBackground).frame(width: 140, height: 12)
@@ -1536,7 +1536,7 @@ private struct HotBoardSkeletonRow: View {
             Spacer()
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.vertical, KXSpacing.md)
         .redacted(reason: .placeholder)
     }
 }
@@ -1600,7 +1600,7 @@ private struct HappeningSection: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 10) {
             HappeningLiveDot()
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                 Text(regionTitle)
                     .font(.headline.weight(.bold))
                     .foregroundStyle(.primary)
@@ -1620,7 +1620,7 @@ private struct HappeningSection: View {
                     .monospacedDigit()
             }
         }
-        .padding(.horizontal, 2)
+        .padding(.horizontal, KXSpacing.xxs)
     }
 
     private var newContentBanner: some View {
@@ -1707,8 +1707,8 @@ private struct HappeningFocusCard: View {
 
     var body: some View {
         let spec = post.contentType.spec
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
+            HStack(spacing: KXSpacing.sm) {
                 Text(language == .ja ? "注目" : language == .en ? "Top" : "焦点")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(KXColor.heat)
@@ -1775,7 +1775,7 @@ private struct HappeningRankRow: View {
 
     var body: some View {
         let spec = post.contentType.spec
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: KXSpacing.md) {
             DiscoverRankBadge(rank: rank)
 
             VStack(alignment: .leading, spacing: 3) {
@@ -1925,7 +1925,7 @@ private struct DiscoverContentList: View {
     }
 
     private var topicList: some View {
-        FlowLayout(spacing: 8) {
+        FlowLayout(spacing: KXSpacing.sm) {
             ForEach(topics.prefix(18)) { topic in
                 Button {
                     onOpenTopic(topic.name)
@@ -1939,7 +1939,7 @@ private struct DiscoverContentList: View {
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(.secondary)
                     }
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, KXSpacing.md)
                     .frame(height: 56)
                     .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .overlay {
@@ -2007,7 +2007,7 @@ private struct DiscoverContentCard: View {
             .buttonStyle(.plain)
             .accessibilityLabel(author?.displayName ?? L("profile", language))
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                 Text(author?.displayName ?? "@\(post.authorId.prefix(8))")
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
@@ -2022,7 +2022,7 @@ private struct DiscoverContentCard: View {
             Label(L(post.contentType.spec.titleKey, language), systemImage: post.contentType.spec.icon)
                 .font(.caption2.weight(.bold))
                 .foregroundStyle(post.contentType.spec.tint)
-                .padding(.horizontal, 8)
+                .padding(.horizontal, KXSpacing.sm)
                 .frame(height: 24)
                 .background(post.contentType.spec.tint.opacity(0.12), in: Capsule())
         }
@@ -2068,7 +2068,7 @@ private struct DiscoverContentCard: View {
                         Text("#\(topic)")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(KXColor.accent)
-                            .padding(.horizontal, 8)
+                            .padding(.horizontal, KXSpacing.sm)
                             .frame(height: 26)
                             .background(KXColor.accent.opacity(0.08), in: Capsule())
                     }
@@ -2079,7 +2079,7 @@ private struct DiscoverContentCard: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: KXSpacing.md) {
             HeatPill(score: post.heatScore, rank: 1, compact: true)
             Spacer(minLength: 0)
             DiscoverStat(icon: "heart", value: post.likeCount)
@@ -2094,14 +2094,14 @@ private struct DiscoverHighlightChip: View {
     let item: DiscoverHighlight
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: KXSpacing.xs) {
             Text(item.label)
                 .foregroundStyle(.secondary)
             Text(item.value)
                 .foregroundStyle(.primary)
         }
         .font(.caption.weight(.semibold))
-        .padding(.horizontal, 8)
+        .padding(.horizontal, KXSpacing.sm)
         .frame(height: 28)
         .background(KXColor.softBackground, in: Capsule())
     }
@@ -2169,7 +2169,7 @@ private struct DiscoverSectionTitle: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 2)
+        .padding(.horizontal, KXSpacing.xxs)
     }
 }
 
@@ -2218,7 +2218,7 @@ private struct HeatPill: View {
     var compact = false
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: KXSpacing.xs) {
             Image(systemName: "flame.fill")
                 .font(.system(size: compact ? 10 : 11, weight: .black))
             Text(NumberFormatterUtils.compact(Int(score.rounded())))
@@ -2489,7 +2489,7 @@ struct DiscoverOverviewCard: View {
 
     var body: some View {
         Button(action: onOpen) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: KXSpacing.sm) {
                 Image(systemName: icon)
                     .foregroundStyle(tint)
                 Text(title)

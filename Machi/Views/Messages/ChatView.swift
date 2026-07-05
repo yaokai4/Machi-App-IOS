@@ -312,8 +312,8 @@ struct ChatView: View {
             } label: {
                 HStack(spacing: 10) {
                     AvatarView(user: peer, size: 38)
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 4) {
+                    VStack(alignment: .leading, spacing: KXSpacing.xxs) {
+                        HStack(spacing: KXSpacing.xs) {
                             Text(peer?.displayName ?? L("messages", language))
                                 .font(.headline.weight(.semibold))
                             KXUserBadge(user: peer)
@@ -374,8 +374,8 @@ struct ChatView: View {
             }
             .accessibilityLabel(language == .ja ? "その他" : language == .en ? "More" : "更多")
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
+        .padding(.horizontal, KXSpacing.lg)
+        .padding(.top, KXSpacing.sm)
         .padding(.bottom, 10)
         .kxGlassBar(ignoresTopSafeArea: true)
         .overlay(alignment: .bottom) {
@@ -431,7 +431,7 @@ struct ChatView: View {
     private var messageList: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 8) {
+                LazyVStack(spacing: KXSpacing.sm) {
                     ForEach(timelineItems) { item in
                         switch item.kind {
                         case .day(let date):
@@ -485,7 +485,7 @@ struct ChatView: View {
                 }
                 .padding(.horizontal, KaiXTheme.horizontalPadding)
                 .padding(.top, 10)
-                .padding(.bottom, 12)
+                .padding(.bottom, KXSpacing.md)
                 .kxReadableWidth()
                 // Drive the bubble insertion/removal transitions off the message
                 // count so appends/deletes animate rather than snap.
@@ -571,13 +571,13 @@ struct ChatView: View {
     private var draftMediaPreview: some View {
         if !viewModel.mediaDrafts.isEmpty {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     ForEach(viewModel.mediaDrafts) { draft in
                         draftChip(draft)
                     }
                 }
                 .padding(.horizontal, 14)
-                .padding(.vertical, 8)
+                .padding(.vertical, KXSpacing.sm)
             }
             .kxGlassBar()
         }
@@ -628,14 +628,14 @@ struct ChatView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(L("delete", language))
-                    .padding(4)
+                    .padding(KXSpacing.xs)
                 }
             }
     }
 
     private var chatSearchTools: some View {
         VStack(spacing: 9) {
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
                 TextField(L("chatSearchPlaceholder", language), text: $viewModel.searchQuery)
@@ -657,7 +657,7 @@ struct ChatView: View {
                     .accessibilityLabel(L("clear", language))
                 }
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, KXSpacing.md)
             .frame(height: 40)
             .kxGlassCapsule()
 
@@ -694,7 +694,7 @@ struct ChatView: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, KXSpacing.lg)
         .padding(.vertical, 10)
         .kxGlassBar()
         .overlay(alignment: .bottom) {
@@ -729,7 +729,7 @@ struct KXMessageBubble: View {
     var body: some View {
         let contentType = message.resolvedType(mediaItems: mediaItems)
 
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: KXSpacing.sm) {
             if isMine { Spacer(minLength: 52) }
 
             if !isMine {
@@ -821,7 +821,7 @@ struct KXMessageBubble: View {
                     }
                 }
                 .font(.caption2.weight(.semibold))
-                .padding(.horizontal, 4)
+                .padding(.horizontal, KXSpacing.xs)
             }
 
             if !isMine { Spacer(minLength: 52) }
@@ -880,7 +880,7 @@ private struct ChatInputBar: View {
         }
         .padding(.horizontal, 10)
         .padding(.top, 7)
-        .padding(.bottom, 8)
+        .padding(.bottom, KXSpacing.sm)
         .background {
             Rectangle()
                 .fill(KXColor.pageBackground.opacity(0.72))
@@ -942,7 +942,7 @@ private struct ChatInputBar: View {
             sendButton
         }
         .padding(.horizontal, 9)
-        .padding(.vertical, 8)
+        .padding(.vertical, KXSpacing.sm)
         .background {
             RoundedRectangle(cornerRadius: 31, style: .continuous)
                 .fill(KXColor.cardBackground.opacity(0.92))
@@ -1007,7 +1007,7 @@ private struct ChatInputBar: View {
     }
 
     private func attachTray(remainingImageSlots: Int, imageDisabled: Bool, videoDisabled: Bool) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: KXSpacing.md) {
             PhotosPicker(selection: $pickerItems, maxSelectionCount: remainingImageSlots, matching: .images) {
                 ChatAttachTile(
                     icon: "photo.fill",
@@ -1028,8 +1028,8 @@ private struct ChatInputBar: View {
 
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 8)
-        .padding(.top, 2)
+        .padding(.horizontal, KXSpacing.sm)
+        .padding(.top, KXSpacing.xxs)
     }
 }
 
@@ -1095,11 +1095,11 @@ private struct ChatDaySeparator: View {
             .font(.caption2.weight(.semibold))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 11)
-            .padding(.vertical, 4)
+            .padding(.vertical, KXSpacing.xs)
             .background(KXColor.softBackground.opacity(0.9), in: Capsule())
             .frame(maxWidth: .infinity)
             .padding(.top, 6)
-            .padding(.bottom, 2)
+            .padding(.bottom, KXSpacing.xxs)
     }
 
     static func label(_ date: Date, _ language: AppLanguage) -> String {
@@ -1125,7 +1125,7 @@ private struct ChatNewMessagesDivider: View {
     let language: AppLanguage
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: KXSpacing.sm) {
             line
             Text(language == .ja ? "ここから新着メッセージ" : language == .en ? "New messages" : "以下是新消息")
                 .font(.caption2.weight(.bold))
@@ -1133,7 +1133,7 @@ private struct ChatNewMessagesDivider: View {
                 .fixedSize()
             line
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, KXSpacing.sm)
         .padding(.vertical, 3)
     }
 
@@ -1154,7 +1154,7 @@ private struct ChatSkeletonView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, r in
-                HStack(alignment: .bottom, spacing: 8) {
+                HStack(alignment: .bottom, spacing: KXSpacing.sm) {
                     if r.mine { Spacer(minLength: 52) }
                     if !r.mine { Circle().fill(KXColor.softBackground).frame(width: 32, height: 32) }
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -1166,7 +1166,7 @@ private struct ChatSkeletonView: View {
             Spacer()
         }
         .padding(.horizontal, KaiXTheme.horizontalPadding)
-        .padding(.top, 16)
+        .padding(.top, KXSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
         .redacted(reason: .placeholder)
         .accessibilityHidden(true)
@@ -1177,7 +1177,7 @@ private struct ChatSkeletonView: View {
 private struct ChatEmptyView: View {
     let language: AppLanguage
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: KXSpacing.md) {
             Spacer()
             Image(systemName: "bubble.left.and.bubble.right")
                 .font(.system(size: 38, weight: .light))
@@ -1200,7 +1200,7 @@ private struct ChatLoadErrorView: View {
     let onRetry: () -> Void
     @Environment(\.appLanguage) private var language
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: KXSpacing.md) {
             Spacer()
             Image(systemName: "wifi.exclamationmark")
                 .font(.system(size: 34, weight: .light))

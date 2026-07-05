@@ -45,7 +45,7 @@ struct SavedSearchesView: View {
     }
 
     private func row(_ item: KaiXSavedSearchDTO) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: KXSpacing.xs) {
             Text(displayTitle(item))
                 .font(.subheadline.weight(.bold))
                 .lineLimit(1)
@@ -53,7 +53,7 @@ struct SavedSearchesView: View {
                 Text(cadenceText(item.cadence))
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(KXColor.accent)
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, KXSpacing.sm)
                     .frame(height: 20)
                     .background(KXColor.accent.opacity(0.12), in: Capsule())
                 if let detail = detailText(item) {
@@ -69,7 +69,7 @@ struct SavedSearchesView: View {
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, KXSpacing.xs)
     }
 
     /// 首选服务端 label(创建时自动拼好),兜底关键词→垂类名。

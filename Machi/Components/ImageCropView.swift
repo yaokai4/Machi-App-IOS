@@ -196,7 +196,7 @@ struct ImageCropView: View {
                     Text(L("cancel", language))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.white)
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, KXSpacing.lg)
                         .frame(height: 38)
                         .background(.white.opacity(0.16), in: Capsule())
                         .overlay(Capsule().stroke(.white.opacity(0.24), lineWidth: 1))
@@ -233,7 +233,7 @@ struct ImageCropView: View {
         .foregroundStyle(.white.opacity(0.72))
         .multilineTextAlignment(.center)
         .padding(.horizontal, 24)
-        .padding(.top, 8)
+        .padding(.top, KXSpacing.sm)
     }
 
     private var actionBar: some View {
@@ -249,7 +249,7 @@ struct ImageCropView: View {
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 24)
-        .padding(.top, 12)
+        .padding(.top, KXSpacing.md)
         .padding(.bottom, 28)
     }
 }

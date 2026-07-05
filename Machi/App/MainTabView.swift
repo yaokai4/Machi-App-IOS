@@ -82,7 +82,7 @@ struct MainTabView: View {
                 // `.ignoresSafeArea` to the bar alone wasn't enough — the
                 // overlay's anchor still rode the shrinking safe area up.
                 BottomTabBarView(selection: selectedTab, currentUser: currentUser)
-                    .padding(.bottom, 8)
+                    .padding(.bottom, KXSpacing.sm)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                     .ignoresSafeArea(.keyboard, edges: .bottom)
                     .transition(.move(edge: .bottom).combined(with: .opacity))

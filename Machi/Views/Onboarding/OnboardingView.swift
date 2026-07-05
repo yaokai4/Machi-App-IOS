@@ -103,7 +103,7 @@ struct OnboardingView: View {
             }
             .padding(.bottom, 22)
 
-            VStack(spacing: 12) {
+            VStack(spacing: KXSpacing.md) {
                 Button(action: {
                     // UI-test launches drive the app through the auth wall /
                     // -KXAutoGuest, never this step — but if a script ever taps
@@ -146,7 +146,7 @@ struct OnboardingView: View {
     private var personaStep: some View {
         VStack(spacing: 0) {
             Spacer()
-            VStack(spacing: 12) {
+            VStack(spacing: KXSpacing.md) {
                 Text(pick("你现在处于哪个阶段？", "いまはどの段階ですか？", "Where are you right now?"))
                     .kxScaledFont(26, relativeTo: .title2, weight: .bold, design: .rounded)
                     .foregroundStyle(.primary)
@@ -161,7 +161,7 @@ struct OnboardingView: View {
             }
             .padding(.horizontal, 36)
 
-            VStack(spacing: 12) {
+            VStack(spacing: KXSpacing.md) {
                 ForEach(personaOptions) { option in
                     personaRow(option)
                 }
@@ -196,7 +196,7 @@ struct OnboardingView: View {
                     .foregroundStyle(KXColor.accent)
                     .frame(width: 44, height: 44)
                     .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                     Text(option.title)
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.primary)
@@ -230,7 +230,7 @@ struct OnboardingView: View {
                     in: RoundedRectangle(cornerRadius: 32, style: .continuous)
                 )
                 .shadow(color: card.tint.opacity(0.3), radius: 18, y: 10)
-            VStack(spacing: 12) {
+            VStack(spacing: KXSpacing.md) {
                 Text(card.title)
                     .kxScaledFont(26, relativeTo: .title2, weight: .bold, design: .rounded)
                     .foregroundStyle(.primary)

@@ -20,12 +20,12 @@ struct GuideJLPTVocabView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: KXSpacing.lg) {
                 JLPTLevelPicker(selection: $level)
                     .onChange(of: level) { _, _ in Task { await load() } }
                 content
             }
-            .padding(16)
+            .padding(KXSpacing.lg)
         }
         .background(KXColor.livingBackground.ignoresSafeArea())
         .navigationTitle(guideText(language, "我的单词", "単語", "Vocabulary"))
@@ -88,20 +88,20 @@ struct GuideJLPTVocabView: View {
             }
             ProgressView(value: p.progress ?? 0).tint(KXColor.livingAccent)
         }
-        .padding(16)
+        .padding(KXSpacing.lg)
         .frame(maxWidth: .infinity)
         .jlptSurface(radius: KXRadius.hero)
     }
 
     private func deckRow(_ deck: KaiXJLPTVocabDeck) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: KXSpacing.md) {
             Image(systemName: "rectangle.stack.fill")
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(KXColor.livingAccent)
                 .frame(width: 46, height: 46)
                 .background(KXColor.livingAccentSoft, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(JLPTStyle.accentRim, lineWidth: 0.8))
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: KXSpacing.xs) {
                 HStack(spacing: 6) {
                     Text(deck.title ?? "")
                         .font(.subheadline.weight(.bold))
@@ -191,7 +191,7 @@ struct GuideJLPTDeckDetailView: View {
             NavigationLink {
                 GuideJLPTVocabQuizView(level: level, deckId: deckId, deckTitle: deckTitle)
             } label: {
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     Image(systemName: "checkmark.circle.fill").font(.subheadline.weight(.bold))
                     Text(guideText(language, "考单词（测验）", "単語テスト", "Vocab quiz"))
                         .font(.subheadline.weight(.bold))
@@ -206,7 +206,7 @@ struct GuideJLPTDeckDetailView: View {
             }
             .buttonStyle(KXPressableStyle(scale: 0.98))
 
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 Image(systemName: "checkmark.circle")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(KXColor.livingAccent)
@@ -215,7 +215,7 @@ struct GuideJLPTDeckDetailView: View {
                     .foregroundStyle(KXColor.livingMuted)
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 2)
+            .padding(.horizontal, KXSpacing.xxs)
 
             ForEach(words) { word in
                 GuideJLPTWordCard(
@@ -227,7 +227,7 @@ struct GuideJLPTDeckDetailView: View {
 
             JLPTComplianceNote()
         }
-        .padding(16)
+        .padding(KXSpacing.lg)
     }
 
     private func load() async {
@@ -277,7 +277,7 @@ struct GuideJLPTWordCard: View {
                 }
                 if let pos = word.pos, !pos.isEmpty, revealed {
                     Text(pos).font(.caption2.weight(.semibold)).foregroundStyle(KXColor.livingMuted)
-                        .padding(.horizontal, 7).padding(.vertical, 2)
+                        .padding(.horizontal, 7).padding(.vertical, KXSpacing.xxs)
                         .background(KXColor.livingSoft, in: Capsule())
                 }
                 Spacer(minLength: 0)
@@ -302,7 +302,7 @@ struct GuideJLPTWordCard: View {
                         .foregroundStyle(.secondary)
                         .lineSpacing(2)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 2)
+                        .padding(.top, KXSpacing.xxs)
                 }
             } else {
                 Label(guideText(language, "点按查看释义", "タップして意味を見る", "Tap to reveal"),
@@ -310,7 +310,7 @@ struct GuideJLPTWordCard: View {
                     .font(.caption.weight(.medium)).foregroundStyle(KXColor.livingMuted)
             }
         }
-        .padding(16)
+        .padding(KXSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             (mastered ? KXColor.livingAccentSoft : KXColor.livingSurface),
@@ -374,15 +374,15 @@ struct GuideJLPTVocabQuizView: View {
     private var quizView: some View {
         if cursor < questions.count {
             let q = questions[cursor]
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: KXSpacing.lg) {
+                HStack(spacing: KXSpacing.sm) {
                     ProgressView(value: Double(cursor), total: Double(max(1, questions.count)))
                         .tint(KXColor.livingAccent)
                     Text("\(cursor + 1)/\(questions.count)")
                         .font(.caption.weight(.bold).monospacedDigit())
                         .foregroundStyle(KXColor.livingMuted)
                 }
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: KXSpacing.md) {
                     Text(guideText(language, "选择正确释义", "正しい意味を選択", "Pick the meaning"))
                         .font(.caption2.weight(.heavy))
                         .tracking(0.8)
@@ -406,7 +406,7 @@ struct GuideJLPTVocabQuizView: View {
                             )
                         }
                     }
-                    .padding(.top, 2)
+                    .padding(.top, KXSpacing.xxs)
                 }
                 .padding(18)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -424,7 +424,7 @@ struct GuideJLPTVocabQuizView: View {
 
                 JLPTComplianceNote()
             }
-            .padding(16)
+            .padding(KXSpacing.lg)
         }
     }
 
@@ -453,7 +453,7 @@ struct GuideJLPTVocabQuizView: View {
                 .shadow(color: KXColor.livingAccent.opacity(0.24), radius: 8, y: 3)
             }
             .buttonStyle(KXPressableStyle(scale: 0.96))
-            .padding(.top, 2)
+            .padding(.top, KXSpacing.xxs)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(32)

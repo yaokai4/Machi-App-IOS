@@ -56,8 +56,8 @@ struct MyInvitesView: View {
     // MARK: - hero (code + share)
 
     private func heroCard(_ summary: KaiXReferralSummaryDTO) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.lg) {
+            HStack(spacing: KXSpacing.md) {
                 Image(systemName: "gift.fill")
                     .font(.title2.weight(.bold))
                     .foregroundStyle(KXColor.accent)
@@ -77,7 +77,7 @@ struct MyInvitesView: View {
             }
 
             // The code itself — big, monospaced, tap-to-copy.
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: KXSpacing.sm) {
                 Text(KXListingCopy.pickText(language, "我的邀请码", "招待コード", "Your invite code"))
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.secondary)
@@ -95,7 +95,7 @@ struct MyInvitesView: View {
                             .font(.subheadline.weight(.bold))
                             .foregroundStyle(copied ? .green : KXColor.accent)
                     }
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, KXSpacing.lg)
                     .frame(height: 54)
                     .frame(maxWidth: .infinity)
                     .background(KXColor.softBackground.opacity(0.9), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
@@ -123,7 +123,7 @@ struct MyInvitesView: View {
             }
             .buttonStyle(KXPressableStyle(scale: 0.99))
         }
-        .padding(16)
+        .padding(KXSpacing.lg)
         .kxGlassSurface(radius: KXRadius.lg)
         .animation(.snappy, value: copied)
     }
@@ -143,7 +143,7 @@ struct MyInvitesView: View {
     }
 
     private func statCell(value: Int, label: String, tint: Color = .primary) -> some View {
-        VStack(spacing: 4) {
+        VStack(spacing: KXSpacing.xs) {
             Text(NumberFormatterUtils.compact(value))
                 .font(.title3.weight(.bold))
                 .foregroundStyle(tint)
@@ -163,7 +163,7 @@ struct MyInvitesView: View {
     // MARK: - how it works
 
     private func howItWorksCard(_ summary: KaiXReferralSummaryDTO) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
             Text(KXListingCopy.pickText(language, "怎么得奖励", "特典の受け取り方", "How it works"))
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(.primary)
@@ -183,9 +183,9 @@ struct MyInvitesView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 2)
+                .padding(.top, KXSpacing.xxs)
         }
-        .padding(16)
+        .padding(KXSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
         .kxGlassSurface(radius: KXRadius.lg)
     }
@@ -225,14 +225,14 @@ struct MyInvitesView: View {
                         }
                     }
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, KXSpacing.xs)
                 .kxGlassSurface(radius: KXRadius.lg)
             }
         }
     }
 
     private var emptyInvitees: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: KXSpacing.sm) {
             Image(systemName: "person.2")
                 .font(.title2)
                 .foregroundStyle(.secondary)
@@ -247,14 +247,14 @@ struct MyInvitesView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 22)
-        .padding(.horizontal, 16)
+        .padding(.horizontal, KXSpacing.lg)
         .kxGlassSurface(radius: KXRadius.lg)
     }
 
     private func inviteeRow(_ invitee: KaiXReferralInviteeDTO) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: KXSpacing.md) {
             inviteeAvatar(invitee)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                 Text(displayName(invitee))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)

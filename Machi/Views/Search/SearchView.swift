@@ -259,7 +259,7 @@ struct SearchScreen: View {
                         if viewModel.searchedListings.isEmpty {
                             KXEmptyState(title: L("listings", language), subtitle: L("noContent", language), systemImage: "tray")
                                 .frame(maxWidth: .infinity)
-                                .padding(.top, 20)
+                                .padding(.top, KXSpacing.xl)
                         } else {
                             listingsSection
                         }
@@ -279,7 +279,7 @@ struct SearchScreen: View {
                 }
             }
             .padding(.horizontal, KaiXTheme.horizontalPadding)
-            .padding(.top, 12)
+            .padding(.top, KXSpacing.md)
             .padding(.bottom, chrome.bottomContentPadding + KXSpacing.lg)
         }
         .refreshable {
@@ -472,7 +472,7 @@ struct SearchScreen: View {
                         .frame(width: 32, height: 32)
                         .background(KXColor.accent.opacity(0.10), in: Circle())
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                         Text(L("happeningNow", language))
                             .font(.headline.weight(.semibold))
                         Text(L("happeningSubtitle", language))
@@ -694,7 +694,7 @@ private struct RankingHeatPill: View {
     var body: some View {
         let color = style.colors.first ?? KXColor.accent
 
-        HStack(spacing: 4) {
+        HStack(spacing: KXSpacing.xs) {
             Image(systemName: "flame.fill")
                 .font(.system(size: compact ? 10 : 11, weight: .black, design: .rounded))
                 .frame(width: compact ? 10 : 11)
@@ -881,7 +881,7 @@ private struct RankingMetaLabel: View {
     let text: String
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: KXSpacing.xs) {
             if let icon {
                 Image(systemName: icon)
                     .font(.caption2.weight(.bold))
@@ -907,7 +907,7 @@ private struct SearchUserRow: View {
                 HStack(spacing: KXSpacing.md) {
                     AvatarView(user: user, size: KXAvatarSize.md)
                     VStack(alignment: .leading, spacing: 3) {
-                        HStack(spacing: 4) {
+                        HStack(spacing: KXSpacing.xs) {
                             Text(user.displayName)
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.primary)
@@ -1014,7 +1014,7 @@ struct TopicDetailView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 12) {
+            LazyVStack(alignment: .leading, spacing: KXSpacing.md) {
                 topicHeader
                 topicScopePicker
 
@@ -1075,7 +1075,7 @@ struct TopicDetailView: View {
     }
 
     private var topicHeader: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
             Text("#\(topicName)")
                 .font(.title.weight(.semibold))
             Text("\(topicPostCount) \(L("posts", language))")
@@ -1092,7 +1092,7 @@ struct TopicDetailView: View {
 
     private var topicScopePicker: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 ForEach(TopicDetailScope.allCases) { item in
                     Button {
                         withAnimation(.snappy(duration: 0.18)) {
@@ -1111,8 +1111,8 @@ struct TopicDetailView: View {
                     .fixedSize(horizontal: true, vertical: false)
                 }
             }
-            .padding(.horizontal, 2)
-            .padding(.vertical, 2)
+            .padding(.horizontal, KXSpacing.xxs)
+            .padding(.vertical, KXSpacing.xxs)
         }
     }
 
@@ -1154,14 +1154,14 @@ struct TopicDetailView: View {
             if relatedRegions.isEmpty {
                 EmptyStateView(title: L("relatedCities", language), subtitle: L("noContent", language), systemImage: "mappin")
             } else {
-                FlowLayout(spacing: 8) {
+                FlowLayout(spacing: KXSpacing.sm) {
                     ForEach(relatedRegions, id: \.regionCode) { region in
                         Button {
                             router.open(.city(regionCode: region.regionCode))
                         } label: {
                             Text(KaiXRegionDirectory.localizedHeaderLabel(region, language: language))
                                 .font(.subheadline.weight(.semibold))
-                                .padding(.horizontal, 12)
+                                .padding(.horizontal, KXSpacing.md)
                                 .frame(height: 34)
                                 .kxGlassCapsule()
                         }

@@ -107,7 +107,7 @@ struct GuideCalendarView: View {
                     }
                     .pickerStyle(.segmented)
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
+                        HStack(spacing: KXSpacing.sm) {
                             ForEach(GuideCalendarScope.allCases) { item in
                                 Button {
                                     scope = item
@@ -144,7 +144,7 @@ struct GuideCalendarView: View {
                                     .foregroundStyle(KXColor.accent)
                             }
                             .frame(maxWidth: .infinity, minHeight: 40)
-                            .padding(.horizontal, 12)
+                            .padding(.horizontal, KXSpacing.md)
                             .background(KXColor.livingSurface.opacity(0.68), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                             .contentShape(Rectangle())
                         }
@@ -156,7 +156,7 @@ struct GuideCalendarView: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(message.contains("失败") ? Color.orange : KXColor.accent)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 12)
+                            .padding(.horizontal, KXSpacing.md)
                             .padding(.vertical, 10)
                             .background(KXColor.livingSurface.opacity(0.68), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     }
@@ -249,12 +249,12 @@ private struct GuideCalendarMonthGrid: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
             HStack {
                 Text(monthTitle)
                     .font(.headline.weight(.bold))
                 Spacer()
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     monthButton("chevron.left") {
                         cursor = Calendar.current.date(byAdding: .month, value: -1, to: cursor) ?? cursor
                     }
@@ -375,12 +375,12 @@ private struct GuideCalendarWeekBoard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
             HStack {
                 Text(rangeTitle)
                     .font(.headline.weight(.bold))
                 Spacer()
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     weekButton("chevron.left") { shiftWeek(-1) }
                         .accessibilityLabel(guideOSText(language, "上一周", "先週", "Previous week"))
                     Button {
@@ -436,8 +436,8 @@ private struct GuideCalendarWeekBoard: View {
         return Button {
             selectedDate = iso
         } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: KXSpacing.sm) {
+                VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                     Text(isToday
                          ? guideOSText(language, "今天", "今日", "Today")
                          : guideOSText(language,
@@ -466,7 +466,7 @@ private struct GuideCalendarWeekBoard: View {
                                 .foregroundStyle(item.status == "done" ? .secondary : .primary)
                                 .lineLimit(2)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 8)
+                                .padding(.horizontal, KXSpacing.sm)
                                 .padding(.vertical, 6)
                                 .background(item.status == "done" ? KXColor.softBackground : KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                                 .draggable(item.id)
@@ -560,7 +560,7 @@ private struct GuideCalendarAgendaList: View {
     private func agendaSection(date: String, items: [KaiXGuideCalendarItemDTO]) -> some View {
         let day = String(date.prefix(10))
         let overdue = day < GuideOSDate.today()
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: KXSpacing.sm) {
             HStack {
                 Text(dateLabel(day))
                     .font(.headline.weight(.bold))
@@ -614,18 +614,18 @@ private struct GuideCalendarEventComposer: View {
     @State private var notes = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
             Button {
                 if !isExpanded {
                     date = GuideOSDate.parse(defaultDate) ?? Date()
                 }
                 withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
             } label: {
-                HStack(spacing: 12) {
+                HStack(spacing: KXSpacing.md) {
                     Image(systemName: "calendar.badge.plus")
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(KXColor.accent)
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                         Text(guideOSText(language, "新建日程", "予定を作成", "New event"))
                             .font(.subheadline.weight(.bold))
                             .foregroundStyle(.primary)
@@ -648,7 +648,7 @@ private struct GuideCalendarEventComposer: View {
                 Divider().opacity(0.55)
                 TextField(guideOSText(language, "日程标题，例如：大学院线上说明会", "予定のタイトル（例：大学院オンライン説明会）", "Event title, e.g. grad school online info session"), text: $title)
                     .textInputAutocapitalization(.sentences)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, KXSpacing.md)
                     .frame(minHeight: 46)
                     .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                 DatePicker(guideOSText(language, "日期", "日付", "Date"), selection: $date, displayedComponents: .date)
@@ -669,7 +669,7 @@ private struct GuideCalendarEventComposer: View {
                 .font(.subheadline.weight(.semibold))
                 TextField(guideOSText(language, "备注（可选）", "メモ（任意）", "Notes (optional)"), text: $notes, axis: .vertical)
                     .lineLimit(2...5)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, KXSpacing.md)
                     .padding(.vertical, 10)
                     .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                 Button {
@@ -728,7 +728,7 @@ private struct GuideCalendarEventRow: View {
         Button {
             showEditor = true
         } label: {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: KXSpacing.md) {
                 Image(systemName: "calendar")
                     .font(.body.weight(.semibold))
                     .foregroundStyle(Color.indigo)
@@ -738,7 +738,7 @@ private struct GuideCalendarEventRow: View {
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.primary)
                         .lineLimit(2)
-                    HStack(spacing: 8) {
+                    HStack(spacing: KXSpacing.sm) {
                         Text(event.allDay == false ? GuideCalendarEventEditor.timeText(event.startAt, language) : guideOSText(language, "全天", "終日", "All-day"))
                         if let recurrence = event.recurrence, !recurrence.isEmpty {
                             Text(GuideCalendarEventEditor.recurrenceLabel(recurrence, language))
@@ -759,7 +759,7 @@ private struct GuideCalendarEventRow: View {
                     .foregroundStyle(.tertiary)
             }
             .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
-            .padding(12)
+            .padding(KXSpacing.md)
             .contentShape(Rectangle())
             .background(Color.indigo.opacity(0.07), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
@@ -805,7 +805,7 @@ private struct GuideCalendarEventEditor: View {
                             .padding(.horizontal, 14)
                             .frame(minHeight: 52)
                             .background(KXColor.livingSurface.opacity(0.82), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        VStack(spacing: 4) {
+                        VStack(spacing: KXSpacing.xs) {
                             DatePicker(guideOSText(language, "日期", "日付", "Date"), selection: $date, displayedComponents: .date)
                             Toggle(guideOSText(language, "全天", "終日", "All-day"), isOn: $allDay)
                             if !allDay {
@@ -822,7 +822,7 @@ private struct GuideCalendarEventEditor: View {
                         .font(.subheadline.weight(.semibold))
                         .padding(14)
                         .background(KXColor.livingSurface.opacity(0.82), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: KXSpacing.sm) {
                             Text(guideOSText(language, "备注", "メモ", "Notes"))
                                 .font(.caption.weight(.bold))
                                 .foregroundStyle(.secondary)
@@ -938,7 +938,7 @@ private struct GuideCalendarCountdownStrip: View {
 
     var body: some View {
         if !items.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: KXSpacing.sm) {
                 Text(guideOSText(language, "最近倒数", "直近のカウントダウン", "Upcoming countdown"))
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(.primary)
@@ -958,7 +958,7 @@ private struct GuideCalendarCountdownStrip: View {
                                     .foregroundStyle(.secondary)
                             }
                             .frame(width: 138, alignment: .leading)
-                            .padding(12)
+                            .padding(KXSpacing.md)
                             .kxGlassSurface(radius: KXRadius.md)
                         }
                     }

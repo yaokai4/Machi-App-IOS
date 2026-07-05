@@ -68,8 +68,8 @@ struct GuideSchoolListView: View {
 
     private var schoolSearchHeader: some View {
         KXCard(padding: 16, radius: 22) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: KXSpacing.md) {
+                HStack(spacing: KXSpacing.md) {
                     GuideIconBubble(icon: "graduationcap.fill", color: KXColor.rankSky)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(guideText(language, "日本学校库", "日本の学校データベース", "Japan School Library"))
@@ -79,7 +79,7 @@ struct GuideSchoolListView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
                     TextField(guideText(language, "搜索学校名、学科、城市", "学校名・学科・都市を検索", "Search school name, major, or city"), text: $keyword)
@@ -92,7 +92,7 @@ struct GuideSchoolListView: View {
                     .buttonStyle(.borderedProminent)
                     .buttonBorderShape(.capsule)
                 }
-                .padding(12)
+                .padding(KXSpacing.md)
                 .background(KXColor.softBackground.opacity(0.8), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
         }
@@ -103,7 +103,7 @@ struct GuideSchoolListView: View {
     private var schoolFilters: some View {
         VStack(alignment: .leading, spacing: 9) {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     ForEach([
                         ("", guideText(language, "全部", "すべて", "All")),
                         ("university", guideText(language, "大学", "大学", "University")),
@@ -116,11 +116,11 @@ struct GuideSchoolListView: View {
                         }
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, KXSpacing.xxs)
             }
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
+                    HStack(spacing: KXSpacing.sm) {
                         GuidePillButton(title: guideText(language, "首都圈", "首都圏", "Capital area"), isSelected: regionGroup == "capital_area") {
                             regionGroup = regionGroup == "capital_area" ? "" : "capital_area"
                         }
@@ -134,18 +134,18 @@ struct GuideSchoolListView: View {
                             supportFilter = supportFilter == "english" ? "" : "english"
                         }
                     }
-                    .padding(.vertical, 2)
+                    .padding(.vertical, KXSpacing.xxs)
                 }
                 Button {
                     showFilterSheet = true
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: KXSpacing.xs) {
                         Image(systemName: "slider.horizontal.3")
                         Text(activeFilterCount > 0 ? guideText(language, "筛选 \(activeFilterCount)", "絞り込み \(activeFilterCount)", "Filters \(activeFilterCount)") : guideText(language, "筛选", "絞り込み", "Filters"))
                     }
                     .font(.caption.weight(.bold))
                     .foregroundStyle(activeFilterCount > 0 ? Color.white : KXColor.accent)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, KXSpacing.md)
                     .padding(.vertical, 7)
                     .background(activeFilterCount > 0 ? KXColor.accent : KXColor.accentSoft, in: Capsule())
                 }
@@ -254,8 +254,8 @@ struct GuideCompanyListView: View {
 
     private var companySearchHeader: some View {
         KXCard(padding: 16, radius: 22) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: KXSpacing.md) {
+                HStack(spacing: KXSpacing.md) {
                     GuideIconBubble(icon: "building.2.fill", color: KXColor.rankTeal)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(guideText(language, "外国人就职公司库", "外国人向け就職企業データベース", "Foreigner-Friendly Company Library"))
@@ -265,7 +265,7 @@ struct GuideCompanyListView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
                     TextField(guideText(language, "搜索公司名、行业、岗位", "会社名・業界・職種を検索", "Search company, industry, or role"), text: $keyword)
@@ -278,7 +278,7 @@ struct GuideCompanyListView: View {
                     .buttonStyle(.borderedProminent)
                     .buttonBorderShape(.capsule)
                 }
-                .padding(12)
+                .padding(KXSpacing.md)
                 .background(KXColor.softBackground.opacity(0.8), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
         }
@@ -287,17 +287,17 @@ struct GuideCompanyListView: View {
     private var companyFilters: some View {
         VStack(alignment: .leading, spacing: 9) {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     ForEach([("", guideText(language, "全部地区", "すべての地域", "All areas")), ("tokyo", "Tokyo"), ("yokohama", "Yokohama"), ("osaka", "Osaka"), ("kyoto", "Kyoto"), ("kobe", "Kobe")], id: \.0) { value, title in
                         GuidePillButton(title: title, isSelected: city == value) {
                             city = value
                         }
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, KXSpacing.xxs)
             }
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     ForEach([("", guideText(language, "日本全国", "日本全国", "All Japan")), ("capital_area", guideText(language, "首都圈", "首都圏", "Capital area")), ("kansai_area", guideText(language, "关西圈", "関西圏", "Kansai area"))], id: \.0) { value, title in
                         GuidePillButton(title: title, isSelected: regionGroup == value) {
                             regionGroup = value
@@ -309,10 +309,10 @@ struct GuideCompanyListView: View {
                         }
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, KXSpacing.xxs)
             }
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     ForEach([("", guideText(language, "全部规模", "すべての規模", "All sizes")), ("enterprise", guideText(language, "大手", "大手", "Enterprise")), ("large", guideText(language, "大型", "大規模", "Large")), ("medium", guideText(language, "中型", "中規模", "Mid-size")), ("startup", guideText(language, "初创", "スタートアップ", "Startup"))], id: \.0) { value, title in
                         GuidePillButton(title: title, isSelected: companySize == value) {
                             companySize = value
@@ -324,10 +324,10 @@ struct GuideCompanyListView: View {
                         }
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, KXSpacing.xxs)
             }
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     ForEach([("visa", guideText(language, "签证支持", "ビザ支援", "Visa support")), ("foreign", guideText(language, "外国人友好", "外国人フレンドリー", "Foreigner-friendly")), ("english", guideText(language, "英文岗位", "英語ポジション", "English roles")), ("global", "Global career"), ("employees", guideText(language, "外国员工", "外国籍社員", "Foreign employees"))], id: \.0) { value, title in
                         GuidePillButton(title: title, isSelected: supportFilter == value) {
                             supportFilter = supportFilter == value ? "" : value
@@ -339,7 +339,7 @@ struct GuideCompanyListView: View {
                         }
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, KXSpacing.xxs)
             }
         }
     }
@@ -450,7 +450,7 @@ struct GuideSchoolDetailView: View {
             VStack(alignment: .leading, spacing: 13) {
                 HStack(alignment: .top, spacing: 13) {
                     GuideIconBubble(icon: "graduationcap.fill", color: KXColor.rankSky)
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: KXSpacing.xs) {
                         Text(school.schoolName)
                             .font(.title2.weight(.bold))
                             .fixedSize(horizontal: false, vertical: true)
@@ -527,7 +527,7 @@ struct GuideSchoolDetailView: View {
 
     private func schoolSignalPanel(_ school: KaiXGuideSchoolDTO) -> some View {
         KXCard(padding: 16, radius: 22) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: KXSpacing.md) {
                 Text(guideText(language, "申请信息", "出願情報", "Application info"))
                     .font(.headline.weight(.bold))
                 GuideMetaRow(title: guideText(language, "地址", "住所", "Address"), value: [school.postalCode ?? "", school.prefecture, school.city, school.ward ?? "", school.address ?? ""].filter { !$0.isEmpty }.joined(separator: " ").ifEmpty(guideText(language, "待补充", "未入力", "Pending")))
@@ -576,7 +576,7 @@ struct GuideSchoolDetailView: View {
                 TextField(guideText(language, "发现官网、招生信息有误？在这里提交纠错", "公式サイトや入試情報の誤りを見つけたら、ここから修正を送信", "Found an error in the website or admissions info? Submit a correction here"), text: $correctionText, axis: .vertical)
                     .font(.footnote)
                     .lineLimit(2...4)
-                    .padding(12)
+                    .padding(KXSpacing.md)
                     .background(KXColor.softBackground.opacity(0.82), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
                 Button(guideText(language, "提交纠错", "修正を送信", "Submit correction")) {
                     Task { await submitCorrection(school) }
@@ -603,7 +603,7 @@ struct GuideSchoolDetailView: View {
             } else {
                 ForEach(programs) { program in
                     KXCard(padding: 14, radius: 20) {
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: KXSpacing.sm) {
                             Text(program.programName)
                                 .font(.headline.weight(.bold))
                             if !program.programNameJp.isEmpty {
@@ -652,7 +652,7 @@ struct GuideSchoolDetailView: View {
             } else {
                 ForEach(admissions) { admission in
                     KXCard(padding: 14, radius: 20) {
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: KXSpacing.sm) {
                             HStack {
                                 Text(admission.admissionType.isEmpty ? guideText(language, "入试信息", "入試情報", "Admission info") : admission.admissionType)
                                     .font(.headline.weight(.bold))
@@ -811,10 +811,10 @@ struct GuideCompanyDetailView: View {
 
     private func companyHero(_ company: KaiXGuideCompanyDTO) -> some View {
         KXCard(padding: 18, radius: 24) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: KXSpacing.md) {
                 HStack(alignment: .top, spacing: 13) {
                     GuideIconBubble(icon: "building.2.fill", color: KXColor.rankTeal)
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: KXSpacing.xs) {
                         Text(company.companyName)
                             .font(.title2.weight(.bold))
                         if !company.companyNameJp.isEmpty {
@@ -908,7 +908,7 @@ struct GuideCompanyDetailView: View {
                 TextField(guideText(language, "发现招聘页、签证信息有误？在这里提交纠错", "採用ページやビザ情報の誤りを見つけたら、ここから修正を送信", "Found an error in careers or visa info? Submit a correction here"), text: $correctionText, axis: .vertical)
                     .font(.footnote)
                     .lineLimit(2...4)
-                    .padding(12)
+                    .padding(KXSpacing.md)
                     .background(KXColor.softBackground.opacity(0.82), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
                 Button(guideText(language, "提交纠错", "修正を送信", "Submit correction")) {
                     Task { await submitCorrection(company) }
@@ -922,7 +922,7 @@ struct GuideCompanyDetailView: View {
 
     private func companyFactsPanel(_ company: KaiXGuideCompanyDTO) -> some View {
         KXCard(padding: 16, radius: 22) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: KXSpacing.md) {
                 Text(guideText(language, "就职信号", "就職シグナル", "Career signals"))
                     .font(.headline.weight(.bold))
                 GuideMetaRow(title: guideText(language, "行业", "業界", "Industry"), value: [company.industry, company.subIndustry ?? "", company.companySize ?? company.size].filter { !$0.isEmpty }.joined(separator: " · ").ifEmpty(guideText(language, "待补充", "未入力", "Pending")))
@@ -968,7 +968,7 @@ struct GuideCompanyDetailView: View {
 
     private func scorePanel(_ company: KaiXGuideCompanyDTO) -> some View {
         KXCard(padding: 16, radius: 22) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: KXSpacing.md) {
                 HStack {
                     Text(guideText(language, "真实评价", "リアルレビュー", "Real reviews"))
                         .font(.headline.weight(.bold))
@@ -1083,7 +1083,7 @@ struct GuideCompanyReviewsView: View {
                 }
             } else if let response {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 12) {
+                    LazyVStack(alignment: .leading, spacing: KXSpacing.md) {
                         HStack {
                             ForEach(ReviewTab.allCases) { tab in
                                 GuidePillButton(title: "\(tab.title(language)) \(count(for: tab, response: response))", isSelected: selectedTab == tab) {
@@ -1181,9 +1181,9 @@ struct GuideInterviewReviewListView: View {
                 GuideComingSoonView()
             } else {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 12) {
+                    LazyVStack(alignment: .leading, spacing: KXSpacing.md) {
                         ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
+                            HStack(spacing: KXSpacing.sm) {
                                 ForEach([("", guideText(language, "全部地区", "すべての地域", "All areas")), ("tokyo", "Tokyo"), ("osaka", "Osaka")], id: \.0) { value, title in
                                     GuidePillButton(title: title, isSelected: city == value) {
                                         city = value

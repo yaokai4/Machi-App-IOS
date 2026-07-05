@@ -29,20 +29,20 @@ struct ChatEmojiPanel: View {
     ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
             if !recent.isEmpty {
                 Text(language == .ja ? "最近" : language == .en ? "Recent" : "最近使用")
                     .font(.caption2.weight(.bold)).foregroundStyle(.secondary)
-                    .padding(.leading, 4)
+                    .padding(.leading, KXSpacing.xs)
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
+                    HStack(spacing: KXSpacing.sm) {
                         ForEach(recent, id: \.self) { e in emojiButton(e) }
                     }
-                    .padding(.horizontal, 4)
+                    .padding(.horizontal, KXSpacing.xs)
                 }
             }
 
-            HStack(spacing: 4) {
+            HStack(spacing: KXSpacing.xs) {
                 ForEach(Array(Self.categories.enumerated()), id: \.offset) { index, cat in
                     Button {
                         withAnimation(.snappy(duration: 0.15)) { category = index }
@@ -60,10 +60,10 @@ struct ChatEmojiPanel: View {
             }
 
             ScrollView(showsIndicators: false) {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 8), spacing: 6) {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: KXSpacing.xxs), count: 8), spacing: 6) {
                     ForEach(Self.categories[category].emojis, id: \.self) { e in emojiButton(e) }
                 }
-                .padding(.horizontal, 2)
+                .padding(.horizontal, KXSpacing.xxs)
             }
             .frame(height: 196)
         }

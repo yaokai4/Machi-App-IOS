@@ -148,7 +148,7 @@ struct RegionPickerView: View {
                     }
                 }
                 .frame(width: 26)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                     Text(L("useCurrentLocation", language))
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.primary)
@@ -223,7 +223,7 @@ struct RegionPickerView: View {
                                 .font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
                             Image(systemName: "chevron.right").font(.footnote.weight(.medium)).foregroundStyle(.tertiary)
                         }
-                        .padding(.vertical, 12)
+                        .padding(.vertical, KXSpacing.md)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -239,7 +239,7 @@ struct RegionPickerView: View {
                                 .font(.footnote.weight(.medium))
                                 .foregroundStyle(.tertiary)
                         }
-                        .padding(.vertical, 12)
+                        .padding(.vertical, KXSpacing.md)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -256,7 +256,7 @@ struct RegionPickerView: View {
                             Text(KaiXRegionDirectory.localizedCityName(countryCode: country.code, city: city, language: language)).font(.body)
                             Spacer()
                         }
-                        .padding(.vertical, 12)
+                        .padding(.vertical, KXSpacing.md)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -280,7 +280,7 @@ struct RegionPickerView: View {
                             .font(.footnote.weight(.medium))
                             .foregroundStyle(.tertiary)
                     }
-                    .padding(.vertical, 12)
+                    .padding(.vertical, KXSpacing.md)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -310,7 +310,7 @@ struct RegionPickerView: View {
                         Button { deliver(region) } label: {
                             HStack(spacing: KXSpacing.sm) {
                                 Text(region.countryEmoji).font(.title3)
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                                     Text(KaiXRegionDirectory.localizedShortLabel(region, language: language)).font(.body)
                                     Text(regionSubtitle(region))
                                         .font(.caption)
@@ -421,7 +421,7 @@ private struct CircleCityListView: View {
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.tertiary)
                         }
-                        .padding(.vertical, 12)
+                        .padding(.vertical, KXSpacing.md)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -461,7 +461,7 @@ private struct ProvinceListView: View {
                                     .font(.footnote.weight(.medium))
                                     .foregroundStyle(.tertiary)
                             }
-                            .padding(.vertical, 12)
+                            .padding(.vertical, KXSpacing.md)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
@@ -477,7 +477,7 @@ private struct ProvinceListView: View {
                                     .font(.footnote.weight(.medium))
                                     .foregroundStyle(.tertiary)
                             }
-                            .padding(.vertical, 12)
+                            .padding(.vertical, KXSpacing.md)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
@@ -495,7 +495,7 @@ private struct ProvinceListView: View {
                                 Text(KaiXRegionDirectory.localizedCityName(countryCode: country.code, city: city, language: language)).font(.body)
                                 Spacer()
                             }
-                            .padding(.vertical, 12)
+                            .padding(.vertical, KXSpacing.md)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
@@ -537,7 +537,7 @@ private struct CityListView: View {
                             Text(KaiXRegionDirectory.localizedCityName(countryCode: country.code, provinceCode: province.code, city: city, language: language)).font(.body)
                             Spacer()
                         }
-                        .padding(.vertical, 12)
+                        .padding(.vertical, KXSpacing.md)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)

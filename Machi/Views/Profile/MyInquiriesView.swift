@@ -90,7 +90,7 @@ struct MyInquiriesView: View {
         let counterpart = role == .received ? inquiry.resolvedFromUser : inquiry.resolvedToUser
         let details = normalizedDetails(inquiry)
         let cleanMessage = clean(inquiry.message)
-        return VStack(alignment: .leading, spacing: 12) {
+        return VStack(alignment: .leading, spacing: KXSpacing.md) {
             HStack(alignment: .top, spacing: 10) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 13, style: .continuous)
@@ -175,7 +175,7 @@ struct MyInquiriesView: View {
                 .background(statusColor(inquiry.status ?? "submitted").opacity(0.08), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
             }
 
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 actionButton(title: LabeledCopy.viewDetail(language), icon: "doc.text.magnifyingglass", filled: false) {
                     openListing(inquiry)
                 }
@@ -190,7 +190,7 @@ struct MyInquiriesView: View {
             if role == .received {
                 statusUpdateMenu(inquiry)
             } else {
-                HStack(spacing: 8) {
+                HStack(spacing: KXSpacing.sm) {
                     if !isTerminalStatus(inquiry.status ?? "submitted") {
                         statusAction(inquiry, status: "withdrawn", title: LabeledCopy.withdraw(language), icon: "arrow.uturn.backward.circle.fill")
                     }
@@ -222,7 +222,7 @@ struct MyInquiriesView: View {
             menuStatusButton(inquiry, current: current, status: "rejected", title: LabeledCopy.reject(language), icon: "xmark.seal.fill", destructive: true)
             menuStatusButton(inquiry, current: current, status: "closed", title: LabeledCopy.close(language), icon: "archivebox.fill", destructive: true)
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: KXSpacing.sm) {
                 if updatingInquiryId == inquiry.id {
                     KXSpinner(size: 13, lineWidth: 1.8, tint: KXColor.accent)
                 } else {
@@ -721,7 +721,7 @@ struct MyOrdersView: View {
     }
 
     private func row(_ order: KaiXPaymentOrderDTO) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: KXSpacing.md) {
             VStack(alignment: .leading, spacing: 5) {
                 Text(order.plan_key?.isEmpty == false ? L("membershipSettingsTitle", language) : order.order_no)
                     .font(.subheadline.weight(.semibold))
