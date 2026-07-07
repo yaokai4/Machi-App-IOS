@@ -158,6 +158,10 @@ struct CityListingChannelView: View {
     // carries one cursor per stream). nil = that stream is exhausted.
     @State private var nextCursor: String?
     @State private var nextHiringCursor: String?
+    /// 服务端返回的满足当前筛选的真实总数(仅第一页下发)。头部此前显示
+    /// 「已加载条数 条结果」,首屏永远是「24 条结果」,被读成"总共只有 24 套";
+    /// 有真实总数时优先展示它。nil = 旧服务端 / 回退流,退回已加载数。
+    @State private var serverTotal: Int?
     @State private var isLoadingMore = false
     /// True while a `quiet` reload (filter/sort change) is in flight — drives a
     /// small "updating…" indicator so a silent reload never reads as "frozen".
@@ -943,7 +947,7 @@ struct CityListingChannelView: View {
     /// 轻量结果摘要行：结果数 + 当前范围/类目 + 清空。
     private var resultSummaryRow: some View {
         HStack(spacing: 6) {
-            Text(resultCountText(visibleItems.count))
+            Text(resultCountText(serverTotal ?? visibleItems.count))
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.secondary)
             Text("·")
@@ -1108,7 +1112,7 @@ struct CityListingChannelView: View {
         Button {
             filtersOpen = false
         } label: {
-            Text(KXListingCopy.pickText(language, "查看 \(visibleItems.count) 个结果", "\(visibleItems.count) 件を見る", "Show \(visibleItems.count) results"))
+            Text(KXListingCopy.pickText(language, "查看 \(serverTotal ?? visibleItems.count) 个结果", "\(serverTotal ?? visibleItems.count) 件を見る", "Show \(serverTotal ?? visibleItems.count) results"))
                 .kxGlassButton(prominent: true)
         }
         .buttonStyle(KXPressableStyle(scale: 0.97))
@@ -1652,6 +1656,15 @@ struct CityListingChannelView: View {
                 nextCursor = jobCursor
                 nextHiringCursor = hiringCursor
                 fallbackNoticeLabel = (fbLabel?.isEmpty == false) ? fbLabel : nil
+                // 双流合并的总数 = 两流总数之和;任一流被客户端丢弃(单流回退
+                // 且另一流有本地结果)时服务端总数已不代表屏上内容,退回加载数。
+                if jobItems.isEmpty != jobPage.items.isEmpty || hiringItems.isEmpty != hiringPage.items.isEmpty {
+                    serverTotal = nil
+                } else if let jobTotal = jobPage.total, let hiringTotal = hiringPage.total {
+                    serverTotal = jobTotal + hiringTotal
+                } else {
+                    serverTotal = nil
+                }
             } else {
                 let page = try await KaiXAPIClient.shared.listingsPage(
                     type: queryType,
@@ -1672,6 +1685,7 @@ struct CityListingChannelView: View {
                 items = page.items
                 nextCursor = page.nextCursor
                 nextHiringCursor = nil
+                serverTotal = page.total
                 fallbackNoticeLabel = (page.fallback != nil && page.fallbackLabel?.isEmpty == false) ? page.fallbackLabel : nil
             }
             isLoading = false

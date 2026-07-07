@@ -874,6 +874,8 @@ final class KaiXAPIClient {
     struct ListingsPage {
         let items: [KaiXCityListingDTO]
         let nextCursor: String?
+        /// 满足当前筛选的真实总条数(仅第一页下发;游标页 nil,客户端沿用)。
+        var total: Int? = nil
         /// data.filters.fallback / fallback_label — set only when the requested
         /// area was empty and the server widened the scope (metro_circle /
         /// country), so channels can show "该地区暂无,已为你展示{label}的内容".
@@ -930,6 +932,7 @@ final class KaiXAPIClient {
         return ListingsPage(
             items: response.items,
             nextCursor: response.next_cursor,
+            total: response.total,
             fallback: response.data?.filters?.fallback,
             fallbackLabel: response.data?.filters?.fallback_label
         )

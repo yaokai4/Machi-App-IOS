@@ -365,8 +365,10 @@ struct CreateCityListingView: View {
     }
 
     private var canSubmit: Bool {
+        // 出二手不再要求交易地点——买卖双方私聊约地点,展示位置由发布地区
+        // 自动兜底(见 submit 的 resolvedLocationText)。其余类型保持必填。
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && (listingType == "secondhand" || !location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             && region != nil
             && typeRequiredFieldsReady
             && !hasBlockingMediaUpload
@@ -421,7 +423,9 @@ struct CreateCityListingView: View {
             return filled(merchantName) && filled(discountInfo) && filled(validUntil)
         }
         if listingType == "secondhand" {
-            return filled(category) && filled(price) && filled(condition)
+            // 出二手只要求 标题+分类+价格+描述(标题在 canSubmit 里全类型必填);
+            // 新旧程度等交易细节全部可选,降低发布门槛。
+            return filled(category) && filled(price) && filled(description)
         }
         return true
     }
@@ -590,6 +594,11 @@ struct CreateCityListingView: View {
 
     private var requiredProgress: (done: Int, total: Int) {
         let filled: (String) -> Bool = { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        // 出二手的必填集独立:标题/分类/价格/描述,无交易地点。
+        if listingType == "secondhand" {
+            let values = [filled(title), filled(category), filled(price), filled(description)]
+            return (values.filter { $0 }.count, values.count)
+        }
         var values = [filled(title), filled(location)]
         if listingType == "rental" {
             values += [filled(layout), filled(area), filled(station), filled(moveIn)]
@@ -621,8 +630,6 @@ struct CreateCityListingView: View {
             }
         } else if listingType == "discount" {
             values += [filled(merchantName), filled(discountInfo), filled(validUntil)]
-        } else if listingType == "secondhand" {
-            values += [filled(category), filled(price), filled(condition)]
         }
         return (values.filter { $0 }.count, values.count)
     }
@@ -630,14 +637,14 @@ struct CreateCityListingView: View {
     private var missingRequiredCopy: String {
         let filled: (String) -> Bool = { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         if !filled(title) { return KXListingCopy.pickText(language, "请先补充标题", "タイトルを入力してください", "Add a title first") }
-        if !filled(location) { return KXListingCopy.pickText(language, "请补充地区、车站或交易地点", "エリア、駅、または受け渡し場所を入力してください", "Add an area, station, or meetup location") }
+        if listingType != "secondhand", !filled(location) { return KXListingCopy.pickText(language, "请补充地区、车站或交易地点", "エリア、駅、または受け渡し場所を入力してください", "Add an area, station, or meetup location") }
         if region == nil { return KXListingCopy.pickText(language, "请先选择可发布的城市", "投稿先の都市を選んでください", "Choose a city before posting") }
         if listingType == "rental" && !typeRequiredFieldsReady { return KXListingCopy.pickText(language, "请补充户型、面积、最近车站和入住时间", "間取り、面積、最寄り駅、入居時期を入力してください", "Add layout, size, nearest station, and move-in date") }
         if (listingType == "work" || listingType == "job" || listingType == "hiring") && !typeRequiredFieldsReady { return KXListingCopy.pickText(language, "请补充公司/店铺名和工作时间", "会社・店舗名と勤務時間を入力してください", "Add company/store name and working hours") }
         if listingType == "local_service" && serviceVertical == nil { return KXListingCopy.pickText(language, "请先选择商家与服务细分类", "店舗・サービスの細分類を選んでください", "Choose a business/service subcategory") }
         if listingType == "local_service" && !typeRequiredFieldsReady { return KXListingCopy.pickText(language, "请补齐当前服务分类的必填字段", "現在のサービス分類の必須項目を入力してください", "Complete the required fields for this service type") }
         if listingType == "discount" && !typeRequiredFieldsReady { return KXListingCopy.pickText(language, "请补充商家、优惠内容和有效期", "店舗、特典内容、有効期限を入力してください", "Add merchant, deal details, and validity") }
-        if listingType == "secondhand" && !typeRequiredFieldsReady { return KXListingCopy.pickText(language, "请补充分类、价格和新旧程度，免费送可填 0", "カテゴリ、価格、状態を入力してください。無料譲渡は 0 で登録できます", "Add category, price, and condition. Use 0 for free items") }
+        if listingType == "secondhand" && !typeRequiredFieldsReady { return KXListingCopy.pickText(language, "请补充分类、价格和描述，免费送可填 0", "カテゴリ、価格、説明を入力してください。無料譲渡は 0 で登録できます", "Add category, price, and a description. Use 0 for free items") }
         return KXListingCopy.pickText(language, "信息完整后即可提交", "情報がそろうと送信できます", "You can submit once the details are complete")
     }
 
@@ -1125,7 +1132,10 @@ struct CreateCityListingView: View {
                 // 展示位置 (business location, free text) — NOT the publish region.
                 // Channel-specific label so it reads as a real-world spot, not an
                 // area filter. The structured region lives in the 发布地区 card above.
-                KXListingFormField(title: locationFieldTitle, placeholder: locationFieldPlaceholder, icon: "mappin.and.ellipse", text: $location)
+                // 出二手不填交易地点:双方私聊约地点,展示位置自动取发布地区城市。
+                if listingType != "secondhand" {
+                    KXListingFormField(title: locationFieldTitle, placeholder: locationFieldPlaceholder, icon: "mappin.and.ellipse", text: $location)
+                }
                 KXListingFormField(title: KXListingCopy.pickText(language, "描述", "説明", "Description"), placeholder: KXListingCopy.descriptionPlaceholder(for: listingType, language), icon: "text.alignleft", text: $description, lineLimit: 4...8)
             }
         }
@@ -1515,25 +1525,27 @@ struct CreateCityListingView: View {
                 }
             }
         } else {
-            KXListingSection(title: "交易字段", icon: "shippingbox") {
+            // 全部可选:必填只有 标题/分类/价格/描述(在基本信息里)。
+            // 交易地点已删除——买卖双方私聊再约,展示位置自动取发布地区。
+            KXListingSection(title: "交易细节（可选）", icon: "shippingbox") {
                 VStack(spacing: KXSpacing.md) {
+                    KXListingHintRow(text: "以下全部选填。写清新旧程度、瑕疵与配件能减少来回确认;交易地点私聊约定即可。", icon: "sparkles", tint: typeAccent)
                     KXListingChoiceRow(title: "发布类型", icon: "arrow.left.arrow.right.circle", options: ["出售", "免费送", "求购"], selection: $listingMode, tint: typeAccent)
-                    KXListingFormField(title: "品牌 / 型号", placeholder: "可选，例如 日文配列键盘 / 白色书桌 / 13 寸笔记本", icon: "tag", text: $brandModel)
                     KXListingChoiceRow(title: "新旧程度", icon: "sparkles", options: ["全新", "几乎全新", "良好", "有使用痕迹", "可用"], selection: $condition, tint: typeAccent)
+                    KXListingFormField(title: "品牌 / 型号", placeholder: "可选，例如 日文配列键盘 / 白色书桌 / 13 寸笔记本", icon: "tag", text: $brandModel)
                     HStack(spacing: 10) {
                         KXListingFormField(title: "原价 / 参考价", placeholder: "可选，例如 28000", icon: "chart.line.uptrend.xyaxis", text: $originalPrice, keyboard: .decimalPad)
                         KXListingFormField(title: "购买时间", placeholder: "可选，例如 2025 年春", icon: "calendar", text: $purchaseTime)
                     }
                     KXListingFormField(title: "配件 / 包装", placeholder: "例如 原盒、充电器、说明书、保修卡", icon: "shippingbox.and.arrow.backward", text: $accessories)
-                    KXListingFormField(title: "瑕疵 / 使用痕迹", placeholder: "如有划痕、缺件、维修史请提前说明；没有可写“无明显瑕疵”", icon: "exclamationmark.circle", text: $defectNote, lineLimit: 2...4)
+                    KXListingFormField(title: "瑕疵 / 使用痕迹", placeholder: "如有划痕、缺件、维修史请提前说明", icon: "exclamationmark.circle", text: $defectNote, lineLimit: 2...4)
                     KXListingFormField(title: "可交易时间", placeholder: "例如 平日 19:00 后 / 周末下午", icon: "calendar.badge.clock", text: $secondhandAvailableTime)
-                    KXListingFormField(title: "取货 / 邮寄说明", placeholder: "例如 新宿站面交，邮寄需买家承担运费", icon: "shippingbox", text: $secondhandPickupNotes, lineLimit: 2...4)
+                    KXListingFormField(title: "取货 / 邮寄说明", placeholder: "例如 可面交，邮寄需买家承担运费", icon: "shippingbox", text: $secondhandPickupNotes, lineLimit: 2...4)
                     HStack(spacing: 10) {
                         KXListingToggleChip(title: "自取 / 面交", icon: "person.2", isOn: $pickupAvailable, tint: typeAccent)
                         KXListingToggleChip(title: "可邮寄", icon: "shippingbox", isOn: $secondhandShippingAvailable, tint: typeAccent)
                     }
                     KXListingToggleChip(title: "价格可商量", icon: "arrow.left.arrow.right", isOn: $priceNegotiable, tint: typeAccent)
-                    KXListingHintRow(text: "建议写清购买时间、瑕疵、配件、是否含包装和交易地点，减少来回确认。", icon: "lightbulb", tint: typeAccent)
                 }
             }
         }
@@ -1720,6 +1732,20 @@ struct CreateCityListingView: View {
 
     private func submit() async {
         guard let region else { return }
+        // 出二手隐藏了交易地点输入:展示位置自动落到发布地区的城市名,
+        // 具体交易地点买卖双方私聊再约。编辑旧帖时保留原值。
+        let resolvedLocationText: String = {
+            let trimmed = location.trimmingCharacters(in: .whitespacesAndNewlines)
+            if listingType == "secondhand", trimmed.isEmpty {
+                return KaiXRegionDirectory.localizedCityName(
+                    countryCode: region.countryCode,
+                    provinceCode: region.provinceCode,
+                    city: KaiXRegionDirectory.City(code: region.cityCode, name: region.cityName),
+                    language: language
+                )
+            }
+            return location
+        }()
         isSubmitting = true
         message = nil
         do {
@@ -1754,7 +1780,7 @@ struct CreateCityListingView: View {
                     description: description,
                     category: category.isEmpty ? KXListingCopy.defaultCategory(for: listingType) : category,
                     price: Double(price),
-                    locationText: location,
+                    locationText: resolvedLocationText,
                     mediaIds: mediaIds,
                     attributes: attributes
                 )
@@ -1769,7 +1795,7 @@ struct CreateCityListingView: View {
                     description: description,
                     category: category.isEmpty ? KXListingCopy.defaultCategory(for: listingType) : category,
                     price: Double(price),
-                    locationText: location,
+                    locationText: resolvedLocationText,
                     mediaIds: mediaIds,
                     attributes: attributes
                 )
@@ -1787,7 +1813,7 @@ struct CreateCityListingView: View {
                 typeLabel: KXListingCopy.createTitle(for: listingType, language),
                 title: title.isEmpty ? KXListingCopy.displayTitle(result) : title,
                 regionLabel: KaiXRegionDirectory.localizedHeaderLabel(region, language: language),
-                locationText: location
+                locationText: resolvedLocationText
             )
         } catch {
             if let api = error as? KaiXAPIError {

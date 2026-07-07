@@ -270,7 +270,9 @@ struct DiscoverView: View {
             primaryCategories: primaryCategories,
             secondaryCategories: secondaryCategories,
             onOpen: openCategory,
-            onMore: { isShowingMoreChannels = true }
+            onMore: { isShowingMoreChannels = true },
+            onOpenRooms: { router.open(.socialRooms) },
+            onOpenEvents: { router.open(.events) }
         )
     }
 
@@ -785,6 +787,8 @@ private struct DiscoverCategoryGrid: View {
     var secondaryCategories: [DiscoverCategory] = []
     let onOpen: (DiscoverCategory) -> Void
     let onMore: () -> Void
+    var onOpenRooms: () -> Void = {}
+    var onOpenEvents: () -> Void = {}
 
     private let columns = [
         GridItem(.flexible(minimum: 0), spacing: KXSpacing.md),
@@ -820,32 +824,63 @@ private struct DiscoverCategoryGrid: View {
                     .buttonStyle(KXPressableStyle(scale: 0.97))
                 }
             }
-            if !secondaryCategories.isEmpty {
-                KXFadingHScroll {
-                    HStack(spacing: KXSpacing.sm) {
-                        ForEach(secondaryCategories) { category in
-                            Button { onOpen(category) } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: category.icon)
-                                        .font(.caption.weight(.bold))
-                                    Text(category.title(language))
-                                        .font(.caption.weight(.bold))
-                                        .lineLimit(1)
-                                }
-                                .foregroundStyle(category.tint)
-                                .padding(.horizontal, 13)
-                                .frame(height: 36)
-                                .background(category.tint.opacity(0.10), in: Capsule())
-                                .overlay(Capsule().stroke(category.tint.opacity(0.18), lineWidth: 0.7))
-                            }
-                            .buttonStyle(KXPressableStyle(scale: 0.95))
-                        }
-                    }
-                    .padding(.horizontal, KXSpacing.xxs)
+            // 四大入口下面那排小频道 chips(活动/优惠/指南/快讯/问答)整排下线,
+            // 换成两个真正的社交入口:交友·约局·约饭(社交房间) + 活动(Luma 式)。
+            HStack(spacing: KXSpacing.md) {
+                socialEntryCard(
+                    title: KXListingCopy.pickText(language, "交友 · 约局 · 约饭", "友達 · 遊び · ごはん", "Meet & Hang out"),
+                    subtitle: KXListingCopy.pickText(language, "开个局,像进房间一样认识人", "ルーム感覚で友達づくり", "Open a room, meet people"),
+                    icon: "person.2.wave.2.fill",
+                    tint: Color(red: 0.42, green: 0.36, blue: 0.90)
+                ) {
+                    onOpenRooms()
                 }
-                .padding(.top, KXSpacing.xxs)
+                socialEntryCard(
+                    title: KXListingCopy.pickText(language, "活动", "イベント", "Events"),
+                    subtitle: KXListingCopy.pickText(language, "酒局、展览、读书会…线下见", "飲み会・展示・読書会など", "Drinks, art, book clubs…"),
+                    icon: "calendar.badge.clock",
+                    tint: Color(red: 0.90, green: 0.42, blue: 0.30)
+                ) {
+                    onOpenEvents()
+                }
             }
+            .padding(.top, KXSpacing.xxs)
         }
+    }
+
+    /// 社交入口卡:渐变图标 + 双行文案,规格与上面四张主入口卡同族但更轻。
+    private func socialEntryCard(title: String, subtitle: String, icon: String, tint: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: KXSpacing.sm) {
+                Image(systemName: icon)
+                    .kxScaledFont(16, weight: .bold)
+                    .foregroundStyle(.white)
+                    .frame(width: 38, height: 38)
+                    .background(
+                        LinearGradient(colors: [tint.opacity(0.95), tint.opacity(0.62)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                        in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    )
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Text(subtitle)
+                        .kxScaledFont(10, relativeTo: .caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .kxGlassSurface(radius: KXRadius.md)
+            .contentShape(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+        }
+        .buttonStyle(KXPressableStyle(scale: 0.97))
     }
 }
 

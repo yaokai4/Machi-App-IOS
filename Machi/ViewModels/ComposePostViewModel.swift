@@ -204,16 +204,15 @@ final class ComposePostViewModel: ObservableObject {
     /// else is captured by the typed form but not required.
     var requiredAttributeKeys: [String] {
         switch contentType {
-        case .image_post, .long_post, .rant, .anonymous:
+        case .image_post, .long_post, .rant, .anonymous, .question:
             // Body-first posts: the composer body / media is the content,
-            // so nothing in the typed form is required.
+            // so nothing in the typed form is required. 提问的正文就是问题,
+            // 发布时自动镜像进 attributes.question(见 publish)。
             return []
         case .news, .local_info:
             return [PostAttributeKeys.title]
         case .guide:
             return [PostAttributeKeys.title]
-        case .question:
-            return [PostAttributeKeys.question]
         case .secondhand:
             return [PostAttributeKeys.title, PostAttributeKeys.price]
         case .housing:
@@ -451,7 +450,7 @@ final class ComposePostViewModel: ObservableObject {
                 hashtags: publishHashtags,
                 region: selectedRegion,
                 contentType: contentType,
-                attributes: attributes,
+                attributes: outgoingAttributes,
                 language: selectedLanguage.serverTag,
                 uploadedMediaByDraftID: uploadedMediaByDraftID,
                 onMediaUploadState: { [weak self] draftId, uploadState, progress in
@@ -503,7 +502,7 @@ final class ComposePostViewModel: ObservableObject {
                 hashtags: publishHashtags,
                 region: selectedRegion,
                 contentType: contentType,
-                attributes: attributes,
+                attributes: outgoingAttributes,
                 language: selectedLanguage.serverTag,
                 uploadedMediaByDraftID: uploadedMediaByDraftID
             )
@@ -524,6 +523,23 @@ final class ComposePostViewModel: ObservableObject {
 
     private var publishHashtags: [String] {
         (selectedTopics + content.extractedHashtags).normalizedDisplayHashtags
+    }
+
+    /// Attributes as they go to the server. 提问的正文就是问题本身(独立
+    /// 「问题」表单已删),这里把正文首段镜像进 attributes.question,Web /
+    /// 老版本客户端按 question 属性渲染的地方照常工作。
+    private var outgoingAttributes: [String: KaiXAttributeValue] {
+        guard contentType == .question else { return attributes }
+        var merged = attributes
+        let question = content
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .components(separatedBy: .newlines)
+            .first?
+            .trimmingCharacters(in: .whitespaces) ?? ""
+        if !question.isEmpty {
+            merged[PostAttributeKeys.question] = KaiXAttributeValue(string: String(question.prefix(300)))
+        }
+        return merged
     }
 
     func resetDraft(keepError: Bool = false) {

@@ -252,6 +252,10 @@ struct MainTabView: View {
                         GuideCompanyDetailView(companyId: id)
                     } else {
                         switch screen.name {
+                    case "rooms":
+                        SocialRoomsView(currentUser: currentUser)
+                    case "events":
+                        EventsListView(currentUser: currentUser)
                     case "workbench":
                         MyWorkbenchView(currentUser: currentUser)
                     case "merchant":

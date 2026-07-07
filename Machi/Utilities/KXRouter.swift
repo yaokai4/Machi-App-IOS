@@ -52,6 +52,13 @@ enum KXRoute: Hashable {
     case search(initialQuery: String?)
     /// 订阅的搜索(saved searches)管理列表 — 设置入口之外还可被通知深链打开。
     case savedSearches
+    /// 交友 · 约局 · 约饭 —— 社交房间广场 / 单个房间。
+    case socialRooms
+    case socialRoom(roomId: String)
+    /// Machi 活动(Luma 式):活动列表 / 详情(slug 或 id)/ 创建。
+    case events
+    case eventDetail(idOrSlug: String)
+    case createEvent
 }
 
 @MainActor
@@ -193,7 +200,7 @@ extension KXRoute {
             return .none
         case .postDetailComment(_, let commentId):
             return commentId.map { .comment($0) } ?? .comments
-        case .profile, .topic, .city, .cityChannel, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .myInquiries, .myReservations, .businessDirectory, .businessProfile, .guideCategory, .guideJourney, .guidePlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideFinance, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications, .guideServices, .guideMemberResources, .guideMyLibrary, .personalWorkbench, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .guideAI, .conversation, .search, .savedSearches:
+        case .profile, .topic, .city, .cityChannel, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .myInquiries, .myReservations, .businessDirectory, .businessProfile, .guideCategory, .guideJourney, .guidePlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideFinance, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications, .guideServices, .guideMemberResources, .guideMyLibrary, .personalWorkbench, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .guideAI, .conversation, .search, .savedSearches, .socialRooms, .socialRoom, .events, .eventDetail, .createEvent:
             return .none
         }
     }
@@ -204,9 +211,9 @@ extension KXRoute {
         // occludes the calendar / list footers (the bar covered the Calendar's
         // bottom rows). They keep their own nav bar + edge-swipe back, so users
         // are never stranded. The 我的工作台 hub itself keeps the tab bar.
-        case .postDetail, .postDetailComment, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .businessProfile, .guideArticle, .guideProduct, .guideJourney, .guideSchool, .guideCompany, .guideCompanyReviews, .conversation, .guidePlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideFinance, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications, .guideAI:
+        case .postDetail, .postDetailComment, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .businessProfile, .guideArticle, .guideProduct, .guideJourney, .guideSchool, .guideCompany, .guideCompanyReviews, .conversation, .guidePlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideFinance, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications, .guideAI, .socialRoom, .eventDetail, .createEvent:
             true
-        case .profile, .topic, .city, .cityChannel, .myInquiries, .myReservations, .businessDirectory, .guideCategory, .guideServices, .guideMemberResources, .guideMyLibrary, .personalWorkbench, .guideSchools, .guideCompanies, .guideInterviewReviews, .search, .savedSearches:
+        case .profile, .topic, .city, .cityChannel, .myInquiries, .myReservations, .businessDirectory, .guideCategory, .guideServices, .guideMemberResources, .guideMyLibrary, .personalWorkbench, .guideSchools, .guideCompanies, .guideInterviewReviews, .search, .savedSearches, .socialRooms, .events:
             false
         }
     }
@@ -227,6 +234,8 @@ extension KXRoute {
             L("emptyMessages", language)
         case .search:
             L("emptySearch", language)
+        case .socialRooms, .socialRoom, .events, .eventDetail, .createEvent:
+            L("emptyFeed", language)
         }
     }
 }
@@ -343,6 +352,16 @@ private struct KXRouteDestinations: ViewModifier {
                     SearchScreen(currentUser: currentUser, initialQuery: initialQuery ?? "")
                 case .savedSearches:
                     SavedSearchesView()
+                case .socialRooms:
+                    SocialRoomsView(currentUser: currentUser)
+                case .socialRoom(let roomId):
+                    SocialRoomDetailView(roomId: roomId, currentUser: currentUser)
+                case .events:
+                    EventsListView(currentUser: currentUser)
+                case .eventDetail(let idOrSlug):
+                    EventDetailView(idOrSlug: idOrSlug, currentUser: currentUser)
+                case .createEvent:
+                    CreateEventView(currentUser: currentUser)
                 }
             }
             .alert(L("error", language), isPresented: Binding(
@@ -512,6 +531,18 @@ private extension KXRoute {
             return .search(initialQuery: query?.isEmpty == true ? nil : query)
         case .savedSearches:
             return .savedSearches
+        case .socialRooms:
+            return .socialRooms
+        case .socialRoom(let roomId):
+            let id = roomId.trimmingCharacters(in: .whitespacesAndNewlines)
+            return id.isEmpty ? nil : .socialRoom(roomId: id)
+        case .events:
+            return .events
+        case .eventDetail(let idOrSlug):
+            let id = idOrSlug.trimmingCharacters(in: .whitespacesAndNewlines)
+            return id.isEmpty ? nil : .eventDetail(idOrSlug: id)
+        case .createEvent:
+            return .createEvent
         }
     }
 }

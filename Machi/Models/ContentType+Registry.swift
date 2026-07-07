@@ -45,7 +45,10 @@ enum ContentTypeRegistry {
         .news:       .init(titleKey: "ct_news",      icon: "newspaper",            tint: .blue,     subtitleKey: "ct_news_sub",      hasTypedForm: true),
         .local_info: .init(titleKey: "ct_localinfo", icon: "megaphone",            tint: .cyan,     subtitleKey: "ct_localinfo_sub", hasTypedForm: true),
         .guide:      .init(titleKey: "ct_guide",     icon: "book",                 tint: .teal,     subtitleKey: "ct_guide_sub",     hasTypedForm: true),
-        .question:   .init(titleKey: "ct_question",  icon: "questionmark.bubble",  tint: .purple,   subtitleKey: "ct_question_sub",  hasTypedForm: true),
+        // 提问不再有独立表单:正文就是问题本身(旧版正文+「问题」字段重复,
+        // 用户要填两遍)。发布时正文自动镜像进 attributes.question,老客户端 /
+        // Web 的问题渲染不受影响。
+        .question:   .init(titleKey: "ct_question",  icon: "questionmark.bubble",  tint: .purple,   subtitleKey: "ct_question_sub",  hasTypedForm: false),
         .rant:       .init(titleKey: "ct_rant",      icon: "speaker.wave.2",       tint: .indigo,   subtitleKey: "ct_rant_sub",      hasTypedForm: true),
         .secondhand: .init(titleKey: "ct_secondhand",icon: "tag",                  tint: .green,    subtitleKey: "ct_secondhand_sub",hasTypedForm: true),
         .housing:    .init(titleKey: "ct_housing",   icon: "house",                tint: .blue,     subtitleKey: "ct_housing_sub",   hasTypedForm: true),
@@ -77,14 +80,11 @@ enum ContentTypeRegistry {
     /// 优惠/内推) were moved out: they each have a dedicated publish flow
     /// (workbench) and a browse channel under 同城, so surfacing them here too
     /// was redundant and read as a conflicting second entry point.
-    // First 9 are the everyday community actions (the picker's "常用"); the
-    // rarer / overlapping ones (图文 long-post, 长文, 本地告示, 吐槽, 树洞, 内推)
-    // fold under "更多" so the first screen reads as ~8 clear choices instead
-    // of a wall of 15.
+    // 2026-07 精简:发帖类型只保留四个真正被使用的——动态(最轻)、提问、
+    // 吐槽、内推。约局/约饭/活动各自有专门系统(社交房间 + 活动),指南/快讯/
+    // 投票等低频类型全部下线;历史帖子照常渲染(specs 仍保留全部类型)。
     static let pickerOrder: [ContentType] = [
-        .dynamic, .question, .guide, .warning,
-        .meetup, .dining, .event, .poll, .news,
-        .image_post, .long_post, .local_info, .rant, .anonymous, .referral,
+        .dynamic, .question, .rant, .referral,
     ]
 
     /// Marketplace / service listing types — still fully creatable, but only
@@ -108,7 +108,7 @@ extension ContentType {
     /// meaningful metadata to display.
     var allowsGenericPayloadOnly: Bool {
         switch self {
-        case .image_post, .long_post, .question, .rant, .anonymous:
+        case .dynamic, .image_post, .long_post, .question, .rant, .anonymous:
             return true
         default:
             return false

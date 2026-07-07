@@ -437,6 +437,17 @@ struct ComposePostView: View {
         return L(labelKey, language)
     }
 
+    /// 每个类型一句贴合场景的正文引导:提问的正文就是问题本身,吐槽/内推
+    /// 也各有各的开场,不再是千篇一律的「有什么新鲜事?」。
+    private var composerPlaceholderKey: String {
+        switch viewModel.contentType {
+        case .question: return "placeholderQuestion"
+        case .rant: return "placeholderRant"
+        case .referral: return "placeholderReferral"
+        default: return "placeholderPost"
+        }
+    }
+
     private var composer: some View {
         HStack(alignment: .top, spacing: KXSpacing.md) {
             AvatarView(user: currentUser, size: 48)
@@ -448,7 +459,7 @@ struct ComposePostView: View {
                     .padding(.top, -8)
 
                 if viewModel.content.isEmpty {
-                    Text(L("placeholderPost", language))
+                    Text(L(composerPlaceholderKey, language))
                         .font(.title3)
                         .foregroundStyle(.secondary)
                         .padding(.top, KXSpacing.sm)

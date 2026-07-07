@@ -533,6 +533,13 @@ enum KXListingCopy {
         "选择服务细分类": ("サービス細分類を選択", "Choose service subcategory"),
         "商家优惠字段": ("店舗特典の項目", "Deal details"),
         "交易字段": ("取引項目", "Marketplace details"),
+        "交易细节（可选）": ("取引の詳細（任意）", "Trade details (optional)"),
+        "以下全部选填。写清新旧程度、瑕疵与配件能减少来回确认;交易地点私聊约定即可。": (
+            "以下はすべて任意です。状態・傷・付属品を書いておくとやり取りがスムーズです。受け渡し場所はメッセージで相談しましょう。",
+            "Everything below is optional. Condition, flaws and accessories save back-and-forth; arrange the meetup spot in chat."
+        ),
+        "例如 可面交，邮寄需买家承担运费": ("例：手渡し可、郵送は買い手が送料負担", "e.g. meetup OK, buyer pays shipping"),
+        "如有划痕、缺件、维修史请提前说明": ("傷・欠品・修理歴があれば事前に記載してください", "Note any scratches, missing parts or repairs"),
         "服务方名称": ("提供者名", "Provider name"),
         "细分类 / 服务类型": ("細分類 / サービス種別", "Subcategory / service type"),
         "公司 / 店铺名": ("会社 / 店舗名", "Company / store name"),
@@ -980,7 +987,7 @@ enum KXListingCopy {
         case "discount":
             (zh, ja, en) = ("优惠内容、有效期和使用规则需要明确，避免用户到店后产生误解。", "特典内容、有効期限、利用条件を明確にして、来店時の誤解を防ぎましょう。", "Make deal details, validity, and usage rules clear to avoid confusion in-store.")
         default:
-            (zh, ja, en) = ("清楚的照片、价格、地点和新旧程度，会让同城交易更快也更安全。", "写真、価格、場所、状態が明確だと、地域取引はより速く安全になります。", "Clear photos, price, location, and condition make local trades faster and safer.")
+            (zh, ja, en) = ("只需标题、分类、价格和描述就能发布；照片清楚会卖得更快，交易地点私聊再约。", "タイトル・カテゴリ・価格・説明だけで出品OK。写真がきれいだと早く売れます。受け渡し場所はメッセージで相談を。", "Just a title, category, price and description to list. Clear photos sell faster; arrange the meetup in chat.")
         }
         return pickText(language, zh, ja, en)
     }

@@ -147,9 +147,11 @@ struct ContentTypePickerView: View {
 
     /// Recently-picked types, deduped against current. Stored as a
     /// pipe-delimited list so we don't pull SwiftData into this leaf
-    /// view.
+    /// view. Filtered to the live pickerOrder so a type that has been
+    /// retired from the picker can't resurrect itself from history.
     private var recentTypes: [ContentType] {
         recentTypesRaw.split(separator: "|").compactMap { ContentType(rawValue: String($0)) }
+            .filter { ContentTypeRegistry.pickerOrder.contains($0) }
             .prefix(4)
             .map { $0 }
     }

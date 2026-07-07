@@ -193,6 +193,9 @@ struct KaiXListingsResponse: Codable {
 
     let items: [KaiXCityListingDTO]
     let next_cursor: String?
+    /// 满足当前筛选的真实总条数——只在第一页下发(游标页为 nil)。频道头部
+    /// 用它展示「311 条结果」,而不是把「已加载 24 条」误标成总数。
+    let total: Int?
     let type: String?
     /// Envelope `data` — carries `filters` (empty-result fallback contract).
     let data: DataPayload?

@@ -24,7 +24,9 @@ struct ComposeFormFactory: View {
             BasicTitleFormView(viewModel: viewModel, titleKey: "ct_rant", icon: "speaker.wave.2")
 
         case .question:
-            QuestionFormView(viewModel: viewModel)
+            // 正文就是问题(hasTypedForm=false):不再叠一个重复的「问题」
+            // 表单。发布时正文自动镜像进 attributes.question(见 publish)。
+            EmptyView()
 
         case .news:
             NewsInfoFormView(viewModel: viewModel, titleKey: "ct_news", icon: "newspaper")

@@ -180,7 +180,11 @@ struct PostCardView: View, Equatable {
 
                     metadataRow(for: contentPost)
 
-                    if !contentPost.previewText.isEmpty {
+                    if contentPost.contentType == .question {
+                        // 提问帖不用等打开详情:问题本身在卡片上就是主角,
+                        // 附带回答数 / 作答 CTA,让人一眼认出「这是一个提问」。
+                        questionPanel(for: contentPost)
+                    } else if !contentPost.previewText.isEmpty {
                         Button {
                             if expandOnTap {
                                 expandTextIfPossible(contentPost.previewText)
@@ -374,6 +378,84 @@ struct PostCardView: View, Equatable {
 
     private func shouldShowExpand(for text: String) -> Bool {
         text.count > 96 || text.components(separatedBy: .newlines).count > 4
+    }
+
+    /// 提问帖的卡片主体:问题面板(问号徽章 + 问题原文 + 补充说明摘要 +
+    /// 回答数/作答 CTA)。问题优先取 attributes.question(老帖),否则取正文
+    /// 首行;剩余正文作为补充背景淡化展示。
+    private func questionPanel(for post: PostEntity) -> some View {
+        let preview = post.previewText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let attrQuestion = (post.stringAttribute(PostAttributeKeys.question) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let firstLine = preview.components(separatedBy: .newlines).first?
+            .trimmingCharacters(in: .whitespaces) ?? ""
+        let question = attrQuestion.isEmpty ? (firstLine.isEmpty ? preview : firstLine) : attrQuestion
+        // 正文以问题行开头时,剩余部分作为背景补充;完全相同则不重复展示。
+        var body = ""
+        if !preview.isEmpty, preview != question {
+            if preview.hasPrefix(question) {
+                body = String(preview.dropFirst(question.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            } else {
+                body = preview
+            }
+        }
+        let tint = ContentType.question.spec.tint
+        return Button {
+            onOpen()
+        } label: {
+            VStack(alignment: .leading, spacing: KXSpacing.sm) {
+                HStack(alignment: .top, spacing: KXSpacing.sm) {
+                    Image(systemName: "questionmark.circle.fill")
+                        .kxScaledFont(17, weight: .bold)
+                        .foregroundStyle(tint)
+                        .padding(.top, 1)
+                    Text(question)
+                        .kxScaledFont(16, relativeTo: .body, weight: .semibold)
+                        .foregroundStyle(.primary)
+                        .lineSpacing(2)
+                        .lineLimit(4)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if !body.isEmpty {
+                    Text(body)
+                        .kxScaledFont(14, relativeTo: .subheadline, weight: .regular)
+                        .foregroundStyle(.secondary)
+                        .lineSpacing(2)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                HStack(spacing: KXSpacing.sm) {
+                    if post.commentCount > 0 {
+                        Label(String(format: L("questionAnswersFmt", language), post.commentCount), systemImage: "text.bubble.fill")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(tint)
+                    } else {
+                        Label(L("questionAwaiting", language), systemImage: "sparkles")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(tint)
+                    }
+                    Spacer(minLength: 0)
+                    HStack(spacing: 3) {
+                        Text(L("questionAnswerCTA", language))
+                        Image(systemName: "chevron.right")
+                    }
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                }
+            }
+            .padding(KXSpacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(tint.opacity(0.07), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
+                    .stroke(tint.opacity(0.16), lineWidth: 0.8)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(L("ct_question", language))：\(question)")
     }
 
     private func metadataRow(for post: PostEntity) -> some View {

@@ -23,17 +23,6 @@ struct BasicTitleFormView: View {
     }
 }
 
-struct QuestionFormView: View {
-    @ObservedObject var viewModel: ComposePostViewModel
-
-    var body: some View {
-        TypedFormSection(titleKey: "ct_question", icon: "questionmark.bubble") {
-            TypedTextField("fld_question", text: viewModel.stringBinding(PostAttributeKeys.question), axis: .vertical, isRequired: true)
-            TypedTextField("fld_category", text: viewModel.stringBinding(PostAttributeKeys.category))
-        }
-    }
-}
-
 struct AnonymousFormView: View {
     @Environment(\.appLanguage) private var language
     @ObservedObject var viewModel: ComposePostViewModel
