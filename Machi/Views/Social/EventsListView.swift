@@ -2,54 +2,69 @@ import SwiftUI
 
 // MARK: - 活动样式速查
 
+/// 活动 = 正式策划活动。分类按「活动的形式」(名词,你去参加的东西),与约局
+/// (按「一起做什么」的搭子动作)彻底区分。含旧数据别名兼容。
 enum KXEventStyle {
+    /// 旧 key(0708 首发)→新 key,与后端 _EVENT_CATEGORY_ALIASES 对齐。
+    static func canonical(_ raw: String) -> String {
+        switch raw {
+        case "art": "exhibition"
+        case "music": "show"
+        case "food", "drinks", "social": "party"
+        default: raw
+        }
+    }
+
+    /// 现役分类顺序(供筛选/选择器)。
+    static let orderedKeys = ["exhibition", "show", "talk", "workshop", "market", "party", "sports", "reading", "film", "outdoor"]
+
     static func icon(_ key: String) -> String {
-        switch key {
-        case "drinks": "wineglass.fill"
-        case "food": "fork.knife"
-        case "art": "paintpalette.fill"
-        case "reading": "book.fill"
-        case "music": "music.note"
-        case "outdoor": "leaf.fill"
+        switch canonical(key) {
+        case "exhibition": "paintpalette.fill"
+        case "show": "music.note"
+        case "talk": "person.wave.2.fill"
+        case "workshop": "hammer.fill"
         case "market": "bag.fill"
-        case "talk": "mic.fill"
+        case "party": "party.popper.fill"
         case "sports": "sportscourt.fill"
-        case "social": "person.3.fill"
+        case "reading": "book.fill"
+        case "film": "film.fill"
+        case "outdoor": "mountain.2.fill"
         default: "sparkles"
         }
     }
 
     static func tint(_ key: String) -> Color {
-        switch key {
-        case "drinks": .pink
-        case "food": .orange
-        case "art": .purple
-        case "reading": .teal
-        case "music": .indigo
-        case "outdoor": .green
-        case "market": .brown
+        switch canonical(key) {
+        case "exhibition": .purple
+        case "show": .indigo
         case "talk": .blue
+        case "workshop": .orange
+        case "market": .brown
+        case "party": .pink
         case "sports": .mint
-        case "social": .cyan
+        case "reading": .teal
+        case "film": .cyan
+        case "outdoor": .green
         default: .gray
         }
     }
 
     static func label(_ key: String, fallback: String?, _ language: AppLanguage) -> String {
         let table: [String: (zh: String, ja: String, en: String)] = [
-            "drinks": ("酒局小聚", "飲み会", "Drinks"),
-            "food": ("美食饭局", "グルメ", "Food"),
-            "art": ("展览艺术", "アート", "Art"),
-            "reading": ("读书会", "読書会", "Reading"),
-            "music": ("音乐演出", "音楽", "Music"),
-            "outdoor": ("户外徒步", "アウトドア", "Outdoor"),
+            "exhibition": ("展览", "展示", "Exhibition"),
+            "show": ("演出", "ライブ", "Show"),
+            "talk": ("讲座沙龙", "トーク", "Talk"),
+            "workshop": ("工作坊", "ワークショップ", "Workshop"),
             "market": ("市集", "マルシェ", "Market"),
-            "talk": ("讲座分享", "トーク", "Talks"),
-            "sports": ("运动", "スポーツ", "Sports"),
-            "social": ("交友社群", "交流会", "Social"),
+            "party": ("派对", "パーティー", "Party"),
+            "sports": ("运动赛事", "スポーツ", "Sports"),
+            "reading": ("读书会", "読書会", "Reading"),
+            "film": ("观影", "上映", "Film"),
+            "outdoor": ("户外", "アウトドア", "Outdoor"),
             "other": ("其他", "その他", "Other"),
         ]
-        if let entry = table[key] {
+        if let entry = table[canonical(key)] {
             return KXListingCopy.pickText(language, entry.zh, entry.ja, entry.en)
         }
         return fallback ?? key
@@ -180,7 +195,7 @@ struct EventsListView: View {
 
     private var displayCategories: [KaiXEventCategoryDTO] {
         if !categories.isEmpty { return categories }
-        return ["drinks", "food", "art", "reading", "music", "outdoor", "market", "talk", "sports", "social"].map {
+        return KXEventStyle.orderedKeys.map {
             KaiXEventCategoryDTO(key: $0, label: $0)
         }
     }
@@ -326,7 +341,7 @@ private struct EventCard: View {
     let language: AppLanguage
     let onOpen: () -> Void
 
-    private var tint: Color { KXEventStyle.tint(event.category ?? "social") }
+    private var tint: Color { KXEventStyle.tint(event.category ?? "party") }
 
     var body: some View {
         Button(action: onOpen) {
@@ -334,7 +349,7 @@ private struct EventCard: View {
                 cover
                 VStack(alignment: .leading, spacing: KXSpacing.sm) {
                     HStack(spacing: 6) {
-                        Label(KXEventStyle.label(event.category ?? "social", fallback: event.category_label, language), systemImage: KXEventStyle.icon(event.category ?? "social"))
+                        Label(KXEventStyle.label(event.category ?? "party", fallback: event.category_label, language), systemImage: KXEventStyle.icon(event.category ?? "party"))
                             .font(.caption2.weight(.black))
                             .foregroundStyle(tint)
                             .padding(.horizontal, 8)
@@ -413,7 +428,7 @@ private struct EventCard: View {
                         endPoint: .bottomTrailing
                     )
                     .overlay {
-                        Image(systemName: KXEventStyle.icon(event.category ?? "social"))
+                        Image(systemName: KXEventStyle.icon(event.category ?? "party"))
                             .font(.system(size: 44, weight: .bold))
                             .foregroundStyle(.white.opacity(0.85))
                     }

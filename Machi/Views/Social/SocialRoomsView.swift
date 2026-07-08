@@ -2,56 +2,71 @@ import SwiftUI
 
 // MARK: - 房间样式速查
 
-/// 每种局一个「性格」:图标 + 主色,列表和详情共用,保证同种局在任何
-/// 界面看起来都是同一个东西。
+/// 约局 = 搭子 / 即兴组队。每种搭子一个「性格」:图标 + 主色,列表和详情共用。
+/// 分类按「一起做什么」,与活动(按活动形式)彻底区分。含旧数据别名兼容。
 enum KXRoomStyle {
+    /// 旧 key(0708 首发)→新 key,与后端 _ROOM_TYPE_ALIASES 对齐。
+    static func canonical(_ raw: String) -> String {
+        switch raw {
+        case "dining": "meal"
+        case "drinks": "drink"
+        case "boardgame", "karaoke": "play"
+        case "sports": "sport"
+        case "hangout": "chat"
+        default: raw
+        }
+    }
+
+    /// 现役分类顺序(供筛选/选择器)。
+    static let orderedKeys = ["meal", "drink", "coffee", "sport", "study", "play", "carpool", "outing", "language", "chat"]
+
     static func icon(_ typeKey: String) -> String {
-        switch typeKey {
-        case "dining": "fork.knife"
-        case "drinks": "wineglass.fill"
+        switch canonical(typeKey) {
+        case "meal": "fork.knife"
+        case "drink": "wineglass.fill"
         case "coffee": "cup.and.saucer.fill"
-        case "boardgame": "dice.fill"
-        case "sports": "figure.run"
+        case "sport": "figure.run"
         case "study": "book.fill"
-        case "language": "bubble.left.and.bubble.right.fill"
-        case "karaoke": "music.mic"
+        case "play": "gamecontroller.fill"
+        case "carpool": "car.fill"
         case "outing": "figure.walk"
-        case "hangout": "person.2.fill"
+        case "language": "bubble.left.and.bubble.right.fill"
+        case "chat": "message.fill"
         default: "sparkles"
         }
     }
 
     static func tint(_ typeKey: String) -> Color {
-        switch typeKey {
-        case "dining": .orange
-        case "drinks": .pink
+        switch canonical(typeKey) {
+        case "meal": .orange
+        case "drink": .pink
         case "coffee": .brown
-        case "boardgame": .purple
-        case "sports": .green
+        case "sport": .green
         case "study": .teal
-        case "language": .blue
-        case "karaoke": Color(red: 0.85, green: 0.35, blue: 0.55)
+        case "play": .purple
+        case "carpool": .blue
         case "outing": .cyan
-        case "hangout": .indigo
+        case "language": .indigo
+        case "chat": Color(red: 0.42, green: 0.45, blue: 0.5)
         default: .gray
         }
     }
 
     static func label(_ typeKey: String, fallback: String?, _ language: AppLanguage) -> String {
         let table: [String: (zh: String, ja: String, en: String)] = [
-            "dining": ("约饭", "ごはん", "Food"),
-            "drinks": ("约酒", "飲み会", "Drinks"),
-            "coffee": ("咖啡闲聊", "カフェ", "Coffee"),
-            "boardgame": ("桌游电玩", "ボドゲ", "Games"),
-            "sports": ("运动", "スポーツ", "Sports"),
-            "study": ("自习学习", "勉強会", "Study"),
+            "meal": ("饭搭子", "ごはん友達", "Meal buddy"),
+            "drink": ("酒搭子", "飲み友達", "Drink buddy"),
+            "coffee": ("咖啡", "カフェ", "Coffee"),
+            "sport": ("运动搭子", "運動仲間", "Workout buddy"),
+            "study": ("学习搭子", "勉強仲間", "Study buddy"),
+            "play": ("玩乐", "遊び", "Play"),
+            "carpool": ("拼车拼单", "相乗り・共同購入", "Carpool"),
+            "outing": ("出行搭子", "おでかけ", "Outing"),
             "language": ("语言交换", "言語交換", "Language"),
-            "karaoke": ("唱K", "カラオケ", "Karaoke"),
-            "outing": ("出行看展", "おでかけ", "Outing"),
-            "hangout": ("交友闲聊", "交流", "Hangout"),
+            "chat": ("随便聊", "雑談", "Just chat"),
             "other": ("其他", "その他", "Other"),
         ]
-        if let entry = table[typeKey] {
+        if let entry = table[canonical(typeKey)] {
             return KXListingCopy.pickText(language, entry.zh, entry.ja, entry.en)
         }
         return fallback ?? typeKey
@@ -224,7 +239,7 @@ struct SocialRoomsView: View {
     /// 服务端给的现役类型;首载前用本地兜底,让筛选行第一帧就有内容。
     private var displayTypes: [KaiXRoomTypeDTO] {
         if !roomTypes.isEmpty { return roomTypes }
-        return ["dining", "drinks", "coffee", "boardgame", "sports", "study", "language", "karaoke", "outing", "hangout"].map {
+        return KXRoomStyle.orderedKeys.map {
             KaiXRoomTypeDTO(key: $0, label: $0)
         }
     }
@@ -483,7 +498,7 @@ private struct CreateRoomSheet: View {
 
     @State private var title = ""
     @State private var description = ""
-    @State private var roomType = "dining"
+    @State private var roomType = "meal"
     @State private var locationHint = ""
     @State private var hasStartTime = false
     @State private var startsAt = Date().addingTimeInterval(3600 * 4)
@@ -604,7 +619,7 @@ private struct CreateRoomSheet: View {
         VStack(alignment: .leading, spacing: KXSpacing.sm) {
             fieldLabel(KXListingCopy.pickText(language, "这是个什么局?", "どんなルーム?", "What kind of room?"), required: true)
             FlowLayout(spacing: KXSpacing.sm) {
-                ForEach(["dining", "drinks", "coffee", "boardgame", "sports", "study", "language", "karaoke", "outing", "hangout", "other"], id: \.self) { key in
+                ForEach(KXRoomStyle.orderedKeys + ["other"], id: \.self) { key in
                     let isSelected = roomType == key
                     let tint = KXRoomStyle.tint(key)
                     Button {

@@ -28,7 +28,7 @@ struct KaiXRoomDTO: Codable, Identifiable, Equatable {
     let viewer_joined: Bool?
     let viewer_role: String?
 
-    var typeKey: String { room_type ?? "hangout" }
+    var typeKey: String { room_type ?? "chat" }
     var memberCountValue: Int { member_count ?? members?.count ?? 1 }
     var capacityValue: Int { capacity ?? 0 }
     var isOpen: Bool { (status ?? "open") == "open" }
@@ -301,7 +301,7 @@ extension KaiXAPIClient {
         var title: String
         var subtitle: String = ""
         var description: String = ""
-        var category: String = "social"
+        var category: String = "party"
         var cover_url: String = ""
         var starts_at: String
         var ends_at: String = ""
@@ -336,5 +336,10 @@ extension KaiXAPIClient {
         let data = try await request("DELETE", "/api/events/\(idOrSlug.encodedPathSegment)/register")
         let response: Response = try decode(data)
         return response.event
+    }
+
+    /// Organizer / admin only — soft-deletes the event (server enforces).
+    func deleteEvent(_ idOrSlug: String) async throws {
+        _ = try await request("DELETE", "/api/events/\(idOrSlug.encodedPathSegment)")
     }
 }

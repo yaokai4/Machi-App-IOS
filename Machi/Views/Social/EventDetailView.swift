@@ -19,8 +19,9 @@ struct EventDetailView: View {
     @State private var actionMessage: String?
     @State private var registrationOpen = false
     @State private var showCancelConfirm = false
+    @State private var showDeleteConfirm = false
 
-    private var tint: Color { KXEventStyle.tint(event?.category ?? "social") }
+    private var tint: Color { KXEventStyle.tint(event?.category ?? "party") }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -77,6 +78,18 @@ struct EventDetailView: View {
             }
             Button(KXListingCopy.pickText(language, "再想想", "戻る", "Keep it"), role: .cancel) {}
         }
+        .confirmationDialog(
+            KXListingCopy.pickText(language, "删除这场活动?", "このイベントを削除しますか?", "Delete this event?"),
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button(KXListingCopy.pickText(language, "删除活动", "削除する", "Delete"), role: .destructive) {
+                Task { await deleteEvent() }
+            }
+            Button(KXListingCopy.pickText(language, "取消", "キャンセル", "Cancel"), role: .cancel) {}
+        } message: {
+            Text(KXListingCopy.pickText(language, "已报名的人会看到活动已取消,此操作不可撤销。", "参加者にはキャンセルとして表示されます。取り消せません。", "Registered people will see it cancelled. This can't be undone."))
+        }
         .alert(KXListingCopy.pickText(language, "提示", "お知らせ", "Notice"), isPresented: Binding(
             get: { actionMessage != nil },
             set: { if !$0 { actionMessage = nil } }
@@ -110,6 +123,22 @@ struct EventDetailView: View {
                         .background(.thinMaterial, in: Circle())
                 }
                 .accessibilityLabel(KXListingCopy.pickText(language, "分享", "共有", "Share"))
+                if event.organizer_user_id == currentUser.id || currentUser.displaysOfficialBadge {
+                    Menu {
+                        Button(role: .destructive) {
+                            showDeleteConfirm = true
+                        } label: {
+                            Label(KXListingCopy.pickText(language, "删除活动", "イベントを削除", "Delete event"), systemImage: "trash")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .frame(width: 42, height: 42)
+                            .background(.thinMaterial, in: Circle())
+                    }
+                    .accessibilityLabel(KXListingCopy.pickText(language, "更多", "その他", "More"))
+                }
             }
         }
         .padding(.horizontal, KaiXTheme.horizontalPadding)
@@ -130,7 +159,7 @@ struct EventDetailView: View {
                         endPoint: .bottomTrailing
                     )
                     .overlay {
-                        Image(systemName: KXEventStyle.icon(event.category ?? "social"))
+                        Image(systemName: KXEventStyle.icon(event.category ?? "party"))
                             .font(.system(size: 64, weight: .bold))
                             .foregroundStyle(.white.opacity(0.8))
                     }
@@ -166,7 +195,7 @@ struct EventDetailView: View {
     private func titleBlock(_ event: KaiXEventDTO) -> some View {
         VStack(alignment: .leading, spacing: KXSpacing.sm) {
             HStack(spacing: 6) {
-                Label(KXEventStyle.label(event.category ?? "social", fallback: event.category_label, language), systemImage: KXEventStyle.icon(event.category ?? "social"))
+                Label(KXEventStyle.label(event.category ?? "party", fallback: event.category_label, language), systemImage: KXEventStyle.icon(event.category ?? "party"))
                     .font(.caption.weight(.black))
                     .foregroundStyle(tint)
                     .padding(.horizontal, 9)
@@ -483,6 +512,16 @@ struct EventDetailView: View {
     private func cancelRegistration() async {
         do {
             event = try await KaiXAPIClient.shared.cancelEventRegistration(idOrSlug)
+        } catch {
+            actionMessage = error.kaixUserMessage
+        }
+    }
+
+    private func deleteEvent() async {
+        do {
+            try await KaiXAPIClient.shared.deleteEvent(idOrSlug)
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            dismiss()
         } catch {
             actionMessage = error.kaixUserMessage
         }

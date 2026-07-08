@@ -22,10 +22,12 @@ struct SocialRoomDetailView: View {
     @State private var errorMessage: String?
     @State private var actionMessage: String?
     @State private var showLeaveConfirm = false
+    /// 局信息默认收起——聊天优先。点顶部信息条展开(描述/时间/位置/成员)。
+    @State private var showInfo = false
     /// 轻量轮询:房间聊天没有专用推送通道,前台每 8s 刷一次新消息。
     @State private var pollTask: Task<Void, Never>?
 
-    private var tint: Color { KXRoomStyle.tint(room?.typeKey ?? "hangout") }
+    private var tint: Color { KXRoomStyle.tint(room?.typeKey ?? "chat") }
     private var joined: Bool { room?.joined ?? false }
     private var isHost: Bool { room?.isHostViewer ?? false }
 
@@ -97,13 +99,24 @@ struct SocialRoomDetailView: View {
                 }
             }
             Spacer()
+            if let room {
+                ShareLink(item: KaiXBackend.marketingSiteURL.appendingPathComponent("rooms/\(room.id)"),
+                          subject: Text(room.title)) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 42, height: 42)
+                        .kxGlassCircle()
+                }
+                .accessibilityLabel(KXListingCopy.pickText(language, "分享", "共有", "Share"))
+            }
             if joined {
                 Menu {
                     if isHost {
                         Button(role: .destructive) {
                             showLeaveConfirm = true
                         } label: {
-                            Label(KXListingCopy.pickText(language, "解散房间", "ルームを解散", "Disband room"), systemImage: "xmark.circle")
+                            Label(KXListingCopy.pickText(language, "解散房间", "ルームを解散", "Disband room"), systemImage: "trash")
                         }
                     } else {
                         Button(role: .destructive) {
@@ -127,29 +140,117 @@ struct SocialRoomDetailView: View {
         .kxGlassBar(ignoresTopSafeArea: true)
     }
 
+    /// 聊天 App 式布局:可折叠的局信息条 + 定高内部滚动的消息区 + 底部固定操作。
+    /// 关键是消息区用 `.frame(maxHeight: .infinity)` 吃掉剩余空间自己滚,不会把
+    /// 整页越撑越长(之前的 bug)。
     private func content(_ room: KaiXRoomDTO) -> some View {
         VStack(spacing: 0) {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: KXSpacing.lg) {
-                        infoCard(room)
-                        membersCard(room)
-                        chatSection
-                    }
-                    .padding(.horizontal, KaiXTheme.horizontalPadding)
-                    .padding(.top, KXSpacing.md)
-                    .padding(.bottom, 12)
-                }
-                .onChange(of: messages.count) { _, _ in
-                    if let last = messages.last {
-                        withAnimation(.snappy(duration: 0.2)) {
-                            proxy.scrollTo(last.id, anchor: .bottom)
-                        }
-                    }
-                }
-            }
+            roomInfoDisclosure(room)
+            chatScroll(room)
             bottomBar(room)
         }
+    }
+
+    /// 顶部可折叠的局信息条:一行摘要,点开看描述/时间/位置/成员。
+    @ViewBuilder
+    private func roomInfoDisclosure(_ room: KaiXRoomDTO) -> some View {
+        VStack(spacing: 0) {
+            Button {
+                withAnimation(.snappy(duration: 0.22)) { showInfo.toggle() }
+            } label: {
+                HStack(spacing: KXSpacing.sm) {
+                    Image(systemName: KXRoomStyle.icon(room.typeKey))
+                        .kxScaledFont(13, weight: .bold)
+                        .foregroundStyle(.white)
+                        .frame(width: 30, height: 30)
+                        .background(tint.gradient, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    Text(infoSummary(room))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(showInfo ? 180 : 0))
+                }
+                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.vertical, 10)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if showInfo {
+                VStack(alignment: .leading, spacing: KXSpacing.md) {
+                    infoCard(room)
+                    membersCard(room)
+                }
+                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.bottom, KXSpacing.md)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+            Divider().opacity(0.25)
+        }
+    }
+
+    private func infoSummary(_ room: KaiXRoomDTO) -> String {
+        var parts: [String] = []
+        if let startsAt = room.starts_at, !startsAt.isEmpty { parts.append(formattedTime(startsAt)) }
+        if let hint = room.location_hint, !hint.isEmpty { parts.append(hint) }
+        if parts.isEmpty {
+            return KXListingCopy.pickText(language, "查看局的详情与成员", "詳細とメンバーを見る", "Tap for details & members")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// 定高、内部滚动的消息区。
+    private func chatScroll(_ room: KaiXRoomDTO) -> some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: KXSpacing.md) {
+                    if nextBefore != nil {
+                        Button {
+                            Task { await loadEarlier() }
+                        } label: {
+                            Text(KXListingCopy.pickText(language, "查看更早的消息", "以前のメッセージ", "Earlier messages"))
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(KXColor.accent)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 6)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    if messages.isEmpty {
+                        VStack(spacing: 8) {
+                            Image(systemName: "bubble.left.and.bubble.right")
+                                .font(.title2)
+                                .foregroundStyle(.tertiary)
+                            Text(joined
+                                 ? KXListingCopy.pickText(language, "还没人说话,来开个头", "まだ発言がありません。最初のひとことをどうぞ", "No messages yet — say hi!")
+                                 : KXListingCopy.pickText(language, "还没人说话。加入后可以聊天", "まだ発言がありません。参加すると話せます", "No messages yet — join to chat"))
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 60)
+                    } else {
+                        ForEach(messages) { message in
+                            messageRow(message)
+                                .id(message.id)
+                        }
+                    }
+                    Color.clear.frame(height: 1).id("chat-bottom")
+                }
+                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.vertical, KXSpacing.md)
+            }
+            .onChange(of: messages.count) { _, _ in
+                withAnimation(.snappy(duration: 0.2)) { proxy.scrollTo("chat-bottom", anchor: .bottom) }
+            }
+            .onAppear {
+                proxy.scrollTo("chat-bottom", anchor: .bottom)
+            }
+        }
+        .frame(maxHeight: .infinity)
     }
 
     private func infoCard(_ room: KaiXRoomDTO) -> some View {
@@ -247,46 +348,6 @@ struct SocialRoomDetailView: View {
                     }
                 }
                 .padding(.vertical, 2)
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .kxGlassSurface(radius: KXRadius.lg)
-    }
-
-    @ViewBuilder
-    private var chatSection: some View {
-        VStack(alignment: .leading, spacing: KXSpacing.sm) {
-            Text(KXListingCopy.pickText(language, "房间聊天", "ルームチャット", "Room chat"))
-                .font(.caption.weight(.black))
-                .foregroundStyle(.secondary)
-            if nextBefore != nil {
-                Button {
-                    Task { await loadEarlier() }
-                } label: {
-                    Text(KXListingCopy.pickText(language, "查看更早的消息", "以前のメッセージ", "Earlier messages"))
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(KXColor.accent)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                }
-                .buttonStyle(.plain)
-            }
-            if messages.isEmpty {
-                Text(joined
-                     ? KXListingCopy.pickText(language, "还没人说话,来开个头", "まだ発言がありません。最初のひとことをどうぞ", "No messages yet — say hi!")
-                     : KXListingCopy.pickText(language, "还没人说话。加入后可以聊天", "まだ発言がありません。参加すると話せます", "No messages yet — join to chat"))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, KXSpacing.lg)
-            } else {
-                LazyVStack(alignment: .leading, spacing: KXSpacing.md) {
-                    ForEach(messages) { message in
-                        messageRow(message)
-                            .id(message.id)
-                    }
-                }
             }
         }
         .padding(14)

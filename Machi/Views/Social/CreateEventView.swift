@@ -14,7 +14,7 @@ struct CreateEventView: View {
     @State private var title = ""
     @State private var subtitle = ""
     @State private var description = ""
-    @State private var category = "social"
+    @State private var category = "party"
     @State private var startsAt = Date().addingTimeInterval(3600 * 24)
     @State private var hasEndTime = false
     @State private var endsAt = Date().addingTimeInterval(3600 * 26)
@@ -139,7 +139,7 @@ struct CreateEventView: View {
         VStack(alignment: .leading, spacing: KXSpacing.sm) {
             sectionLabel(KXListingCopy.pickText(language, "活动类型", "カテゴリ", "Category"))
             FlowLayout(spacing: KXSpacing.sm) {
-                ForEach(["drinks", "food", "art", "reading", "music", "outdoor", "market", "talk", "sports", "social", "other"], id: \.self) { key in
+                ForEach(KXEventStyle.orderedKeys + ["other"], id: \.self) { key in
                     let isSelected = category == key
                     let chipTint = KXEventStyle.tint(key)
                     Button {
