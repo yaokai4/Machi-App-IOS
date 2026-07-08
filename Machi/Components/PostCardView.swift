@@ -62,7 +62,7 @@ struct PostCardView: View, Equatable {
         && lhs.post.isBoosted == rhs.post.isBoosted
         && lhs.author?.id == rhs.author?.id
         && lhs.author?.updatedAt == rhs.author?.updatedAt
-        && lhs.mediaItems.map(\.id) == rhs.mediaItems.map(\.id)
+        && lhs.mediaItems.elementsEqual(rhs.mediaItems) { $0.id == $1.id }
         && lhs.originalPost?.id == rhs.originalPost?.id
         && lhs.originalPost?.updatedAt == rhs.originalPost?.updatedAt
         && lhs.originalPost?.likeCount == rhs.originalPost?.likeCount
@@ -74,7 +74,7 @@ struct PostCardView: View, Equatable {
         && lhs.originalPost?.isRepostedByCurrentUser == rhs.originalPost?.isRepostedByCurrentUser
         && lhs.originalAuthor?.id == rhs.originalAuthor?.id
         && lhs.originalAuthor?.updatedAt == rhs.originalAuthor?.updatedAt
-        && lhs.originalMediaItems.map(\.id) == rhs.originalMediaItems.map(\.id)
+        && lhs.originalMediaItems.elementsEqual(rhs.originalMediaItems) { $0.id == $1.id }
         && lhs.currentUser?.id == rhs.currentUser?.id
         && lhs.showsMenu == rhs.showsMenu
     }

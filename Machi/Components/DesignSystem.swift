@@ -764,7 +764,20 @@ extension View {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .stroke(stroke.opacity(0.7), lineWidth: 0.75)
             }
-            .modifier(_SurfaceShadow(elevated: elevated))
+            // Cast the drop shadow from a plain opaque rounded rect *behind* the
+            // (already opaque) card, instead of applying `.shadow` to the whole
+            // composited card. The silhouette is pixel-identical — the card fills
+            // exactly this rounded rect — but SwiftUI no longer has to rasterize
+            // every card's text / avatars / images into an offscreen buffer each
+            // frame just to derive the shadow's alpha mask. That per-card offscreen
+            // pass, ×N visible cards, was the biggest hidden cost against the
+            // 120 Hz (8.3 ms) scroll budget. Placed *after* the clip so the soft
+            // edge isn't clipped away.
+            .background {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(KXColor.cardBackground)
+                    .modifier(_SurfaceShadow(elevated: elevated))
+            }
     }
 
     func kxLivingSurface(radius: CGFloat = KXRadius.card, elevated: Bool = false) -> some View {
@@ -774,11 +787,18 @@ extension View {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .stroke(KXColor.livingInk.opacity(0.075), lineWidth: 0.8)
             }
-            .shadow(
-                color: Color.black.opacity(elevated ? 0.075 : 0.035),
-                radius: elevated ? 12 : 5,
-                y: elevated ? 5 : 2
-            )
+            // Same 120 Hz optimization as kxGlassSurface: cast the shadow from the
+            // opaque surface shape rather than from the whole composited card, so
+            // there's no per-frame offscreen rasterization. Identical look.
+            .background {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(KXColor.livingSurface)
+                    .shadow(
+                        color: Color.black.opacity(elevated ? 0.075 : 0.035),
+                        radius: elevated ? 12 : 5,
+                        y: elevated ? 5 : 2
+                    )
+            }
     }
 
     func kxGlassCapsule(isSelected: Bool = false) -> some View {
