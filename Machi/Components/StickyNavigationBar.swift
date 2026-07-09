@@ -20,7 +20,7 @@ struct StickyNavigationBar: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.horizontal, KXSpacing.screen)
         .padding(.vertical, 10)
         .kxGlassBar()
         .overlay(alignment: .bottom) { Divider().opacity(0.35) }
