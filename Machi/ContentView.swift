@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UserNotifications
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
@@ -31,6 +32,12 @@ struct ContentView: View {
     /// "登录 / 注册" tap sets `.register`; the default cold entry stays `.login`.
     @State private var entryAuthMode: AuthViewModel.Mode = .login
     @State private var isSyncingSystemNotifications = false
+    // P-4 游客召回钩子:游客会话计数 + 「问过一次就永不再问」标记(拒绝、
+    // 滑掉、或系统权限已 denied 都算问过)。计数只在 maybePromptGuestRecall
+    // 里、每个进程一次地自增。
+    @AppStorage("guestRecallSessionCount") private var guestRecallSessionCount = 0
+    @AppStorage("guestRecallPromptDone") private var guestRecallPromptDone = false
+    @State private var isShowingGuestRecallPrompt = false
     /// A system-notification tap that arrived while `currentUser` was still nil
     /// (cold start from a killed app: the tap lands before bootstrap finishes).
     /// Stashed here and replayed once the session loads, so the deep link is
@@ -50,6 +57,12 @@ struct ContentView: View {
         didEmitFirstHomeRender = true
         KXPerf.event("home.firstRender")
     }
+
+    /// P-4: count a guest browsing session exactly once per process — the
+    /// bootstrap task re-runs on every login/logout (task id = currentUserID),
+    /// and re-counting those transitions would fake "multiple sessions" inside
+    /// one launch.
+    private static var didCountGuestSession = false
 
     /// Count this cold launch exactly once per process so the review prompt can
     /// fire on the third genuine launch (not on every scene reactivation).
@@ -149,6 +162,14 @@ struct ContentView: View {
             .environment(\.appLanguage, language)
             .presentationDragIndicator(.visible)
         }
+        // P-4 游客召回:第 2 次游客会话后的一次性通知软引导(阈值与「只问
+        // 一次」规则见 maybePromptGuestRecall)。
+        .sheet(isPresented: $isShowingGuestRecallPrompt) {
+            GuestRecallPromptSheet {
+                Task { await SystemNotificationService.shared.requestGuestAuthorization() }
+            }
+            .environment(\.appLanguage, language)
+        }
         .task(id: currentUserID) {
             await KXPerf.measure("app.bootstrap") {
                 await appState.bootstrap(context: modelContext, currentUserId: currentUserID)
@@ -189,6 +210,11 @@ struct ContentView: View {
             }
             sessionStore.setCurrentUser(appState.currentUser?.id)
             userStore.setCurrentUser(appState.currentUser)
+            // P-4 游客召回钩子。放在下面的通知轮询 guard 之前 —— 游客没有
+            // token,那个 guard 对游客直接 return,永远走不到这里之后。
+            if appState.currentUser?.isGuest == true {
+                await maybePromptGuestRecall()
+            }
             // Foreground notification loop: poll the server's notification
             // list and surface anything new as a REAL system banner +
             // app-icon badge. Cancelled automatically when the session
@@ -498,6 +524,14 @@ struct ContentView: View {
         }
     }
 
+    /// 会话复核:每个 await 之后 token 可能已被 401/登出清空,或已切到另一账号
+    /// (scenePhase / kaiXConversationShouldRefresh 触发的同步 Task 不随会话取消)。
+    /// 任何写 store / 角标的动作前都必须复核,否则在途响应会把上个账号的通知、
+    /// 未读数回填进 resetPerAccountState() 刚清空的 store——跨账号泄漏。
+    private func isSessionStillCurrent(_ user: UserEntity) -> Bool {
+        !Task.isCancelled && KaiXBackend.token != nil && appState.currentUser?.id == user.id
+    }
+
     /// One notification tick: read the server list directly, refresh the
     /// in-app store/badge, and banner anything new.
     private func syncSystemNotifications() async {
@@ -507,17 +541,40 @@ struct ContentView: View {
         defer { isSyncingSystemNotifications = false }
         do {
             if let conversations = try? await MessageRepository(context: modelContext).fetchThreads(currentUserId: user.id) {
+                guard isSessionStillCurrent(user) else { return }
                 let previousLastMessageDates = messageStore.conversationsById.mapValues(\.lastMessageAt)
-                messageStore.setConversations(conversations)
+                // 合并进 store 里既有的线程实例,而不是整批换新实例:收件箱 List
+                // (MessagesViewModel.threads)与 ChatView 持有的是旧实例引用,换新
+                // 实例后 ChatView 标记已读只写得到新实例,行内未读徽章要滞留到下
+                // 一次收件箱轮询(~8s)才与 Tab 角标一致。实例身份稳定后未读数
+                // 只有一份事实,标记已读立即反映到所有屏幕。
+                let merged = conversations.map { fetched -> MessageThreadEntity in
+                    guard let existing = messageStore.conversationsById[fetched.id],
+                          existing !== fetched else { return fetched }
+                    existing.participantIdsRaw = fetched.participantIdsRaw
+                    existing.lastMessage = fetched.lastMessage
+                    existing.lastMessageAt = fetched.lastMessageAt
+                    existing.unreadCount = fetched.unreadCount
+                    existing.updatedAt = fetched.updatedAt
+                    existing.remoteId = fetched.remoteId
+                    existing.syncStatusRaw = fetched.syncStatusRaw
+                    existing.deletedAt = fetched.deletedAt
+                    existing.cursor = fetched.cursor
+                    return existing
+                }
+                messageStore.setConversations(merged)
                 if shouldWarmChangedMessageThreads {
                     await warmChangedMessageThreads(
-                        conversations,
-                        previousLastMessageDates: previousLastMessageDates
+                        merged,
+                        previousLastMessageDates: previousLastMessageDates,
+                        for: user
                     )
                 }
+                guard isSessionStillCurrent(user) else { return }
                 syncAppBadge()
             }
             let response = try await KaiXAPIClient.shared.notifications(kind: "all")
+            guard isSessionStillCurrent(user) else { return }
             let all = response.items.map(notificationEntity(from:))
             notificationStore.setNotifications(all)
             notificationStore.setUnreadCount(response.unread_count)
@@ -553,6 +610,8 @@ struct ContentView: View {
                     actors[actor.id] = actor
                 }
             }
+            // 会话在 actor 拉取期间失效/切号:别再替上个账号弹系统横幅。
+            guard isSessionStillCurrent(user) else { return }
             await SystemNotificationService.shared.deliver(
                 wanted,
                 actors: actors,
@@ -573,7 +632,8 @@ struct ContentView: View {
 
     private func warmChangedMessageThreads(
         _ conversations: [MessageThreadEntity],
-        previousLastMessageDates: [String: Date]
+        previousLastMessageDates: [String: Date],
+        for user: UserEntity
     ) async {
         guard KaiXBackend.token != nil else { return }
         let changed = conversations
@@ -589,6 +649,9 @@ struct ContentView: View {
             do {
                 let messages = try await repository.fetchMessages(threadId: conversation.id)
                 _ = try await repository.fetchMedia(threadId: conversation.id, messageIds: Set(messages.map(\.id)))
+                // 拉消息期间可能已登出/切号:store 刚被清空,别把上个账号的
+                // 聊天内容回填进去。
+                guard isSessionStillCurrent(user) else { return }
                 messageStore.setMessages(messages, conversationId: conversation.id)
                 messageStore.upsertConversation(conversation)
             } catch {
@@ -640,7 +703,12 @@ struct ContentView: View {
                 onBrowseAsGuest: {
                     hasSeenOnboarding = true
                     enterAsGuest()
-                    routeOnboardingPersonaJourney()
+                    // P-3: pre_arrival / just_arrived 人设曾在这里直接跳进
+                    // Guide journey——第一屏变成一张待办清单,看不到社区本体。
+                    // 现在所有人设一律落社区首页 feed:HomeTimelineView 顶部的
+                    // HomeJourneyNextStepCard 读同一个 onboardingPersona(经
+                    // guideJourneyKey(forArrivalStage:) 映射)把该人设的旅程作为
+                    // 一键钩子常驻呈现,指引仍一眼可达,但先看到的是内容。
                 },
                 onContinueToAuth: {
                     // Someone tapping "登录 / 注册" from onboarding is here to make an
@@ -676,18 +744,6 @@ struct ContentView: View {
             _ = try? await KaiXAPIClient.shared.referralBind(code: code)
             ReferralInvite.clear()
         }
-    }
-
-    /// First guest entry from onboarding: a pre-arrival / just-arrived persona
-    /// lands directly on its matching Guide journey (mirrors the
-    /// machi://guide/journey deep-link routing) so the first screen is the one
-    /// that actually helps. first_year / long_term / skipped keep the default
-    /// home feed.
-    private func routeOnboardingPersonaJourney() {
-        guard let key = guideJourneyKey(forArrivalStage: onboardingPersona) else { return }
-        appChrome.select(.guide)
-        appRouter.setActiveTab(.guide)
-        appRouter.open(.guideJourney(key: key), in: .guide)
     }
 
     /// Push the onboarding persona into the server-side Guide profile
@@ -737,6 +793,46 @@ struct ContentView: View {
         // 立即套用游客的默认/上次浏览城市，首页 feed 不留空白等待。
         RegionStore.shared.applyUserRegion(guest)
         appState.state = .loaded
+    }
+
+    /// P-4 游客召回钩子:游客的第 2 次会话(冷启动)后,用一张三语软引导
+    /// sheet 轻声问一次要不要「开启新内容提醒」。规则:
+    ///   • 会话每个进程只计一次(见 didCountGuestSession),阈值 ≥2 —— 不在
+    ///     第一次打开时打扰,回头客才值得问。
+    ///   • 每位游客一生最多询问一次:sheet 出现即记「问过」,拒绝 / 滑掉都
+    ///     不再弹(guestRecallPromptDone)。
+    ///   • 系统权限已是 authorized(例如曾登录时授权过)就不弹卡片,直接
+    ///     静默注册 APNs 把 token 缓存好;已 denied 则问了也没用,记跳过。
+    ///   • 与 guestGate 登录 sheet 撞车时让路且不记「问过」,下次会话再试。
+    /// 服务端 push-token 端点要求登录态(web/server.py api_register_push_token
+    /// → require_user),游客 token 只缓存在本地,登录后由既有的
+    /// refreshRegistration() 自动补上传 —— 详见 PushTokenService.registerForGuest。
+    private func maybePromptGuestRecall() async {
+        if !Self.didCountGuestSession {
+            Self.didCountGuestSession = true
+            guestRecallSessionCount += 1
+        }
+        guard !guestRecallPromptDone, guestRecallSessionCount >= 2 else { return }
+        let status = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+        switch status {
+        case .authorized, .provisional, .ephemeral:
+            // 已有权限,无需再问 —— 只补一次 APNs 注册,把 token 缓存到位。
+            guestRecallPromptDone = true
+            await PushTokenService.registerForGuest()
+            return
+        case .denied:
+            guestRecallPromptDone = true
+            return
+        default:
+            break
+        }
+        // 让 feed 先站稳:这张卡应该像温和的建议,而不是启动插屏。
+        try? await Task.sleep(nanoseconds: 2_500_000_000)
+        guard !Task.isCancelled,
+              appState.currentUser?.isGuest == true,
+              !guestGate.isPromptingLogin else { return }
+        guestRecallPromptDone = true
+        isShowingGuestRecallPrompt = true
     }
 
     /// Runtime session expiry / revocation (a 401 on a real, token-backed
@@ -799,8 +895,91 @@ struct ContentView: View {
         composeStore.clear()
         MessageRepository.clearCaches()
         KaiXFeedCache.clearAll()
+        // 磁盘 Store 兜底:生产不写业务数据进 SwiftData(服务器唯一真相),但
+        // 老版本升级上来的设备可能残留旧库内容。登出/切号时安排下次启动清空
+        // (不能删活着的 SQLite 文件),保证磁盘上不留任何前账号痕迹。
+        KaiXDatabaseContainer.requestLocalDataWipe()
         // Zero the app-icon badge immediately; the next account's sync repopulates
         // it. Leaving the previous count up until the first poll looks like a bug.
         SystemNotificationService.shared.syncBadge(unreadCount: 0)
+    }
+}
+
+/// P-4 游客召回钩子:一次性的三语通知软引导。系统权限弹窗一生只有一次
+/// 机会,先用这张卡讲清价值(同城新帖 / 活动第一时间知道)再触发系统
+/// 弹窗;点「暂不需要」或滑掉都视为问过,不再打扰(由呈现方记账)。
+private struct GuestRecallPromptSheet: View {
+    @Environment(\.appLanguage) private var language
+    @Environment(\.dismiss) private var dismiss
+
+    /// Invoked on opt-in — the caller owns the actual system permission
+    /// request + APNs registration (SystemNotificationService.requestGuestAuthorization).
+    let onEnable: () -> Void
+
+    var body: some View {
+        VStack(spacing: KXSpacing.xl) {
+            Image(systemName: "bell.badge.fill")
+                .font(.system(size: 32, weight: .semibold))
+                .foregroundStyle(KXColor.accent)
+                .frame(width: 76, height: 76)
+                .background(KXColor.accentSoft, in: Circle())
+                .padding(.top, KXSpacing.xl)
+
+            VStack(spacing: KXSpacing.sm) {
+                Text(KXListingCopy.pickText(
+                    language,
+                    "开启新内容提醒",
+                    "新着コンテンツの通知をオン",
+                    "Turn on new-content alerts"
+                ))
+                .font(.title3.weight(.bold))
+                .multilineTextAlignment(.center)
+
+                Text(KXListingCopy.pickText(
+                    language,
+                    "同城的新帖子、活动和干货,第一时间告诉你。以后随时可以在系统设置里关闭。",
+                    "同じ街の新しい投稿・イベント・お役立ち情報をいち早くお届けします。設定からいつでもオフにできます。",
+                    "Be the first to know about new posts, events and tips in your city. You can turn alerts off anytime in Settings."
+                ))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, KXSpacing.xl)
+
+            VStack(spacing: KXSpacing.sm) {
+                Button {
+                    onEnable()
+                    dismiss()
+                } label: {
+                    Text(KXListingCopy.pickText(language, "开启提醒", "通知をオンにする", "Turn on alerts"))
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(KXColor.onAccent)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 52)
+                        .background(KXColor.accent, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("guestRecall.enable")
+
+                Button {
+                    dismiss()
+                } label: {
+                    Text(KXListingCopy.pickText(language, "暂不需要", "今はしない", "Not now"))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("guestRecall.dismiss")
+            }
+            .padding(.horizontal, KXSpacing.xl)
+
+            Spacer(minLength: 0)
+        }
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
     }
 }

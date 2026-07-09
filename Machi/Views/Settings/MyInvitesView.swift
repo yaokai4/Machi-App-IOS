@@ -39,8 +39,8 @@ struct MyInvitesView: View {
                     recentSection(summary)
                 }
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
-            .padding(.top, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
+            .padding(.top, KXSpacing.screen)
             .kxTabBarSafeBottomPadding()
         }
         .kxPageBackground()
@@ -116,7 +116,7 @@ struct MyInvitesView: View {
             ) {
                 Label(KXListingCopy.pickText(language, "分享邀请链接", "招待リンクを共有", "Share invite link"), systemImage: "square.and.arrow.up")
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(KXColor.onAccent)
                     .frame(maxWidth: .infinity)
                     .frame(height: 50)
                     .background(KXColor.accent, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))

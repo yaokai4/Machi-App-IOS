@@ -26,6 +26,14 @@ struct SocialRoomDetailView: View {
     @State private var showInfo = false
     /// 轻量轮询:房间聊天没有专用推送通道,前台每 8s 刷一次新消息。
     @State private var pollTask: Task<Void, Never>?
+    /// 用户是否贴近聊天底部(底部哨兵可见即视为贴底)。轮询到的新消息只在贴底时
+    /// 自动跟随滚动;用户翻阅历史时绝不把阅读位置拽回底部。
+    @State private var isNearBottom = true
+    /// 自己发送成功后强制滚底(即使此前翻在历史里,也要看到自己的消息)。
+    @State private var forceScrollToBottomTick = 0
+    /// room 覆写代际:join/leave 落地时 +1;轮询发起前捕获、落地前比对,防止
+    /// mutation 前发出的过期 GET 快照把 viewer_joined 回滚(输入栏闪回加入按钮)。
+    @State private var roomMutationGeneration = 0
 
     private var tint: Color { KXRoomStyle.tint(room?.typeKey ?? "chat") }
     private var joined: Bool { room?.joined ?? false }
@@ -132,9 +140,11 @@ struct SocialRoomDetailView: View {
                         .frame(width: 42, height: 42)
                         .kxGlassCircle()
                 }
+                // 与 EventDetailView 的省略号按钮一致:旁白只能念出符号名,须给三语标签。
+                .accessibilityLabel(KXListingCopy.pickText(language, "更多", "その他", "More"))
             }
         }
-        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.horizontal, KXSpacing.screen)
         .padding(.top, KXSpacing.sm)
         .padding(.bottom, KXSpacing.sm)
         .kxGlassBar(ignoresTopSafeArea: true)
@@ -161,9 +171,9 @@ struct SocialRoomDetailView: View {
                 HStack(spacing: KXSpacing.sm) {
                     Image(systemName: KXRoomStyle.icon(room.typeKey))
                         .kxScaledFont(13, weight: .bold)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(KXColor.onTint(tint))
                         .frame(width: 30, height: 30)
-                        .background(tint.gradient, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        .background(tint.gradient, in: RoundedRectangle(cornerRadius: KXRadius.sm, style: .continuous))
                     Text(infoSummary(room))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
@@ -174,7 +184,7 @@ struct SocialRoomDetailView: View {
                         .foregroundStyle(.tertiary)
                         .rotationEffect(.degrees(showInfo ? 180 : 0))
                 }
-                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.horizontal, KXSpacing.screen)
                 .padding(.vertical, 10)
                 .contentShape(Rectangle())
             }
@@ -184,7 +194,7 @@ struct SocialRoomDetailView: View {
                     infoCard(room)
                     membersCard(room)
                 }
-                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.horizontal, KXSpacing.screen)
                 .padding(.bottom, KXSpacing.md)
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -209,7 +219,7 @@ struct SocialRoomDetailView: View {
                 LazyVStack(alignment: .leading, spacing: KXSpacing.md) {
                     if nextBefore != nil {
                         Button {
-                            Task { await loadEarlier() }
+                            Task { await loadEarlier(proxy: proxy) }
                         } label: {
                             Text(KXListingCopy.pickText(language, "查看更早的消息", "以前のメッセージ", "Earlier messages"))
                                 .font(.caption.weight(.bold))
@@ -220,18 +230,44 @@ struct SocialRoomDetailView: View {
                         .buttonStyle(.plain)
                     }
                     if messages.isEmpty {
-                        VStack(spacing: 8) {
-                            Image(systemName: "bubble.left.and.bubble.right")
-                                .font(.title2)
-                                .foregroundStyle(.tertiary)
-                            Text(joined
-                                 ? KXListingCopy.pickText(language, "还没人说话,来开个头", "まだ発言がありません。最初のひとことをどうぞ", "No messages yet — say hi!")
-                                 : KXListingCopy.pickText(language, "还没人说话。加入后可以聊天", "まだ発言がありません。参加すると話せます", "No messages yet — join to chat"))
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                        if errorMessage != nil {
+                            // room 加载成功、仅 messages 失败:不能伪装成「还没人说话」
+                            // 的假空房,给内联重试(轮询也在跑,可自愈)。
+                            VStack(spacing: 10) {
+                                Image(systemName: "wifi.exclamationmark")
+                                    .font(.title2)
+                                    .foregroundStyle(.tertiary)
+                                Text(KXListingCopy.pickText(language, "消息加载失败", "メッセージを読み込めませんでした", "Couldn't load messages"))
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                Button {
+                                    Task { await load() }
+                                } label: {
+                                    Text(KXListingCopy.pickText(language, "重试", "再試行", "Retry"))
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(KXColor.accent)
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 6)
+                                        .background(KXColor.accent.opacity(0.10), in: Capsule())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 60)
+                        } else {
+                            VStack(spacing: 8) {
+                                Image(systemName: "bubble.left.and.bubble.right")
+                                    .font(.title2)
+                                    .foregroundStyle(.tertiary)
+                                Text(joined
+                                     ? KXListingCopy.pickText(language, "还没人说话,来开个头", "まだ発言がありません。最初のひとことをどうぞ", "No messages yet — say hi!")
+                                     : KXListingCopy.pickText(language, "还没人说话。加入后可以聊天", "まだ発言がありません。参加すると話せます", "No messages yet — join to chat"))
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 60)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 60)
                     } else {
                         ForEach(messages) { message in
                             messageRow(message)
@@ -239,11 +275,22 @@ struct SocialRoomDetailView: View {
                         }
                     }
                     Color.clear.frame(height: 1).id("chat-bottom")
+                        // 底部哨兵可见 ≈ 用户贴底(LazyVStack 预取会把「贴底」判定
+                        // 放宽一些,可接受)。iOS 17 目标下没有 onScrollGeometryChange,
+                        // 用哨兵 appear/disappear 是零成本的等价探测。
+                        .onAppear { isNearBottom = true }
+                        .onDisappear { isNearBottom = false }
                 }
-                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.horizontal, KXSpacing.screen)
                 .padding(.vertical, KXSpacing.md)
             }
-            .onChange(of: messages.count) { _, _ in
+            .onChange(of: messages.last?.id) { _, _ in
+                // 只跟随「尾部新增且用户贴底」:loadEarlier 的头部 prepend 不改变
+                // last id 天然不触发;翻历史时轮询到的新消息也不再把人甩回底部(原 bug)。
+                guard isNearBottom else { return }
+                withAnimation(.snappy(duration: 0.2)) { proxy.scrollTo("chat-bottom", anchor: .bottom) }
+            }
+            .onChange(of: forceScrollToBottomTick) { _, _ in
                 withAnimation(.snappy(duration: 0.2)) { proxy.scrollTo("chat-bottom", anchor: .bottom) }
             }
             .onAppear {
@@ -258,9 +305,9 @@ struct SocialRoomDetailView: View {
             HStack(spacing: KXSpacing.sm) {
                 Image(systemName: KXRoomStyle.icon(room.typeKey))
                     .kxScaledFont(16, weight: .bold)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(KXColor.onTint(tint))
                     .frame(width: 38, height: 38)
-                    .background(tint.gradient, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(tint.gradient, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(KXRoomStyle.label(room.typeKey, fallback: room.room_type_label, language))
                         .font(.caption.weight(.black))
@@ -331,9 +378,9 @@ struct SocialRoomDetailView: View {
                                         if member.id == room.host_user_id {
                                             Image(systemName: "crown.fill")
                                                 .font(.system(size: 9, weight: .black))
-                                                .foregroundStyle(.white)
+                                                .foregroundStyle(KXColor.onTint(KXColor.rankGold))
                                                 .frame(width: 17, height: 17)
-                                                .background(Color.orange.gradient, in: Circle())
+                                                .background(KXColor.rankGold.gradient, in: Circle())
                                                 .overlay(Circle().stroke(KXColor.cardBackground, lineWidth: 1.4))
                                         }
                                     }
@@ -382,12 +429,12 @@ struct SocialRoomDetailView: View {
                     }
                     Text(message.content)
                         .font(.subheadline)
-                        .foregroundStyle(isMine ? .white : .primary)
+                        .foregroundStyle(isMine ? KXColor.onAccent : .primary)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .background(
                             isMine ? AnyShapeStyle(KXColor.accent.gradient) : AnyShapeStyle(KXColor.softBackground),
-                            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                         )
                         .frame(maxWidth: 280, alignment: isMine ? .trailing : .leading)
                         .fixedSize(horizontal: false, vertical: true)
@@ -414,7 +461,7 @@ struct SocialRoomDetailView: View {
                 .lineLimit(1...4)
                 .padding(.horizontal, KXSpacing.md)
                 .padding(.vertical, 10)
-                .kxGlassSurface(radius: 22)
+                .kxGlassSurface(radius: KXRadius.hero)
                 Button {
                     Task { await send() }
                 } label: {
@@ -424,7 +471,7 @@ struct SocialRoomDetailView: View {
                     } else {
                         Image(systemName: "arrow.up")
                             .font(.headline.weight(.bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.white : KXColor.onAccent)
                             .frame(width: 44, height: 44)
                             .background(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? AnyShapeStyle(Color.secondary.opacity(0.35)) : AnyShapeStyle(KXColor.accent.gradient), in: Circle())
                     }
@@ -433,7 +480,7 @@ struct SocialRoomDetailView: View {
                 .disabled(isSending || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .accessibilityLabel(KXListingCopy.pickText(language, "发送", "送信", "Send"))
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.vertical, 10)
             .kxGlassBar()
         } else if room.isOpen || room.status == "full" {
@@ -452,14 +499,14 @@ struct SocialRoomDetailView: View {
                          : KXListingCopy.pickText(language, "加入这个局", "この局に参加する", "Join this room"))
                         .font(.headline.weight(.bold))
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(room.status == "full" ? Color.white : KXColor.onTint(tint))
                 .frame(maxWidth: .infinity)
                 .frame(height: 52)
                 .background(room.status == "full" ? AnyShapeStyle(Color.secondary.opacity(0.5)) : AnyShapeStyle(tint.gradient), in: Capsule())
             }
             .buttonStyle(KXPressableStyle(scale: 0.97))
             .disabled(isJoining || room.status == "full")
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.vertical, 10)
             .kxGlassBar()
         }
@@ -467,10 +514,11 @@ struct SocialRoomDetailView: View {
 
     private func formattedTime(_ raw: String) -> String {
         guard let date = KXDateParsing.parse(raw) else { return raw }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: language == .ja ? "ja_JP" : (language == .en ? "en_US" : "zh_CN"))
-        formatter.setLocalizedDateFormatFromTemplate("MMMdEHHmm")
-        return formatter.string(from: date)
+        // starts_at 是 UTC 瞬时,约局是日本本地线下聚会,必须固定 JST 渲染——
+        // 与活动端 KXEventStyle.timeLine/dateBadge 一致,否则设备时区≠JST 的用户
+        // (回国探亲/来日前规划)会把东京 19:00 JST 的局看成 18:00 的错误墙钟。
+        // body 求值热路径:用缓存 formatter,别每次做 ICU 模板解析。
+        return KXSocialDateFormatters.templated("MMMdEHHmm", language: language, timeZone: KXEventStyle.displayTimeZone(nil)).string(from: date)
     }
 
     // MARK: - actions
@@ -482,9 +530,22 @@ struct SocialRoomDetailView: View {
             async let roomTask = KaiXAPIClient.shared.room(roomId)
             async let messagesTask = KaiXAPIClient.shared.roomMessages(roomId)
             room = try await roomTask
-            let page = try await messagesTask
-            messages = page.items
-            nextBefore = page.nextBefore
+            do {
+                let page = try await messagesTask
+                messages = page.items
+                nextBefore = page.nextBefore
+            } catch {
+                // room 已成功、仅 messages 失败:原来这里错误被吞(body 的错误态只在
+                // room==nil 时展示),用户看到假空房且轮询永不启动。现在记下错误给
+                // 聊天区内联重试,并照常启动轮询(轮询 try? 静默重试,可自愈)。
+                if Task.isCancelled {
+                    isLoading = false
+                    return
+                }
+                if !(error is CancellationError || (error as? URLError)?.code == .cancelled) {
+                    errorMessage = error.kaixUserMessage
+                }
+            }
             isLoading = false
             startPolling()
         } catch {
@@ -515,17 +576,33 @@ struct SocialRoomDetailView: View {
         if !fresh.isEmpty {
             messages += fresh
         }
+        // 轮询成功 = 消息通道恢复,清掉首载失败留下的内联错误条(room 此时必非 nil,
+        // 不会影响整页错误态)。
+        if errorMessage != nil { errorMessage = nil }
+        let generation = roomMutationGeneration
         if let updated = try? await KaiXAPIClient.shared.room(roomId) {
+            // 代际守卫:join/leave 刚落地时,这个 GET 若在 mutation 前后交错,
+            // 过期快照会把 viewer_joined 覆写回旧值(输入栏闪回「加入」按钮
+            // 最长 8 秒)。列表页有 loadGeneration,此处同理。
+            guard generation == roomMutationGeneration else { return }
             room = updated
         }
     }
 
-    private func loadEarlier() async {
+    private func loadEarlier(proxy: ScrollViewProxy) async {
         guard let before = nextBefore else { return }
         guard let page = try? await KaiXAPIClient.shared.roomMessages(roomId, before: before) else { return }
         let existing = Set(messages.map(\.id))
-        messages = page.items.filter { !existing.contains($0.id) } + messages
+        let fresh = page.items.filter { !existing.contains($0.id) }
+        let anchorId = messages.first?.id
+        messages = fresh + messages
         nextBefore = page.nextBefore
+        // prepend 会把内容顶下去:等这帧布局落地后把原首条钉回顶部,保持阅读位置
+        // 不跳(尾部的 chat-bottom 自动滚动只认 last id,不会被 prepend 触发)。
+        if !fresh.isEmpty, let anchorId {
+            try? await Task.sleep(for: .milliseconds(80))
+            proxy.scrollTo(anchorId, anchor: .top)
+        }
     }
 
     private func join() async {
@@ -533,7 +610,9 @@ struct SocialRoomDetailView: View {
         isJoining = true
         defer { isJoining = false }
         do {
-            room = try await KaiXAPIClient.shared.joinRoom(roomId)
+            let joined = try await KaiXAPIClient.shared.joinRoom(roomId)
+            roomMutationGeneration += 1 // 作废在途轮询的过期 room 快照,防 viewer_joined 回滚
+            room = joined
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             await refreshMessagesQuietly()
         } catch {
@@ -544,11 +623,17 @@ struct SocialRoomDetailView: View {
     private func leave() async {
         do {
             let result = try await KaiXAPIClient.shared.leaveRoom(roomId)
+            roomMutationGeneration += 1 // 同 join:作废在途轮询的过期 room 快照
             if result == nil {
-                // 房主退出 → 房间解散,直接回列表。
+                // 房主退出 → 房间解散。通知列表页剔除(已解散,再点会 404),再回列表。
+                NotificationCenter.default.post(name: .kaiXRoomRemoved, object: nil,
+                                                userInfo: ["id": roomId, "disbanded": true])
                 dismiss()
             } else {
                 room = result
+                // 成员退出:房间仍在,但「我的局」筛选下应消失。广播让列表按筛选处理。
+                NotificationCenter.default.post(name: .kaiXRoomRemoved, object: nil,
+                                                userInfo: ["id": roomId, "disbanded": false])
                 await refreshMessagesQuietly()
             }
         } catch {
@@ -563,8 +648,13 @@ struct SocialRoomDetailView: View {
         defer { isSending = false }
         do {
             let message = try await KaiXAPIClient.shared.sendRoomMessage(roomId, content: content)
-            messages.append(message)
+            // 8s 轮询可能已先把这条消息拉回来(POST 已落库、响应回传慢):append 前
+            // 查重,否则 ForEach 出现重复 id → 双气泡 + SwiftUI 未定义行为警告。
+            if !messages.contains(where: { $0.id == message.id }) {
+                messages.append(message)
+            }
             draft = ""
+            forceScrollToBottomTick += 1 // 自己发的消息永远滚到底(即使正翻在历史里)
         } catch {
             actionMessage = error.kaixUserMessage
         }

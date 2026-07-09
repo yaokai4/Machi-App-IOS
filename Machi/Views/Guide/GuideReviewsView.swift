@@ -230,7 +230,7 @@ struct GuideProductReviewsSection: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
                 .background(KXColor.accent, in: Capsule())
-                .foregroundStyle(.white)
+                .foregroundStyle(KXColor.onAccent)
             }
             .buttonStyle(.fullArea)
             .contentShape(Rectangle())

@@ -44,9 +44,9 @@ struct SettingsSectionCard<Content: View>: View {
                 content
             }
             .padding(.vertical, 6)
-            .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: KXRadius.card, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: KXRadius.card, style: .continuous)
                     .stroke(KXColor.separator.opacity(0.4), lineWidth: 0.5)
             }
             .shadow(color: .black.opacity(0.03), radius: 6, y: 1)
@@ -225,7 +225,7 @@ struct ProfileMetricBox: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(KXSpacing.sm)
-        .kxGlassSurface(radius: KXRadius.sm, stroke: KaiXTheme.mutedGlassStroke)
+        .kxGlassSurface(radius: KXRadius.sm, stroke: KXColor.separator)
     }
 }
 

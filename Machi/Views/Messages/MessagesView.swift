@@ -86,7 +86,7 @@ struct MessagesView: View {
             }
         }
         .sheet(isPresented: $isShowingNewConversation) {
-            NewConversationView(currentUser: currentUser) { user in
+            NewConversationView(currentUser: currentUser, onMeetPeople: openDiscoverPeople) { user in
                 Task {
                     do {
                         let thread = try await MessageRepository(context: modelContext).getOrCreateThread(
@@ -193,7 +193,7 @@ struct MessagesView: View {
                     Label(item.title(language), systemImage: item.icon)
                         .font(.subheadline.weight(.bold))
                         .labelStyle(.titleAndIcon)
-                        .foregroundStyle(mode == item ? .white : .primary)
+                        .foregroundStyle(mode == item ? KXColor.onAccent : .primary)
                         .frame(maxWidth: .infinity)
                         .frame(height: 38)
                         .background(mode == item ? KXColor.accent : Color.clear, in: Capsule())
@@ -263,7 +263,7 @@ struct MessagesView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.top, KXSpacing.sm)
             .padding(.bottom, chrome.bottomContentPadding + 24)
         }
@@ -272,13 +272,16 @@ struct MessagesView: View {
 
     private var contactsEmptyContent: some View {
         ScrollView {
-            KXStatePanel(
-                title: L("mutualFriendsEmptyTitle", language),
-                subtitle: L("mutualFriendsOnly", language),
-                systemImage: "person.2",
-                accent: KXColor.accent
-            )
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            VStack(spacing: KXSpacing.md) {
+                KXStatePanel(
+                    title: L("mutualFriendsEmptyTitle", language),
+                    subtitle: L("mutualFriendsOnly", language),
+                    systemImage: "person.2",
+                    accent: KXColor.accent
+                )
+                MeetPeopleCTAButton(language: language, action: openDiscoverPeople)
+            }
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.top, 34)
             .padding(.bottom, chrome.bottomContentPadding + 24)
         }
@@ -333,13 +336,16 @@ struct MessagesView: View {
 
     private var emptyContent: some View {
         ScrollView {
-            EmptyStateView(
-                title: L("emptyMessages", language),
-                subtitle: L("newConversationsHere", language),
-                systemImage: "envelope.open",
-                illustration: .messages
-            )
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            VStack(spacing: KXSpacing.md) {
+                EmptyStateView(
+                    title: L("emptyMessages", language),
+                    subtitle: L("newConversationsHere", language),
+                    systemImage: "envelope.open",
+                    illustration: .messages
+                )
+                MeetPeopleCTAButton(language: language, action: openDiscoverPeople)
+            }
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.top, 34)
             .padding(.bottom, chrome.bottomContentPadding + 24)
         }
@@ -371,6 +377,17 @@ struct MessagesView: View {
                 viewModel.transientError = error.kaixUserMessage
             }
         }
+    }
+
+    /// 消息死胡同的出口:互关才能私信的限制不变(防骚扰的产品决策),但每个
+    /// 空态都给一条「去发现页认识同城的人」的通道,而不是把用户困在空收件箱里。
+    /// 跳转走既有约定(chrome.select + router.setActiveTab,同 SettingsView /
+    /// ProfileView 的跨 Tab CTA),并先 popToRoot 保证落在发现页首屏。
+    private func openDiscoverPeople() {
+        isShowingNewConversation = false
+        router.popToRoot(.search)
+        chrome.select(.search)
+        router.setActiveTab(.search)
     }
 
     private func openConversation(with user: UserEntity) {
@@ -417,8 +434,8 @@ private struct ConversationSkeletonRow: View {
         HStack(spacing: 11) {
             Circle().fill(KXColor.softBackground).frame(width: 48, height: 48)
             VStack(alignment: .leading, spacing: 7) {
-                RoundedRectangle(cornerRadius: 4).fill(KXColor.softBackground).frame(width: 150, height: 13)
-                RoundedRectangle(cornerRadius: 4).fill(KXColor.softBackground).frame(width: 210, height: 10)
+                RoundedRectangle(cornerRadius: KXRadius.xxs).fill(KXColor.softBackground).frame(width: 150, height: 13)
+                RoundedRectangle(cornerRadius: KXRadius.xxs).fill(KXColor.softBackground).frame(width: 210, height: 10)
             }
             Spacer()
         }
@@ -427,6 +444,34 @@ private struct ConversationSkeletonRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .redacted(reason: .placeholder)
         .accessibilityHidden(true)
+    }
+}
+
+/// 「去认识同城的人」— the way out of the messages dead-end. DM stays
+/// mutual-follow-gated (anti-harassment product decision); this button gives
+/// every "no conversations / no mutual friends yet" state a forward path to
+/// the Discover page where people can actually be met first.
+private struct MeetPeopleCTAButton: View {
+    let language: AppLanguage
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: KXSpacing.xs) {
+                Image(systemName: "person.2.wave.2")
+                    .font(.subheadline.weight(.bold))
+                Text(KXListingCopy.pickText(language, "去认识同城的人", "同じ街の人と出会う", "Meet people in your city"))
+                    .font(.subheadline.weight(.bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            .foregroundStyle(KXColor.onAccent)
+            .padding(.horizontal, 24)
+            .frame(height: 44)
+            .background(KXColor.accent, in: Capsule())
+            .shadow(color: KXColor.accent.opacity(0.22), radius: 8, y: 3)
+        }
+        .buttonStyle(KXPressableStyle())
     }
 }
 
@@ -462,7 +507,7 @@ private struct GuestMessagesPanel: View {
             Button(action: onLogin) {
                 Text(L("login", language))
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(KXColor.onAccent)
                     .padding(.horizontal, 30)
                     .frame(height: 46)
                     .background(KXColor.accent, in: Capsule())
@@ -473,7 +518,7 @@ private struct GuestMessagesPanel: View {
             Spacer()
             Spacer()
         }
-        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.horizontal, KXSpacing.screen)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
@@ -540,6 +585,9 @@ private struct NewConversationView: View {
     @State private var state: ScreenState = .idle
 
     let currentUser: UserEntity
+    /// Dead-end escape hatch: "no mutual friends yet" offers a route to the
+    /// Discover page (host dismisses this sheet and switches tabs).
+    var onMeetPeople: (() -> Void)? = nil
     let onSelect: (UserEntity) -> Void
 
     private var filteredUsers: [UserEntity] {
@@ -560,7 +608,18 @@ private struct NewConversationView: View {
                 case .loading, .idle:
                     LoadingView()
                 case .empty:
-                    EmptyStateView(title: L("mutualFriendsEmptyTitle", language), subtitle: L("mutualFriendsOnly", language), systemImage: "person.2")
+                    // ScrollView keeps EmptyStateView compact so the CTA sits
+                    // right under the copy instead of pinning to screen bottom.
+                    ScrollView {
+                        VStack(spacing: KXSpacing.md) {
+                            EmptyStateView(title: L("mutualFriendsEmptyTitle", language), subtitle: L("mutualFriendsOnly", language), systemImage: "person.2")
+                            if let onMeetPeople {
+                                MeetPeopleCTAButton(language: language, action: onMeetPeople)
+                            }
+                        }
+                        .padding(.horizontal, KXSpacing.screen)
+                        .padding(.top, 34)
+                    }
                 case .error(let message):
                     ErrorStateView(message: message) {
                         Task { await load() }
@@ -594,6 +653,9 @@ private struct NewConversationView: View {
 
                             if filteredUsers.isEmpty {
                                 EmptyStateView(title: L("mutualFriendsEmptyTitle", language), subtitle: L("mutualFriendsOnly", language), systemImage: "person.2")
+                                if let onMeetPeople {
+                                    MeetPeopleCTAButton(language: language, action: onMeetPeople)
+                                }
                             }
 
                             ForEach(filteredUsers) { user in
@@ -632,7 +694,7 @@ private struct NewConversationView: View {
                                 .buttonStyle(.plain)
                             }
                         }
-                        .padding(KaiXTheme.horizontalPadding)
+                        .padding(KXSpacing.screen)
                         .padding(.top, KXSpacing.md)
                     }
                 }
@@ -778,7 +840,7 @@ private struct MessageConversationCard: View {
                 let unreadText = thread.unreadCount > 99 ? "99+" : "\(thread.unreadCount)"
                 Text(unreadText)
                     .font(.caption2.weight(.black))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(KXColor.onAccent)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
                     .frame(minWidth: 20, minHeight: 20)

@@ -422,7 +422,7 @@ struct PostDetailView: View {
                         commentList
                     }
                 }
-                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.horizontal, KXSpacing.screen)
                 .padding(.vertical, KXSpacing.sm)
                 .padding(.bottom, KXSpacing.xl)
             }
@@ -476,7 +476,7 @@ struct PostDetailView: View {
             DetailMetric(title: L("repost", language), value: post.repostCount)
             DetailMetric(title: L("like", language), value: post.likeCount)
             DetailMetric(title: L("bookmark", language), value: post.bookmarkCount)
-            DetailMetric(title: L("heat", language), value: Int(post.heatScore), tint: KaiXTheme.heat)
+            DetailMetric(title: L("heat", language), value: Int(post.heatScore), tint: KXColor.heat)
         }
         .padding(14)
         .kxGlassSurface(radius: KXRadius.lg)

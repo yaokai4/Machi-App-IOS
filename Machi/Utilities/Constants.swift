@@ -1,23 +1,8 @@
 import SwiftUI
 
-enum KaiXTheme {
-    static let pageBackground = KXColor.pageBackground
-    static let cardBackground = KXColor.elevatedBackground
-    static let softBackground = KXColor.softBackground
-    static let line = KXColor.separator
-    static let glassStroke = KXColor.glassStroke
-    static let mutedGlassStroke = KXColor.separator
-    static let accent = KXColor.accent
-    static let heat = KXColor.heat
-    static let horizontalPadding: CGFloat = KXSpacing.screen
-    static let cardRadius: CGFloat = KXRadius.card
-    static let compactRadius: CGFloat = KXRadius.sm
-    static let bottomBarHeight: CGFloat = 66
-    /// Bottom inset reserved for floating TabBar + safe-area on
-    /// every scrollable surface. This keeps the last card tappable
-    /// while the glass tab bar floats over the feed content.
-    static let bottomContentPadding: CGFloat = 98
-}
+// KaiXTheme 兼容别名层已完成历史使命：全部调用点已迁移至 KX* token
+// （颜色/间距/圆角见 DesignSystem.swift；悬浮 TabBar 布局常量收入 KXLayout），
+// 别名层于批次2清除。新代码一律直接使用 KX* 命名空间。
 
 enum KaiXConfig {
     static let schemaVersion = 7
@@ -56,9 +41,3 @@ enum KaiXBuild {
 
 }
 
-extension View {
-    func kaixGlassCard(cornerRadius: CGFloat = KaiXTheme.cardRadius) -> some View {
-        self
-            .kxGlassSurface(radius: cornerRadius)
-    }
-}

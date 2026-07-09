@@ -10,7 +10,6 @@ struct AuthView: View {
     @AppStorage("appLanguageCode") private var appLanguageCode = AppLanguage.system.rawValue
     @StateObject private var viewModel = AuthViewModel()
     @State private var isPasswordVisible = false
-    @State private var isShowingRegionPicker = false
     @State private var isGoogleLoading = false
     @State private var appleNonce = ""
     @State private var isShowingForgotPassword = false
@@ -61,9 +60,7 @@ struct AuthView: View {
         if !passwordOK {
             missing.append(L("authMissingPasswordRule", language))
         }
-        if viewModel.selectedRegion == nil {
-            missing.append(L("authMissingRegion", language))
-        }
+        // P-6: 地区已不在注册表单里(onAppear 静默兜底),不再列为缺项。
         guard !missing.isEmpty else { return nil }
         let separator = language == .en ? ", " : "、"
         return L("authMissingPrefix", language) + missing.joined(separator: separator)
@@ -195,6 +192,15 @@ struct AuthView: View {
             if viewModel.referralCode.isEmpty, let pending = ReferralInvite.pendingCode {
                 viewModel.referralCode = pending
             }
+            // P-6 注册摩擦后置:地区选择整个从注册表单移除(服务端 register
+            // 本就允许缺省 —— server.py _normalize_region_payload「Empty values
+            // are allowed」)。AuthViewModel 的校验仍要求一个 region,这里静默
+            // 带上用户当前浏览的城市(游客逛到哪座城,注册就落在哪座城),
+            // 兜底东京;注册后既有的自动定位 / 首页 RegionPicker 引导随时可改。
+            if viewModel.selectedRegion == nil {
+                viewModel.selectedRegion = RegionStore.shared.current
+                    ?? KaiXRegionDirectory.resolve(regionCode: "jp.tokyo.tokyo")
+            }
         }
         .onChange(of: viewModel.mode) { _, _ in
             viewModel.fieldErrors = [:]
@@ -204,15 +210,6 @@ struct AuthView: View {
             ForgotPasswordSheet(initialEmail: viewModel.mode == .login ? viewModel.username : viewModel.email)
                 .environment(\.appLanguage, language)
                 .presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: $isShowingRegionPicker) {
-            RegionPickerView(
-                initialCountry: viewModel.selectedRegion?.countryCode,
-                allowsAnyCountry: true
-            ) { region in
-                viewModel.selectedRegion = region
-                viewModel.clearError(for: .region)
-            }
         }
     }
 
@@ -235,7 +232,7 @@ struct AuthView: View {
                         .shadow(color: KXColor.accent.opacity(0.36), radius: 14, y: 7)
                     Image(systemName: "bolt.fill")
                         .font(.title2.weight(.bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(KXColor.onAccent)
                 }
 
                 Spacer()
@@ -391,7 +388,8 @@ struct AuthView: View {
                     icon: "at",
                     accessibilityIdentifier: "auth.username",
                     error: viewModel.fieldError(.username),
-                    keyboardType: viewModel.mode == .register ? .asciiCapable : .emailAddress
+                    keyboardType: viewModel.mode == .register ? .asciiCapable : .emailAddress,
+                    textContentType: .username
                 )
 
                 if viewModel.mode == .register {
@@ -403,7 +401,8 @@ struct AuthView: View {
                         text: displayNameBinding,
                         icon: "person.text.rectangle",
                         accessibilityIdentifier: "auth.displayName",
-                        error: viewModel.fieldError(.displayName)
+                        error: viewModel.fieldError(.displayName),
+                        textContentType: .nickname
                     )
 
                     AuthInputField(
@@ -413,7 +412,8 @@ struct AuthView: View {
                         icon: "envelope",
                         accessibilityIdentifier: "auth.email",
                         error: viewModel.fieldError(.email),
-                        keyboardType: .emailAddress
+                        keyboardType: .emailAddress,
+                        textContentType: .emailAddress
                     )
                     availabilityHint(viewModel.emailAvailability, takenKey: "authEmailTaken", okKey: "authEmailAvailable")
 
@@ -446,9 +446,9 @@ struct AuthView: View {
                         onSend: { Task { await viewModel.sendCode(language: language) } }
                     )
 
-                    AuthRegionField(region: viewModel.selectedRegion, error: viewModel.fieldError(.region)) {
-                        isShowingRegionPicker = true
-                    }
+                    // P-6: 「地区」字段已从注册流移除(6 必填 → 5)。地区在
+                    // onAppear 里静默兜底为当前浏览城市 / 东京,注册后再由
+                    // 自动定位与 RegionPicker 引导按需修正。
 
                     // 邀请裂变: optional friend invite code. Prefilled from a
                     // tapped /i/<code> link, but always editable and never
@@ -466,7 +466,8 @@ struct AuthView: View {
                     password: passwordBinding,
                     isVisible: $isPasswordVisible,
                     placeholder: viewModel.mode == .login ? L("enterPassword", language) : L("passwordMin", language),
-                    error: viewModel.fieldError(.password)
+                    error: viewModel.fieldError(.password),
+                    textContentType: viewModel.mode == .login ? .password : .newPassword
                 )
 
                 if viewModel.mode == .login {
@@ -738,7 +739,8 @@ struct ForgotPasswordSheet: View {
                 .foregroundStyle(.secondary)
 
             resetField(title: L("email", language), text: $email, icon: "envelope",
-                       keyboard: .emailAddress, secure: false, id: "forgot.email")
+                       keyboard: .emailAddress, secure: false, id: "forgot.email",
+                       contentType: .emailAddress)
 
             if captchaEnabled {
                 ForgotCaptchaField(
@@ -768,7 +770,8 @@ struct ForgotPasswordSheet: View {
 
             HStack(spacing: 10) {
                 resetField(title: L("authVerificationCode", language), text: $code, icon: "number",
-                           keyboard: .numberPad, secure: false, id: "forgot.code")
+                           keyboard: .numberPad, secure: false, id: "forgot.code",
+                           contentType: .oneTimeCode)
                 Button {
                     Task { await requestCode() }
                 } label: {
@@ -787,13 +790,15 @@ struct ForgotPasswordSheet: View {
 
             resetField(title: L("authResetNewPassword", language), text: $newPassword, icon: "lock",
                        keyboard: .default, secure: !isPasswordVisible, id: "forgot.newPassword",
+                       contentType: .newPassword,
                        trailing: passwordVisibilityToggle)
             Text(L("passwordMin", language))
                 .font(.caption)
                 .foregroundStyle(.tertiary)
 
             resetField(title: L("authResetConfirmPassword", language), text: $confirmPassword, icon: "lock.rotation",
-                       keyboard: .default, secure: !isPasswordVisible, id: "forgot.confirmPassword")
+                       keyboard: .default, secure: !isPasswordVisible, id: "forgot.confirmPassword",
+                       contentType: .newPassword)
 
             if !confirmPassword.isEmpty, newPassword != confirmPassword {
                 Label(L("authResetPasswordMismatch", language), systemImage: "exclamationmark.circle")
@@ -863,6 +868,9 @@ struct ForgotPasswordSheet: View {
                     .foregroundStyle(.blue.opacity(0.65))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(isPasswordVisible
+                ? guideText(language, "隐藏密码", "パスワードを非表示", "Hide password")
+                : guideText(language, "显示密码", "パスワードを表示", "Show password"))
         )
     }
 
@@ -870,6 +878,7 @@ struct ForgotPasswordSheet: View {
 
     private func resetField(title: String, text: Binding<String>, icon: String,
                             keyboard: UIKeyboardType, secure: Bool, id: String,
+                            contentType: UITextContentType? = nil,
                             trailing: AnyView? = nil) -> some View {
         VStack(alignment: .leading, spacing: KXSpacing.sm) {
             Text(title)
@@ -888,6 +897,7 @@ struct ForgotPasswordSheet: View {
                             .keyboardType(keyboard)
                     }
                 }
+                .textContentType(contentType)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .accessibilityIdentifier(id)
@@ -1115,6 +1125,7 @@ private struct AuthCodeField: View {
                         .frame(width: 24)
                     TextField("000000", text: $code)
                         .keyboardType(.numberPad)
+                        .textContentType(.oneTimeCode)
                         .accessibilityIdentifier("auth.code")
                 }
                 .padding(.horizontal, KXSpacing.lg)
@@ -1230,66 +1241,6 @@ private struct AuthCaptchaField: View {
     }
 }
 
-private struct AuthRegionField: View {
-    @Environment(\.appLanguage) private var language
-    let region: KaiXRegionDirectory.Region?
-    let error: String?
-    let onTap: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: KXSpacing.sm) {
-            Text(L("registerRegion", language))
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.secondary)
-
-            Button(action: onTap) {
-                HStack(spacing: 13) {
-                    Image(systemName: "mappin.and.ellipse")
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 24)
-
-                    VStack(alignment: .leading, spacing: KXSpacing.xxs) {
-                        Text(region.map { KaiXRegionDirectory.localizedDisplayName($0, language: language) } ?? L("selectRegisterRegion", language))
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(region == nil ? .secondary : .primary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.78)
-                        if let region {
-                            Text(L("registerRegionHelp", language).replacingOccurrences(
-                                of: "{country}",
-                                with: KaiXRegionDirectory.localizedCountryName(
-                                    .init(code: region.countryCode, name: region.countryName, emoji: region.countryEmoji, tier: 1, hasProvinces: !region.provinceCode.isEmpty),
-                                    language: language
-                                )
-                            ))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.75)
-                        }
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.down")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, KXSpacing.lg)
-                .frame(height: 60)
-                .kxGlassSurface(radius: KXRadius.md, stroke: error == nil ? KXColor.glassStroke : Color.red.opacity(0.36))
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("auth.region")
-
-            if let error {
-                AuthFieldErrorText(error)
-            }
-        }
-    }
-}
-
 private struct AuthModePicker: View {
     @Environment(\.appLanguage) private var language
     @Binding var selection: AuthViewModel.Mode
@@ -1324,6 +1275,9 @@ private struct AuthInputField: View {
     let accessibilityIdentifier: String
     var error: String?
     var keyboardType: UIKeyboardType = .default
+    /// iOS 只在设置了 textContentType 时才触发密码 AutoFill / 钥匙串保存 /
+    /// 强密码建议——不设等于整页禁用一键填充。
+    var textContentType: UITextContentType?
 
     var body: some View {
         VStack(alignment: .leading, spacing: KXSpacing.sm) {
@@ -1339,6 +1293,7 @@ private struct AuthInputField: View {
 
                 TextField(placeholder, text: $text)
                     .keyboardType(keyboardType)
+                    .textContentType(textContentType)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .accessibilityIdentifier(accessibilityIdentifier)
@@ -1360,6 +1315,9 @@ private struct AuthPasswordField: View {
     @Binding var isVisible: Bool
     let placeholder: String
     var error: String?
+    /// 登录传 .password(AutoFill 已存密码),注册传 .newPassword(强密码建议
+    /// + 提示存入钥匙串)。
+    var textContentType: UITextContentType = .password
 
     var body: some View {
         VStack(alignment: .leading, spacing: KXSpacing.sm) {
@@ -1380,6 +1338,7 @@ private struct AuthPasswordField: View {
                         SecureField(placeholder, text: $password)
                     }
                 }
+                .textContentType(textContentType)
                 .accessibilityIdentifier("auth.password")
 
                 Button {
@@ -1390,7 +1349,9 @@ private struct AuthPasswordField: View {
                         .foregroundStyle(.blue.opacity(0.65))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(isVisible ? "隐藏密码" : "显示密码")
+                .accessibilityLabel(isVisible
+                    ? guideText(language, "隐藏密码", "パスワードを非表示", "Hide password")
+                    : guideText(language, "显示密码", "パスワードを表示", "Show password"))
             }
             .padding(.horizontal, KXSpacing.lg)
             .frame(height: 56)

@@ -156,9 +156,9 @@ struct GuideOSTodoCard: View {
                         .scrollContentBackground(.hidden)
                         .frame(minHeight: 72)
                         .padding(KXSpacing.sm)
-                        .background(KXColor.livingSurface.opacity(0.82), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                        .background(KXColor.livingSurface.opacity(0.82), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                            RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
                                 .stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8)
                         )
                     HStack(spacing: 10) {
@@ -170,7 +170,7 @@ struct GuideOSTodoCard: View {
                         }
                         .buttonStyle(.fullArea)
                         .contentShape(Rectangle())
-                        .foregroundStyle(.white)
+                        .foregroundStyle(KXColor.onAccent)
                         .background(KXColor.accent, in: Capsule())
                         Button {
                             noteDraft = todo.notes
@@ -195,7 +195,7 @@ struct GuideOSTodoCard: View {
                         .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(10)
-                        .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                        .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 }
                 .buttonStyle(.fullArea)
                 .contentShape(Rectangle())
@@ -218,7 +218,7 @@ struct GuideOSTodoCard: View {
                 .lineLimit(2)
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 .padding(.top, KXSpacing.xs)
         }
     }
@@ -298,9 +298,9 @@ struct GuideOSTodoCard: View {
             }
         }
         .padding(KXSpacing.md)
-        .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                 .stroke(Color.black.opacity(0.05), lineWidth: 0.8)
         )
         .contentShape(Rectangle())
@@ -504,7 +504,7 @@ struct GuideTodoListView: View {
                                     .font(.subheadline.weight(.bold))
                                     .foregroundStyle(section.2 ? Color.orange : Color.primary)
                                 ForEach(section.1) { todo in
-                                    GuideSwipeDeleteTodoRow(onDelete: {
+                                    GuideSwipeDeleteRow(onDelete: {
                                         await model.deleteTodo(todo)
                                     }) {
                                         GuideOSTodoCard(
@@ -539,8 +539,12 @@ struct GuideTodoListView: View {
     }
 }
 
-private struct GuideSwipeDeleteTodoRow<Content: View>: View {
+/// 自绘的「左滑显示删除」容器。SwiftUI 的 .swipeActions 只对 List 行生效,在
+/// ScrollView/LazyVStack 中是彻底 no-op——Guide 工作台各页均为 ScrollView,所以
+/// 行内删除必须走这个容器(记账 ledger 也复用它,别再挂 .swipeActions)。
+struct GuideSwipeDeleteRow<Content: View>: View {
     @Environment(\.appLanguage) private var language
+    let radius: CGFloat
     let onDelete: () async -> Bool
     let content: Content
     @State private var offset: CGFloat = 0
@@ -549,7 +553,8 @@ private struct GuideSwipeDeleteTodoRow<Content: View>: View {
 
     private let revealWidth: CGFloat = 92
 
-    init(onDelete: @escaping () async -> Bool, @ViewBuilder content: () -> Content) {
+    init(radius: CGFloat = 18, onDelete: @escaping () async -> Bool, @ViewBuilder content: () -> Content) {
+        self.radius = radius
         self.onDelete = onDelete
         self.content = content()
     }
@@ -570,7 +575,7 @@ private struct GuideSwipeDeleteTodoRow<Content: View>: View {
                 .frame(maxHeight: .infinity)
                 .background(
                     LinearGradient(colors: [Color.red, Color.red.opacity(0.78)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                    in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    in: RoundedRectangle(cornerRadius: radius, style: .continuous)
                 )
             }
             .buttonStyle(.plain)
@@ -601,11 +606,12 @@ private struct GuideSwipeDeleteTodoRow<Content: View>: View {
                             }
                         }
                 )
-                .accessibilityAction(named: Text(guideOSText(language, "删除 Todo", "Todo を削除", "Delete todo"))) {
+                // 容器已通用化(Todo/记账共用),VoiceOver 动作名保持通用的「删除」。
+                .accessibilityAction(named: Text(guideOSText(language, "删除", "削除", "Delete"))) {
                     delete()
                 }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
     }
 
     private func delete() {
@@ -667,7 +673,7 @@ private struct GuideTodoDetailHeroCard: View {
                     .kxScaledFont(30, weight: .semibold)
                     .foregroundStyle(todo.isDone ? KXColor.accent : tint.opacity(0.75))
                     .frame(width: 44, height: 44)
-                    .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                 VStack(alignment: .leading, spacing: 5) {
                     Text(titleText)
                         .font(.title3.weight(.bold))
@@ -858,7 +864,7 @@ private struct GuideTodoDetailSheet: View {
                         .frame(minHeight: 110)
                         .scrollContentBackground(.hidden)
                         .padding(KXSpacing.sm)
-                        .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                 }
                 Section(guideOSText(language, "附件", "添付ファイル", "Attachments")) {
                     GuideAttachmentSection(entityType: "guide_task", entityId: todo.id, title: guideOSText(language, "任务附件", "タスクの添付ファイル", "Task attachments"))

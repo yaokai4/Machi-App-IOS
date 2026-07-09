@@ -13,7 +13,10 @@ final class KaiXCacheManager: ObservableObject {
     @Published private(set) var mediaBytes: Int64 = 0
     /// Cached page/feed snapshots + crash diagnostics.
     @Published private(set) var dataBytes: Int64 = 0
-    /// The local database (帖子 / 会话 / 聊天记录 / 资料) — WeChat-style offline cache.
+    /// KaiXLocalStore 文件夹大小。注意:生产不把帖子/会话/聊天记录写进 SwiftData
+    /// (服务器唯一真相不落盘),这里通常只有 SQLite/WAL 骨架 + 游客占位行,以及
+    /// 老版本升级残留的历史数据——不是"微信式离线缓存"。清除动作对残留数据仍然
+    /// 有意义,故保留;若未来真接离线缓存需同步更新 DataManagementView 文案。
     @Published private(set) var dbBytes: Int64 = 0
     @Published private(set) var isWorking = false
     /// Set after the user clears local data: the DB wipe takes effect on restart.
@@ -56,9 +59,10 @@ final class KaiXCacheManager: ObservableObject {
         isWorking = false
     }
 
-    /// Clear the local database — 帖子 / 会话 / **聊天记录** / 资料. Applied on the next
-    /// launch (we never delete a SQLite file the live store still holds open), so
-    /// the UI marks it "restart to fully clear".
+    /// Clear the on-disk SwiftData store (生产环境仅骨架 + 旧版本残留;聊天记录在
+    /// 内存态,不在这里). Applied on the next launch (we never delete a SQLite
+    /// file the live store still holds open), so the UI marks it "restart to
+    /// fully clear".
     func clearLocalData() {
         KaiXDatabaseContainer.requestLocalDataWipe()
         localDataWipeScheduled = true

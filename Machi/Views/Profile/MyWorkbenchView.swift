@@ -36,7 +36,7 @@ struct MyWorkbenchView: View {
                 serviceSection
                     .kxWorkbenchEntrance(didEnter, index: 3)
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.top, KXSpacing.md)
             .kxTabBarSafeBottomPadding()
         }
@@ -102,7 +102,7 @@ struct MyWorkbenchView: View {
                 if s.pendingTotal > 0 {
                     Text("\(s.pendingTotal)")
                         .font(.caption.weight(.black))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(KXColor.onTint(KXColor.heat))
                         .frame(minWidth: 22, minHeight: 22)
                         .padding(.horizontal, 5)
                         .background(KXColor.heat, in: Capsule())
@@ -305,7 +305,7 @@ struct PublishListingTypeChooserView: View {
                     }
                 }
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.top, KXSpacing.md)
             .kxTabBarSafeBottomPadding()
         }

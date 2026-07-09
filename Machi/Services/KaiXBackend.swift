@@ -135,9 +135,26 @@ enum KaiXBackend {
         set {
             if let value = newValue, !value.isEmpty {
                 KaiXTokenStore.write(value)
+                // 新登录成功 → 允许下一次会话失效再触发一次退游客流程。
+                sessionLock.lock(); sessionInvalidated = false; sessionLock.unlock()
             } else {
                 KaiXTokenStore.delete()
             }
         }
+    }
+
+    private static let sessionLock = NSLock()
+    private static var sessionInvalidated = false
+
+    /// 为一次 401 原子地清 token,并返回【本调用是否是第一个】这么做的。
+    /// N 个并发请求几乎同时拿到 401 时(会话过期/被撤销的"401 风暴"),只有第一个
+    /// 返回 true 去触发退游客流程,其余返回 false 跳过——避免后台线程重复拆除
+    /// 会话状态、叠加多个 toast。游客(token==nil)恒返回 false。
+    static func invalidateSessionOnce() -> Bool {
+        sessionLock.lock(); defer { sessionLock.unlock() }
+        guard token != nil, !sessionInvalidated else { return false }
+        sessionInvalidated = true
+        token = nil   // 走 delete 分支,不重入 sessionLock
+        return true
     }
 }

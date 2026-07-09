@@ -58,7 +58,7 @@ struct GuideJLPTPlacementView: View {
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(KXColor.livingAccent)
                         .frame(width: 42, height: 42)
-                        .background(KXColor.livingAccentSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .background(KXColor.livingAccentSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                     Text(guideText(language, "凭直觉作答，不会做就跳过——我们据此推荐等级。",
                                    "直感で回答してください。分からなければ飛ばしてOK。結果からレベルを提案します。",
                                    "Answer by instinct; skip what you don't know. We recommend a level from your answers."))
@@ -200,7 +200,9 @@ struct GuideJLPTPlacementView: View {
                 .buttonStyle(KXPressableStyle(scale: 0.98))
 
                 Button {
-                    router.open(.guidePlan, in: .guide)
+                    // 「生成学习计划」必须落到学习计划生成器:此前错落到 .guidePlan
+                    // (普通 Todo 列表),定级→学习计划的核心转化链路断裂。
+                    router.open(.guideStudyPlan(level: r.recommendedLevel), in: .guide)
                 } label: {
                     ctaLabel(icon: "calendar",
                              title: guideText(language, "生成学习计划", "学習計画を作る", "Generate study plan"),

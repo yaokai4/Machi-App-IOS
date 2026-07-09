@@ -8,6 +8,7 @@ struct HomeTimelineView: View {
     @EnvironmentObject private var postStore: PostStore
     @EnvironmentObject private var userStore: UserStore
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var toastManager: ToastManager
     @StateObject private var viewModel = HomeViewModel()
     @ObservedObject private var regionStore = RegionStore.shared
     @ObservedObject private var languageManager = LanguageManager.shared
@@ -36,7 +37,7 @@ struct HomeTimelineView: View {
                         // and the swap to real content doesn't jump.
                         ScrollView {
                             KXFeedSkeleton()
-                                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                                .padding(.horizontal, KXSpacing.screen)
                                 .padding(.vertical, 7)
                         }
                         .scrollDisabled(true)
@@ -48,7 +49,17 @@ struct HomeTimelineView: View {
                             } else if viewModel.mode == .local && regionStore.current == nil {
                                 localPickRegionState
                             } else {
-                                EmptyStateView(title: L("emptyFeed", language), subtitle: L("emptyFeedHelp", language), systemImage: "text.bubble")
+                                // 空态也必须能自助恢复:包进 ScrollView 挂下拉刷新,
+                                // 否则服务端瞬时返回空页后这里就是死胡同(无重试按钮,
+                                // 用户只能切 tab / 杀 App 才能重载)。
+                                ScrollView {
+                                    EmptyStateView(title: L("emptyFeed", language), subtitle: L("emptyFeedHelp", language), systemImage: "text.bubble")
+                                        .frame(maxWidth: .infinity)
+                                        .containerRelativeFrame(.vertical)
+                                }
+                                .refreshable {
+                                    await viewModel.refresh(context: modelContext, currentUser: currentUser, postStore: postStore)
+                                }
                             }
                         }
                         .transition(.opacity)
@@ -77,6 +88,11 @@ struct HomeTimelineView: View {
         }
         .kxPageBackground()
         .toolbar(.hidden, for: .navigationBar)
+        .onReceive(NotificationCenter.default.publisher(for: .kaiXPostRemoved)) { note in
+            // 详情页删帖后立即剔除幽灵卡(否则 `?? post` 回退会继续渲染 PostStore
+            // 已忘掉、但 viewModel.posts 仍强引用的陈旧实体,点进去报 postDeleted)。
+            if let ids = note.userInfo?["ids"] as? [String] { viewModel.removePosts(ids: ids) }
+        }
         .task {
             await KXPerf.measure("feed.loadInitial") {
                 await viewModel.loadInitial(context: modelContext, currentUser: currentUser, postStore: postStore)
@@ -128,6 +144,20 @@ struct HomeTimelineView: View {
                     clearExisting: true,
                 )
             }
+        }
+        .onChange(of: viewModel.transientError) { _, message in
+            // 互动(赞/藏/转/引用/关注)失败走全局 toast,绝不整页替换 feed ——
+            // 弱网下一次点赞失败曾让满屏内容瞬间变成错误页并丢滚动位置。
+            // 展示后清回 nil,同一条错误连续出现时 onChange 才会再次触发。
+            guard let message else { return }
+            toastManager.show(.custom(
+                title: KXListingCopy.pickText(language, "操作未完成", "操作を完了できませんでした", "Action didn't complete"),
+                message: message,
+                systemImage: "xmark.octagon",
+                tint: .red,
+                technicalDetails: nil
+            ))
+            viewModel.transientError = nil
         }
     }
 
@@ -249,7 +279,7 @@ struct HomeTimelineView: View {
                         .transition(.opacity)
                 }
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.vertical, 7)
             .padding(.bottom, chrome.bottomContentPadding + 18)
             .kxReadableWidth()
@@ -306,9 +336,14 @@ struct HomeTimelineView: View {
                     .kxGlassSurface(radius: KXRadius.lg)
                 }
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.top, KXSpacing.md)
             .padding(.bottom, chrome.bottomContentPadding)
+        }
+        // 关注空态与正常 feed 同一手势自愈:没有它,推荐加载失败/暂时为空时
+        // 这个页面无任何重载途径。
+        .refreshable {
+            await viewModel.refresh(context: modelContext, currentUser: currentUser, postStore: postStore)
         }
     }
 }

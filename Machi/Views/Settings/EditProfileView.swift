@@ -55,7 +55,7 @@ struct EditProfileView: View {
                             .padding(.horizontal, KXSpacing.xs)
                     }
                 }
-                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.horizontal, KXSpacing.screen)
                 .padding(.top, 14)
                 .kxTabBarSafeBottomPadding()
             }
@@ -115,7 +115,7 @@ struct EditProfileView: View {
             .kxGlassCapsule(isSelected: canSave)
             .disabled(!canSave)
         }
-        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.horizontal, KXSpacing.screen)
         .padding(.top, KXSpacing.sm)
         .padding(.bottom, 10)
         .kxGlassBar(ignoresTopSafeArea: true)
@@ -178,12 +178,34 @@ struct EditProfileView: View {
         .kxGlassSurface(radius: KXRadius.lg)
     }
 
+    @ViewBuilder
     private var avatarStylePicker: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(L("avatarStyle", language))
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(.secondary)
 
+            // 有头像照片时符号/颜色不参与渲染(照片优先),继续展示选择器只是
+            // 一排点了没反应的死交互——改为解释现状,引导先移除照片。
+            if avatarURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                avatarStyleOptions
+            } else {
+                Text(KXListingCopy.pickText(
+                    language,
+                    "当前使用头像照片，符号与颜色不生效。移除照片后即可改回符号头像。",
+                    "現在は写真アバターを使用中のため、シンボルと色は反映されません。写真を削除するとシンボルに戻せます。",
+                    "A photo avatar is in use, so symbol and color don't apply. Remove the photo to switch back."
+                ))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var avatarStyleOptions: some View {
+        Group {
             FlowLayout(spacing: KXSpacing.sm) {
                 ForEach(["sparkles", "star.fill", "person.fill", "newspaper.fill", "tram.fill", "fork.knife", "camera.fill", "bolt.fill"], id: \.self) { symbol in
                     Button {
@@ -191,7 +213,7 @@ struct EditProfileView: View {
                     } label: {
                         Image(systemName: symbol)
                             .font(.headline.weight(.bold))
-                            .foregroundStyle(avatarSymbol == symbol ? .white : .primary)
+                            .foregroundStyle(avatarSymbol == symbol ? KXColor.onAccent : .primary)
                             .frame(width: 38, height: 38)
                             .background(avatarSymbol == symbol ? KXColor.accent.opacity(0.78) : KXColor.glassControlTint)
                             .kxLiquidGlass(avatarSymbol == symbol ? .selected : .control, in: Circle())
@@ -248,7 +270,39 @@ struct EditProfileView: View {
                 }
                 .disabled(isPreparingMedia)
             }
+
+            // 移除入口:没有它,照片一旦上传 avatarURL/coverURL 就只能被裁剪流程
+            // 再赋值、永远清不空,用户被"锁死"在照片上回不去符号/渐变头像。
+            // 置空后保存时显式下发空串,服务端才会真正清除(见 save())。
+            if !avatarURL.isEmpty || !coverURL.isEmpty {
+                HStack(spacing: 10) {
+                    if !avatarURL.isEmpty {
+                        removeMediaButton(
+                            title: KXListingCopy.pickText(language, "移除头像照片", "アバター写真を削除", "Remove avatar photo")
+                        ) { avatarURL = "" }
+                    }
+                    if !coverURL.isEmpty {
+                        removeMediaButton(
+                            title: KXListingCopy.pickText(language, "移除背景照片", "カバー写真を削除", "Remove cover photo")
+                        ) { coverURL = "" }
+                    }
+                }
+            }
         }
+    }
+
+    private func removeMediaButton(title: String, action: @escaping () -> Void) -> some View {
+        Button(role: .destructive, action: action) {
+            Label(title, systemImage: "trash")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.red)
+                .frame(maxWidth: .infinity)
+                .frame(height: 38)
+                .contentShape(Capsule())
+                .kxGlassCapsule()
+        }
+        .buttonStyle(.plain)
+        .disabled(isPreparingMedia)
     }
 
     @ViewBuilder
@@ -314,9 +368,15 @@ struct EditProfileView: View {
                 ]
                 if !uploadedAvatarURL.isEmpty {
                     patch["avatar_url"] = uploadedAvatarURL
+                } else if avatarURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !user.avatarURL.isEmpty {
+                    // 用户点了「移除头像照片」:显式下发空串,服务端清除
+                    // avatar_url 后头像回落到符号/渐变(不发这个键就是保持不变)。
+                    patch["avatar_url"] = ""
                 }
                 if !uploadedCoverURL.isEmpty {
                     patch["cover_url"] = uploadedCoverURL
+                } else if coverURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !user.coverURL.isEmpty {
+                    patch["cover_url"] = ""
                 }
                 let updated = try await KaiXAPIClient.shared.updateMe(patch)
                 UserRepository.apply(updated, to: user)

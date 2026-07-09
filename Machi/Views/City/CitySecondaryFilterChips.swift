@@ -28,7 +28,7 @@ struct CitySecondaryFilterChips: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.vertical, 7)
         }
         .background(KXColor.softBackground.opacity(0.6))

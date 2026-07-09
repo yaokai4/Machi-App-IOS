@@ -113,3 +113,67 @@ enum KaiXTokenStore {
         defaults.removeObject(forKey: legacyDefaultsKey)
     }
 }
+
+/// Generic Keychain-backed key-value storage for small user-private strings
+/// that must NOT live in UserDefaults (plaintext plist → unencrypted backups /
+/// sandbox mounts) — e.g. the locally-stored contact phone number. Same
+/// `AfterFirstUnlockThisDeviceOnly` policy as the session token, but under a
+/// distinct service so entries can never collide with the bearer token item.
+/// Values are tiny and read on demand, so no in-memory cache is kept.
+enum KaiXSecureStore {
+    private static let service = "com.yaokai.kaizi.secure"
+
+    static func read(_ key: String) -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: key,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        guard status == errSecSuccess,
+              let data = item as? Data,
+              let value = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        return value
+    }
+
+    /// Writes the value; an empty string removes the item entirely so cleared
+    /// fields don't leave stale entries behind.
+    static func write(_ value: String, for key: String) {
+        guard !value.isEmpty else {
+            delete(key)
+            return
+        }
+        let data = Data(value.utf8)
+        // Update-first so rotating a value never accumulates duplicate items.
+        let updateQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: key,
+        ]
+        let updateStatus = SecItemUpdate(updateQuery as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+        if updateStatus == errSecItemNotFound {
+            let attributes: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: service,
+                kSecAttrAccount as String: key,
+                kSecValueData as String: data,
+                kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            ]
+            SecItemAdd(attributes as CFDictionary, nil)
+        }
+    }
+
+    static func delete(_ key: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: key,
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
+}

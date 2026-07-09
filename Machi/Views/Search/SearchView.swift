@@ -33,7 +33,9 @@ struct SearchScreen: View {
     @EnvironmentObject private var searchStore: SearchStore
     @EnvironmentObject private var router: KXRouter
     @StateObject private var viewModel = SearchViewModel()
-    @State private var recentSearchesStorage = ""
+    // 最近搜索存 stringArray:旧版用 "|" 拼接单字符串,搜索词本身含竖线
+    // (正则/店名/日文混排)会被拆碎且永久污染历史。首次读取做一次旧格式迁移。
+    @State private var recentSearchItems: [String] = []
     @State private var searchDebounceTask: Task<Void, Never>?
     @State private var serverSearchTask: Task<Void, Never>?
     @State private var savedSearchSaving = false
@@ -49,7 +51,7 @@ struct SearchScreen: View {
     }
 
     private var recentSearches: [String] {
-        recentSearchesStorage.split(separator: "|").map(String.init).filter { !$0.isEmpty }
+        recentSearchItems.filter { !$0.isEmpty }
     }
 
     private var trimmedQuery: String {
@@ -88,6 +90,18 @@ struct SearchScreen: View {
         || !combinedTopics.isEmpty
         || !combinedUsers.isEmpty
         || !viewModel.searchedListings.isEmpty
+    }
+
+    // 落地页的"正在发生"与"热搜榜"曾同源同序(都取 trendingItems 头部,前 4 条
+    // 100% 重复)。"正在发生"改用真实 recency 排序的 latestItems(名副其实),
+    // 热搜榜过滤掉已在上方展示的条目,首屏不再连续两块一样的内容。
+    private var landingHappeningItems: [TrendingItem] {
+        Array(viewModel.latestItems.prefix(4))
+    }
+
+    private var landingHotRankItems: [TrendingItem] {
+        let happeningIds = Set(landingHappeningItems.map(\.id))
+        return viewModel.trendingItems.filter { !happeningIds.contains($0.id) }
     }
 
     var body: some View {
@@ -133,7 +147,14 @@ struct SearchScreen: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .task {
-            recentSearchesStorage = UserDefaults.standard.string(forKey: recentSearchKey) ?? ""
+            if let stored = UserDefaults.standard.stringArray(forKey: recentSearchKey) {
+                recentSearchItems = stored
+            } else if let legacy = UserDefaults.standard.string(forKey: recentSearchKey) {
+                // 旧 "|" 拼接格式:按旧规则拆开迁移一次并改写为数组存储。
+                let migrated = legacy.split(separator: "|").map(String.init).filter { !$0.isEmpty }
+                recentSearchItems = migrated
+                UserDefaults.standard.set(migrated, forKey: recentSearchKey)
+            }
             if !initialQuery.isEmpty {
                 viewModel.query = initialQuery
                 viewModel.updateDebouncedQuery(initialQuery)
@@ -157,6 +178,9 @@ struct SearchScreen: View {
             // Every settled query hits the server (/api/search) — the client
             // filters above only cover the ~30 preloaded hot items.
             savedSearchDone = false
+            // 换新关键词回到"帖子"Tab:停在"信息"等 Tab 的用户对新查询会直接
+            // 看到该类目的空态,误以为整个查询无结果。
+            selectedResultTab = .posts
             serverSearchTask?.cancel()
             serverSearchTask = Task { await viewModel.searchServer() }
         }
@@ -233,7 +257,7 @@ struct SearchScreen: View {
                 if trimmedQuery.isEmpty {
                     recentSearchSection
                     happeningNowSection
-                    rankingSection(title: L("hotSearchRank", language), items: viewModel.trendingItems, limit: 8)
+                    rankingSection(title: L("hotSearchRank", language), items: landingHotRankItems, limit: 8)
                     topicSection(title: L("topics", language), topics: viewModel.topics.prefix(8).map { $0 })
                     usersSection(title: L("recommendedFollow", language), users: userResults.prefix(6).map { $0 })
                 } else if hasResults {
@@ -250,7 +274,11 @@ struct SearchScreen: View {
                     switch selectedResultTab {
                     case .posts:
                         rankingSection(title: L("posts", language), items: combinedPostItems, limit: 10)
-                        rankingSection(title: L("newsRank", language), items: viewModel.latestTrendingItems, limit: 6)
+                        // "最新"是对 ~30 条预载热帖的客户端过滤,真实长尾查询几乎
+                        // 必空 —— 空时整块隐藏,不在有效结果下方挂"暂无内容"空态。
+                        if !viewModel.latestTrendingItems.isEmpty {
+                            rankingSection(title: L("newsRank", language), items: viewModel.latestTrendingItems, limit: 6)
+                        }
                     case .topics:
                         topicSection(title: L("topics", language), topics: Array(combinedTopics.prefix(8)))
                     case .users:
@@ -270,6 +298,15 @@ struct SearchScreen: View {
                     LoadingView()
                         .frame(maxWidth: .infinity)
                         .padding(.top, 28)
+                } else if let searchError = viewModel.searchErrorMessage {
+                    // 服务端搜索失败 ≠ 无结果:断网/超时要给出错误 + 重试,
+                    // 不能伪装成"未找到相关内容"让用户以为平台没有这条信息。
+                    ErrorStateView(message: searchError) {
+                        serverSearchTask?.cancel()
+                        serverSearchTask = Task { await viewModel.searchServer() }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 28)
                 } else {
                     KXEmptyState(title: L("emptySearch", language), subtitle: viewModel.query, systemImage: "magnifyingglass")
                         .frame(maxWidth: .infinity)
@@ -278,7 +315,7 @@ struct SearchScreen: View {
                         .frame(maxWidth: .infinity)
                 }
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.top, KXSpacing.md)
             .padding(.bottom, chrome.bottomContentPadding + KXSpacing.lg)
         }
@@ -295,8 +332,8 @@ struct SearchScreen: View {
                     KXSectionHeader(title: L("recentSearches", language))
                     Spacer()
                     Button(L("clear", language)) {
-                        recentSearchesStorage = ""
-                        UserDefaults.standard.set("", forKey: recentSearchKey)
+                        recentSearchItems = []
+                        UserDefaults.standard.set([String](), forKey: recentSearchKey)
                     }
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
@@ -342,6 +379,9 @@ struct SearchScreen: View {
                         savedSearchDone = true
                     } catch {
                         savedSearchDone = false
+                        // 失败必须有反馈:否则 spinner 归位、按钮原样,用户以为
+                        // 已订阅关键词提醒,实际服务端从未记录。复用页顶通知条。
+                        viewModel.followErrorMessage = error.kaixUserMessage
                     }
                 }
             } label: {
@@ -462,7 +502,8 @@ struct SearchScreen: View {
 
     @ViewBuilder
     private var happeningNowSection: some View {
-        let items = Array(viewModel.trendingItems.prefix(4))
+        // 真实 recency 排序(latestItems),不再与下方热搜榜同源同序。
+        let items = landingHappeningItems
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: KXSpacing.md) {
                 HStack(alignment: .center, spacing: KXSpacing.sm) {
@@ -556,10 +597,10 @@ struct SearchScreen: View {
     private func saveRecentSearch(_ value: String) {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.isEmpty == false else { return }
-        var items = recentSearches.filter { $0.caseInsensitiveCompare(trimmed) != .orderedSame }
+        var items = recentSearchItems.filter { $0.caseInsensitiveCompare(trimmed) != .orderedSame }
         items.insert(trimmed, at: 0)
-        recentSearchesStorage = items.prefix(8).joined(separator: "|")
-        UserDefaults.standard.set(recentSearchesStorage, forKey: recentSearchKey)
+        recentSearchItems = Array(items.prefix(8))
+        UserDefaults.standard.set(recentSearchItems, forKey: recentSearchKey)
     }
 
     private func load() async {
@@ -654,7 +695,8 @@ private struct SearchRankBadge: View {
         let style = SearchRankStyle.style(for: rank, itemType: itemType)
 
         Text("\(rank)")
-            .font(.system(size: rank <= 3 ? 16 : 15, weight: .bold, design: .rounded).monospacedDigit())
+            .monospacedDigit()
+            .kxScaledFont(rank <= 3 ? 16 : 15, relativeTo: .callout, weight: .bold, design: .rounded)
             .foregroundStyle(style.foreground)
             .frame(width: size, height: size)
             .background {
@@ -696,11 +738,12 @@ private struct RankingHeatPill: View {
 
         HStack(spacing: KXSpacing.xs) {
             Image(systemName: "flame.fill")
-                .font(.system(size: compact ? 10 : 11, weight: .black, design: .rounded))
+                .kxScaledFont(compact ? 10 : 11, relativeTo: .caption2, weight: .black, design: .rounded)
                 .frame(width: compact ? 10 : 11)
 
             Text(NumberFormatterUtils.compact(Int(score.rounded())))
-                .font(.system(size: compact ? 10 : 11, weight: .bold, design: .rounded).monospacedDigit())
+                .monospacedDigit()
+                .kxScaledFont(compact ? 10 : 11, relativeTo: .caption2, weight: .bold, design: .rounded)
                 .lineLimit(1)
                 .minimumScaleFactor(0.9)
         }
@@ -1066,7 +1109,7 @@ struct TopicDetailView: View {
                     }
                 }
             }
-            .padding(KaiXTheme.horizontalPadding)
+            .padding(KXSpacing.screen)
             .padding(.bottom, chrome.bottomContentPadding)
         }
         .kxPageBackground()

@@ -25,7 +25,11 @@ final class GuideFinanceViewModel: ObservableObject {
     var isLoggedIn: Bool { KaiXBackend.token != nil }
 
     static func currentMonth() -> String {
+        // 必须锁定公历 + POSIX:和暦设备上未锁定的 formatter 会把 2026 写成
+        // 令和 "0008",month 查询命中不存在的月份、页面恒空(GuideOSDate.iso 同理)。
         let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "yyyy-MM"
         return f.string(from: Date())
     }
@@ -71,16 +75,25 @@ final class GuideFinanceViewModel: ObservableObject {
         }
     }
 
-    func add(kind: String, amount: Int, category: String, date: Date, note: String) async {
-        guard amount > 0 else { return }
-        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
+    /// 返回是否保存成功——调用方只有在成功时才清空金额/备注输入,
+    /// 否则弱网一次失败就逼用户重新输入整笔记录。
+    @discardableResult
+    func add(kind: String, amount: Int, category: String, date: Date, note: String) async -> Bool {
+        guard amount > 0 else { return false }
+        // 同 currentMonth():必须锁定公历 + POSIX,否则和暦设备写入 "0008-07-09"。
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
         do {
             _ = try await KaiXAPIClient.shared.createGuideTransaction(
                 .init(kind: kind, amount: amount, category: category, occurredOn: f.string(from: date), note: note.isEmpty ? nil : note, currency: currency)
             )
             await load()
+            return true
         } catch {
             message = guideOSText(language, "记账失败，请稍后重试。", "記録に失敗しました。しばらくしてからお試しください。", "Couldn't save the entry. Please try again later.")
+            return false
         }
     }
 
@@ -106,10 +119,20 @@ final class GuideFinanceViewModel: ObservableObject {
         return lines.joined(separator: "\n")
     }
 
-    func delete(_ tx: KaiXGuideTransactionDTO) async {
+    /// 乐观移除 + 失败回补:此前 try? 吞掉错误后 load() 会把条目无声拉回,
+    /// 用户看到「删了又出现」却毫无提示。返回是否删除成功(滑动行据此复位)。
+    @discardableResult
+    func delete(_ tx: KaiXGuideTransactionDTO) async -> Bool {
         transactions.removeAll { $0.id == tx.id }
-        try? await KaiXAPIClient.shared.deleteGuideTransaction(id: tx.id)
-        await load()
+        do {
+            try await KaiXAPIClient.shared.deleteGuideTransaction(id: tx.id)
+            await load()
+            return true
+        } catch {
+            await load()  // 以服务器为准恢复条目
+            message = guideOSText(language, "删除失败，请稍后重试。", "削除に失敗しました。しばらくしてからお試しください。", "Couldn't delete the entry. Please try again later.")
+            return false
+        }
     }
 
     func setBudget(category: String, limit: Int) async {
@@ -330,7 +353,7 @@ struct GuideFinanceView: View {
                 Image(systemName: "sparkles").font(.caption.weight(.bold)).foregroundStyle(KXColor.accent)
                 if s.income > 0 {
                     Text(guideOSText(language, "储蓄率 ", "貯蓄率 ", "Savings ")).font(.caption.weight(.semibold))
-                        + Text("\(savingsRate)%").font(.caption.weight(.bold)).foregroundColor(savingsRate >= 0 ? KXColor.accent : .red)
+                        + Text("\(savingsRate)%").font(.caption.weight(.bold)).foregroundStyle(savingsRate >= 0 ? KXColor.accent : .red)
                 }
                 if s.income > 0 && s.fixedMonthly > 0 {
                     Text(guideOSText(language, "· 固定费占收入 \(fixedShare)%", "· 固定費\(fixedShare)%", "· Fixed \(fixedShare)%"))
@@ -371,7 +394,7 @@ struct GuideFinanceView: View {
                                     .frame(width: 9, height: max(3, CGFloat(m.expense) / CGFloat(maxV) * 88))
                             }
                             .frame(height: 88, alignment: .bottom)
-                            Text(String(m.month.suffix(2)) + guideOSText(language, "月", "月", ""))
+                            Text(trendMonthLabel(m.month))
                                 .kxScaledFont(9, weight: .bold)
                                 .foregroundStyle(isCurrent ? KXColor.accent : .secondary)
                         }
@@ -400,9 +423,18 @@ struct GuideFinanceView: View {
         }
     }
 
+    /// 轴标签:中/日 = 「07月」;英文用月份缩写(此前英文槽为空串,只剩一个孤立的
+    /// 两位数字,与两位数日期在形式上无法区分)。
+    private func trendMonthLabel(_ month: String) -> String {
+        let mm = String(month.suffix(2))
+        let names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        let en = Int(mm).flatMap { $0 >= 1 && $0 <= 12 ? names[$0 - 1] : nil } ?? mm
+        return guideOSText(language, mm + "月", mm + "月", en)
+    }
+
     private func legendDot(color: Color, text: String) -> some View {
         HStack(spacing: 5) {
-            RoundedRectangle(cornerRadius: 3).fill(color).frame(width: 10, height: 10)
+            RoundedRectangle(cornerRadius: KXRadius.xxs).fill(color).frame(width: 10, height: 10)
             Text(text).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
         }
     }
@@ -470,13 +502,15 @@ struct GuideFinanceView: View {
             GuideOSDateField(title: guideOSText(language, "日期", "日付", "Date"), date: $occurredOn)
             TextField(guideOSText(language, "备注（可选）", "メモ（任意）", "Note (optional)"), text: $note)
                 .padding(.horizontal, KXSpacing.md).frame(height: 40)
-                .background(KXColor.livingSurface.opacity(0.7), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(KXColor.livingSurface.opacity(0.7), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
 
             Button {
                 let amount = Int(amountText) ?? 0
                 Task {
-                    await vm.add(kind: kind, amount: amount, category: category, date: occurredOn, note: note)
-                    amountText = ""; note = ""
+                    // 只有保存成功才清空输入;失败时保留金额与备注供直接重试。
+                    if await vm.add(kind: kind, amount: amount, category: category, date: occurredOn, note: note) {
+                        amountText = ""; note = ""
+                    }
                 }
             } label: {
                 Label(guideOSText(language, "记一笔", "記録する", "Add"), systemImage: "plus")
@@ -559,7 +593,7 @@ struct GuideFinanceView: View {
                 .tint(KXColor.accent)
             }
             .padding(.horizontal, KXSpacing.md).frame(height: 44)
-            .background(KXColor.livingSurface.opacity(0.7), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(KXColor.livingSurface.opacity(0.7), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
         }
         .padding(KXSpacing.lg)
         .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
@@ -578,22 +612,28 @@ struct GuideFinanceView: View {
             )
         } else {
             ForEach(vm.transactions) { t in
-                HStack(spacing: KXSpacing.md) {
-                    VStack(alignment: .leading, spacing: KXSpacing.xxs) {
-                        Text(vm.label(language, code: t.category) + (t.note.isEmpty ? "" : " · \(t.note)"))
-                            .font(.subheadline.weight(.semibold)).lineLimit(1)
-                        Text(t.occurredOn ?? "").font(.caption2).foregroundStyle(.secondary)
+                // 删除入口必须走自绘滑动容器 + 长按菜单:此前挂的 .swipeActions 在
+                // ScrollView/LazyVStack 里是彻底 no-op(只对 List 行生效),导致
+                // iOS 端记错的账完全无法删除,只能永久污染月度汇总。
+                GuideSwipeDeleteRow(radius: KXRadius.md, onDelete: { await vm.delete(t) }) {
+                    HStack(spacing: KXSpacing.md) {
+                        VStack(alignment: .leading, spacing: KXSpacing.xxs) {
+                            Text(vm.label(language, code: t.category) + (t.note.isEmpty ? "" : " · \(t.note)"))
+                                .font(.subheadline.weight(.semibold)).lineLimit(1)
+                            Text(t.occurredOn ?? "").font(.caption2).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Text((t.isIncome ? "+" : "-") + money(t.amount))
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(t.isIncome ? KXColor.accent : Color.primary)
                     }
-                    Spacer()
-                    Text((t.isIncome ? "+" : "-") + money(t.amount))
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(t.isIncome ? KXColor.accent : Color.primary)
-                }
-                .padding(KXSpacing.md)
-                .background(KXColor.livingSurface.opacity(0.7), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
-                .swipeActions(edge: .trailing) {
-                    Button(role: .destructive) { Task { await vm.delete(t) } } label: {
-                        Label(guideOSText(language, "删除", "削除", "Delete"), systemImage: "trash")
+                    .padding(KXSpacing.md)
+                    .frame(maxWidth: .infinity)
+                    .background(KXColor.livingSurface.opacity(0.7), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+                    .contextMenu {
+                        Button(role: .destructive) { Task { await vm.delete(t) } } label: {
+                            Label(guideOSText(language, "删除", "削除", "Delete"), systemImage: "trash")
+                        }
                     }
                 }
             }
@@ -601,12 +641,10 @@ struct GuideFinanceView: View {
     }
 }
 
-private let kxCategoryColors: [Color] = [
-    Color(red: 0.08, green: 0.44, blue: 0.40), Color(red: 0.91, green: 0.54, blue: 0.23),
-    Color(red: 0.36, green: 0.56, blue: 0.94), Color(red: 0.85, green: 0.33, blue: 0.31),
-    Color(red: 0.61, green: 0.35, blue: 0.71), Color(red: 0.23, green: 0.63, blue: 0.49),
-    Color(red: 0.88, green: 0.69, blue: 0.13), Color(red: 0.48, green: 0.54, blue: 0.63),
-]
+/// Donut/legend categorical colors — the shared trait-aware chart palette
+/// (brightens one step in dark mode) instead of the old frozen `Color(red:)`
+/// set that ignored appearance changes.
+private let kxCategoryColors: [Color] = KXColor.chartPalette
 
 private struct GuideCategoryDonut: View {
     @Environment(\.appLanguage) private var language
@@ -621,7 +659,7 @@ private struct GuideCategoryDonut: View {
         var out: [(String, Int, Color)] = []
         for (i, s) in top.enumerated() { out.append((label(s.category), s.amount, kxCategoryColors[i % kxCategoryColors.count])) }
         let rest = segments.dropFirst(8).reduce(0) { $0 + $1.amount }
-        if rest > 0 { out.append((guideOSText(language, "其他", "その他", "Other"), rest, Color.gray.opacity(0.5))) }
+        if rest > 0 { out.append((guideOSText(language, "其他", "その他", "Other"), rest, KXColor.categoryNeutral.opacity(0.6))) }
         return out
     }
 
@@ -644,7 +682,7 @@ private struct GuideCategoryDonut: View {
                 VStack(alignment: .leading, spacing: 5) {
                     ForEach(Array(capped.enumerated()), id: \.offset) { _, seg in
                         HStack(spacing: 6) {
-                            RoundedRectangle(cornerRadius: 2).fill(seg.color).frame(width: 9, height: 9)
+                            RoundedRectangle(cornerRadius: KXRadius.xxs).fill(seg.color).frame(width: 9, height: 9)
                             Text(seg.label).font(.caption2.weight(.semibold)).lineLimit(1)
                             Spacer(minLength: 4)
                             Text("\(Int((Double(seg.amount) / Double(total) * 100).rounded()))%").font(.caption2.weight(.bold)).foregroundStyle(.secondary)
@@ -654,8 +692,8 @@ private struct GuideCategoryDonut: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(KXColor.separator.opacity(0.7), lineWidth: 0.7))
+            .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: KXRadius.card, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: KXRadius.card, style: .continuous).stroke(KXColor.separator.opacity(0.7), lineWidth: 0.7))
         }
     }
 
@@ -690,7 +728,7 @@ private struct GuideFinanceStat: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(KXSpacing.md)
-        .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KXColor.separator.opacity(0.7), lineWidth: 0.7))
+        .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous).stroke(KXColor.separator.opacity(0.7), lineWidth: 0.7))
     }
 }

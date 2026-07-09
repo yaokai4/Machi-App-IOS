@@ -53,7 +53,11 @@ actor ImageCacheService {
         scheduleDiskTrimIfNeeded()
 
         let diskKey = Self.diskKey(identity: identity, targetPixelSize: targetPixelSize)
-        let task = Task(priority: .utility) { () -> UIImage? in
+        // 必须 Task.detached:Task {} 的闭包带 @_inheritActorContext,会继承本
+        // actor 的隔离,里面同步的 loadFromDisk(Data(contentsOf:) + 强制位图解码)
+        // 就在 actor 上串行执行——滚动时每个磁盘命中都堵住其它 image(for:) 查询。
+        // detached 才兑现下面注释承诺的 off-actor(与 clear/trimDisk 一致)。
+        let task = Task.detached(priority: .utility) { () -> UIImage? in
             // Disk read-through: a downsampled copy survives memory eviction and
             // cold launches, so a covered feed/avatar paints from local storage
             // instead of re-hitting the network. Runs off the actor (static,

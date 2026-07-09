@@ -56,9 +56,9 @@ struct GuideRecommendationsView: View {
                         HStack(alignment: .top, spacing: 10) {
                             Image(systemName: item.isService ? "sparkles" : "doc.text.fill")
                                 .kxScaledFont(13, weight: .bold)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(KXColor.onTint(item.isService ? Color.purple : KXColor.accent))
                                 .frame(width: 30, height: 30)
-                                .background(item.isService ? Color.purple : KXColor.accent, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                                .background(item.isService ? Color.purple : KXColor.accent, in: RoundedRectangle(cornerRadius: KXRadius.sm, style: .continuous))
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(item.title).font(.subheadline.weight(.bold)).foregroundStyle(.primary).lineLimit(2).multilineTextAlignment(.leading)
                                 let sub = item.subtitle.isEmpty ? (item.ctaLabel ?? item.priceLabel) : item.subtitle
@@ -135,9 +135,9 @@ struct GuideOSRecommendationStrip: View {
                                     HStack(spacing: 7) {
                                         Image(systemName: item.isService ? "sparkles" : "doc.text.fill")
                                             .kxScaledFont(13, weight: .bold)
-                                            .foregroundStyle(.white)
+                                            .foregroundStyle(KXColor.onTint(item.isService ? Color.purple : KXColor.accent))
                                             .frame(width: 28, height: 28)
-                                            .background(item.isService ? Color.purple : KXColor.accent, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                                            .background(item.isService ? Color.purple : KXColor.accent, in: RoundedRectangle(cornerRadius: KXRadius.sm, style: .continuous))
                                         Text(item.isService ? guideOSText(language, "服务", "サービス", "Service") : guideOSText(language, "资料", "資料", "Material"))
                                             .font(.caption2.weight(.bold))
                                             .foregroundStyle(.secondary)
@@ -156,9 +156,9 @@ struct GuideOSRecommendationStrip: View {
                                 }
                                 .frame(width: 176, alignment: .leading)
                                 .padding(KXSpacing.md)
-                                .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                                         .stroke(Color.black.opacity(0.05), lineWidth: 0.8)
                                 )
                             }

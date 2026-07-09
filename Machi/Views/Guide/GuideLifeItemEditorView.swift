@@ -4,7 +4,9 @@ struct GuideLifePlannerView: View {
     @Environment(\.appLanguage) private var language
     @StateObject private var model = GuideTodoViewModel()
     @State private var type = "rent"
-    @State private var title = "房租"
+    // 默认标题在 onAppear 按当前语言填(不能在 @State 默认值里读 @Environment);
+    // 空串起步,避免 ja/en 用户看到硬编码中文「房租」。选类型/加载 preset 会覆盖。
+    @State private var title = ""
     @State private var provider = ""
     @State private var amount = ""
     @State private var dueDate = Date()
@@ -111,6 +113,12 @@ struct GuideLifePlannerView: View {
                 }
             }
         }
+        .onAppear {
+            // 按当前语言填默认标题(房租/家賃/Rent),覆盖空串起步值。
+            if title.isEmpty {
+                title = guideOSText(language, "房租", "家賃", "Rent")
+            }
+        }
         .task {
             await model.loadLifePresets()
             // 游客可以随意浏览；登录墙只在保存时弹（工作台承诺「保存时再登录」）。
@@ -154,7 +162,7 @@ struct GuideOSLifeItemRow: View {
                     .font(.subheadline)
                     .foregroundStyle(KXColor.accent)
                     .frame(width: 30, height: 30)
-                    .background(KXColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .background(KXColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: KXRadius.sm, style: .continuous))
                 VStack(alignment: .leading, spacing: 5) {
                     Text(item.title).font(.subheadline.weight(.bold)).foregroundStyle(.primary).lineLimit(1)
                     if !item.provider.isEmpty {

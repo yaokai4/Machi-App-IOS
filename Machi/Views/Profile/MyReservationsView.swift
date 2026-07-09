@@ -204,7 +204,7 @@ struct MyReservationsHubView: View {
             KXSegmentedControl(Tab.allCases, selection: $tab) { item in
                 Text(item.title(language))
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.vertical, 10)
 
             switch tab {
@@ -278,7 +278,7 @@ struct MySlotManagerListView: View {
                                         .font(.subheadline.weight(.bold))
                                         .foregroundStyle(KXColor.accent)
                                         .frame(width: 38, height: 38)
-                                        .background(KXColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                        .background(KXColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                                     VStack(alignment: .leading, spacing: 3) {
                                         Text(listing.title).font(.subheadline.weight(.semibold)).foregroundStyle(.primary).lineLimit(1)
                                         Text(KXListingCopy.pickText(language, "管理可预约时段", "予約枠を管理", "Manage slots"))
@@ -294,7 +294,7 @@ struct MySlotManagerListView: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    .padding(.horizontal, KaiXTheme.horizontalPadding)
+                    .padding(.horizontal, KXSpacing.screen)
                     .padding(.top, 10)
                     .kxTabBarSafeBottomPadding()
                 }
@@ -360,7 +360,7 @@ private struct KXEmptyActionPanel: View {
             Button(action: action) {
                 Label(actionTitle, systemImage: "arrow.up.right")
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(KXColor.onTint(tint))
                     .padding(.horizontal, 18)
                     .frame(height: 44)
                     .background(tint, in: Capsule())

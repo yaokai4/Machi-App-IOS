@@ -10,7 +10,6 @@ struct SettingsView: View {
     @EnvironmentObject private var chrome: AppChromeState
     @AppStorage("appLanguageCode") private var appLanguageCode = AppLanguage.system.rawValue
     @AppStorage("appAppearance") private var appAppearance = AppAppearance.light.rawValue
-    @AppStorage("accountEmail") private var accountEmail = ""
     @StateObject private var viewModel = ProfileViewModel()
     @State private var showLogoutConfirm = false
     @State private var isShowingFavorites = false
@@ -59,7 +58,7 @@ struct SettingsView: View {
                         .frame(maxWidth: .infinity)
                         .kxSettingsEntrance(didEnter, index: 6)
                 }
-                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.horizontal, KXSpacing.screen)
                 .padding(.top, KXSpacing.md)
                 .padding(.bottom, 96)
                 .kxReadableWidth()
@@ -321,8 +320,10 @@ struct SettingsView: View {
     }
 
     private var securityEmailValue: String? {
-        let email = currentUser.email.isEmpty ? accountEmail : currentUser.email
-        return email.isEmpty ? nil : email
+        // 只信 currentUser.email(服务端真相)。旧的设备全局 "accountEmail" 回退
+        // 会把上一账号的邮箱显示在未绑邮箱的账号 B 上,且明文 PII 落 UserDefaults
+        // ——该键已废弃并在 ContactSettingsView 里清除。
+        currentUser.email.isEmpty ? nil : currentUser.email
     }
 }
 
@@ -454,7 +455,7 @@ struct ProfileCollectionView: View {
                     }
                 }
             }
-            .padding(KaiXTheme.horizontalPadding)
+            .padding(KXSpacing.screen)
         }
         .kxPageBackground()
         .navigationTitle(title)

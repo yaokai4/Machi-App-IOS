@@ -36,19 +36,22 @@ enum KXRoomStyle {
         }
     }
 
+    /// 显式表取 KXColor trait-aware 语义色(rank 系 + chart 扩展色):同类目
+    /// 色彩稳定、暗色模式提亮一档仍可读;原先的原生 .orange/.pink… 彩虹在
+    /// 暗色下不成体系且与全局调色板脱节。
     static func tint(_ typeKey: String) -> Color {
         switch canonical(typeKey) {
-        case "meal": .orange
-        case "drink": .pink
-        case "coffee": .brown
-        case "sport": .green
-        case "study": .teal
-        case "play": .purple
-        case "carpool": .blue
-        case "outing": .cyan
-        case "language": .indigo
-        case "chat": Color(red: 0.42, green: 0.45, blue: 0.5)
-        default: .gray
+        case "meal": KXColor.rankGold
+        case "drink": KXColor.chartPink
+        case "coffee": KXColor.livingWarm
+        case "sport": KXColor.chartGreen
+        case "study": KXColor.rankTeal
+        case "play": KXColor.rankViolet
+        case "carpool": KXColor.chartSlate
+        case "outing": KXColor.rankSky
+        case "language": KXColor.rankCoral
+        case "chat": KXColor.categoryNeutral
+        default: KXColor.categoryNeutral
         }
     }
 
@@ -149,6 +152,10 @@ struct SocialRoomsView: View {
     @State private var errorMessage: String?
     @State private var createOpen = false
     @State private var loadGeneration = 0
+    /// loadMore 瞬时失败标记:保留 nextOffset 给内联重试,而不是静默终结分页。
+    @State private var loadMoreFailed = false
+    /// 已成功整表加载过的筛选组合;pop 回来 task 重启时据此走静默刷新而非整表重置。
+    @State private var loadedFilterKey: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -158,11 +165,25 @@ struct SocialRoomsView: View {
                 LazyVStack(spacing: KXSpacing.md) {
                     stateContent
                     if !isLoading, errorMessage == nil, nextOffset != nil {
-                        KXInlineLoader()
-                            .task(id: "\(items.count)|\(nextOffset ?? -1)") { await loadMore() }
+                        if loadMoreFailed {
+                            // 失败不打死分页:点一下重新挂载 loader,其 .task 会再次 loadMore。
+                            Button {
+                                loadMoreFailed = false
+                            } label: {
+                                Text(KXListingCopy.pickText(language, "加载失败,点此重试", "読み込みに失敗しました。タップして再試行", "Couldn't load more — tap to retry"))
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(KXColor.accent)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            KXInlineLoader()
+                                .task(id: "\(items.count)|\(nextOffset ?? -1)") { await loadMore() }
+                        }
                     }
                 }
-                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.horizontal, KXSpacing.screen)
                 .padding(.top, KXSpacing.sm)
                 .padding(.bottom, chrome.bottomContentPadding + 84)
                 .kxReadableWidth(700)
@@ -173,7 +194,7 @@ struct SocialRoomsView: View {
         .toolbar(.hidden, for: .navigationBar)
         .overlay(alignment: .bottomTrailing) {
             createButton
-                .padding(.trailing, KaiXTheme.horizontalPadding)
+                .padding(.trailing, KXSpacing.screen)
                 .padding(.bottom, chrome.bottomContentPadding + 18)
         }
         .sheet(isPresented: $createOpen) {
@@ -183,7 +204,26 @@ struct SocialRoomsView: View {
                 router.open(.socialRoom(roomId: room.id))
             }
         }
-        .task(id: "\(selectedType)|\(onlyMine)") { await load() }
+        .onReceive(NotificationCenter.default.publisher(for: .kaiXRoomRemoved)) { note in
+            // 解散的房间无条件剔除(再点会 404);成员退出的房间仅在「我的局」筛选下
+            // 剔除(它不再属于我加入的局),广场筛选下留给 refreshSilently 更新为未加入。
+            guard let id = note.userInfo?["id"] as? String else { return }
+            let disbanded = (note.userInfo?["disbanded"] as? Bool) ?? true
+            if disbanded || onlyMine {
+                items.removeAll { $0.id == id }
+                total = max(0, total - 1)
+            }
+        }
+        .task(id: "\(selectedType)|\(onlyMine)") {
+            // NavigationStack 里 push 房间再 pop 回来,.task 会以相同 id 重启:
+            // 此时只做静默合并刷新,保留 loadMore 累积的分页与滚动位置;
+            // 只有筛选真正变化(或首载/上次失败)才整表重载。
+            if loadedFilterKey == "\(selectedType)|\(onlyMine)", !items.isEmpty {
+                await refreshSilently()
+            } else {
+                await load()
+            }
+        }
     }
 
     private var header: some View {
@@ -210,14 +250,14 @@ struct SocialRoomsView: View {
             } label: {
                 Text(KXListingCopy.pickText(language, "我的局", "参加中", "Mine"))
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(onlyMine ? .white : .primary)
+                    .foregroundStyle(onlyMine ? KXColor.onAccent : .primary)
                     .padding(.horizontal, 13)
                     .frame(height: 34)
                     .background(onlyMine ? KXColor.accent : KXColor.softBackground.opacity(0.9), in: Capsule())
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.horizontal, KXSpacing.screen)
         .padding(.top, KXSpacing.sm)
         .padding(.bottom, KXSpacing.sm)
         .kxGlassBar(ignoresTopSafeArea: true)
@@ -231,7 +271,7 @@ struct SocialRoomsView: View {
                     typeChip(key: type.key, label: KXRoomStyle.label(type.key, fallback: type.label, language), icon: KXRoomStyle.icon(type.key))
                 }
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.vertical, 9)
         }
     }
@@ -257,7 +297,7 @@ struct SocialRoomsView: View {
                     .font(.caption.weight(.bold))
                     .lineLimit(1)
             }
-            .foregroundStyle(isSelected ? Color.white : tint)
+            .foregroundStyle(isSelected ? KXColor.onTint(tint) : tint)
             .padding(.horizontal, 12)
             .frame(height: 34)
             .background(isSelected ? tint : tint.opacity(0.10), in: Capsule())
@@ -289,7 +329,7 @@ struct SocialRoomsView: View {
                 } label: {
                     Label(KXListingCopy.pickText(language, "开个局", "ルームを作る", "Start a room"), systemImage: "plus.circle.fill")
                         .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(KXColor.onAccent)
                         .padding(.horizontal, 22)
                         .frame(height: 48)
                         .background(KXColor.accent, in: Capsule())
@@ -313,7 +353,7 @@ struct SocialRoomsView: View {
         } label: {
             Image(systemName: "plus")
                 .font(.title3.weight(.bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(KXColor.onAccent)
                 .frame(width: 56, height: 56)
                 .background(KXColor.accent.gradient, in: Circle())
                 .shadow(color: KXColor.accent.opacity(0.35), radius: 14, y: 6)
@@ -331,6 +371,7 @@ struct SocialRoomsView: View {
         isLoading = items.isEmpty
         loadGeneration += 1
         let generation = loadGeneration
+        let filterKey = "\(selectedType)|\(onlyMine)"
         errorMessage = nil
         do {
             // 默认全国:局本来就少,先让人看到人气;想只看本地用类型/城市筛。
@@ -343,6 +384,8 @@ struct SocialRoomsView: View {
             items = page.items
             total = page.total
             nextOffset = page.nextOffset
+            loadMoreFailed = false
+            loadedFilterKey = filterKey
             if !page.roomTypes.isEmpty { roomTypes = page.roomTypes }
             isLoading = false
         } catch {
@@ -354,6 +397,23 @@ struct SocialRoomsView: View {
             errorMessage = error.kaixUserMessage
             isLoading = false
         }
+    }
+
+    /// 从房间详情返回时的静默刷新:仅用第一页更新已有卡片状态(人数/已加入等)、
+    /// 把新出现的局插到最前;不重置 items/nextOffset,保住分页进度与滚动位置。
+    private func refreshSilently() async {
+        let generation = loadGeneration
+        guard let page = try? await KaiXAPIClient.shared.rooms(
+            countryCode: RegionStore.shared.current?.countryCode ?? "jp",
+            type: selectedType.isEmpty ? nil : selectedType,
+            mine: onlyMine
+        ) else { return }
+        guard generation == loadGeneration else { return }
+        total = page.total
+        if !page.roomTypes.isEmpty { roomTypes = page.roomTypes }
+        let refreshed = Dictionary(page.items.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let existing = Set(items.map(\.id))
+        items = page.items.filter { !existing.contains($0.id) } + items.map { refreshed[$0.id] ?? $0 }
     }
 
     private func loadMore() async {
@@ -372,9 +432,13 @@ struct SocialRoomsView: View {
             let existing = Set(items.map(\.id))
             items += page.items.filter { !existing.contains($0.id) }
             nextOffset = page.nextOffset
+            loadMoreFailed = false
         } catch {
             guard generation == loadGeneration else { return }
-            nextOffset = nil
+            if error is CancellationError || (error as? URLError)?.code == .cancelled { return }
+            // 一次瞬时失败不能置 nextOffset=nil 永久终结分页(用户会以为「就这么多」),
+            // 保留 offset、亮出内联重试。
+            loadMoreFailed = true
         }
     }
 }
@@ -394,11 +458,11 @@ private struct SocialRoomCard: View {
                 HStack(alignment: .top, spacing: KXSpacing.md) {
                     Image(systemName: KXRoomStyle.icon(room.typeKey))
                         .kxScaledFont(18, weight: .bold)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(KXColor.onTint(tint))
                         .frame(width: 44, height: 44)
                         .background(
                             LinearGradient(colors: [tint.opacity(0.92), tint.opacity(0.6)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
                         )
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 6) {
@@ -473,9 +537,10 @@ private struct SocialRoomCard: View {
     private var metaLine: (icon: String, text: String)? {
         if let startsAt = room.starts_at, !startsAt.isEmpty {
             if let date = KXDateParsing.parse(startsAt) {
-                let formatter = DateFormatter()
-                formatter.locale = Locale(identifier: language == .ja ? "ja_JP" : (language == .en ? "en_US" : "zh_CN"))
-                formatter.setLocalizedDateFormatFromTemplate("MMMdEHHmm")
+                // starts_at 是 UTC 瞬时,约局是日本本地线下聚会,固定 JST 渲染——
+                // 与活动端一致,否则海外设备时区的用户看到错位墙钟(详见 SocialRoomDetailView.formattedTime)。
+                // 列表滚动热路径:用缓存 formatter,别每卡每帧做 ICU 模板解析。
+                let formatter = KXSocialDateFormatters.templated("MMMdEHHmm", language: language, timeZone: KXEventStyle.displayTimeZone(nil))
                 return ("calendar", formatter.string(from: date))
             }
             return ("calendar", startsAt)
@@ -576,7 +641,7 @@ private struct CreateRoomSheet: View {
                             .foregroundStyle(KXColor.heat)
                     }
                 }
-                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.horizontal, KXSpacing.screen)
                 .padding(.vertical, KXSpacing.lg)
             }
             .kxPageBackground()
@@ -631,7 +696,7 @@ private struct CreateRoomSheet: View {
                             Text(KXRoomStyle.label(key, fallback: nil, language))
                                 .font(.caption.weight(.bold))
                         }
-                        .foregroundStyle(isSelected ? .white : tint)
+                        .foregroundStyle(isSelected ? KXColor.onTint(tint) : tint)
                         .padding(.horizontal, 12)
                         .frame(height: 34)
                         .background(isSelected ? tint : tint.opacity(0.10), in: Capsule())

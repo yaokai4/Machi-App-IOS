@@ -51,7 +51,7 @@ struct MyCityListingsView: View {
                             listingRow(listing)
                         }
                     }
-                    .padding(.horizontal, KaiXTheme.horizontalPadding)
+                    .padding(.horizontal, KXSpacing.screen)
                     .padding(.top, 10)
                     .kxTabBarSafeBottomPadding()
                 }
@@ -325,7 +325,7 @@ private struct KXListingsEmptyActionPanel: View {
             Button(action: action) {
                 Label(actionTitle, systemImage: "plus.circle.fill")
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(KXColor.onTint(tint))
                     .padding(.horizontal, 18)
                     .frame(height: 44)
                     .background(tint, in: Capsule())

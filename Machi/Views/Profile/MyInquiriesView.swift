@@ -38,7 +38,7 @@ struct MyInquiriesView: View {
             KXSegmentedControl(Role.allCases, selection: $role) { item in
                 Text(item.title(language))
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.vertical, 10)
 
             content
@@ -79,7 +79,7 @@ struct MyInquiriesView: View {
                     row(inquiry)
                 }
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.top, 10)
             .kxTabBarSafeBottomPadding()
         }
@@ -93,7 +93,7 @@ struct MyInquiriesView: View {
         return VStack(alignment: .leading, spacing: KXSpacing.md) {
             HStack(alignment: .top, spacing: 10) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
                         .fill(statusColor(inquiry.status ?? "submitted").opacity(0.12))
                     Image(systemName: typeIcon(inquiry.type ?? "general"))
                         .font(.subheadline.weight(.bold))
@@ -172,7 +172,7 @@ struct MyInquiriesView: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(statusColor(inquiry.status ?? "submitted").opacity(0.08), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .background(statusColor(inquiry.status ?? "submitted").opacity(0.08), in: RoundedRectangle(cornerRadius: KXRadius.sm, style: .continuous))
             }
 
             HStack(spacing: KXSpacing.sm) {
@@ -707,7 +707,7 @@ struct MyOrdersView: View {
                             row(order)
                         }
                     }
-                    .padding(.horizontal, KaiXTheme.horizontalPadding)
+                    .padding(.horizontal, KXSpacing.screen)
                     .padding(.top, 10)
                     .kxTabBarSafeBottomPadding()
                 }

@@ -47,7 +47,7 @@ struct ComposePostView: View {
                         topicComposer
                         mediaPreview
                     }
-                    .padding(.horizontal, KaiXTheme.horizontalPadding)
+                    .padding(.horizontal, KXSpacing.screen)
                     .padding(.top, KXSpacing.lg)
                     .padding(.bottom, 96)
                 }
@@ -74,6 +74,15 @@ struct ComposePostView: View {
                             technicalDetails: nil
                         ))
                         dismiss()
+                    } else {
+                        // 保存失败(常见:媒体还在上传)必须有反馈——对话框收起后
+                        // 若什么都不说,用户会以为已存好、内容感知上等于丢失。
+                        // 停留在编辑页,原因同时显示在页顶错误条(errorMessage)。
+                        toastManager.show(.requestFailed(
+                            message: viewModel.errorMessage
+                                ?? KXListingCopy.pickText(language, "草稿未保存", "下書きは保存されていません", "Draft was not saved"),
+                            technicalDetails: nil
+                        ))
                     }
                 }
             }
@@ -142,7 +151,7 @@ struct ComposePostView: View {
             } label: {
                 Text(L("composeMembershipCTA", language))
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(KXColor.onAccent)
                     .padding(.horizontal, 14)
                     .frame(height: 34)
                     .background(Capsule().fill(KXColor.accent))
@@ -150,8 +159,8 @@ struct ComposePostView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(KXSpacing.md)
-        .background(RoundedRectangle(cornerRadius: 12).fill(KXColor.softBackground))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(KXColor.accent.opacity(0.3), lineWidth: 0.8))
+        .background(RoundedRectangle(cornerRadius: KXRadius.md).fill(KXColor.softBackground))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.md).stroke(KXColor.accent.opacity(0.3), lineWidth: 0.8))
     }
 
     private func syncComposeStore() {
@@ -390,9 +399,9 @@ struct ComposePostView: View {
             }
             .padding(.horizontal, KXSpacing.md)
             .padding(.vertical, 10)
-            .background(KXColor.heat.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(KXColor.heat.opacity(0.08), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
                     .stroke(KXColor.heat.opacity(0.25), lineWidth: 0.7)
             )
         }
@@ -541,14 +550,14 @@ struct ComposePostView: View {
                                     CachedMediaImageView(url: draft.thumbnailURL)
                                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                                 }
-                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                                .clipShape(RoundedRectangle(cornerRadius: KXRadius.tile))
                                 .overlay(alignment: .bottomLeading) {
                                     let status = viewModel.mediaUploadStates[draft.id] ?? .waiting
                                     let progress = viewModel.mediaUploadProgress[draft.id] ?? 0
                                     if draft.type == .video || status != .waiting {
                                         Label(mediaBadgeText(for: draft, state: status, progress: progress), systemImage: mediaBadgeIcon(for: draft, state: status))
                                             .font(.caption2.weight(.semibold))
-                                            .foregroundStyle(.white)
+                                            .foregroundStyle(KXColor.onTint(mediaBadgeColor(for: status)))
                                             .padding(.horizontal, 7)
                                             .padding(.vertical, KXSpacing.xs)
                                             .background(mediaBadgeColor(for: status))
@@ -647,17 +656,32 @@ struct ComposePostView: View {
     @ViewBuilder
     private var bottomToolbar: some View {
         let imageCount = viewModel.mediaDrafts.filter { $0.type == .image }.count
+        let hasVideo = viewModel.mediaDrafts.contains { $0.type == .video }
         let remainingImageSlots = Swift.max(1, KaiXConfig.maxImageItemsPerPost - imageCount)
+        // 与 ChatView.attachTray 对齐:已有视频→图片入口禁用;已有任意媒体→
+        // 视频入口禁用。否则用户能进相册选完、回来才被 addMedia 逐张拒绝,
+        // 像 dead-end。isPreparingMedia 也算"已有视频":转码期间 draft 尚未
+        // 入列,不禁用的话还能再选第二个视频,绕过"仅一个视频"的守卫。
+        let imageDisabled = hasVideo || imageCount >= KaiXConfig.maxImageItemsPerPost || viewModel.isPreparingMedia
+        let videoDisabled = !viewModel.mediaDrafts.isEmpty || viewModel.isPreparingMedia
         HStack(spacing: 18) {
             PhotosPicker(selection: $pickerItems, maxSelectionCount: remainingImageSlots, matching: .images) {
                 Image(systemName: "photo")
                     .font(.title3.weight(.semibold))
+                    .foregroundStyle(imageDisabled ? .secondary : .primary)
             }
+            .disabled(imageDisabled)
+            // 自定义 label 会盖掉 PhotosPicker 的默认可读名,VoiceOver 只会
+            // 念符号名——必须显式给三语标签(同 ChatView 的添加媒体按钮)。
+            .accessibilityLabel(KXListingCopy.pickText(language, "添加图片", "写真を追加", "Add photo"))
 
             PhotosPicker(selection: $pickerItems, maxSelectionCount: KaiXConfig.maxVideoItemsPerPost, matching: .videos) {
                 Image(systemName: "video")
                     .font(.title3.weight(.semibold))
+                    .foregroundStyle(videoDisabled ? .secondary : .primary)
             }
+            .disabled(videoDisabled)
+            .accessibilityLabel(KXListingCopy.pickText(language, "添加视频", "動画を追加", "Add video"))
 
             Spacer()
 

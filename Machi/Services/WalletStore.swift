@@ -53,6 +53,9 @@ final class WalletStore: ObservableObject {
 
     private var productsByID: [String: Product] = [:]
     private var updatesTask: Task<Void, Never>?
+    /// 监听 app 级观察者的结算广播(Ask to Buy 事后批准、跨设备购买)。
+    /// 观察者模式下本页只是镜像,不订阅就会永远停在 .pending、余额陈旧。
+    private var settledObserver: NSObjectProtocol?
     private var appAccountToken: UUID?
 
     var balancePoints: Int { wallet?.balancePoints ?? 0 }
@@ -86,6 +89,24 @@ final class WalletStore: ObservableObject {
                 }
             }
         }
+        // 观察者事后结算(如家长批准 Ask to Buy)只走 Transaction.updates →
+        // IAPTransactionObserver,不会回调本页。订阅其成功广播,把停留的
+        // .pending / .verifying 收敛并刷新余额,用户无需退出重进。
+        if settledObserver == nil {
+            settledObserver = NotificationCenter.default.addObserver(
+                forName: .kaixIAPTransactionSettled, object: nil, queue: .main
+            ) { [weak self] note in
+                guard let productID = note.userInfo?["productID"] as? String,
+                      WalletStore.isPointsProduct(productID) else { return }
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    await self.refreshWallet()
+                    if self.state == .pending || self.state == .verifying {
+                        self.state = .success
+                    }
+                }
+            }
+        }
         Task {
             await loadWalletAndProducts()
             if !observerOwnsTransactions {
@@ -97,6 +118,10 @@ final class WalletStore: ObservableObject {
     func stop() {
         updatesTask?.cancel()
         updatesTask = nil
+        if let settledObserver {
+            NotificationCenter.default.removeObserver(settledObserver)
+            self.settledObserver = nil
+        }
     }
 
     func setAppAccountToken(_ token: UUID?) { appAccountToken = token }
@@ -157,12 +182,19 @@ final class WalletStore: ObservableObject {
         if state == .loading { state = .idle }
     }
 
+    // 服务端 4xx 优先下发语义码("not_found" / "unauthorized"),只有错误体
+    // 解码失败才回退成 http_<status>(见 KaiXAPIClient.request)。两种码都必须
+    // 认——只认字面 http 码时,游客 401 落进 walletLoadFailed,整个 IAP 充值
+    // 目录对游客/审核员不可见(正是 2.1(b) 拒审的复发路径),且重试永远死循环。
+    // 口径与 RemoteSyncService / RepositoryError 保持一致。
     private static func isNotFound(_ error: Error) -> Bool {
-        (error as? KaiXAPIError)?.error.code == "http_404"
+        let code = (error as? KaiXAPIError)?.error.code
+        return code == "not_found" || code == "http_404"
     }
 
     private static func isUnauthorized(_ error: Error) -> Bool {
-        (error as? KaiXAPIError)?.error.code == "http_401"
+        let code = (error as? KaiXAPIError)?.error.code
+        return code == "unauthorized" || code == "http_401"
     }
 
     /// Race a StoreKit product query against a timeout so a hung App Store
@@ -227,20 +259,38 @@ final class WalletStore: ObservableObject {
     /// when the server pack list is empty (guest / offline / server-down). Coin
     /// amount is parsed from the `machi_points_<n>` id; price is StoreKit's
     /// localized `displayPrice`.
+    ///
+    /// 币量是从 product.id 反推的"预计值",且看不到服务端赠币配置——若某档
+    /// 服务端币量≠id 数字或含赠币,这里就会与登录后实际到账不符。因此 subtitle
+    /// 必须明示"以实际到账为准";价格用 StoreKit 真实 displayPrice,无此问题。
     private static func fallbackPack(from product: Product) -> KaiXWalletTopupProductDTO {
         let coins = Int(product.id.replacingOccurrences(of: "machi_points_", with: "")) ?? 0
+        let language = AppLanguage.resolved(from: UserDefaults.standard.string(forKey: "appLanguageCode") ?? "")
+        let estimateNote: String
+        let coinsLabel: String
+        switch language {
+        case .ja:
+            estimateNote = "付与数・ボーナスは実際の入金内容に基づきます"
+            coinsLabel = "\(coins) コイン"
+        case .en:
+            estimateNote = "Coin amount and any bonus follow the actual credit"
+            coinsLabel = "\(coins) coins"
+        default:
+            estimateNote = "币量与赠币以实际到账为准"
+            coinsLabel = "\(coins) 币"
+        }
         return KaiXWalletTopupProductDTO(
             id: product.id,
             packKey: product.id,
             title: product.displayName,
-            subtitle: nil,
+            subtitle: estimateNote,
             points: coins,
             bonusPoints: 0,
             totalPoints: coins,
             amountCents: 0,
             currency: "",
             priceLabel: product.displayPrice,
-            displayPoints: "\(coins) 币",
+            displayPoints: coinsLabel,
             appleProductId: product.id,
             iosIapProductId: product.id,
             googleProductId: nil,

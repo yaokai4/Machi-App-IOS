@@ -45,7 +45,7 @@ struct MerchantSettingsView: View {
                 documentSection
                 reviewNoteSection
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.top, KXSpacing.md)
             .kxTabBarSafeBottomPadding()
         }
@@ -74,11 +74,11 @@ struct MerchantSettingsView: View {
             HStack(spacing: KXSpacing.md) {
                 Image(systemName: statusIcon)
                     .font(.title2.weight(.bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(KXColor.onTint(statusTint))
                     .frame(width: 46, height: 46)
                     .background(
                         LinearGradient(colors: [statusTint.opacity(0.92), statusTint.opacity(0.64)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                        in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                     )
                     .shadow(color: statusTint.opacity(0.32), radius: 7, y: 3)
                 VStack(alignment: .leading, spacing: 3) {
@@ -105,7 +105,7 @@ struct MerchantSettingsView: View {
                 .padding(.horizontal, KXSpacing.md)
                 .padding(.vertical, 9)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background((messageIsPositive ? Color.green : KXColor.heat).opacity(0.09), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background((messageIsPositive ? Color.green : KXColor.heat).opacity(0.09), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             }
         }
         .padding(KXSpacing.lg)
@@ -229,12 +229,12 @@ struct MerchantSettingsView: View {
                             Text(isSaving ? L("merchantSubmitting", language) : L("merchantSubmitReview", language))
                         }
                         .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(KXColor.onAccent)
                         .frame(maxWidth: .infinity)
                         .frame(height: 48)
                         .background(
                             LinearGradient(colors: [KXColor.accent, KXColor.accent.opacity(0.78)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                         )
                         .shadow(color: KXColor.accent.opacity(0.30), radius: 8, y: 4)
                     }
@@ -249,8 +249,8 @@ struct MerchantSettingsView: View {
                             .foregroundStyle(KXColor.accent)
                             .frame(maxWidth: .infinity)
                             .frame(height: 44)
-                            .background(KXColor.accent.opacity(0.09), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).stroke(KXColor.accent.opacity(0.24), lineWidth: 0.8))
+                            .background(KXColor.accent.opacity(0.09), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous).stroke(KXColor.accent.opacity(0.24), lineWidth: 0.8))
                     }
                     .buttonStyle(KXPressableStyle())
                     .disabled(isSaving || isUploading)
@@ -285,11 +285,11 @@ struct MerchantSettingsView: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 46)
                     .background {
-                        RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                             .fill(KXColor.accent.opacity(0.07))
                     }
                     .overlay {
-                        RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                             .strokeBorder(KXColor.accent.opacity(0.45), style: StrokeStyle(lineWidth: 1.1, dash: [5, 4]))
                     }
                 }
@@ -597,7 +597,7 @@ private struct MerchantMetricTile: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(tint)
                 .frame(width: 30, height: 30)
-                .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: KXRadius.sm, style: .continuous))
             Text("\(value)")
                 .font(.title3.weight(.black))
                 .contentTransition(.numericText())
@@ -607,7 +607,7 @@ private struct MerchantMetricTile: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(KXSpacing.md)
-        .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
     }
 }
 
@@ -697,9 +697,9 @@ private struct MerchantField: View {
             }
             .padding(.horizontal, KXSpacing.md)
             .padding(.vertical, 11)
-            .background(KXColor.softBackground.opacity(focused ? 0.55 : 1), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .background(KXColor.softBackground.opacity(focused ? 0.55 : 1), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
                     .stroke(focused ? KXColor.accent.opacity(0.65) : KXColor.separator.opacity(0.55), lineWidth: focused ? 1.2 : 0.7)
             }
             .animation(.easeOut(duration: 0.16), value: focused)
@@ -737,12 +737,12 @@ private struct MerchantTapField: View {
                 }
                 .padding(.horizontal, KXSpacing.md)
                 .padding(.vertical, KXSpacing.md)
-                .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
                         .stroke(KXColor.separator.opacity(0.55), lineWidth: 0.7)
                 }
-                .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             }
             .buttonStyle(KXPressableStyle(scale: 0.985))
         }
@@ -789,12 +789,12 @@ private struct MerchantPickerField: View {
                 }
                 .padding(.horizontal, KXSpacing.md)
                 .padding(.vertical, KXSpacing.md)
-                .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
                         .stroke(KXColor.separator.opacity(0.55), lineWidth: 0.7)
                 }
-                .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             }
         }
     }
@@ -836,9 +836,9 @@ private struct MerchantTextEditor: View {
                     .padding(.vertical, KXSpacing.xxs)
                     .focused($focused)
             }
-            .background(KXColor.softBackground.opacity(focused ? 0.55 : 1), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .background(KXColor.softBackground.opacity(focused ? 0.55 : 1), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
                     .stroke(focused ? KXColor.accent.opacity(0.65) : KXColor.separator.opacity(0.55), lineWidth: focused ? 1.2 : 0.7)
             }
             .animation(.easeOut(duration: 0.16), value: focused)
@@ -876,7 +876,7 @@ private struct FlowTags: View {
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 32)
-                    .foregroundStyle(isOn ? Color.white : .secondary)
+                    .foregroundStyle(isOn ? KXColor.onAccent : .secondary)
                     .background(isOn ? AnyShapeStyle(KXColor.accent) : AnyShapeStyle(KXColor.softBackground), in: Capsule())
                     .overlay(Capsule().stroke(isOn ? Color.clear : KXColor.separator.opacity(0.6), lineWidth: 0.7))
                 }

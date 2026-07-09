@@ -35,7 +35,12 @@ struct MembershipView: View {
 
     private var isActive: Bool { store.membershipActive || currentUser.isVerifiedMember }
     private var isPaymentBusy: Bool {
+        // .pending(Ask to Buy 家长审批等 deferred 场景)也必须算忙:否则等待
+        // 批准期间购买按钮重新可点,连点会发起多笔 purchase(),家长批准几笔
+        // 就真扣几笔款。批准后 IAPTransactionObserver 的结算广播会把状态收敛
+        // 回来(MembershipStore 已订阅)。与 WalletView.isBusy 同款修复。
         store.state == .loading || store.state == .purchasing || store.state == .verifying
+            || store.state == .pending
     }
 
     /// Best-known validity end: server truth first, local mirror as fallback.
@@ -78,8 +83,8 @@ struct MembershipView: View {
                     purchaseDisclosure
                     safetyNotice
                 }
-                .padding(.horizontal, KaiXTheme.horizontalPadding)
-                .padding(.top, KaiXTheme.horizontalPadding)
+                .padding(.horizontal, KXSpacing.screen)
+                .padding(.top, KXSpacing.screen)
                 .kxTabBarSafeBottomPadding()
             }
             .onAppear { scrollProxy = proxy }
@@ -138,7 +143,7 @@ struct MembershipView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(KXSpacing.lg)
-        .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.softBackground))
+        .background(RoundedRectangle(cornerRadius: KXRadius.tile).fill(KXColor.softBackground))
     }
 
     private var priceText: String {
@@ -168,7 +173,7 @@ struct MembershipView: View {
                             if plan.recommended {
                                 Text(L("recommendedBadge", language))
                                     .font(.caption2.weight(.bold))
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(KXColor.onAccent)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, KXSpacing.xxs)
                                     .background(Capsule().fill(KXColor.accent))
@@ -322,8 +327,8 @@ struct MembershipView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(KXSpacing.lg)
-        .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.cardBackground))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(KXColor.separator, lineWidth: 0.7))
+        .background(RoundedRectangle(cornerRadius: KXRadius.tile).fill(KXColor.cardBackground))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.tile).stroke(KXColor.separator, lineWidth: 0.7))
     }
 
     /// #3: a locked "content stats" teaser for non-members. Shows blurred sample
@@ -378,9 +383,9 @@ struct MembershipView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(KXSpacing.lg)
-            .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.cardBackground))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(KXColor.separator, lineWidth: 0.7))
-            .contentShape(RoundedRectangle(cornerRadius: 16))
+            .background(RoundedRectangle(cornerRadius: KXRadius.tile).fill(KXColor.cardBackground))
+            .overlay(RoundedRectangle(cornerRadius: KXRadius.tile).stroke(KXColor.separator, lineWidth: 0.7))
+            .contentShape(RoundedRectangle(cornerRadius: KXRadius.tile))
         }
         .buttonStyle(.plain)
     }
@@ -415,8 +420,8 @@ struct MembershipView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(KXSpacing.lg)
-        .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.cardBackground))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(KXColor.separator, lineWidth: 0.7))
+        .background(RoundedRectangle(cornerRadius: KXRadius.tile).fill(KXColor.cardBackground))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.tile).stroke(KXColor.separator, lineWidth: 0.7))
     }
 
     /// Direct door to the member library — the concrete thing the
@@ -445,8 +450,8 @@ struct MembershipView: View {
                     .foregroundStyle(.tertiary)
             }
             .padding(KXSpacing.lg)
-            .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.cardBackground))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(KXColor.separator, lineWidth: 0.7))
+            .background(RoundedRectangle(cornerRadius: KXRadius.tile).fill(KXColor.cardBackground))
+            .overlay(RoundedRectangle(cornerRadius: KXRadius.tile).stroke(KXColor.separator, lineWidth: 0.7))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -481,7 +486,7 @@ struct MembershipView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
-                .foregroundStyle(.white)
+                .foregroundStyle(KXColor.onAccent)
                 .background(Capsule().fill(KXColor.accent))
             }
             // Also disabled while a paid charge awaits server confirmation —

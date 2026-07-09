@@ -22,12 +22,12 @@ struct KXRatingStarsView: View {
             }
             if showsValue, value > 0 {
                 Text(String(format: "%.1f", value))
-                    .font(.system(size: starSize + 1, weight: .black))
+                    .kxScaledFont(starSize + 1, relativeTo: .caption, weight: .black)
                     .foregroundStyle(KXColor.rankGold)
             }
             if let count, count > 0 {
                 Text("(\(count))")
-                    .font(.system(size: starSize, weight: .semibold))
+                    .kxScaledFont(starSize, relativeTo: .caption, weight: .semibold)
                     .foregroundStyle(.secondary)
             }
         }
@@ -41,9 +41,16 @@ struct KXServiceListingCard: View {
     let listing: KaiXCityListingDTO
     let onOpen: () -> Void
 
-    @State private var favorited: Bool = false
-    @State private var favoriteSeeded = false
+    /// 收藏态实时从 FavoritesStore 推导(观察 items/removedIds),跨页取消后
+    /// 回到列表红心即刷新——旧的 favoriteSeeded 闩锁会留下过期红心。
+    /// store 没记录时用服务端 DTO 兜底,本会话明确取消过的不再点亮。
+    @ObservedObject private var favorites = FavoritesStore.shared
     @State private var openTaps = 0
+
+    private var favorited: Bool {
+        favorites.contains(listing.id)
+            || (!favorites.wasRemoved(listing.id) && (listing.favorited ?? listing.isFavorited ?? false))
+    }
 
     private var ratingAvg: Double { listing.rating_avg ?? listing.ratingAvg ?? 0 }
     private var ratingCount: Int { listing.rating_count ?? listing.ratingCount ?? 0 }
@@ -60,7 +67,7 @@ struct KXServiceListingCard: View {
 
     private var priceText: String {
         if let range = listing.attributes?["price_range"]?.stringValue, !range.isEmpty { return range }
-        return KXListingCopy.priceLabel(listing)
+        return KXListingCopy.priceLabel(listing, language)
     }
 
     private var openHours: String {
@@ -144,7 +151,7 @@ struct KXServiceListingCard: View {
                         Spacer(minLength: 8)
                         Text(ctaTitle)
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(KXColor.onAccent)
                             .padding(.horizontal, 14)
                             .frame(height: 30)
                             .background(KXColor.livingAccent, in: Capsule())
@@ -158,36 +165,27 @@ struct KXServiceListingCard: View {
         }
         .buttonStyle(KXPressableStyle())
         .sensoryFeedback(.impact(weight: .light), trigger: openTaps)
-        .onAppear {
-            if !favoriteSeeded {
-                favorited = FavoritesStore.shared.contains(listing.id) || (listing.favorited ?? listing.isFavorited ?? false)
-                favoriteSeeded = true
-            }
-        }
     }
 
     private var favoriteSnapshot: FavoriteSnapshot {
-        FavoriteSnapshot(
-            id: listing.id,
-            title: KXListingCopy.displayTitle(listing),
-            priceLabel: priceText,
-            coverURLString: listing.realCoverURL?.absoluteString,
-            type: listing.type,
-            locationText: listing.location_text,
-            savedAt: Date()
-        )
+        var snapshot = FavoritesStore.snapshot(from: listing)
+        if let range = listing.attributes?["price_range"]?.stringValue, !range.isEmpty {
+            // 商家价位区间(用户自填,跨语言通用)原样入收藏页,优于按 price 现算。
+            snapshot.priceLabel = range
+            snapshot.hasPriceData = false
+        }
+        return snapshot
     }
 
     private var heartButton: some View {
         Button {
             guard GuestSession.requireSignedIn(reason: KXListingCopy.pickText(language, "登录后可以收藏喜欢的信息。", "ログインするとお気に入りに保存できます。", "Sign in to save listings you like.")) else { return }
             let next = !favorited
-            favorited = next
+            // 乐观写 store,favorited 即时跟随推导刷新;失败回滚。
             FavoritesStore.shared.set(favoriteSnapshot, on: next)
             Task {
                 do { try await KaiXAPIClient.shared.favoriteListing(listing.id, on: next) }
                 catch {
-                    favorited = !next
                     FavoritesStore.shared.set(favoriteSnapshot, on: !next)
                 }
             }
@@ -208,6 +206,7 @@ struct KXServiceListingCard: View {
 
 /// 封面图：listing media 第一张，缺图时按类型渐变占位。
 private struct ListingCoverArtwork: View {
+    @Environment(\.appLanguage) private var language
     let listing: KaiXCityListingDTO
 
     private var category: String { listing.category ?? "" }
@@ -253,7 +252,7 @@ private struct ListingCoverArtwork: View {
                 Image(systemName: placeholderIcon)
                     .kxScaledFont(28, weight: .semibold)
                     .foregroundStyle(KXColor.livingWarm.opacity(0.78))
-                Text(category.isEmpty ? "本地精选" : KXListingCopy.categoryLabel(category, .zh))
+                Text(category.isEmpty ? KXListingCopy.pickText(language, "本地精选", "おすすめ", "Local picks") : KXListingCopy.categoryLabel(category, language))
                     .font(.caption.weight(.black))
                     .foregroundStyle(KXColor.livingWarm)
                     .padding(.horizontal, 10)
@@ -454,7 +453,7 @@ struct MerchantDirectoryView: View {
                         }
                     }
                 }
-                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.horizontal, KXSpacing.screen)
                 .padding(.top, KXSpacing.md)
                 .kxTabBarSafeBottomPadding()
             }
@@ -498,9 +497,9 @@ struct MerchantDirectoryView: View {
             }
             .padding(.horizontal, KXSpacing.lg)
             .frame(height: 44)
-            .background(KXColor.softBackground.opacity(0.8), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .background(KXColor.softBackground.opacity(0.8), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
         }
-        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.horizontal, KXSpacing.screen)
         .padding(.top, KXSpacing.sm)
         .padding(.bottom, KXSpacing.md)
         .kxGlassBar(ignoresTopSafeArea: true)
@@ -517,7 +516,7 @@ struct MerchantDirectoryView: View {
                     } label: {
                         Text(KXListingCopy.categoryLabel(item, language))
                             .font(.caption.weight(.bold))
-                            .foregroundStyle(category == item ? Color.white : .primary)
+                            .foregroundStyle(category == item ? KXColor.onTint(.green) : .primary)
                             .padding(.horizontal, 13)
                             .padding(.vertical, KXSpacing.sm)
                             .background(category == item ? Color.green : KXColor.softBackground.opacity(0.88), in: Capsule())
@@ -540,7 +539,7 @@ struct MerchantDirectoryView: View {
             items = response.items
             isLoading = false
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.kaixUserMessage
             isLoading = false
         }
     }
@@ -638,7 +637,7 @@ struct BusinessPublicProfileView: View {
                 }
                 Spacer()
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.top, KXSpacing.sm)
             .padding(.bottom, KXSpacing.md)
             .kxGlassBar(ignoresTopSafeArea: true)
@@ -754,7 +753,7 @@ struct BusinessPublicProfileView: View {
                     }
                 }
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.top, 14)
             .kxTabBarSafeBottomPadding()
         }
@@ -767,7 +766,7 @@ struct BusinessPublicProfileView: View {
             response = try await KaiXAPIClient.shared.businessPublic(businessId)
             isLoading = false
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.kaixUserMessage
             isLoading = false
         }
     }
@@ -785,7 +784,7 @@ struct KXReviewRow: View {
             HStack(spacing: 9) {
                 ReviewAuthorAvatar(author: review.author, size: 34)
                 VStack(alignment: .leading, spacing: KXSpacing.xxs) {
-                    Text(review.author?.display_name ?? "Machi 用户")
+                    Text(review.author?.display_name ?? KXListingCopy.pickText(language, "Machi 用户", "Machi ユーザー", "Machi user"))
                         .font(.caption.weight(.black))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
@@ -822,7 +821,7 @@ struct KXReviewRow: View {
                 }
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(KXColor.softBackground.opacity(0.7), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(KXColor.softBackground.opacity(0.7), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             }
         }
         .padding(KXSpacing.md)
@@ -932,9 +931,12 @@ struct ListingReviewsSectionView: View {
                     }
                     writeOpen = true
                 } label: {
-                    Label(response?.my_review == nil ? "写点评" : "修改点评", systemImage: "square.and.pencil")
+                    Label(response?.my_review == nil
+                          ? KXListingCopy.pickText(language, "写点评", "レビューを書く", "Write a review")
+                          : KXListingCopy.pickText(language, "修改点评", "レビューを編集", "Edit review"),
+                          systemImage: "square.and.pencil")
                         .font(.caption.weight(.black))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(KXColor.onTint(.orange))
                         .padding(.horizontal, 13)
                         .frame(height: 34)
                         .background(Color.orange, in: Capsule())
@@ -1003,7 +1005,7 @@ struct ListingReviewsSectionView: View {
             message = L("reviewPublishedMessage", language)
             await load()
         } catch {
-            message = error.localizedDescription
+            message = error.kaixUserMessage
         }
     }
 }
@@ -1079,7 +1081,7 @@ struct MerchantReviewsManageView: View {
                     }
                 }
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.top, KXSpacing.md)
             .kxTabBarSafeBottomPadding()
         }
@@ -1107,7 +1109,7 @@ struct MerchantReviewsManageView: View {
             response = try await KaiXAPIClient.shared.myBusinessReviews()
             isLoading = false
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.kaixUserMessage
             isLoading = false
         }
     }

@@ -19,7 +19,12 @@ struct WalletView: View {
     @State private var showMembershipSheet = false
 
     private var isBusy: Bool {
+        // .pending(Ask to Buy 家长审批等 deferred 场景)也必须算忙:否则等待
+        // 批准期间按钮重新可点,连点会对同一消费型商品发起多笔 purchase(),
+        // 家长批准几笔就真扣几笔款(不同 transactionId,服务端幂等合并不了)。
+        // 批准后 IAPTransactionObserver 的结算广播会把状态收敛回来。
         store.state == .loading || store.state == .purchasing || store.state == .verifying
+            || store.state == .pending
     }
 
     var body: some View {
@@ -48,8 +53,8 @@ struct WalletView: View {
                     }
                 }
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
-            .padding(.top, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
+            .padding(.top, KXSpacing.screen)
             .kxTabBarSafeBottomPadding()
         }
         .kxPageBackground()
@@ -102,9 +107,9 @@ struct WalletView: View {
             }
             .padding(KXSpacing.lg)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.cardBackground))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(KXColor.separator, lineWidth: 0.8))
-            .contentShape(RoundedRectangle(cornerRadius: 16))
+            .background(RoundedRectangle(cornerRadius: KXRadius.tile).fill(KXColor.cardBackground))
+            .overlay(RoundedRectangle(cornerRadius: KXRadius.tile).stroke(KXColor.separator, lineWidth: 0.8))
+            .contentShape(RoundedRectangle(cornerRadius: KXRadius.tile))
         }
         .buttonStyle(.plain)
     }
@@ -146,8 +151,8 @@ struct WalletView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(KXSpacing.xl)
-        .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.cardBackground))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(KXColor.separator, lineWidth: 0.8))
+        .background(RoundedRectangle(cornerRadius: KXRadius.tile).fill(KXColor.cardBackground))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.tile).stroke(KXColor.separator, lineWidth: 0.8))
     }
 
     private func stateCard(icon: String, title: String, message: String) -> some View {
@@ -165,8 +170,8 @@ struct WalletView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(KXSpacing.xl)
-        .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.cardBackground))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(KXColor.separator, lineWidth: 0.8))
+        .background(RoundedRectangle(cornerRadius: KXRadius.tile).fill(KXColor.cardBackground))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.tile).stroke(KXColor.separator, lineWidth: 0.8))
     }
 
     // MARK: - balance
@@ -184,7 +189,7 @@ struct WalletView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(KXSpacing.lg)
-        .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.accentSoft))
+        .background(RoundedRectangle(cornerRadius: KXRadius.tile).fill(KXColor.accentSoft))
     }
 
     // MARK: - top-up
@@ -213,6 +218,14 @@ struct WalletView: View {
                             .font(.caption).disabled(store.state == .loading)
                     }
                 }
+            }
+            if store.state == .pending {
+                // Deferred(如家长审批):说明为什么档位不可点,避免"按钮全灰"
+                // 无解释;批准后由观察者广播自动到账并解锁。
+                Text(wl("购买正在等待批准（如家长同意）。批准后会自动到账，请勿重复购买。",
+                        "This purchase is awaiting approval (e.g. Ask to Buy). It will be credited automatically once approved — please don't purchase again.",
+                        "購入は承認待ちです（「承認と購入のリクエスト」など）。承認されると自動的に反映されます。再度購入しないでください。"))
+                    .font(.caption).foregroundStyle(.orange)
             }
             if store.state == .verifyFailedPendingCredit {
                 // Honest state: Apple charged, the server hasn't credited

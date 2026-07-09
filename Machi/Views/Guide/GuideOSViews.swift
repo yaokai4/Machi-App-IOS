@@ -79,7 +79,7 @@ struct GuideOSActionTile: View {
             HStack(spacing: 9) {
                 Image(systemName: icon)
                     .kxScaledFont(16, weight: .bold)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(KXColor.onTint(tint))
                     .frame(width: 32, height: 32)
                     .background(tint, in: RoundedRectangle(cornerRadius: KXRadius.sm, style: .continuous))
                 Text(title)
@@ -90,7 +90,7 @@ struct GuideOSActionTile: View {
             }
             .frame(maxWidth: .infinity)
             .padding(10)
-            .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.fullArea)
@@ -128,7 +128,7 @@ struct GuideOSQuickRow: View {
                     .frame(height: 56)
                     .padding(.horizontal, KXSpacing.md)
                     .foregroundStyle(KXColor.accent)
-                    .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+                    .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.fullArea)
@@ -148,7 +148,7 @@ struct GuideOSTextField: View {
             .textInputAutocapitalization(.never)
             .padding(.horizontal, KXSpacing.md)
             .frame(height: 44)
-            .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
     }
 }
 
@@ -170,7 +170,7 @@ struct GuideOSDateField: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 10)
                 .frame(height: 40)
-                .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
         }
     }
 }
@@ -228,9 +228,9 @@ struct GuideQuickTodoComposer: View {
                 }
                 .padding(.horizontal, KXSpacing.md)
                 .frame(height: 46)
-                .background(KXColor.livingSurface.opacity(0.82), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(KXColor.livingSurface.opacity(0.82), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                         .stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8)
                 )
 
@@ -241,8 +241,8 @@ struct GuideQuickTodoComposer: View {
                 }
                 .buttonStyle(.fullArea)
                 .contentShape(Rectangle())
-                .foregroundStyle(.white)
-                .background(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? KXColor.accent.opacity(0.42) : KXColor.accent, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .foregroundStyle(KXColor.onAccent)
+                .background(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? KXColor.accent.opacity(0.42) : KXColor.accent, in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                 .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving)
             }
 
@@ -345,8 +345,8 @@ struct GuideOSPrimaryButton: View {
         }
         .buttonStyle(.fullArea)
         .contentShape(Rectangle())
-        .foregroundStyle(.white)
-        .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .foregroundStyle(KXColor.onAccent)
+        .background(KXColor.accent, in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
     }
 }
 
@@ -423,7 +423,7 @@ struct GuideOSEmptyMini: View {
             .foregroundStyle(.secondary)
             .padding(KXSpacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
     }
 }
 
@@ -538,7 +538,7 @@ struct GuideManageView: View {
                                 VStack(alignment: .leading, spacing: 10) {
                                     Image(systemName: item.icon)
                                         .kxScaledFont(21, weight: .bold)
-                                        .foregroundStyle(.white)
+                                        .foregroundStyle(KXColor.onTint(item.tint))
                                         .frame(width: 42, height: 42)
                                         .background(item.tint, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                                     Text(item.title)
@@ -706,7 +706,7 @@ struct GuideContractsView: View {
             TextField(guideOSText(language, "备注", "メモ", "Notes"), text: $notes, axis: .vertical)
                 .lineLimit(3...6)
                 .padding(KXSpacing.md)
-                .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             GuideOSPrimaryButton(title: model.isSaving ? guideOSText(language, "保存中", "保存中", "Saving") : guideOSText(language, "保存合同", "契約を保存", "Save contract")) {
                 Task {
                     let ok = await model.saveContract(id: editingId, payload: currentPayload())
@@ -812,7 +812,7 @@ private struct GuideContractRow: View {
                     .kxScaledFont(18, weight: .bold)
                     .foregroundStyle(KXColor.accent)
                     .frame(width: 42, height: 42)
-                    .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 6) {
                         Text(item.title).font(.subheadline.weight(.bold)).lineLimit(2)
@@ -942,7 +942,7 @@ struct GuideDocumentsView: View {
             TextField(guideOSText(language, "备注", "メモ", "Notes"), text: $notes, axis: .vertical)
                 .lineLimit(3...6)
                 .padding(KXSpacing.md)
-                .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             GuideOSPrimaryButton(title: model.isSaving ? guideOSText(language, "保存中", "保存中", "Saving") : guideOSText(language, "保存提醒", "リマインダーを保存", "Save reminder")) {
                 Task {
                     let ok = await model.saveDocument(
@@ -998,7 +998,7 @@ private struct GuideDocumentRow: View {
                     .kxScaledFont(18, weight: .bold)
                     .foregroundStyle(.cyan)
                     .frame(width: 42, height: 42)
-                    .background(Color.cyan.opacity(0.12), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .background(Color.cyan.opacity(0.12), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 6) {
                         Text(item.title).font(.subheadline.weight(.bold))
@@ -1074,7 +1074,7 @@ struct GuideGoalsView: View {
                     }
                     .buttonStyle(.fullArea)
                     .contentShape(Rectangle())
-                    .foregroundStyle(.white)
+                    .foregroundStyle(KXColor.onAccent)
                     .background(KXColor.accent, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
 
                     if showingCreate {
@@ -1230,6 +1230,8 @@ struct GuideAttachmentSection: View {
     @State private var isUploading = false
     @State private var showingImporter = false
     @State private var message: String?
+    // 提示是否为错误:替代按 message.contains("失败") 判色的脆弱启发式
+    @State private var messageIsError = false
     @State private var deleteTarget: KaiXUploadedFileDTO?
 
     var body: some View {
@@ -1257,7 +1259,7 @@ struct GuideAttachmentSection: View {
                         .frame(minHeight: 44)
                         .padding(.horizontal, KXSpacing.md)
                         .background(Capsule().fill(KXColor.accent))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(KXColor.onAccent)
                 }
                 .buttonStyle(.fullArea)
                 .disabled(isUploading)
@@ -1274,7 +1276,7 @@ struct GuideAttachmentSection: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(KXSpacing.md)
-                    .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.softBackground))
+                    .background(RoundedRectangle(cornerRadius: KXRadius.tile).fill(KXColor.softBackground))
             } else {
                 VStack(spacing: KXSpacing.sm) {
                     ForEach(files, id: \.id) { file in
@@ -1312,8 +1314,8 @@ struct GuideAttachmentSection: View {
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, KXSpacing.sm)
-                        .background(RoundedRectangle(cornerRadius: 16).fill(KXColor.cardBackground))
-                        .overlay(RoundedRectangle(cornerRadius: 16).stroke(KXColor.separator.opacity(0.45), lineWidth: 1))
+                        .background(RoundedRectangle(cornerRadius: KXRadius.tile).fill(KXColor.cardBackground))
+                        .overlay(RoundedRectangle(cornerRadius: KXRadius.tile).stroke(KXColor.separator.opacity(0.45), lineWidth: 1))
                     }
                 }
             }
@@ -1321,7 +1323,7 @@ struct GuideAttachmentSection: View {
             if let message {
                 Text(message)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(message.contains("失败") || message.lowercased().contains("fail") ? Color.red : KXColor.accent)
+                    .foregroundStyle(messageIsError ? Color.red : KXColor.accent)
             }
         }
         .task(id: entityId) {
@@ -1333,6 +1335,7 @@ struct GuideAttachmentSection: View {
                 Task { await upload(urls) }
             case .failure(let error):
                 message = error.localizedDescription
+                messageIsError = true
             }
         }
         .alert(guideOSText(language, "删除附件？", "添付を削除しますか？", "Delete attachment?"), isPresented: Binding(
@@ -1359,8 +1362,10 @@ struct GuideAttachmentSection: View {
         do {
             files = try await KaiXAPIClient.shared.guideAttachments(entityType: entityType, entityId: entityId).items
             message = nil
+            messageIsError = false
         } catch {
             message = error.localizedDescription
+            messageIsError = true
         }
     }
 
@@ -1385,9 +1390,11 @@ struct GuideAttachmentSection: View {
                 )
             }
             message = guideOSText(language, "附件已上传", "添付をアップロードしました", "Attachment uploaded")
+            messageIsError = false
             await reload()
         } catch {
             message = guideOSText(language, "上传失败：", "アップロード失敗：", "Upload failed: ") + error.localizedDescription
+            messageIsError = true
         }
     }
 
@@ -1401,6 +1408,7 @@ struct GuideAttachmentSection: View {
             }
             guard let url = URL(string: raw, relativeTo: KaiXBackend.baseURL)?.absoluteURL else {
                 message = guideOSText(language, "文件暂时不可查看", "ファイルを表示できません", "File is not available")
+                messageIsError = true
                 return
             }
             await MainActor.run {
@@ -1408,6 +1416,7 @@ struct GuideAttachmentSection: View {
             }
         } catch {
             message = error.localizedDescription
+            messageIsError = true
         }
     }
 
@@ -1416,9 +1425,11 @@ struct GuideAttachmentSection: View {
             try await KaiXAPIClient.shared.deleteUploadedFile(file.id)
             deleteTarget = nil
             message = guideOSText(language, "附件已删除", "添付を削除しました", "Attachment deleted")
+            messageIsError = false
             await reload()
         } catch {
             message = error.localizedDescription
+            messageIsError = true
         }
     }
 

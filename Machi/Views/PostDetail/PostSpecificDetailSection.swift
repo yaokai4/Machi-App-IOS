@@ -95,7 +95,7 @@ struct PostSpecificDetailSection: View {
                 } label: {
                     HStack(spacing: 5) {
                         if meetupBusy {
-                            KXSpinner(size: 14, lineWidth: 2, tint: meetupJoined ? KXColor.accent : .white)
+                            KXSpinner(size: 14, lineWidth: 2, tint: meetupJoined ? KXColor.accent : KXColor.onAccent)
                         } else if meetupJoined {
                             Image(systemName: "checkmark").font(.caption.weight(.bold))
                         }
@@ -107,7 +107,7 @@ struct PostSpecificDetailSection: View {
                     }
                     .padding(.horizontal, KXSpacing.lg)
                     .frame(height: 36)
-                    .foregroundStyle(meetupJoined ? KXColor.accent : .white)
+                    .foregroundStyle(meetupJoined ? KXColor.accent : KXColor.onAccent)
                     .background(meetupJoined ? KXColor.accentSoft : KXColor.accent, in: Capsule())
                 }
                 .buttonStyle(.plain)
@@ -116,7 +116,7 @@ struct PostSpecificDetailSection: View {
         }
         .padding(.horizontal, KXSpacing.md)
         .padding(.vertical, 10)
-        .background(KXColor.accentSoft.opacity(0.5), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(KXColor.accentSoft.opacity(0.5), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
     }
 
     @MainActor
@@ -156,10 +156,10 @@ struct PostSpecificDetailSection: View {
 
     private func statusColor(for status: String) -> Color {
         switch status {
-        case "available": return .green
-        case "reserved": return .orange
-        case "sold", "rented": return .gray
-        case "under_review": return .orange
+        case "available": return KXColor.chartGreen
+        case "reserved": return KXColor.heat
+        case "sold", "rented": return KXColor.categoryNeutral
+        case "under_review": return KXColor.heat
         case "active": return KXColor.accent
         default: return .secondary
         }
@@ -186,7 +186,7 @@ struct PostSpecificDetailSection: View {
             } label: {
                 HStack(spacing: 6) {
                     if openingDM {
-                        KXSpinner(size: 16, lineWidth: 2, tint: .white)
+                        KXSpinner(size: 16, lineWidth: 2, tint: KXColor.onAccent)
                     } else {
                         Image(systemName: "bubble.left.and.bubble.right.fill")
                             .font(.subheadline.weight(.semibold))
@@ -199,7 +199,7 @@ struct PostSpecificDetailSection: View {
             }
             .buttonStyle(.plain)
             .disabled(openingDM || currentUser?.id == post.authorId)
-            .foregroundStyle(.white)
+            .foregroundStyle(KXColor.onAccent)
             .background(KXColor.accent, in: Capsule())
 
             Button {

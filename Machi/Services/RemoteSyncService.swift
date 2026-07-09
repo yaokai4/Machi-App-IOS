@@ -2,11 +2,15 @@ import Foundation
 import os
 import SwiftData
 
-/// Legacy bridge retained for explicit local fixture/debug flows.
+/// ⚠️ DEBUG-only legacy bridge — **生产死代码,勿在发布路径接线**。
 ///
-/// Production data now comes directly from `KaiXAPIClient` and is kept in
-/// memory for SwiftUI compatibility; business records are not mirrored into a
-/// persistent iOS database.
+/// 这是全项目唯一把服务器数据 upsert 写进 SwiftData 的写通路,但发布版没有任何
+/// 调用点:生产数据一律由 `KaiXAPIClient` 直出、驻内存(服务器唯一真相不落盘,
+/// 见 ec4472a / DatabaseContainer 头注释)。保留它只是给本地夹具/调试流程和
+/// 测试(FeedPaginationTests)用,用 `#if DEBUG` 门控,防止未来有人误以为
+/// "离线缓存在用"而把它重新接进发布路径——那会让磁盘 Store 重新承载业务数据,
+/// 与登出清理、加密、隐私承诺全部脱节。
+#if DEBUG
 @MainActor
 final class RemoteSyncService {
     static let shared = RemoteSyncService()
@@ -591,3 +595,4 @@ final class RemoteSyncService {
         return try? context.fetch(descriptor).first
     }
 }
+#endif

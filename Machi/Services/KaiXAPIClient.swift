@@ -13,6 +13,13 @@ extension Notification.Name {
     /// toast so an observer-owned background transaction (Ask-to-Buy approval,
     /// cross-device purchase, killed mid-verify) doesn't stay silently pending.
     static let kaixIAPVerificationPending = Notification.Name("KaiXIAPVerificationPending")
+
+    /// Fired after the app-level IAP observer successfully verified & finished a
+    /// transaction with the backend (points credited / membership updated).
+    /// Ask-to-Buy 事后批准由观察者结算而不是页面 store——若钱包/会员页仍开着,
+    /// 页面会停在 .pending、余额陈旧;页面 store 收到该通知后应刷新并收敛状态。
+    /// userInfo 只带 "productID",绝不携带 JWS / token / 交易凭据。
+    static let kaixIAPTransactionSettled = Notification.Name("KaiXIAPTransactionSettled")
 }
 
 /// HTTP client for the unified KaiX backend.
@@ -40,6 +47,27 @@ final class KaiXAPIClient {
     private static let jsonEncoder = JSONEncoder()
     private static let jsonDecoder = JSONDecoder()
 
+    // 路径"补漏"编码字符集 = urlPathAllowed + "%"。"%" 必须放行:调用点的动态段
+    // 已经过 `encodedPathSegment` 编码一次,再编码会把 "%" 变 "%25"(双重编码),
+    // 这正是 CJK 话题路径(/api/topics/东京生活)整体失效的根因。其余非法字符
+    // (调用点若漏了编码)在这里被恰好编码一次兜底。
+    private static let pathAllowedPreservingEscapes: CharacterSet = {
+        var set = CharacterSet.urlPathAllowed
+        set.insert(charactersIn: "%")
+        return set
+    }()
+
+    /// Query-value charset that additionally escapes "+", "&", "=" so a value
+    /// containing them survives round-trip. URLComponents.queryItems does NOT
+    /// escape "+", and the server (URLSearchParams / parse_qs) decodes a literal
+    /// "+" back to a space — so a search for "N2+" or "C++" silently loses the
+    /// "+". We build percentEncodedQueryItems with this set instead.
+    private static let queryValueAllowed: CharacterSet = {
+        var set = CharacterSet.urlQueryAllowed
+        set.remove(charactersIn: "+&=?")
+        return set
+    }()
+
     enum FeedMode: String { case recommend, following, hot, local }
     enum CommentSort: String { case top, new }
     enum ProfileSegment: String { case posts, replies, media, likes, bookmarks }
@@ -66,10 +94,33 @@ final class KaiXAPIClient {
         // Build the URL defensively. `request` is the hot path for every API
         // call; a malformed path/query must surface as a catchable error (which
         // callers already handle) rather than force-unwrap into a crash.
-        guard var components = URLComponents(url: KaiXBackend.baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false) else {
+        //
+        // 绝不能用 `appendingPathComponent(path)` 拼路径:它会把 path 里已有的
+        // "%" 再编码成 "%25"。动态段在调用点已经过 `encodedPathSegment` 编码
+        // (UUID 等纯 ASCII 段是无害空操作),二次编码会让所有非 ASCII 路径段
+        // (中/日文话题 tag 等)在服务端匹配失败。这里只做一次"补漏"编码
+        // (放行 "%",已编码段零改动),再直接字符串拼接;纯 ASCII 路径的最终
+        // URL 与旧实现完全一致。
+        guard let encodedPath = path.addingPercentEncoding(withAllowedCharacters: Self.pathAllowedPreservingEscapes) else {
             throw URLError(.badURL)
         }
-        if !queryItems.isEmpty { components.queryItems = queryItems }
+        var baseString = KaiXBackend.baseURL.absoluteString
+        if baseString.hasSuffix("/") { baseString = String(baseString.dropLast()) }
+        let joinedPath = encodedPath.hasPrefix("/") ? encodedPath : "/" + encodedPath
+        guard var components = URLComponents(string: baseString + joinedPath) else {
+            throw URLError(.badURL)
+        }
+        if !queryItems.isEmpty {
+            // 用 percentEncodedQueryItems 手动编码,强制转义 "+"(见 queryValueAllowed)。
+            // 默认的 components.queryItems 不转义 "+",服务端会把它解成空格,
+            // 导致含 "+" 的查询值(如 "N2+"、"C++")丢失加号。name 侧一般为 ASCII 常量,
+            // 仍统一编码以防万一。
+            components.percentEncodedQueryItems = queryItems.map { item in
+                let name = item.name.addingPercentEncoding(withAllowedCharacters: Self.queryValueAllowed) ?? item.name
+                let value = item.value?.addingPercentEncoding(withAllowedCharacters: Self.queryValueAllowed)
+                return URLQueryItem(name: name, value: value)
+            }
+        }
         guard let url = components.url else {
             throw URLError(.badURL)
         }
@@ -128,9 +179,13 @@ final class KaiXAPIClient {
                 // the guest off whatever authed-only tab they opened (Profile)
                 // straight back to Home — the "tap 我的 but stay on 首页" bug.
                 // Guests have no session to invalidate, so skip the logout flow.
-                if http.statusCode == 401, KaiXBackend.token != nil {
-                    KaiXBackend.token = nil
-                    NotificationCenter.default.post(name: .kaiXSessionInvalidated, object: nil)
+                // 会话失效:原子清 token + 只让第一个并发 401 触发退游客流程,
+                // 且在主线程投递通知(request() 续体运行在后台线程,观察者
+                // handleSessionExpired 要改十余处 SwiftUI 状态,必须回主线程)。
+                if http.statusCode == 401, KaiXBackend.invalidateSessionOnce() {
+                    await MainActor.run {
+                        NotificationCenter.default.post(name: .kaiXSessionInvalidated, object: nil)
+                    }
                 }
                 if http.statusCode == 429,
                    let api = try? Self.jsonDecoder.decode(KaiXAPIError.self, from: data),
@@ -142,7 +197,10 @@ final class KaiXAPIClient {
                 // prevents a 9-image publish from failing just because the
                 // production upload bucket refills between requests.
                 if isReplaySafe, attempt < maxAttempts, Self.isRetryableHTTPStatus(http.statusCode) {
-                    try? await Task.sleep(nanoseconds: Self.retryBackoff(attempt, response: http))
+                    // 不用 try?:退避期间(最长可到数秒)的取消必须以 CancellationError
+                    // 冒泡终止循环,否则吞掉取消后 continue 还会多发一次已被取消的请求。
+                    // 调用方本就把 CancellationError 与 URLError(.cancelled) 同等静默处理。
+                    try await Task.sleep(nanoseconds: Self.retryBackoff(attempt, response: http))
                     continue
                 }
                 if let api = try? Self.jsonDecoder.decode(KaiXAPIError.self, from: data) {
@@ -152,7 +210,8 @@ final class KaiXAPIClient {
             } catch let urlError as URLError where isReplaySafe
                 && attempt < maxAttempts
                 && Self.isRetryableURLError(urlError) {
-                try? await Task.sleep(nanoseconds: Self.retryBackoff(attempt))
+                // 同上:取消直接冒泡,不再吞掉后多发一次请求。
+                try await Task.sleep(nanoseconds: Self.retryBackoff(attempt))
                 continue
             }
         }
@@ -439,7 +498,10 @@ final class KaiXAPIClient {
     // MARK: - bootstrap
 
     func bootstrap() async throws -> KaiXBootstrapResponse {
-        let data = try await request("GET", "/api/bootstrap")
+        // 首屏 GET,同 feed():缩短弱网下的最坏等待(15s×2 次)。
+        let data = try await request("GET", "/api/bootstrap",
+                                     timeoutInterval: 15,
+                                     maxReplayAttempts: 2)
         return try decode(data)
     }
 
@@ -653,6 +715,15 @@ final class KaiXAPIClient {
         struct ReplyPage: Codable {
             let items: [ReplyItem]
             let next_cursor: String?
+
+            enum CodingKeys: String, CodingKey { case items, next_cursor }
+
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                // items 逐条容错:单条坏回复只丢该条,不让个人主页回复分页整屏报错(与主 feed 一致)。
+                items = try container.decode(KaiXLossyDecodableArray<ReplyItem>.self, forKey: .items).elements
+                next_cursor = try container.decodeIfPresent(String.self, forKey: .next_cursor)
+            }
         }
 
         var q: [URLQueryItem] = []
@@ -752,7 +823,11 @@ final class KaiXAPIClient {
         if let contentTypes, !contentTypes.isEmpty {
             q.append(URLQueryItem(name: "content_type", value: contentTypes.map(\.rawValue).joined(separator: ",")))
         }
-        let data = try await request("GET", "/api/feed", queryItems: q)
+        // 首屏 GET:默认 25s×4 次在彻底卡死的弱网上最坏要 ~100s 才报错,
+        // 用户早已反复下拉。压到 15s×2 次(最坏 ~30s+退避),与 post() 同思路。
+        let data = try await request("GET", "/api/feed", queryItems: q,
+                                     timeoutInterval: 15,
+                                     maxReplayAttempts: 2)
         return try decode(data)
     }
 
@@ -927,7 +1002,10 @@ final class KaiXAPIClient {
         if let excludeListingId, !excludeListingId.isEmpty { q.append(URLQueryItem(name: "exclude", value: excludeListingId)) }
         if let cursor, !cursor.isEmpty { q.append(URLQueryItem(name: "cursor", value: cursor)) }
         if let limit { q.append(URLQueryItem(name: "limit", value: String(limit))) }
-        let data = try await request("GET", "/api/listings", queryItems: q)
+        // 首屏 GET,同 feed():缩短弱网下的最坏等待(15s×2 次)。
+        let data = try await request("GET", "/api/listings", queryItems: q,
+                                     timeoutInterval: 15,
+                                     maxReplayAttempts: 2)
         let response: KaiXListingsResponse = try decode(data)
         return ListingsPage(
             items: response.items,
@@ -1728,7 +1806,19 @@ final class KaiXAPIClient {
     }
 
     func topic(_ tag: String) async throws -> [KaiXPostDTO] {
-        struct Wrapper: Codable { let tag: String; let items: [KaiXPostDTO] }
+        struct Wrapper: Codable {
+            let tag: String
+            let items: [KaiXPostDTO]
+
+            enum CodingKeys: String, CodingKey { case tag, items }
+
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                tag = try container.decode(String.self, forKey: .tag)
+                // items 逐条容错:单条坏帖只丢该条,不让话题页整屏报错(与主 feed 一致)。
+                items = try container.decode(KaiXLossyDecodableArray<KaiXPostDTO>.self, forKey: .items).elements
+            }
+        }
         let trimmed = tag.hasPrefix("#") ? String(tag.dropFirst()) : tag
         let data = try await request("GET", "/api/topics/\(trimmed.encodedPathSegment)")
         return try decode(data) as Wrapper |> \.items
@@ -1812,19 +1902,31 @@ final class KaiXAPIClient {
         _ = try await request("DELETE", "/api/conversations/\(id.encodedPathSegment)")
     }
 
-    func messages(_ conversationId: String, query: String = "", day: String? = nil, limit: Int = 80) async throws -> [KaiXMessageDTO] {
+    func messages(_ conversationId: String, query: String = "", day: String? = nil, cursor: String? = nil, limit: Int = 80) async throws -> (items: [KaiXMessageDTO], nextCursor: String?) {
+        // 服务端契约(opt-in keyset 分页):传 limit → 返回最新一页 + next_cursor;
+        // 把 next_cursor 作为 cursor 传回 → 取更早的一页;next_cursor 为空 =
+        // 已到最早。超过 80 条的会话此前在 iOS 上永久丢失更早历史入口(Web
+        // 可见,两端不对等),聊天 UI 接上该游标即可做"加载更早消息"。
+        struct Wrapper: Decodable {
+            let items: [KaiXMessageDTO]
+            // snake/camel 双键容错(本库惯例,服务端两个键都下发)。
+            let next_cursor: String?
+            let nextCursor: String?
+        }
         var items: [URLQueryItem] = []
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { items.append(URLQueryItem(name: "q", value: trimmed)) }
         if let day, !day.isEmpty { items.append(URLQueryItem(name: "day", value: day)) }
+        if let cursor, !cursor.isEmpty { items.append(URLQueryItem(name: "cursor", value: cursor)) }
         // Bound the page: without a limit the server returned its full default
         // window, so a long-lived thread paid to decode + re-sign every message
         // on each 3s poll. 80 covers a screenful with headroom and matches the
         // existing pagination window.
         if limit > 0 { items.append(URLQueryItem(name: "limit", value: String(limit))) }
         let data = try await request("GET", "/api/conversations/\(conversationId.encodedPathSegment)/messages", queryItems: items)
-        let response: KaiXMessagesResponse = try decode(data)
-        return response.items
+        let response: Wrapper = try decode(data)
+        let next = response.next_cursor ?? response.nextCursor
+        return (response.items, (next?.isEmpty ?? true) ? nil : next)
     }
 
     func sendMessage(_ conversationId: String, content: String, mediaIds: [String] = [], attachmentIds: [String] = [], idempotencyKey: String? = nil) async throws -> KaiXMessageDTO {
@@ -1996,7 +2098,9 @@ final class KaiXAPIClient {
                     return ""
                 }
                 if attempt < maxAttempts, Self.isRetryableHTTPStatus(http.statusCode) {
-                    try? await Task.sleep(nanoseconds: Self.retryBackoff(attempt, response: http))
+                    // 不用 try?:退避期间的取消必须以 CancellationError 冒泡终止,否则吞掉
+                    // 取消后 continue 会多发一次已被取消的上传(与 request() 主循环一致)。
+                    try await Task.sleep(nanoseconds: Self.retryBackoff(attempt, response: http))
                     continue
                 }
                 if let api = try? Self.jsonDecoder.decode(KaiXAPIError.self, from: body) {
@@ -2004,7 +2108,8 @@ final class KaiXAPIClient {
                 }
                 throw KaiXAPIError(error: .init(code: "upload_failed", message: "Upload failed (\(http.statusCode))"))
             } catch let urlError as URLError where attempt < maxAttempts && Self.isRetryableURLError(urlError) {
-                try? await Task.sleep(nanoseconds: Self.retryBackoff(attempt))
+                // 同上:取消直接冒泡,不再吞掉后多发一次已被取消的上传。
+                try await Task.sleep(nanoseconds: Self.retryBackoff(attempt))
                 continue
             }
         }
@@ -2033,7 +2138,9 @@ final class KaiXAPIClient {
                     return ""
                 }
                 if attempt < maxAttempts, Self.isRetryableHTTPStatus(http.statusCode) {
-                    try? await Task.sleep(nanoseconds: Self.retryBackoff(attempt, response: http))
+                    // 不用 try?:退避期间的取消必须以 CancellationError 冒泡终止,否则吞掉
+                    // 取消后 continue 会多发一次已被取消的上传(与 request() 主循环一致)。
+                    try await Task.sleep(nanoseconds: Self.retryBackoff(attempt, response: http))
                     continue
                 }
                 if let api = try? Self.jsonDecoder.decode(KaiXAPIError.self, from: body) {
@@ -2041,7 +2148,8 @@ final class KaiXAPIClient {
                 }
                 throw KaiXAPIError(error: .init(code: "upload_failed", message: "Upload failed (\(http.statusCode))"))
             } catch let urlError as URLError where attempt < maxAttempts && Self.isRetryableURLError(urlError) {
-                try? await Task.sleep(nanoseconds: Self.retryBackoff(attempt))
+                // 同上:取消直接冒泡,不再吞掉后多发一次已被取消的上传。
+                try await Task.sleep(nanoseconds: Self.retryBackoff(attempt))
                 continue
             }
         }

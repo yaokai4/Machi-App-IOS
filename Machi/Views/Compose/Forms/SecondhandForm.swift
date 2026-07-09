@@ -10,7 +10,7 @@ struct SecondhandFormView: View {
             TypedTextField("fld_currency", text: viewModel.stringBinding(PostAttributeKeys.currency), placeholder: "JPY / CNY / USD")
             TypedTextField("fld_condition", text: viewModel.stringBinding(PostAttributeKeys.condition))
             TypedTextField("fld_trade_method", text: viewModel.stringBinding(PostAttributeKeys.tradeMethod))
-            TypedTextField("fld_area", text: viewModel.stringBinding(PostAttributeKeys.area), isRequired: true)
+            TypedTextField("fld_area", text: viewModel.stringBinding(PostAttributeKeys.area))
             TypedChoiceRow(
                 titleKey: "fld_status",
                 selection: viewModel.stringBinding(PostAttributeKeys.status),
@@ -22,8 +22,8 @@ struct SecondhandFormView: View {
             )
         }
         .onAppear {
-            viewModel.seedDefaultAttribute(PostAttributeKeys.currency, "JPY")
-            viewModel.seedDefaultAttribute(PostAttributeKeys.status, "available")
+            viewModel.seedFormDefault(PostAttributeKeys.currency, "JPY")
+            viewModel.seedFormDefault(PostAttributeKeys.status, "available")
         }
     }
 }

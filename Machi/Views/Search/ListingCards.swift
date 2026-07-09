@@ -21,7 +21,7 @@ struct KXSecondhandSkeletonCard: View {
     private var inner: CGFloat { max(0, width - 14) }
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                 .fill(KXColor.softBackground)
                 .frame(width: inner, height: inner)
             KXSkeletonBone(width: 72, height: 15)
@@ -40,7 +40,7 @@ struct KXJobSkeletonRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: KXSpacing.md) {
             HStack(spacing: KXSpacing.md) {
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                     .fill(KXColor.softBackground)
                     .frame(width: 50, height: 50)
                 VStack(alignment: .leading, spacing: 7) {
@@ -52,7 +52,7 @@ struct KXJobSkeletonRow: View {
             KXSkeletonBone(width: 140, height: 13)
             HStack(spacing: 6) {
                 ForEach(0..<3, id: \.self) { _ in
-                    KXSkeletonBone(width: 56, height: 22, radius: 11)
+                    KXSkeletonBone(width: 56, height: 22, radius: KXRadius.sm)
                 }
             }
             // Match the real job row's divider + "查看详情·投递" CTA line.
@@ -87,7 +87,7 @@ struct KXBigPhotoSkeletonCard: View {
                 HStack {
                     KXSkeletonBone(width: 90, height: 14)
                     Spacer()
-                    KXSkeletonBone(width: 72, height: 28, radius: 14)
+                    KXSkeletonBone(width: 72, height: 28, radius: KXRadius.md)
                 }
             }
             .padding(.horizontal, KXSpacing.xxs)
@@ -119,9 +119,17 @@ struct KXSecondhandListingCard: View {
     var width: CGFloat? = nil
     let onOpen: () -> Void
 
-    @State private var favorited: Bool = false
-    @State private var favoriteSeeded = false
+    /// 收藏态实时从 FavoritesStore 推导(观察 items/removedIds 变化),跨页
+    /// (详情页/收藏 sheet)取消后回到列表红心即刷新——旧的 favoriteSeeded
+    /// 闩锁只播种一次,会留下过期红心。store 没记录时用服务端 DTO 兜底,
+    /// 但本会话明确取消过的不再点亮。
+    @ObservedObject private var favorites = FavoritesStore.shared
     @State private var openTaps = 0
+
+    private var favorited: Bool {
+        favorites.contains(listing.id)
+            || (!favorites.wasRemoved(listing.id) && (listing.favorited ?? listing.isFavorited ?? false))
+    }
 
     private var innerWidth: CGFloat? {
         width.map { max(0, $0 - 14) }
@@ -191,37 +199,22 @@ struct KXSecondhandListingCard: View {
         .frame(maxWidth: width ?? .infinity, alignment: .leading)
         .buttonStyle(.plain)
         .sensoryFeedback(.impact(weight: .light), trigger: openTaps)
-        .onAppear {
-            if !favoriteSeeded {
-                favorited = FavoritesStore.shared.contains(listing.id) || (listing.favorited ?? listing.isFavorited ?? false)
-                favoriteSeeded = true
-            }
-        }
     }
 
     /// 右上角爱心：乐观切换，失败回滚;同时写入本地收藏。与住宿/服务卡一致。
     private var favoriteSnapshot: FavoriteSnapshot {
-        FavoriteSnapshot(
-            id: listing.id,
-            title: KXListingCopy.displayTitle(listing),
-            priceLabel: KXListingCopy.priceLabel(listing, language),
-            coverURLString: listing.realCoverURL?.absoluteString,
-            type: listing.type,
-            locationText: listing.location_text,
-            savedAt: Date()
-        )
+        FavoritesStore.snapshot(from: listing)
     }
 
     private var heartButton: some View {
         Button {
             guard GuestSession.requireSignedIn(reason: KXListingCopy.pickText(language, "登录后可以收藏喜欢的信息。", "ログインするとお気に入りに保存できます。", "Sign in to save listings you like.")) else { return }
             let next = !favorited
-            favorited = next
+            // 乐观写 store,favorited 即时跟随推导刷新;失败回滚。
             FavoritesStore.shared.set(favoriteSnapshot, on: next)
             Task {
                 do { try await KaiXAPIClient.shared.favoriteListing(listing.id, on: next) }
                 catch {
-                    favorited = !next
                     FavoritesStore.shared.set(favoriteSnapshot, on: !next)
                 }
             }
@@ -282,9 +275,9 @@ struct KXSecondhandListingCard: View {
             heartButton
                 .padding(1)   // 44pt frame absorbs the rest of the inset
         }
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                 .stroke(Color.white.opacity(0.35), lineWidth: 0.6)
         }
     }
@@ -444,10 +437,10 @@ struct KXJobListingRow: View {
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),
-                            in: RoundedRectangle(cornerRadius: 15, style: .continuous)
+                            in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                         )
                         .overlay(
-                            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                            RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                                 .strokeBorder(KXColor.livingInk.opacity(0.06), lineWidth: 0.8)
                         )
 
@@ -550,9 +543,9 @@ struct KXStructuredListingRow: View {
                     if let url = listing.coverURL {
                         MediaImageView(url: url)
                             .frame(width: 112, height: 104)
-                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .clipShape(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                     } else {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                             .fill(KXColor.softBackground)
                             .frame(width: 112, height: 104)
                             .overlay {
@@ -623,7 +616,7 @@ struct KXListingAttributeSection: View {
                     }
                     .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(KXColor.livingSoft.opacity(0.72), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .background(KXColor.livingSoft.opacity(0.72), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 }
             }
         }

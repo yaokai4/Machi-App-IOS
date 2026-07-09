@@ -124,7 +124,7 @@ struct JLPTSectionHeader: View {
     let title: String
     var body: some View {
         HStack(spacing: KXSpacing.sm) {
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
+            RoundedRectangle(cornerRadius: KXRadius.xxs, style: .continuous)
                 .fill(KXColor.livingAccent)
                 .frame(width: 3, height: 15)
             Text(title)
@@ -213,8 +213,8 @@ struct JLPTStreakBadge: View {
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(KXColor.livingWarm)
                     .frame(width: 44, height: 44)
-                    .background(KXColor.livingWarm.opacity(0.13), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(KXColor.livingWarm.opacity(0.24), lineWidth: 0.8))
+                    .background(KXColor.livingWarm.opacity(0.13), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous).stroke(KXColor.livingWarm.opacity(0.24), lineWidth: 0.8))
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(alignment: .firstTextBaseline, spacing: 3) {
                         Text("\(streak.currentStreak ?? 0)")
@@ -260,7 +260,7 @@ struct JLPTWeekStrip: View {
             let list = Array(days.suffix(7))
             ForEach(Array(list.enumerated()), id: \.element.id) { idx, day in
                 let isToday = idx == list.count - 1
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                RoundedRectangle(cornerRadius: KXRadius.xs, style: .continuous)
                     .fill(day.done ? KXColor.livingAccent : KXColor.livingSoft)
                     .frame(height: 26)
                     .frame(maxWidth: .infinity)
@@ -272,7 +272,7 @@ struct JLPTWeekStrip: View {
                         }
                     }
                     .overlay {
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        RoundedRectangle(cornerRadius: KXRadius.xs, style: .continuous)
                             .stroke(isToday ? KXColor.livingAccent : JLPTStyle.hairline,
                                     lineWidth: isToday ? 1.5 : 0.8)
                     }
@@ -295,7 +295,7 @@ struct JLPTCountdownBar: View {
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(KXColor.onAccent)
                 .frame(width: 44, height: 44)
-                .background(KXColor.livingAccent, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .background(KXColor.livingAccent, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                 Text(guideText(language,
                                "距 \(countdown.sessionLabel ?? "") 考试",

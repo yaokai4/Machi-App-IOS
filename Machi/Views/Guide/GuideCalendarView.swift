@@ -145,7 +145,7 @@ struct GuideCalendarView: View {
                             }
                             .frame(maxWidth: .infinity, minHeight: 40)
                             .padding(.horizontal, KXSpacing.md)
-                            .background(KXColor.livingSurface.opacity(0.68), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                            .background(KXColor.livingSurface.opacity(0.68), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.fullArea)
@@ -154,7 +154,9 @@ struct GuideCalendarView: View {
                     if let message = model.message, !message.isEmpty {
                         Text(message)
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(message.contains("失败") ? Color.orange : KXColor.accent)
+                            // 用 VM 的显式错误标志决定颜色——原来的 contains("失败")
+                            // 只因消息恰好是中文才成立,消息三语化后立即失效。
+                            .foregroundStyle(model.messageIsError ? Color.orange : KXColor.accent)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, KXSpacing.md)
                             .padding(.vertical, 10)
@@ -326,7 +328,7 @@ private struct GuideCalendarMonthGrid: View {
         .buttonStyle(.fullArea)
         .contentShape(Rectangle())
         .foregroundStyle(isSelected ? .white : (inMonth ? Color.primary : Color.secondary.opacity(0.45)))
-        .background(isSelected ? KXColor.accent : (isToday ? KXColor.accentSoft : KXColor.livingSurface.opacity(0.55)), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(isSelected ? KXColor.accent : (isToday ? KXColor.accentSoft : KXColor.livingSurface.opacity(0.55)), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
         .dropDestination(for: String.self) { ids, _ in
             guard let id = ids.first else { return false }
             selectedDate = iso
@@ -452,7 +454,7 @@ private struct GuideCalendarWeekBoard: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(10)
-                .background(isSelected ? KXColor.accent : (isToday ? KXColor.accentSoft : KXColor.livingSurface.opacity(0.72)), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                .background(isSelected ? KXColor.accent : (isToday ? KXColor.accentSoft : KXColor.livingSurface.opacity(0.72)), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 6) {
                     if items.isEmpty {
@@ -650,7 +652,7 @@ private struct GuideCalendarEventComposer: View {
                     .textInputAutocapitalization(.sentences)
                     .padding(.horizontal, KXSpacing.md)
                     .frame(minHeight: 46)
-                    .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 DatePicker(guideOSText(language, "日期", "日付", "Date"), selection: $date, displayedComponents: .date)
                     .font(.subheadline.weight(.semibold))
                 Toggle(guideOSText(language, "全天", "終日", "All-day"), isOn: $allDay)
@@ -671,7 +673,7 @@ private struct GuideCalendarEventComposer: View {
                     .lineLimit(2...5)
                     .padding(.horizontal, KXSpacing.md)
                     .padding(.vertical, 10)
-                    .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 Button {
                     let dateText = GuideOSDate.iso(date)
                     let timeText = allDay ? nil : Self.timeFormatter.string(from: time)
@@ -693,14 +695,14 @@ private struct GuideCalendarEventComposer: View {
                     }
                 } label: {
                     HStack {
-                        if model.isSaving { ProgressView().tint(.white) }
+                        if model.isSaving { ProgressView().tint(KXColor.onAccent) }
                         Text(model.isSaving ? guideOSText(language, "添加中", "追加中", "Adding") : guideOSText(language, "添加日程", "予定を追加", "Add event"))
                             .font(.subheadline.weight(.bold))
                     }
                     .frame(maxWidth: .infinity, minHeight: 46)
                 }
                 .buttonStyle(.fullArea)
-                .foregroundStyle(.white)
+                .foregroundStyle(KXColor.onAccent)
                 .background(KXColor.accent, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 .disabled(model.isSaving || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .opacity(model.isSaving || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.55 : 1)
@@ -761,7 +763,7 @@ private struct GuideCalendarEventRow: View {
             .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
             .padding(KXSpacing.md)
             .contentShape(Rectangle())
-            .background(Color.indigo.opacity(0.07), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(Color.indigo.opacity(0.07), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
         }
         .buttonStyle(.fullArea)
         .sheet(isPresented: $showEditor) {
@@ -804,7 +806,7 @@ private struct GuideCalendarEventEditor: View {
                             .font(.title3.weight(.bold))
                             .padding(.horizontal, 14)
                             .frame(minHeight: 52)
-                            .background(KXColor.livingSurface.opacity(0.82), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .background(KXColor.livingSurface.opacity(0.82), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                         VStack(spacing: KXSpacing.xs) {
                             DatePicker(guideOSText(language, "日期", "日付", "Date"), selection: $date, displayedComponents: .date)
                             Toggle(guideOSText(language, "全天", "終日", "All-day"), isOn: $allDay)
@@ -821,7 +823,7 @@ private struct GuideCalendarEventEditor: View {
                         }
                         .font(.subheadline.weight(.semibold))
                         .padding(14)
-                        .background(KXColor.livingSurface.opacity(0.82), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .background(KXColor.livingSurface.opacity(0.82), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                         VStack(alignment: .leading, spacing: KXSpacing.sm) {
                             Text(guideOSText(language, "备注", "メモ", "Notes"))
                                 .font(.caption.weight(.bold))
@@ -830,7 +832,7 @@ private struct GuideCalendarEventEditor: View {
                                 .lineLimit(4...10)
                         }
                         .padding(14)
-                        .background(KXColor.livingSurface.opacity(0.82), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .background(KXColor.livingSurface.opacity(0.82), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                         Button(role: .destructive) {
                             confirmDelete = true
                         } label: {

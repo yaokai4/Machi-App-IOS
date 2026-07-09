@@ -208,7 +208,7 @@ struct GuideOSApplicationRow: View {
                 .font(.subheadline)
                 .foregroundStyle(KXColor.accent)
                 .frame(width: 30, height: 30)
-                .background(KXColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .background(KXColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: KXRadius.sm, style: .continuous))
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 6) {
                     Text(app.name).font(.subheadline.weight(.bold)).foregroundStyle(.primary).lineLimit(1)
@@ -579,7 +579,7 @@ struct GuideOSLibraryPickerField: View {
             }
             .padding(.horizontal, KXSpacing.md)
             .frame(height: 44)
-            .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
 
             if !suggestions.isEmpty {
                 VStack(spacing: 0) {
@@ -624,8 +624,8 @@ struct GuideOSLibraryPickerField: View {
                         .padding(.horizontal, KXSpacing.md)
                         .padding(.vertical, KXSpacing.sm)
                 }
-                .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(KXColor.accent.opacity(0.18), lineWidth: 1))
+                .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous).stroke(KXColor.accent.opacity(0.18), lineWidth: 1))
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }

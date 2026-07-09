@@ -5,17 +5,21 @@ import SwiftData
 enum KaiXDatabaseContainer {
     private static let logger = Logger(subsystem: "com.yaokai.kaizi", category: "Database")
 
-    /// Persistent on-disk cache, WeChat-style: posts, conversations, messages
-    /// and profile data are kept locally so a cold launch paints last-seen
-    /// content instantly and chats only fetch what's new instead of re-pulling
-    /// everything. The production server stays the single source of truth — this
-    /// is a *rebuildable cache*, not authoritative storage.
+    /// 设计决策(与现实一致,勿再写成"微信式离线缓存"):**生产不把业务数据写进
+    /// 这个磁盘 Store**。帖子/会话/聊天记录/资料一律由 `KaiXAPIClient` 直出、驻
+    /// 内存,服务器是唯一真相(ec4472a"服务器唯一真相不落盘")。发布版里会落到
+    /// 这个 Store 的只有游客占位行等非业务骨架;真正写库的通路
+    /// (RemoteSyncService / DatabaseSeeder)全部 `#if DEBUG` 门控,只服务本地
+    /// 夹具与 UI 测试。老版本升级残留的历史数据由登出/切号时的
+    /// `requestLocalDataWipe()` 兜底清除(见 ContentView.resetPerAccountState)。
     ///
     /// Robustness (so the old "数据库恢复模式 / 本地数据库需要恢复" state can never
     /// surface): if the on-disk store is unreadable — corruption or a failed
     /// migration — we silently wipe it and start fresh; if even that fails we
     /// fall back to an in-memory store so the app always launches. No recovery
     /// banner is ever shown, and the user can clear this cache from 设置 ▸ 数据管理.
+    /// 这些保护在生产守的是"空壳 + 残留",看似小题大做,但换来的是启动永不被
+    /// 一个坏 SQLite 文件卡死——保留。
     static let shared: ModelContainer = {
         KXPerf.event("app.launch")
         let schema = Schema(KaiXSchemaV5.models)
@@ -49,11 +53,12 @@ enum KaiXDatabaseContainer {
     private static var storeURL: URL {
         let dir = URL.applicationSupportDirectory.appending(path: "KaiXLocalStore", directoryHint: .isDirectory)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        // Encrypt the on-disk cache at rest — it holds DM message bodies. Complete-
-        // until-first-unlock matches the session token's accessibility: unreadable
-        // on a locked device that has never been unlocked since boot, yet still
-        // available for background refresh after the first unlock. Applied to the
-        // folder so the .store / -wal / -shm files created inside inherit it.
+        // Encrypt the store at rest. 生产虽不写 DM 正文进库(见上),但 DEBUG 夹具
+        // 会写、老版本可能残留过——按"可能含 DM 正文"的最坏情况加密不吃亏。
+        // Complete-until-first-unlock matches the session token's accessibility:
+        // unreadable on a locked device that has never been unlocked since boot,
+        // yet still available for background refresh after the first unlock.
+        // Applied to the folder so the .store / -wal / -shm files inherit it.
         try? FileManager.default.setAttributes(
             [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
             ofItemAtPath: dir.path

@@ -7,6 +7,11 @@ final class MessageRepository {
     private static var cachedPeersById: [String: UserEntity] = [:]
     private static var cachedMediaByConversationId: [String: [String: [MediaEntity]]] = [:]
     private static var signedAttachmentURLCache: [String: SignedAttachmentURLCacheItem] = [:]
+    /// 会话 → 已读消息 id 集合(服务端 is_read)。服务端一直随消息返回 is_read
+    /// (对己方消息即"对方是否已读"),过去在映射成 MessageEntity 时被直接丢弃,
+    /// iOS 永远只显示"已发送"。不改 SwiftData 模型(归其他分组),按会话缓存,
+    /// 供 ChatViewModel 发布给气泡渲染已读回执。只增不减:is_read 单调。
+    private static var readMessageIdsByConversationId: [String: Set<String>] = [:]
     /// Draft id → already-uploaded file id, so a DM resend after a failure that
     /// happened *after* the S3 upload finished reuses the uploaded bytes instead
     /// of re-transferring them (mirrors ComposePostViewModel.uploadedMediaByDraftID).
@@ -39,6 +44,7 @@ final class MessageRepository {
         cachedMediaByConversationId = [:]
         signedAttachmentURLCache = [:]
         uploadedFileIdByDraftId = [:]
+        readMessageIdsByConversationId = [:]
     }
 
     init(context: ModelContext) {
@@ -66,24 +72,61 @@ final class MessageRepository {
     }
 
     func fetchMessages(threadId: String, query: String = "", day: String? = nil) async throws -> [MessageEntity] {
+        try await fetchMessagesPage(threadId: threadId, query: query, day: day).messages
+    }
+
+    /// 最新一页(limit=80)+ 服务端 next_cursor:把 next_cursor 作为 cursor 传回
+    /// `fetchEarlierMessages` 可取更早的一页;nil = 已到最早(或本地兜底路径)。
+    func fetchMessagesPage(threadId: String, query: String = "", day: String? = nil) async throws -> (messages: [MessageEntity], nextCursor: String?) {
         if KaiXBackend.token != nil {
-            let messages = try await KaiXAPIClient.shared.messages(threadId, query: query, day: day)
+            let page = try await KaiXAPIClient.shared.messages(threadId, query: query, day: day)
             var mediaByMessage: [String: [MediaEntity]] = [:]
             var entities: [MessageEntity] = []
-            for dto in messages {
+            for dto in page.items {
                 let mappedMedia = await Self.resolvedMediaItems(from: dto)
                 mediaByMessage[dto.id] = mappedMedia
                 let entity = Self.message(from: dto, mediaIds: mappedMedia.map(\.id))
                 entities.append(entity)
             }
-            Self.cachedMediaByConversationId[threadId] = mediaByMessage
-            return entities
+            Self.mergeMediaCache(threadId: threadId, mediaByMessage)
+            Self.rememberReadMessageIds(from: page.items, threadId: threadId)
+            return (entities, page.nextCursor)
         }
-        guard KaiXRuntimeFlags.allowLocalStoreFallback else { return [] }
-        return try context.fetch(FetchDescriptor<MessageEntity>(
+        guard KaiXRuntimeFlags.allowLocalStoreFallback else { return ([], nil) }
+        return (try context.fetch(FetchDescriptor<MessageEntity>(
             predicate: #Predicate { $0.threadId == threadId },
             sortBy: [SortDescriptor(\.createdAt)]
-        ))
+        )), nil)
+    }
+
+    /// 更早的一页历史(keyset 游标 = 上一页响应的 next_cursor)。返回的消息按
+    /// 时间升序,调用方去重后 prepend 到列表头部;媒体一次性全量解析(历史页是
+    /// 一次性加载,不走 text-first 两段式)并合并进会话缓存。
+    func fetchEarlierMessages(
+        threadId: String,
+        query: String = "",
+        day: String? = nil,
+        cursor: String
+    ) async throws -> (messages: [MessageEntity], nextCursor: String?) {
+        guard KaiXBackend.token != nil else { return ([], nil) }
+        let page = try await KaiXAPIClient.shared.messages(threadId, query: query, day: day, cursor: cursor)
+        var mediaByMessage: [String: [MediaEntity]] = [:]
+        var entities: [MessageEntity] = []
+        for dto in page.items {
+            let mappedMedia = await Self.resolvedMediaItems(from: dto)
+            mediaByMessage[dto.id] = mappedMedia
+            entities.append(Self.message(from: dto, mediaIds: mappedMedia.map(\.id)))
+        }
+        Self.mergeMediaCache(threadId: threadId, mediaByMessage)
+        Self.rememberReadMessageIds(from: page.items, threadId: threadId)
+        return (entities, page.nextCursor)
+    }
+
+    /// 历史分页后,更早页的媒体必须在整页刷新(3s 轮询只取最新一页)中幸存,
+    /// 所以按消息 id 合并而不是整会话覆盖。fetchMedia 按请求的 messageIds 过滤,
+    /// 已删消息的残留条目对外不可见,删除路径也会显式清理自己的条目。
+    private static func mergeMediaCache(threadId: String, _ fresh: [String: [MediaEntity]]) {
+        cachedMediaByConversationId[threadId, default: [:]].merge(fresh) { _, new in new }
     }
 
     /// Text-first fetch: decodes message bubbles immediately (no attachment
@@ -95,26 +138,27 @@ final class MessageRepository {
         threadId: String,
         query: String = "",
         day: String? = nil
-    ) async throws -> (messages: [MessageEntity], pending: [KaiXMessageDTO]) {
+    ) async throws -> (messages: [MessageEntity], pending: [KaiXMessageDTO], nextCursor: String?) {
         if KaiXBackend.token != nil {
-            let dtos = try await KaiXAPIClient.shared.messages(threadId, query: query, day: day)
+            let page = try await KaiXAPIClient.shared.messages(threadId, query: query, day: day)
             // Seed the media cache with whatever resolves without a network sign
             // (public URLs / legacy media), so text + already-public media paint
             // together and only signed attachments wait for the second pass.
             var mediaByMessage: [String: [MediaEntity]] = [:]
             var entities: [MessageEntity] = []
             var pending: [KaiXMessageDTO] = []
-            for dto in dtos {
+            for dto in page.items {
                 let immediate = Self.immediateMediaItems(from: dto)
                 mediaByMessage[dto.id] = immediate.media
                 if immediate.needsSigning { pending.append(dto) }
                 entities.append(Self.message(from: dto, mediaIds: immediate.media.map(\.id)))
             }
-            Self.cachedMediaByConversationId[threadId] = mediaByMessage
-            return (entities, pending)
+            Self.mergeMediaCache(threadId: threadId, mediaByMessage)
+            Self.rememberReadMessageIds(from: page.items, threadId: threadId)
+            return (entities, pending, page.nextCursor)
         }
         let local = try await fetchMessages(threadId: threadId, query: query, day: day)
-        return (local, [])
+        return (local, [], nil)
     }
 
     /// Second pass for `fetchMessagesTextFirst`: signs the pending attachments
@@ -369,6 +413,7 @@ final class MessageRepository {
         if KaiXBackend.token != nil {
             try await KaiXAPIClient.shared.deleteConversation(thread.id)
             Self.cachedMediaByConversationId[thread.id] = nil
+            Self.readMessageIdsByConversationId[thread.id] = nil
             return
         }
         guard KaiXRuntimeFlags.allowLocalStoreFallback else { throw RepositoryError.authenticationRequired }
@@ -414,6 +459,19 @@ final class MessageRepository {
         }
         thread.updatedAt = .now
         try context.save()
+    }
+
+    /// 当前缓存的"已读消息 id"集合(is_read == true),按会话。搜索/日期过滤的
+    /// 抓取只是全量的子集,所以用并集累积而不是整体覆盖——is_read 单调,不会
+    /// 从已读翻回未读。
+    func readMessageIds(threadId: String) -> Set<String> {
+        Self.readMessageIdsByConversationId[threadId] ?? []
+    }
+
+    private static func rememberReadMessageIds(from dtos: [KaiXMessageDTO], threadId: String) {
+        let readIds = dtos.filter(\.is_read).map(\.id)
+        guard !readIds.isEmpty else { return }
+        readMessageIdsByConversationId[threadId, default: []].formUnion(readIds)
     }
 
     func peerUserId(in thread: MessageThreadEntity, currentUserId: String) -> String? {

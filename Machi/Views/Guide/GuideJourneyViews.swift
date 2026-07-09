@@ -61,16 +61,30 @@ func guideJourneyKey(forArrivalStage stage: String) -> String? {
     }
 }
 
-private func guideJourneyTitle(forKey key: String) -> String {
-    GuideViewModelJourneyTitles.titles[key] ?? key
+private func guideJourneyTitle(forKey key: String, language: AppLanguage) -> String {
+    GuideViewModelJourneyTitles.title(forKey: key, language: language)
 }
 
+/// Inline trilingual journey titles mirroring the server's GUIDE_JOURNEY_SEED.
+/// Used by the "open path" hooks where only a journey KEY is in scope (no
+/// server journey DTO available) — a Chinese-only table here produced
+/// mixed-language copy like "Open the 日本就职 path" in EN/JA environments.
 enum GuideViewModelJourneyTitles {
-    static let titles: [String: String] = [
-        "arrival": "刚到日本 7 天", "prepare": "准备来日本", "housing": "租房 / 搬家",
-        "language_school": "语言学校 / 留学", "grad_school": "大学院 / 升学",
-        "job_hunting": "日本就职", "jlpt": "JLPT / EJU 备考", "visa": "签证 / 手续",
+    static let titles: [String: (zh: String, ja: String, en: String)] = [
+        "arrival": ("刚到日本 7 天", "来日最初の7日間", "First 7 days in Japan"),
+        "prepare": ("准备来日本", "渡日準備", "Before you arrive"),
+        "housing": ("租房 / 搬家", "賃貸・引っ越し", "Renting & moving"),
+        "language_school": ("语言学校 / 留学", "語学学校・留学", "Language school & study"),
+        "grad_school": ("大学院 / 升学", "大学院・進学", "Grad school & admissions"),
+        "job_hunting": ("日本就职", "日本での就職", "Job hunting in Japan"),
+        "jlpt": ("JLPT / EJU 备考", "JLPT・EJU 対策", "JLPT / EJU prep"),
+        "visa": ("签证 / 手续", "ビザ・手続き", "Visa & paperwork"),
     ]
+
+    static func title(forKey key: String, language: AppLanguage) -> String {
+        guard let t = titles[key] else { return key }
+        return KXListingCopy.pickText(language, t.zh, t.ja, t.en)
+    }
 }
 
 // MARK: - Home: "你现在想解决什么" journey grid
@@ -136,11 +150,11 @@ struct GuideJourneyCard: View {
                 HStack {
                     Image(systemName: guideJourneySymbol(journey.icon))
                         .kxScaledFont(18, weight: .bold)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(KXColor.onTint(tint))
                         .frame(width: 40, height: 40)
                         .background(
                             LinearGradient(colors: [tint, tint.opacity(0.82)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                            in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+                            in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
                         )
                         .shadow(color: tint.opacity(0.35), radius: 8, y: 4)
                     Spacer()
@@ -249,6 +263,12 @@ final class GuideJourneyDetailViewModel: ObservableObject {
     /// "share your tips" celebration card, deduped per journey via @AppStorage.
     @Published var journeyJustCompleted = false
 
+    /// 当前界面语言。VM 层的进度/计划/登录提示必须三语——此前全部硬编码中文,
+    /// 日/英用户完成步骤、安排日期或生成计划时只能看到中文。
+    private var uiLanguage: AppLanguage {
+        AppLanguage.resolved(from: UserDefaults.standard.string(forKey: "appLanguageCode") ?? AppLanguage.system.rawValue)
+    }
+
     func load(journeyKey: String, country: String, language: String) async {
         guard country == "jp" else { detail = nil; isLoading = false; return }
         isLoading = true
@@ -301,7 +321,10 @@ final class GuideJourneyDetailViewModel: ObservableObject {
             } else {
                 progress.removeValue(forKey: step.stepKey)
             }
-            syncMessage = "进度未能同步到云端，已恢复本机状态，请稍后再试。"
+            syncMessage = journeyText(uiLanguage,
+                "进度未能同步到云端，已恢复本机状态，请稍后再试。",
+                "進捗をクラウドに同期できませんでした。ローカルの状態に戻しました。しばらくしてからもう一度お試しください。",
+                "Couldn't sync your progress to the cloud. Reverted to the local state — please try again later.")
         }
     }
 
@@ -326,21 +349,30 @@ final class GuideJourneyDetailViewModel: ObservableObject {
                 plannedDate: date,
                 dueAt: date
             )
-            syncMessage = "已安排到 Guide 日历。"
+            syncMessage = journeyText(uiLanguage,
+                "已安排到 Guide 日历。",
+                "Guide カレンダーに追加しました。",
+                "Added to your Guide calendar.")
         } catch {
             if let previous {
                 progress[step.stepKey] = previous
             } else {
                 progress.removeValue(forKey: step.stepKey)
             }
-            syncMessage = "安排日期失败，请稍后再试。"
+            syncMessage = journeyText(uiLanguage,
+                "安排日期失败，请稍后再试。",
+                "日程の設定に失敗しました。しばらくしてからもう一度お試しください。",
+                "Couldn't schedule the date. Please try again later.")
         }
     }
 
     @discardableResult
     func startPlan(journeyKey: String, planType: String) async -> Bool {
         guard KaiXBackend.token != nil else {
-            GuestGate.shared.requireLogin("登录后可以把这条路径生成 Todo 计划。")
+            GuestGate.shared.requireLogin(journeyText(uiLanguage,
+                "登录后可以把这条路径生成 Todo 计划。",
+                "ログインすると、このパスから Todo 計画を作成できます。",
+                "Sign in to turn this path into a Todo plan."))
             return false
         }
         isStartingPlan = true
@@ -348,10 +380,16 @@ final class GuideJourneyDetailViewModel: ObservableObject {
         defer { isStartingPlan = false }
         do {
             _ = try await KaiXAPIClient.shared.startGuidePlan(journeyKey: journeyKey, planType: planType.isEmpty ? "guide" : planType)
-            syncMessage = "已生成 Todo 计划，可以在「我的计划」里继续推进。"
+            syncMessage = journeyText(uiLanguage,
+                "已生成 Todo 计划，可以在「我的计划」里继续推进。",
+                "Todo 計画を作成しました。「マイ計画」で続けて進められます。",
+                "Todo plan created — continue in \"My plan\".")
             return true
         } catch {
-            syncMessage = "计划生成失败，请稍后再试。"
+            syncMessage = journeyText(uiLanguage,
+                "计划生成失败，请稍后再试。",
+                "計画の作成に失敗しました。しばらくしてからもう一度お試しください。",
+                "Couldn't create the plan. Please try again later.")
             return false
         }
     }
@@ -432,7 +470,7 @@ struct GuideJourneyDetailView: View {
                         }
                         .buttonStyle(.fullArea)
         .contentShape(Rectangle())
-                        .foregroundStyle(.white)
+                        .foregroundStyle(KXColor.onAccent)
                         .background(KXColor.accent, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                         .disabled(model.isStartingPlan)
 
@@ -453,7 +491,7 @@ struct GuideJourneyDetailView: View {
                             .foregroundStyle(.secondary)
                             .padding(10)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 12))
+                            .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.md))
                     }
                     ForEach(Array(detail.steps.enumerated()), id: \.element.id) { index, step in
                         GuideJourneyStepRow(
@@ -466,14 +504,20 @@ struct GuideJourneyDetailView: View {
                             language: language,
                             onToggle: {
                                 if KaiXBackend.token == nil {
-                                    GuestGate.shared.requireLogin("登录后可以同步 Guide 进度、Todo 和提醒。")
+                                    GuestGate.shared.requireLogin(journeyText(language,
+                                        "登录后可以同步 Guide 进度、Todo 和提醒。",
+                                        "ログインすると Guide の進捗・Todo・リマインダーを同期できます。",
+                                        "Sign in to sync your Guide progress, todos and reminders."))
                                 } else {
                                     Task { await model.toggle(step: step, journeyKey: journeyKey) }
                                 }
                             },
                             onSchedule: { date in
                                 if KaiXBackend.token == nil {
-                                    GuestGate.shared.requireLogin("登录后可以把步骤安排到 Guide 日历。")
+                                    GuestGate.shared.requireLogin(journeyText(language,
+                                        "登录后可以把步骤安排到 Guide 日历。",
+                                        "ログインするとステップを Guide カレンダーに追加できます。",
+                                        "Sign in to schedule steps to your Guide calendar."))
                                 } else {
                                     Task { await model.schedule(step: step, journeyKey: journeyKey, date: date) }
                                 }
@@ -510,11 +554,11 @@ struct GuideJourneyDetailView: View {
             HStack(spacing: KXSpacing.md) {
                 Image(systemName: guideJourneySymbol(journey.icon))
                     .kxScaledFont(22, weight: .bold)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(KXColor.onTint(tint))
                     .frame(width: 54, height: 54)
                     .background(
                         LinearGradient(colors: [tint, tint.opacity(0.82)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                        in: RoundedRectangle(cornerRadius: 17, style: .continuous)
+                        in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                     )
                     .shadow(color: tint.opacity(0.38), radius: 10, y: 5)
                 VStack(alignment: .leading, spacing: 3) {
@@ -562,11 +606,11 @@ struct GuideJourneyDetailView: View {
             HStack(spacing: KXSpacing.md) {
                 Image(systemName: "party.popper.fill")
                     .kxScaledFont(20, weight: .bold)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(KXColor.onTint(tint))
                     .frame(width: 46, height: 46)
                     .background(
                         LinearGradient(colors: [tint, tint.opacity(0.82)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                        in: RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                     )
                     .shadow(color: tint.opacity(0.35), radius: 8, y: 4)
                 VStack(alignment: .leading, spacing: 3) {
@@ -591,7 +635,7 @@ struct GuideJourneyDetailView: View {
                 }
                 .buttonStyle(.fullArea)
                 .contentShape(Rectangle())
-                .foregroundStyle(.white)
+                .foregroundStyle(KXColor.onTint(tint))
                 .background(tint, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
 
                 Button {
@@ -692,7 +736,7 @@ private struct GuideJourneyStepRow: View {
                             }
                             .padding(.horizontal, 10)
                             .frame(height: 38)
-                            .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: 11))
+                            .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.sm))
                         }
                         .buttonStyle(.fullArea)
         .contentShape(Rectangle())
@@ -716,7 +760,7 @@ private struct GuideJourneyStepRow: View {
                         }
                         .padding(.horizontal, 10)
                         .frame(height: 38)
-                        .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 11))
+                        .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: KXRadius.sm))
                     }
                     .buttonStyle(.fullArea)
         .contentShape(Rectangle())
@@ -744,10 +788,11 @@ private struct GuideJourneyStepRow: View {
             }
 
             if step.actionType == "journey", !step.actionTarget.isEmpty {
+                let targetTitle = guideJourneyTitle(forKey: step.actionTarget, language: language)
                 Button { onOpenJourney(step.actionTarget) } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.turn.down.right").font(.caption.weight(.bold))
-                        Text(journeyText(language, "查看「\(guideJourneyTitle(forKey: step.actionTarget))」路径", "「\(guideJourneyTitle(forKey: step.actionTarget))」パスを見る", "Open the \(guideJourneyTitle(forKey: step.actionTarget)) path"))
+                        Text(journeyText(language, "查看「\(targetTitle)」路径", "「\(targetTitle)」パスを見る", "Open the \(targetTitle) path"))
                             .font(.caption.weight(.bold))
                     }
                     .foregroundStyle(KXColor.accent)
@@ -766,7 +811,7 @@ private struct GuideJourneyStepRow: View {
         )
         .overlay(alignment: .leading) {
             // slim left accent bar that fills in once the step is done
-            RoundedRectangle(cornerRadius: 2)
+            RoundedRectangle(cornerRadius: KXRadius.xxs)
                 .fill(isDone ? tint : Color.clear)
                 .frame(width: 3)
                 .padding(.vertical, 14)
@@ -826,18 +871,19 @@ struct GuideJourneyNextStepCard: View {
 
     var body: some View {
         if let key = guideJourneyKey(forCategory: categoryKey) {
+            let targetTitle = guideJourneyTitle(forKey: key, language: language)
             Button { router.open(.guideJourney(key: key)) } label: {
                 HStack(spacing: KXSpacing.md) {
                     Image(systemName: "signpost.right.fill")
                         .kxScaledFont(18, weight: .bold)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(KXColor.onAccent)
                         .frame(width: 42, height: 42)
-                        .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                        .background(KXColor.accent, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                     VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                         Text(journeyText(language, "下一步", "次のステップ", "Next step"))
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.secondary)
-                        Text(journeyText(language, "继续「\(guideJourneyTitle(forKey: key))」完整路径", "「\(guideJourneyTitle(forKey: key))」の全ステップへ", "Continue the \(guideJourneyTitle(forKey: key)) path"))
+                        Text(journeyText(language, "继续「\(targetTitle)」完整路径", "「\(targetTitle)」の全ステップへ", "Continue the \(targetTitle) path"))
                             .font(.subheadline.weight(.bold))
                             .foregroundStyle(.primary)
                             .lineLimit(1)

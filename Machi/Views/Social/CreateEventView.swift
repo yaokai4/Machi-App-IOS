@@ -29,6 +29,9 @@ struct CreateEventView: View {
     @State private var coverImage: UIImage?
     @State private var coverUploadedURL = ""
     @State private var isUploadingCover = false
+    /// 封面上传代际:快速连选两张图时,旧的慢上传完成后不得覆写新图的 URL/收尾
+    /// 守卫,否则 last-writer-wins 会发布出与预览不符的封面。
+    @State private var coverLoadGeneration = 0
 
     @State private var isSubmitting = false
     @State private var errorMessage: String?
@@ -59,7 +62,7 @@ struct CreateEventView: View {
                             .padding(.horizontal, KXSpacing.xs)
                     }
                 }
-                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.horizontal, KXSpacing.screen)
                 .padding(.top, KXSpacing.md)
                 .padding(.bottom, 120)
                 .kxReadableWidth(700)
@@ -94,7 +97,7 @@ struct CreateEventView: View {
             }
             Spacer()
         }
-        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.horizontal, KXSpacing.screen)
         .padding(.top, KXSpacing.sm)
         .padding(.bottom, KXSpacing.sm)
         .kxGlassBar(ignoresTopSafeArea: true)
@@ -151,7 +154,7 @@ struct CreateEventView: View {
                             Text(KXEventStyle.label(key, fallback: nil, language))
                                 .font(.caption.weight(.bold))
                         }
-                        .foregroundStyle(isSelected ? .white : chipTint)
+                        .foregroundStyle(isSelected ? KXColor.onTint(chipTint) : chipTint)
                         .padding(.horizontal, 12)
                         .frame(height: 34)
                         .background(isSelected ? chipTint : chipTint.opacity(0.10), in: Capsule())
@@ -203,6 +206,14 @@ struct CreateEventView: View {
                 displayedComponents: [.date, .hourAndMinute]
             )
             .font(.subheadline.weight(.semibold))
+            // 开始时间被推到结束时间之后时,DatePicker 的 `in: startsAt...` 只钳制
+            // 显示、不回写已越界的 endsAt binding → 会提交 end<start 的负时长活动。
+            // 主动把结束时间随开始时间钳回,保证"看到的值=提交的值"。
+            .onChange(of: startsAt) { _, newStart in
+                if hasEndTime, endsAt <= newStart {
+                    endsAt = newStart.addingTimeInterval(3600)
+                }
+            }
             Toggle(isOn: $hasEndTime.animation(.snappy(duration: 0.2))) {
                 Text(KXListingCopy.pickText(language, "设置结束时间", "終了時刻を設定", "Set an end time"))
                     .font(.subheadline.weight(.semibold))
@@ -294,14 +305,14 @@ struct CreateEventView: View {
                 Text(KXListingCopy.pickText(language, "发布活动", "イベントを公開", "Publish event"))
                     .font(.headline.weight(.bold))
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(canSubmit ? KXColor.onTint(tint) : Color.white)
             .frame(maxWidth: .infinity)
             .frame(height: 52)
             .background(canSubmit ? AnyShapeStyle(tint.gradient) : AnyShapeStyle(Color.secondary.opacity(0.4)), in: Capsule())
         }
         .buttonStyle(KXPressableStyle(scale: 0.97))
         .disabled(!canSubmit)
-        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.horizontal, KXSpacing.screen)
         .padding(.vertical, 10)
         .kxGlassBar()
     }
@@ -321,19 +332,41 @@ struct CreateEventView: View {
 
     private func loadCover(_ item: PhotosPickerItem?) async {
         guard let item else { return }
+        // 新选图立刻作废上一代任务:旧任务的所有状态写入(URL/预览/收尾)都要过
+        // 代际比对,否则「选 A(慢)再选 B(快)」时 A 完成后会覆写 coverUploadedURL,
+        // 发布出预览是 B、实际封面是 A 的活动。
+        coverLoadGeneration += 1
+        let generation = coverLoadGeneration
         guard let data = try? await item.loadTransferable(type: Data.self),
               let image = UIImage(data: data) else {
-            errorMessage = KXListingCopy.pickText(language, "封面读取失败,换一张试试", "画像を読み込めませんでした", "Couldn't load that image")
+            if generation == coverLoadGeneration {
+                // 上一代可能仍在途且已被作废(不会再写状态/收尾),这里整体重置,
+                // 保证预览与 coverUploadedURL 永远成对一致。
+                coverImage = nil
+                coverUploadedURL = ""
+                isUploadingCover = false
+                errorMessage = KXListingCopy.pickText(language, "封面读取失败,换一张试试", "画像を読み込めませんでした", "Couldn't load that image")
+            }
             return
         }
+        guard generation == coverLoadGeneration else { return }
         coverImage = image
+        coverUploadedURL = "" // 旧图 URL 立刻作废:上传窗口内点发布不能带上旧封面
         isUploadingCover = true
         errorMessage = nil
-        defer { isUploadingCover = false }
+        // 收尾只允许最新代做:旧代清 isUploadingCover 会提前解锁 canSubmit。
+        defer { if generation == coverLoadGeneration { isUploadingCover = false } }
         do {
             // 压到 2048 宽以内再传,活动封面不需要原图。
             let resized = image.kxResized(maxDimension: 2048)
-            guard let jpeg = resized.jpegData(compressionQuality: 0.82) else { return }
+            guard let jpeg = resized.jpegData(compressionQuality: 0.82) else {
+                if generation == coverLoadGeneration {
+                    // 静默 return 会留下「预览有图、实际没传」的假象:清预览并提示。
+                    coverImage = nil
+                    errorMessage = KXListingCopy.pickText(language, "封面处理失败,换一张试试", "画像を処理できませんでした", "Couldn't process that image")
+                }
+                return
+            }
             let uploaded = try await KaiXAPIClient.shared.uploadFile(
                 data: jpeg,
                 mime: "image/jpeg",
@@ -343,9 +376,12 @@ struct CreateEventView: View {
                 width: Int(resized.size.width),
                 height: Int(resized.size.height)
             )
+            guard generation == coverLoadGeneration else { return }
             coverUploadedURL = uploaded.media.publicUrl ?? uploaded.media.url ?? ""
         } catch {
+            guard generation == coverLoadGeneration else { return }
             coverImage = nil
+            coverUploadedURL = ""
             errorMessage = error.kaixUserMessage
         }
     }
@@ -364,7 +400,9 @@ struct CreateEventView: View {
             payload.description = description.trimmingCharacters(in: .whitespacesAndNewlines)
             payload.category = category
             payload.cover_url = coverUploadedURL
-            payload.ends_at = hasEndTime ? KXDateParsing.iso.string(from: endsAt) : ""
+            // 兜底:即便 UI 钳制被绕过,也绝不提交早于开始时间的结束时间
+            // (否则服务端按 COALESCE(ends,starts) 归类会把未来活动判成"往期"而消失)。
+            payload.ends_at = hasEndTime ? KXDateParsing.iso.string(from: max(endsAt, startsAt.addingTimeInterval(3600))) : ""
             payload.venue_name = venueName.trimmingCharacters(in: .whitespacesAndNewlines)
             payload.address = address.trimmingCharacters(in: .whitespacesAndNewlines)
             payload.country_code = region?.countryCode ?? "jp"

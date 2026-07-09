@@ -6,8 +6,9 @@ import Foundation
 ///
 /// NOTE: We deliberately use plain `Decodable` structs here (not
 /// SwiftData entities) so the network layer can be tested without
-/// touching a `ModelContext`. `RemoteSyncService` is responsible for
-/// converting a DTO into an existing SwiftData entity.
+/// touching a `ModelContext`. In production `ServerEntityFactory` turns
+/// DTOs into detached in-memory entities (server is the single source
+/// of truth); `RemoteSyncService` is DEBUG-gated legacy code.
 
 /// Minimal type-erased Codable scalar for `post.attributes`. The
 /// values we accept from the server are scalar (string / number /

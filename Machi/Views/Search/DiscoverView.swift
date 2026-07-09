@@ -20,7 +20,6 @@ struct DiscoverView: View {
     // (推荐 / 热榜 / 正在发生 and city-vs-country) is remembered instead of
     // snapping back to 推荐 every time they leave and return.
     @SceneStorage("discover.segment") private var selectedSegment: DiscoverSegment = .recommend
-    @SceneStorage("discover.hotScope") private var selectedHotScope: DiscoverHotScope = .city
     @State private var isShowingRegionSelector = false
     @State private var isShowingMoreChannels = false
     @State private var isShowingNotifications = false
@@ -34,77 +33,47 @@ struct DiscoverView: View {
         regionStore.current
     }
 
-    private var sortedPosts: [PostEntity] {
-        let source = viewModel.happeningPosts.isEmpty ? viewModel.hotPosts : viewModel.happeningPosts
-        let regionPosts = source.filter { $0.matches(region: currentRegion) }
-        let base = regionPosts.isEmpty ? source : regionPosts
-        return base.sorted { lhs, rhs in
-            if lhs.discoverBoostScore == rhs.discoverBoostScore {
-                return lhs.heatScore > rhs.heatScore
-            }
-            return lhs.discoverBoostScore > rhs.discoverBoostScore
-        }
-    }
-
-    private var cityHotPosts: [PostEntity] {
-        Array(sortedPosts.sorted { $0.heatScore > $1.heatScore }.prefix(10))
-    }
-
-    private var countryHotPosts: [PostEntity] {
-        guard let currentRegion else {
-            return Array(viewModel.hotPosts.sorted { $0.heatScore > $1.heatScore }.prefix(10))
-        }
-        let countryPosts = viewModel.hotPosts
-            .filter { $0.country == currentRegion.countryCode }
-            .sorted { $0.heatScore > $1.heatScore }
-        return Array((countryPosts.isEmpty ? viewModel.hotPosts.sorted { $0.heatScore > $1.heatScore } : countryPosts).prefix(10))
-    }
-
-    private var scopedHotPosts: [PostEntity] {
-        switch selectedHotScope {
-        case .city:
-            return cityHotPosts
-        case .country:
-            return countryHotPosts
-        }
-    }
-
-    private var scopedHotTitle: String {
-        switch selectedHotScope {
-        case .city:
-            return currentRegion.map { "\((KaiXRegionDirectory.localizedMetroName(for: $0, language: language) ?? KaiXRegionDirectory.localizedShortLabel($0, language: language)))\(L("hot", language))" } ?? "\(L("currentRegion", language))\(L("hot", language))"
-        case .country:
-            return currentRegion.map {
-                let country = KaiXRegionDirectory.localizedCountryName(
-                    .init(code: $0.countryCode, name: $0.countryName, emoji: $0.countryEmoji, tier: 1, hasProvinces: !$0.provinceCode.isEmpty),
-                    language: language
-                )
-                return "\(country)\(L("hot", language))"
-            } ?? "\(L("hotScopeCountry", language))\(L("hot", language))"
-        }
-    }
-
-    private var recommendedPosts: [PostEntity] {
-        Array(sortedPosts.prefix(12))
-    }
+    // 派生数据缓存:这些 O(n) 的 filter/sort 只依赖 viewModel 数据 + 当前区域,
+    // 与 postStore 无关 —— 但 DiscoverView 持有 @EnvironmentObject postStore,
+    // 任意一次点赞/收藏都会让 body 整体重求值。缓存为 @State,只在 load 完成 /
+    // 区域切换时重建(rebuildDerivedContent),避免每次 body 重跑 13 次频道计数
+    // + 多轮排序。默认值保证首帧(load 前 / .empty 态)四大入口卡照常渲染。
+    @State private var cachedPrimaryCategories: [DiscoverCategory] =
+        DiscoverView.primarySpecs.map { DiscoverCategory(spec: $0, count: 0) }
+    @State private var cachedAllCategories: [DiscoverCategory] =
+        DiscoverView.allCategorySpecs.map { DiscoverCategory(spec: $0, count: 0) }
+    @State private var cachedHappeningRadarPosts: [PostEntity] = []
+    @State private var cachedRecommendedUsers: [UserEntity] = []
 
     /// Pure-recency feed for the 正在发生 radar: the newest server happening
     /// posts in the current region, freshest first. Deliberately NOT heat-ranked
     /// — this answers "what's happening right now", which is a different product
     /// from the 热榜 trend board (heat-ranked, server-owned).
     private var happeningRadarPosts: [PostEntity] {
-        let source = viewModel.happeningPosts.isEmpty ? viewModel.hotPosts : viewModel.happeningPosts
-        let regional = source.filter { $0.matches(region: currentRegion) }
-        let base = regional.isEmpty ? source : regional
-        return Array(base.sorted { $0.createdAt > $1.createdAt }.prefix(20))
+        cachedHappeningRadarPosts
     }
 
     private var recommendedUsers: [UserEntity] {
+        cachedRecommendedUsers
+    }
+
+    /// 重建全部派生缓存。调用时机:load() 完成后、区域切换时(先用旧数据即时
+    /// 重过滤,随后 load 回来再刷一次)。新增依赖 viewModel 数据的派生量时,
+    /// 必须归入此处而不是写成每次 body 都重算的计算属性。
+    private func rebuildDerivedContent() {
+        cachedPrimaryCategories = DiscoverView.primarySpecs.map(resolveCategory)
+        cachedAllCategories = DiscoverView.allCategorySpecs.map(resolveCategory)
+
+        let source = viewModel.happeningPosts.isEmpty ? viewModel.hotPosts : viewModel.happeningPosts
+        let regional = source.filter { $0.matches(region: currentRegion) }
+        let base = regional.isEmpty ? source : regional
+        cachedHappeningRadarPosts = Array(base.sorted { $0.createdAt > $1.createdAt }.prefix(20))
+
         var uniqueUsers: [String: UserEntity] = [:]
         for user in viewModel.suggestedUsers + Array(viewModel.authors.values) where user.id != currentUser.id {
             uniqueUsers[user.id] = user
         }
-        return uniqueUsers.values.sorted { $0.followerCount > $1.followerCount }
+        cachedRecommendedUsers = uniqueUsers.values.sorted { $0.followerCount > $1.followerCount }
     }
 
     var body: some View {
@@ -115,7 +84,7 @@ struct DiscoverView: View {
                 // during the initial load instead of a centered spinner.
                 ScrollView {
                     KXFeedSkeleton()
-                        .padding(.horizontal, KaiXTheme.horizontalPadding)
+                        .padding(.horizontal, KXSpacing.screen)
                         .padding(.vertical, 7)
                 }
                 .scrollDisabled(true)
@@ -173,6 +142,9 @@ struct DiscoverView: View {
             Task { await load() }
         }
         .onChange(of: regionStore.current?.regionCode) { _, _ in
+            // 先用已有数据按新区域即时重过滤(雷达/频道计数不等网络),load 回来
+            // 后 rebuild 会再跑一次拿到新区域的服务端数据。
+            rebuildDerivedContent()
             Task { await load() }
         }
         .sheet(isPresented: $isShowingRegionSelector) {
@@ -248,7 +220,7 @@ struct DiscoverView: View {
                         contentListSection
                     }
                 }
-                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.horizontal, KXSpacing.screen)
                 .padding(.top, 14)
                 .padding(.bottom, chrome.bottomContentPadding + 28)
                 .kxReadableWidth()
@@ -256,12 +228,6 @@ struct DiscoverView: View {
             .refreshable {
                 await load()
             }
-        }
-    }
-
-    private var regionSection: some View {
-        CurrentRegionCard(region: currentRegion) {
-            isShowingRegionSelector = true
         }
     }
 
@@ -276,77 +242,16 @@ struct DiscoverView: View {
         )
     }
 
-    private var rankingSection: some View {
-        CityHotRankingView(
-            region: currentRegion,
-            posts: cityHotPosts,
-            authors: viewModel.authors,
-            language: language,
-            onSeeAll: openCityHotList,
-            onOpen: openPost
-        )
-    }
-
-    /// Official 编辑部精选 / 城市助手 content for the current city. These are
-    /// City Seed Bot posts (`isSeedContent`) authored by official accounts —
-    /// surfaced here in place of the old 热门话题/热门城市 chips, which were
-    /// redundant with the segmented "话题" tab and the city card above.
-    private var editorialPosts: [PostEntity] {
-        Array(sortedPosts.filter { $0.isSeedContent }.prefix(6))
-    }
-
-    private var editorialSection: some View {
-        DiscoverEditorialView(
-            region: currentRegion,
-            posts: editorialPosts,
-            authors: viewModel.authors,
-            language: language,
-            onOpen: openPost
-        )
-    }
-
     private var contentListSection: some View {
         DiscoverContentList(
-            segment: selectedSegment,
-            region: currentRegion,
-            posts: recommendedPosts,
-            rankingTitle: scopedHotTitle,
-            scopedRankingPosts: scopedHotPosts,
+            kind: selectedSegment == .users ? .users : .topics,
             topics: viewModel.topics,
             users: recommendedUsers,
-            authors: viewModel.authors,
-            mediaByPostId: viewModel.mediaByPostId,
             followingIds: viewModel.followingIds,
-            currentUser: currentUser,
             language: language,
-            onOpenPost: openPost,
             onOpenTopic: { router.open(.topic(tag: $0)) },
             onOpenUser: { router.open(.profile(userId: $0.id)) },
-            onFollow: follow,
-            onLike: { post in
-                Task {
-                    postStore.register(post)
-                    try? await postStore.toggleLike(context: modelContext, postId: post.id, currentUser: currentUser)
-                }
-            },
-            onBookmark: { post in
-                Task {
-                    postStore.register(post)
-                    try? await postStore.toggleBookmark(context: modelContext, postId: post.id, currentUser: currentUser)
-                }
-            },
-            onRepost: { post in
-                Task {
-                    postStore.register(post)
-                    _ = try? await postStore.toggleRepost(context: modelContext, postId: post.id, currentUser: currentUser)
-                }
-            },
-            onQuoteRepost: { post, content in
-                Task {
-                    postStore.register(post)
-                    _ = try? await postStore.quoteRepost(context: modelContext, postId: post.id, currentUser: currentUser, content: content)
-                }
-            }
+            onFollow: follow
         )
     }
 
@@ -414,7 +319,7 @@ struct DiscoverView: View {
             .buttonStyle(KXPressableStyle())
             .accessibilityLabel(L("searchPlaceholder", language))
         }
-        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.horizontal, KXSpacing.screen)
         .padding(.top, KXSpacing.sm)
         .padding(.bottom, KXSpacing.md)
         .kxGlassBar(ignoresTopSafeArea: true)
@@ -427,7 +332,7 @@ struct DiscoverView: View {
     /// The first four are high-intent structured listing channels; the
     /// remaining five are community/content channels.
     private var primaryCategories: [DiscoverCategory] {
-        DiscoverView.primarySpecs.map { spec in resolveCategory(spec) }
+        cachedPrimaryCategories
     }
 
     /// Secondary channels (活动/优惠/指南/快讯/问答) shown as a compact chip row
@@ -445,9 +350,12 @@ struct DiscoverView: View {
     /// mapping / compose / deep-links, but are hidden so the sheet isn't a
     /// redundant wall.
     private static let moreSheetExtendedIDs: Set<String> = ["guide", "news", "coupon", "groups", "question"]
+    private static var allCategorySpecs: [DiscoverCategorySpec] {
+        primarySpecs + extendedSpecs.filter { moreSheetExtendedIDs.contains($0.id) }
+    }
+
     private var allCategories: [DiscoverCategory] {
-        let extended = DiscoverView.extendedSpecs.filter { DiscoverView.moreSheetExtendedIDs.contains($0.id) }
-        return (DiscoverView.primarySpecs + extended).map { resolveCategory($0) }
+        cachedAllCategories
     }
 
     private func resolveCategory(_ spec: DiscoverCategorySpec) -> DiscoverCategory {
@@ -504,14 +412,6 @@ struct DiscoverView: View {
         router.open(.cityChannel(regionCode: region.regionCode, channel: category.channel))
     }
 
-    private func openCityHotList() {
-        guard let region = currentRegion else {
-            isShowingRegionSelector = true
-            return
-        }
-        router.open(.cityChannel(regionCode: region.regionCode, channel: .hot))
-    }
-
     private func openPost(_ post: PostEntity) {
         router.open(.postDetail(postId: post.repostOfPostId ?? post.id))
     }
@@ -530,6 +430,7 @@ struct DiscoverView: View {
 
     private func load() async {
         await viewModel.load(context: modelContext, currentUser: currentUser, postStore: postStore, searchStore: searchStore)
+        rebuildDerivedContent()
     }
 
 }
@@ -548,26 +449,6 @@ private enum DiscoverSegment: String, CaseIterable, Identifiable, Hashable {
         case .ranking: KXListingCopy.pickText(language, "热榜", "急上昇", "Hot")
         case .topics: KXListingCopy.pickText(language, "话题", "話題", "Topics")
         case .users: KXListingCopy.pickText(language, "用户推荐", "おすすめユーザー", "People")
-        }
-    }
-}
-
-private enum DiscoverHotScope: String, CaseIterable, Identifiable, Hashable {
-    case city
-    case country
-
-    var id: String { rawValue }
-
-    func title(region: KaiXRegionDirectory.Region?, language: AppLanguage) -> String {
-        switch self {
-        case .city:
-            return region.map { KaiXRegionDirectory.localizedMetroName(for: $0, language: language) ?? KaiXRegionDirectory.localizedShortLabel($0, language: language) } ?? L("hotScopeCity", language)
-        case .country:
-            guard let region else { return L("hotScopeCountry", language) }
-            return KaiXRegionDirectory.localizedCountryName(
-                .init(code: region.countryCode, name: region.countryName, emoji: region.countryEmoji, tier: 1, hasProvinces: !region.provinceCode.isEmpty),
-                language: language
-            )
         }
     }
 }
@@ -709,78 +590,6 @@ private struct DiscoverCategory: Identifiable, Hashable {
     }
 }
 
-private struct CurrentRegionCard: View {
-    @Environment(\.appLanguage) private var language
-    let region: KaiXRegionDirectory.Region?
-    let onChange: () -> Void
-
-    private var title: String {
-        guard let region else { return L("selectCity", language) }
-        return KaiXRegionDirectory.localizedShortLabel(region, language: language)
-    }
-
-    var body: some View {
-        Button(action: onChange) {
-            HStack(spacing: KXSpacing.md) {
-                Text(region?.flagEmoji ?? "⌖")
-                    .kxScaledFont(28)
-                    .frame(width: 46, height: 46)
-                    .background(KXColor.softBackground, in: Circle())
-
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(title)
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.78)
-                    Text(region.map {
-                        let city = KaiXRegionDirectory.localizedMetroName(for: $0, language: language) ?? KaiXRegionDirectory.localizedShortLabel($0, language: language)
-                        return KXListingCopy.pickText(
-                            language,
-                            "正在浏览\(city)的本地动态和生活信息",
-                            "\(city)の地域投稿と生活情報を表示しています",
-                            "Browsing local posts and life updates for \(city)"
-                        )
-                    } ?? KXListingCopy.pickText(
-                        language,
-                        "选择城市后，首页、发现和热榜会围绕本地内容展开",
-                        "都市を選ぶと、ホーム・発見・急上昇が地域中心に切り替わります",
-                        "Choose a city to tune Home, Discover, and Hot to local content"
-                    ))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                HStack(spacing: KXSpacing.xs) {
-                    Text(KXListingCopy.pickText(language, "切换城市", "都市を変更", "Change city"))
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(KXColor.accent)
-                    Image(systemName: "chevron.right")
-                        .font(.footnote.weight(.bold))
-                        .foregroundStyle(.secondary)
-                }
-                .fixedSize(horizontal: true, vertical: false)
-            }
-            .padding(.horizontal, KXSpacing.lg)
-            .padding(.vertical, KXSpacing.md)
-            .frame(maxWidth: .infinity, minHeight: 84, alignment: .leading)
-            .background {
-                RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous)
-                    .fill(KXColor.cardBackground)
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous)
-                    .stroke(KXColor.glassStroke.opacity(0.72), lineWidth: 0.8)
-            }
-            .shadow(color: KXColor.glassShadow.opacity(0.48), radius: 7, y: 2)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
 private struct DiscoverCategoryGrid: View {
     @Environment(\.appLanguage) private var language
     let primaryCategories: [DiscoverCategory]
@@ -824,14 +633,19 @@ private struct DiscoverCategoryGrid: View {
                     .buttonStyle(KXPressableStyle(scale: 0.97))
                 }
             }
-            // 四大入口下面那排小频道 chips(活动/优惠/指南/快讯/问答)整排下线,
-            // 换成两个真正的社交入口:交友·约局·约饭(社交房间) + 活动(Luma 式)。
+            // 二级频道 chip 行(指南/快讯/优惠/约局/问答):此前 secondaryCategories
+            // 只计算不渲染,这些频道被埋进「更多」两层深 —— 现在兑现为四大主卡下
+            // 一行紧凑横滚 chips,点击与「更多」sheet 走同一条 openCategory 路由。
+            if !secondaryCategories.isEmpty {
+                secondaryChannelChips
+            }
+            // 两个社交入口:交友·约局·约饭(社交房间) + 活动(Luma 式)。
             HStack(spacing: KXSpacing.md) {
                 socialEntryCard(
                     title: KXListingCopy.pickText(language, "交友 · 约局 · 约饭", "友達 · 遊び · ごはん", "Meet & Hang out"),
                     subtitle: KXListingCopy.pickText(language, "开个局,像进房间一样认识人", "ルーム感覚で友達づくり", "Open a room, meet people"),
                     icon: "person.2.wave.2.fill",
-                    tint: Color(red: 0.42, green: 0.36, blue: 0.90)
+                    tint: KXColor.rankViolet
                 ) {
                     onOpenRooms()
                 }
@@ -839,7 +653,7 @@ private struct DiscoverCategoryGrid: View {
                     title: KXListingCopy.pickText(language, "活动", "イベント", "Events"),
                     subtitle: KXListingCopy.pickText(language, "酒局、展览、读书会…线下见", "飲み会・展示・読書会など", "Drinks, art, book clubs…"),
                     icon: "calendar.badge.clock",
-                    tint: Color(red: 0.90, green: 0.42, blue: 0.30)
+                    tint: KXColor.rankCoral
                 ) {
                     onOpenEvents()
                 }
@@ -848,17 +662,50 @@ private struct DiscoverCategoryGrid: View {
         }
     }
 
+    /// 二级频道 chips:紧凑胶囊、横向滚动,配色沿用各频道的语义色 token
+    /// (category.tint = KXColor.category*),与主入口卡同一套色彩语义。
+    private var secondaryChannelChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: KXSpacing.sm) {
+                ForEach(secondaryCategories) { category in
+                    Button {
+                        onOpen(category)
+                    } label: {
+                        HStack(spacing: KXSpacing.xs) {
+                            Image(systemName: category.icon)
+                                .kxScaledFont(11, relativeTo: .caption2, weight: .bold)
+                            Text(category.title(language))
+                                .font(.caption.weight(.bold))
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
+                        .foregroundStyle(category.tint)
+                        .padding(.horizontal, 12)
+                        .frame(height: 32)
+                        .background(category.tint.opacity(0.10), in: Capsule())
+                        .overlay(Capsule().stroke(category.tint.opacity(0.22), lineWidth: 0.7))
+                    }
+                    .buttonStyle(KXPressableStyle(scale: 0.96))
+                    .accessibilityLabel(category.title(language))
+                }
+            }
+            // 按压缩放时避免首尾 chip 被滚动容器裁掉边缘。
+            .padding(.vertical, 2)
+        }
+        .padding(.top, KXSpacing.xxs)
+    }
+
     /// 社交入口卡:渐变图标 + 双行文案,规格与上面四张主入口卡同族但更轻。
     private func socialEntryCard(title: String, subtitle: String, icon: String, tint: Color, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: KXSpacing.sm) {
                 Image(systemName: icon)
                     .kxScaledFont(16, weight: .bold)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(KXColor.onTint(tint))
                     .frame(width: 38, height: 38)
                     .background(
                         LinearGradient(colors: [tint.opacity(0.95), tint.opacity(0.62)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                        in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
                     )
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
@@ -922,7 +769,7 @@ private struct DiscoverCategoryCell: View {
             HStack(alignment: .top) {
                 Image(systemName: category.icon)
                     .kxScaledFont(19, weight: .semibold)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(KXColor.onTint(category.tint))
                     .frame(width: 44, height: 44)
                     .background(
                         LinearGradient(
@@ -977,7 +824,7 @@ private struct DiscoverCategoryCell: View {
                 .kxScaledFont(18, weight: .bold)
                 .foregroundStyle(category.tint.opacity(0.9))
                 .frame(width: 36, height: 36)
-                .background(category.tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .background(category.tint.opacity(0.10), in: RoundedRectangle(cornerRadius: KXRadius.sm, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(category.title(language))
@@ -1009,7 +856,7 @@ private struct DiscoverMoreCell: View {
                 .kxScaledFont(18, weight: .bold)
                 .foregroundStyle(KXColor.accent)
                 .frame(width: 36, height: 36)
-                .background(KXColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .background(KXColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: KXRadius.sm, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(KXListingCopy.pickText(language, "更多", "もっと見る", "More"))
@@ -1103,7 +950,7 @@ private struct MoreChannelSheet: View {
                         }
                     }
                 }
-                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.horizontal, KXSpacing.screen)
                 .padding(.vertical, KXSpacing.md)
             }
             .kxPageBackground()
@@ -1117,242 +964,6 @@ private struct MoreChannelSheet: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-    }
-}
-
-private struct CityHotRankingView: View {
-    let region: KaiXRegionDirectory.Region?
-    let posts: [PostEntity]
-    let authors: [String: UserEntity]
-    let language: AppLanguage
-    let onSeeAll: () -> Void
-    let onOpen: (PostEntity) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: KXSpacing.sm) {
-            DiscoverSectionTitle(
-                title: region.map {
-                    let city = KaiXRegionDirectory.localizedMetroName(for: $0, language: language) ?? KaiXRegionDirectory.localizedShortLabel($0, language: language)
-                    return "\(city)\(L("hot", language))"
-                } ?? "\(L("currentRegion", language))\(L("hot", language))",
-                trailing: KXListingCopy.pickText(language, "查看全部", "すべて見る", "See all"),
-                trailingAction: onSeeAll
-            )
-
-            if posts.isEmpty {
-                HStack(spacing: KXSpacing.md) {
-                    Image(systemName: "flame")
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(KXColor.heat)
-                    Text(KXListingCopy.pickText(language, "正在积累本地热度", "地域の反応を集計中", "Building local momentum"))
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                }
-                .padding(KXSpacing.md)
-                .frame(maxWidth: .infinity, minHeight: 68)
-                .kxGlassSurface(radius: KXRadius.lg, elevated: true)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(posts.prefix(5).enumerated()), id: \.element.id) { index, post in
-                        Button {
-                            onOpen(post)
-                        } label: {
-                            CityHotRankingRow(
-                                rank: index + 1,
-                                post: post,
-                                author: authors[post.authorId],
-                                language: language
-                            )
-                        }
-                        .buttonStyle(.plain)
-
-                        if index < min(posts.count, 5) - 1 {
-                            Divider().padding(.leading, 58)
-                        }
-                    }
-                }
-                .kxGlassSurface(radius: KXRadius.lg, elevated: true)
-            }
-        }
-    }
-}
-
-private struct CityHotRankingRow: View {
-    let rank: Int
-    let post: PostEntity
-    let author: UserEntity?
-    let language: AppLanguage
-
-    var body: some View {
-        HStack(spacing: KXSpacing.sm) {
-            DiscoverRankBadge(rank: rank)
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text(post.discoverTitle)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-
-                HStack(spacing: 6) {
-                    Text(L(post.contentType.spec.titleKey, language))
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(post.contentType.spec.tint)
-                        .padding(.horizontal, 6)
-                        .frame(height: 20)
-                        .background(post.contentType.spec.tint.opacity(0.11), in: Capsule())
-                    Text(author?.displayName ?? "@\(post.authorId.prefix(8))")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            HeatPill(score: post.heatScore, rank: rank)
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.tertiary)
-        }
-        .padding(.horizontal, KXSpacing.md)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, minHeight: 70, alignment: .leading)
-    }
-}
-
-/// Unified ranking-board row for 正在发生 (recent, time chip) and 热榜 (heat pill).
-/// Rank badge + title + content-type chip + author, compact so the board scans
-/// like a leaderboard rather than a feed of full cards.
-private struct DiscoverRankingRow: View {
-    let rank: Int
-    let post: PostEntity
-    let author: UserEntity?
-    let language: AppLanguage
-    var showHeat: Bool = false
-
-    var body: some View {
-        HStack(spacing: KXSpacing.sm) {
-            DiscoverRankBadge(rank: rank)
-            VStack(alignment: .leading, spacing: KXSpacing.xs) {
-                Text(post.discoverTitle)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                HStack(spacing: 6) {
-                    Text(L(post.contentType.spec.titleKey, language))
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(post.contentType.spec.tint)
-                        .padding(.horizontal, 6)
-                        .frame(height: 19)
-                        .background(post.contentType.spec.tint.opacity(0.11), in: Capsule())
-                    Text(author?.displayName ?? "@\(post.authorId.prefix(8))")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            if showHeat {
-                HeatPill(score: post.heatScore, rank: rank)
-            }
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.tertiary)
-        }
-        .padding(.horizontal, KXSpacing.md)
-        .padding(.vertical, 11)
-        .contentShape(Rectangle())
-    }
-}
-
-/// 编辑部精选 / 城市助手 — the official City Seed Bot row that replaced the
-/// old 热门话题 + 热门城市 chips. Renders official cold-start content with a
-/// clear official identity (account name + light "编辑部整理/城市助手" badge +
-/// the account's official avatar), never as a real user. Hidden entirely when
-/// the current city has no seed content yet, so the page stays clean.
-private struct DiscoverEditorialView: View {
-    let region: KaiXRegionDirectory.Region?
-    let posts: [PostEntity]
-    let authors: [String: UserEntity]
-    let language: AppLanguage
-    let onOpen: (PostEntity) -> Void
-
-    var body: some View {
-        if !posts.isEmpty {
-            VStack(alignment: .leading, spacing: KXSpacing.sm) {
-                DiscoverSectionTitle(
-                    title: region.map {
-                        let city = KaiXRegionDirectory.localizedMetroName(for: $0, language: language) ?? KaiXRegionDirectory.localizedShortLabel($0, language: language)
-                        return KXListingCopy.pickText(language, "\(city)编辑部精选", "\(city)編集部ピックアップ", "\(city) editor picks")
-                    } ?? KXListingCopy.pickText(language, "编辑部精选", "編集部ピックアップ", "Editor picks"),
-                    trailing: nil
-                )
-                VStack(spacing: 0) {
-                    ForEach(Array(posts.prefix(5).enumerated()), id: \.element.id) { index, post in
-                        Button {
-                            onOpen(post)
-                        } label: {
-                            DiscoverEditorialRow(post: post, author: authors[post.authorId], language: language)
-                        }
-                        .buttonStyle(.plain)
-
-                        if index < min(posts.count, 5) - 1 {
-                            Divider().padding(.leading, 56)
-                        }
-                    }
-                }
-                .kxGlassSurface(radius: KXRadius.lg, elevated: true)
-            }
-        }
-    }
-}
-
-private struct DiscoverEditorialRow: View {
-    let post: PostEntity
-    let author: UserEntity?
-    let language: AppLanguage
-
-    /// Light, honest label. We never present seed content as a real person —
-    /// the badge + the official account name make the source explicit.
-    private var badge: String {
-        post.seedAuthorType == "editorial"
-            ? KXListingCopy.pickText(language, "编辑部整理", "編集部整理", "Editorial")
-            : KXListingCopy.pickText(language, "城市助手", "街のアシスタント", "City helper")
-    }
-
-    var body: some View {
-        HStack(spacing: KXSpacing.sm) {
-            AvatarView(user: author, size: 38)
-            VStack(alignment: .leading, spacing: KXSpacing.xs) {
-                HStack(spacing: 6) {
-                    Text(author?.displayName ?? KXListingCopy.pickText(language, "Machi 城市助手", "Machi 街のアシスタント", "Machi City Helper"))
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    Text(badge)
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(KXColor.accent)
-                        .padding(.horizontal, 6)
-                        .frame(height: 18)
-                        .background(KXColor.accent.opacity(0.12), in: Capsule())
-                }
-                Text(post.discoverTitle)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.tertiary)
-        }
-        .padding(.horizontal, KXSpacing.md)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
     }
 }
 
@@ -1437,10 +1048,21 @@ private struct HotBoardSection: View {
             }
             .kxGlassSurface(radius: KXRadius.lg, elevated: true)
         } else if items.isEmpty {
-            DiscoverSoftEmptyRow(text: didFail
-                ? (language == .ja ? "読み込みに失敗しました。引っ張って再試行" : language == .en ? "Couldn't load. Pull to retry." : "热榜加载失败，下拉重试")
-                : (language == .ja ? "この範囲はまだ話題がありません" : language == .en ? "No trends in this range yet" : "当前范围暂无热榜内容"))
+            if didFail {
+                // 外层下拉刷新只重载 Discover 的 viewModel,不改 reloadKey 也不触碰
+                // 本 @State,故"下拉重试"对热榜无效。改成可点击直接重跑 reload()
+                // 的行,文案与真正可行的恢复动作("点击重试")一致。
+                Button {
+                    Task { await reload() }
+                } label: {
+                    DiscoverSoftEmptyRow(text: language == .ja ? "読み込みに失敗しました。タップして再試行" : language == .en ? "Couldn't load. Tap to retry." : "热榜加载失败，点击重试")
+                }
+                .buttonStyle(KXPressableStyle(scale: 0.985, dim: 0.92))
                 .kxGlassSurface(radius: KXRadius.lg, elevated: true)
+            } else {
+                DiscoverSoftEmptyRow(text: language == .ja ? "この範囲はまだ話題がありません" : language == .en ? "No trends in this range yet" : "当前范围暂无热榜内容")
+                    .kxGlassSurface(radius: KXRadius.lg, elevated: true)
+            }
         } else {
             VStack(spacing: 0) {
                 ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
@@ -1468,8 +1090,15 @@ private struct HotBoardSection: View {
         do {
             let resp = try await KaiXAPIClient.shared.discoverHot(
                 scope: scope.rawValue, window: window, regionCode: region?.regionCode ?? "")
+            guard !Task.isCancelled else { return }
             items = resp.items
         } catch {
+            // 切换 scope/区域时 .task(id:) 会取消旧任务,在途请求以取消错误落到
+            // 这里 —— 被取代的任务绝不能碰共享状态,否则会在新请求在途期间闪现
+            // "热榜加载失败"并把上一 scope 的有效榜单清空。
+            if Task.isCancelled || error is CancellationError || (error as? URLError)?.code == .cancelled {
+                return
+            }
             didFail = true
             items = []
         }
@@ -1491,7 +1120,7 @@ private struct HotPillRow: View {
                 Button { onSelect(id) } label: {
                     Text(label)
                         .font((compact ? Font.caption2 : Font.caption).weight(.bold))
-                        .foregroundStyle(isOn ? Color.white : .primary)
+                        .foregroundStyle(isOn ? KXColor.onAccent : .primary)
                         .frame(maxWidth: .infinity)
                         .frame(height: compact ? 30 : 36)
                         .background(isOn ? KXColor.accent : KXColor.softBackground, in: Capsule())
@@ -1565,8 +1194,8 @@ private struct HotBoardSkeletonRow: View {
         HStack(spacing: KXSpacing.md) {
             Circle().fill(KXColor.softBackground).frame(width: 22, height: 22)
             VStack(alignment: .leading, spacing: 6) {
-                RoundedRectangle(cornerRadius: 4).fill(KXColor.softBackground).frame(width: 140, height: 12)
-                RoundedRectangle(cornerRadius: 4).fill(KXColor.softBackground).frame(width: 90, height: 9)
+                RoundedRectangle(cornerRadius: KXRadius.xxs).fill(KXColor.softBackground).frame(width: 140, height: 12)
+                RoundedRectangle(cornerRadius: KXRadius.xxs).fill(KXColor.softBackground).frame(width: 90, height: 9)
             }
             Spacer()
         }
@@ -1598,6 +1227,11 @@ private struct HappeningSection: View {
     var isActive: Bool = true
 
     @State private var liveNewCount = 0
+    /// 当前实际展示的帖子 id 集合。轮询对比必须读这里而不是闭包捕获的 `posts`:
+    /// `.task(id:)` 的 id 不含 posts,父视图刷新换入新数据后任务不重建,闭包里的
+    /// `posts` 冻结在任务启动那一刻;@State 的存储盒随视图身份稳定,onChange 持续
+    /// 更新后旧闭包也能读到最新集合。
+    @State private var visibleIds: Set<String> = []
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var pollKey: String { region?.regionCode ?? "all" }
@@ -1624,10 +1258,15 @@ private struct HappeningSection: View {
             content
                 .animation(reduceMotion ? nil : KXMotion.reveal, value: posts.map(\.id))
         }
-        .task(id: "\(pollKey)|\(isActive)") { await pollLoop() }
-        .onChange(of: posts.map(\.id)) { _, _ in
+        .task(id: "\(pollKey)|\(isActive)") {
+            visibleIds = Set(posts.map(\.id))
+            await pollLoop()
+        }
+        .onChange(of: posts.map(\.id)) { _, newIds in
             // New data flowed in from the parent (refresh / region change) —
-            // the user is now looking at the latest, so clear the nudge.
+            // the user is now looking at the latest, so clear the nudge and
+            // refresh the comparison set the poll loop diffs against.
+            visibleIds = Set(newIds)
             liveNewCount = 0
         }
     }
@@ -1671,7 +1310,7 @@ private struct HappeningSection: View {
                     .lineLimit(1)
             }
             .font(.caption.weight(.bold))
-            .foregroundStyle(.white)
+            .foregroundStyle(KXColor.onAccent)
             .padding(.horizontal, 14)
             .frame(height: 34)
             .frame(maxWidth: .infinity)
@@ -1723,10 +1362,18 @@ private struct HappeningSection: View {
             try? await Task.sleep(for: .seconds(45))
             guard !Task.isCancelled else { break }
             guard let resp = try? await KaiXAPIClient.shared.exploreHappening(region: region, limit: 30) else { continue }
-            let current = Set(posts.map(\.id))
-            let newOnes = resp.orderedPosts.map(\.id).filter { !current.contains($0) }
+            guard !Task.isCancelled else { break }
             await MainActor.run {
-                withAnimation(.snappy(duration: 0.2)) { liveNewCount = newOnes.count }
+                // 对比口径必须与展示口径一致(同样的区域过滤 + createdAt 排序 +
+                // prefix(20),见 DiscoverView.rebuildDerivedContent):直接拿未过滤
+                // 的 30 条响应对比只展示 20 条的列表,第 21+ 条/异区条目会让差集
+                // 恒非零,"有 N 条新动态"横幅永久误报、点刷新也消不掉。
+                let incoming = ServerEntityFactory.postBundle(from: resp.orderedPosts).orderedPosts
+                let regional = incoming.filter { $0.matches(region: region) }
+                let base = regional.isEmpty ? incoming : regional
+                let comparable = base.sorted { $0.createdAt > $1.createdAt }.prefix(20)
+                let newCount = comparable.filter { !visibleIds.contains($0.id) }.count
+                withAnimation(.snappy(duration: 0.2)) { liveNewCount = newCount }
             }
         }
     }
@@ -1755,7 +1402,7 @@ private struct HappeningFocusCard: View {
                 HeatPill(score: post.heatScore, rank: 1, compact: true)
             }
 
-            Text(post.discoverTitle)
+            Text(post.discoverTitle(language))
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(.primary)
                 .lineLimit(3)
@@ -1794,7 +1441,7 @@ private struct HappeningFocusCard: View {
 
     private var subtitle: String {
         let who = author?.displayName ?? ""
-        let location = post.discoverLocationLabel
+        let location = post.discoverLocationLabel(language)
         return [who, location].filter { !$0.isEmpty }.joined(separator: " · ")
     }
 }
@@ -1814,7 +1461,7 @@ private struct HappeningRankRow: View {
             DiscoverRankBadge(rank: rank)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(post.discoverTitle)
+                Text(post.discoverTitle(language))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(2)
@@ -1844,7 +1491,7 @@ private struct HappeningRankRow: View {
 
     private var subtitle: String {
         let who = author?.displayName ?? ""
-        let location = post.discoverLocationLabel
+        let location = post.discoverLocationLabel(language)
         return [who, location].filter { !$0.isEmpty }.joined(separator: " · ")
     }
 }
@@ -1877,38 +1524,29 @@ private struct HappeningLiveDot: View {
     }
 }
 
+/// 话题 / 用户推荐两个 segment 的内容列表。原 recommend/ranking 的 postList
+/// 分支自 HappeningSection / HotBoardSection 上线后不可达,已连同其数据供给链
+/// (sortedPosts / scopedHotPosts / DiscoverRankingRow 等)一并删除。
 private struct DiscoverContentList: View {
-    @EnvironmentObject private var postStore: PostStore
-    let segment: DiscoverSegment
-    let region: KaiXRegionDirectory.Region?
-    let posts: [PostEntity]
-    let rankingTitle: String
-    let scopedRankingPosts: [PostEntity]
+    enum Kind {
+        case topics
+        case users
+    }
+
+    let kind: Kind
     let topics: [TopicEntity]
     let users: [UserEntity]
-    let authors: [String: UserEntity]
-    let mediaByPostId: [String: [MediaEntity]]
     let followingIds: Set<String>
-    let currentUser: UserEntity
     let language: AppLanguage
-    let onOpenPost: (PostEntity) -> Void
     let onOpenTopic: (String) -> Void
     let onOpenUser: (UserEntity) -> Void
     let onFollow: (UserEntity) -> Void
-    var onLike: (PostEntity) -> Void = { _ in }
-    var onBookmark: (PostEntity) -> Void = { _ in }
-    var onRepost: (PostEntity) -> Void = { _ in }
-    var onQuoteRepost: (PostEntity, String) -> Void = { _, _ in }
 
     var body: some View {
         VStack(alignment: .leading, spacing: KXSpacing.sm) {
             DiscoverSectionTitle(title: sectionTitle, trailing: nil)
 
-            switch segment {
-            case .recommend:
-                postList(posts)
-            case .ranking:
-                postList(scopedRankingPosts.isEmpty ? posts : scopedRankingPosts)
+            switch kind {
             case .topics:
                 topicList
             case .users:
@@ -1918,45 +1556,12 @@ private struct DiscoverContentList: View {
     }
 
     private var sectionTitle: String {
-        switch segment {
-        case .recommend:
-            return region.map { "\((KaiXRegionDirectory.localizedMetroName(for: $0, language: language) ?? $0.cityName))正在发生" } ?? "正在发生"
-        case .ranking:
-            return rankingTitle
+        switch kind {
         case .topics:
-            return "热门话题"
+            return KXListingCopy.pickText(language, "热门话题", "人気トピック", "Trending topics")
         case .users:
-            return "推荐用户"
+            return KXListingCopy.pickText(language, "推荐用户", "おすすめユーザー", "Suggested users")
         }
-    }
-
-    private func postList(_ items: [PostEntity]) -> some View {
-        // 正在发生 / 热榜 = 排行榜（名次 + 标题 + 类型 + 热度/时间），只看标题就能扫，
-        // 不再把首页整张卡片塞进来。正在发生取近 2 天、热榜取近 7 天（后端窗口）。
-        let visible = Array(items.prefix(12))
-        return VStack(spacing: 0) {
-            if visible.isEmpty {
-                DiscoverSoftEmptyRow(text: segment == .recommend ? "当前都市圈暂无新动态" : "当前都市圈暂无热榜内容")
-            } else {
-                ForEach(Array(visible.enumerated()), id: \.element.id) { index, post in
-                    let displayed = postStore.post(id: post.id) ?? post
-                    Button { onOpenPost(displayed) } label: {
-                        DiscoverRankingRow(
-                            rank: index + 1,
-                            post: displayed,
-                            author: authors[displayed.authorId],
-                            language: language,
-                            showHeat: segment == .ranking
-                        )
-                    }
-                    .buttonStyle(KXPressableStyle(scale: 0.985, dim: 0.92))
-                    if displayed.id != visible.last?.id {
-                        Divider().opacity(0.16).padding(.leading, 52)
-                    }
-                }
-            }
-        }
-        .kxGlassSurface(radius: KXRadius.lg, elevated: true)
     }
 
     private var topicList: some View {
@@ -1976,9 +1581,9 @@ private struct DiscoverContentList: View {
                     }
                     .padding(.horizontal, KXSpacing.md)
                     .frame(height: 56)
-                    .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                     .overlay {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                             .stroke(KXColor.separator, lineWidth: 0.6)
                     }
                 }
@@ -1990,7 +1595,7 @@ private struct DiscoverContentList: View {
     private var userList: some View {
         VStack(spacing: 10) {
             if users.isEmpty {
-                DiscoverSoftEmptyRow(text: "还没有可推荐的本地用户")
+                DiscoverSoftEmptyRow(text: KXListingCopy.pickText(language, "还没有可推荐的本地用户", "おすすめできる地元ユーザーはまだいません", "No local users to recommend yet"))
             } else {
                 ForEach(users.prefix(8)) { user in
                     DiscoverUserRow(
@@ -2005,144 +1610,8 @@ private struct DiscoverContentList: View {
     }
 }
 
-private struct DiscoverContentCard: View {
-    let post: PostEntity
-    let author: UserEntity?
-    let mediaItems: [MediaEntity]
-    let language: AppLanguage
-    let onOpen: () -> Void
-    let onOpenTopic: (String) -> Void
-    let onOpenAuthor: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: KXSpacing.md) {
-            header
-            bodyText
-                .contentShape(Rectangle())
-                .onTapGesture(perform: onOpen)
-            if !mediaItems.isEmpty {
-                MediaGridView(mediaItems: mediaItems)
-            }
-            highlightChips
-            topicChips
-            footer
-        }
-        .padding(KXSpacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .kxGlassSurface(radius: KXRadius.card)
-        .contentShape(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
-        .gesture(TapGesture().onEnded { onOpen() }, including: .gesture)
-    }
-
-    private var header: some View {
-        HStack(alignment: .center, spacing: KXSpacing.sm) {
-            Button(action: onOpenAuthor) {
-                AvatarView(user: author, size: 36)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(author?.displayName ?? L("profile", language))
-
-            VStack(alignment: .leading, spacing: KXSpacing.xxs) {
-                Text(author?.displayName ?? "@\(post.authorId.prefix(8))")
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                Text(post.discoverLocationLabel)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: KXSpacing.sm)
-
-            Label(L(post.contentType.spec.titleKey, language), systemImage: post.contentType.spec.icon)
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(post.contentType.spec.tint)
-                .padding(.horizontal, KXSpacing.sm)
-                .frame(height: 24)
-                .background(post.contentType.spec.tint.opacity(0.12), in: Capsule())
-        }
-    }
-
-    private var bodyText: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text(post.discoverTitle)
-                .font(.headline.weight(.bold))
-                .foregroundStyle(.primary)
-                .lineLimit(2)
-                .multilineTextAlignment(.leading)
-            if !post.discoverSummary.isEmpty {
-                Text(post.discoverSummary)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var highlightChips: some View {
-        let highlights = post.discoverHighlights(language: language)
-        if !highlights.isEmpty {
-            FlowLayout(spacing: 7) {
-                ForEach(highlights) { item in
-                    DiscoverHighlightChip(item: item)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var topicChips: some View {
-        if !post.hashtags.isEmpty {
-            FlowLayout(spacing: 6) {
-                ForEach(post.hashtags.prefix(4), id: \.self) { topic in
-                    Button {
-                        onOpenTopic(topic)
-                    } label: {
-                        Text("#\(topic)")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(KXColor.accent)
-                            .padding(.horizontal, KXSpacing.sm)
-                            .frame(height: 26)
-                            .background(KXColor.accent.opacity(0.08), in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
-
-    private var footer: some View {
-        HStack(spacing: KXSpacing.md) {
-            HeatPill(score: post.heatScore, rank: 1, compact: true)
-            Spacer(minLength: 0)
-            DiscoverStat(icon: "heart", value: post.likeCount)
-            DiscoverStat(icon: "bubble.right", value: post.commentCount)
-            DiscoverStat(icon: "bookmark", value: post.bookmarkCount)
-            DiscoverStat(icon: "arrow.2.squarepath", value: post.repostCount)
-        }
-    }
-}
-
-private struct DiscoverHighlightChip: View {
-    let item: DiscoverHighlight
-
-    var body: some View {
-        HStack(spacing: KXSpacing.xs) {
-            Text(item.label)
-                .foregroundStyle(.secondary)
-            Text(item.value)
-                .foregroundStyle(.primary)
-        }
-        .font(.caption.weight(.semibold))
-        .padding(.horizontal, KXSpacing.sm)
-        .frame(height: 28)
-        .background(KXColor.softBackground, in: Capsule())
-    }
-}
-
 private struct DiscoverUserRow: View {
+    @Environment(\.appLanguage) private var language
     let user: UserEntity
     let isFollowing: Bool
     let onOpen: () -> Void
@@ -2170,7 +1639,9 @@ private struct DiscoverUserRow: View {
             Spacer()
 
             Button(action: onFollow) {
-                Text(isFollowing ? "已关注" : "关注")
+                // 关注按钮走既有三语键(与 SearchUserRow 同):日/英用户此前
+                // 在这里看到的是中文硬编码。
+                Text(isFollowing ? L("followed", language) : L("follow", language))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(isFollowing ? .secondary : KXColor.accent)
                     .padding(.horizontal, 14)
@@ -2213,8 +1684,9 @@ private struct DiscoverRankBadge: View {
 
     var body: some View {
         Text("\(rank)")
-            .font(.system(size: 16, weight: .bold, design: .rounded).monospacedDigit())
-            .foregroundStyle(rank <= 3 ? .white : rankColor)
+            .monospacedDigit()
+            .kxScaledFont(16, relativeTo: .callout, weight: .bold, design: .rounded)
+            .foregroundStyle(rank <= 3 ? KXColor.onTint(rankColor) : rankColor)
             .frame(width: 36, height: 36)
             .background {
                 if rank <= 3 {
@@ -2255,9 +1727,10 @@ private struct HeatPill: View {
     var body: some View {
         HStack(spacing: KXSpacing.xs) {
             Image(systemName: "flame.fill")
-                .font(.system(size: compact ? 10 : 11, weight: .black))
+                .kxScaledFont(compact ? 10 : 11, relativeTo: .caption2, weight: .black)
             Text(NumberFormatterUtils.compact(Int(score.rounded())))
-                .font(.system(size: compact ? 10 : 11, weight: .bold, design: .rounded).monospacedDigit())
+                .monospacedDigit()
+                .kxScaledFont(compact ? 10 : 11, relativeTo: .caption2, weight: .bold, design: .rounded)
                 .lineLimit(1)
         }
         .foregroundStyle(color)
@@ -2278,20 +1751,6 @@ private struct HeatPill: View {
     }
 }
 
-private struct DiscoverStat: View {
-    let icon: String
-    let value: Int
-
-    var body: some View {
-        HStack(spacing: 3) {
-            Image(systemName: icon)
-            Text(NumberFormatterUtils.compact(value))
-        }
-        .font(.caption2.weight(.semibold))
-        .foregroundStyle(.secondary)
-    }
-}
-
 private struct DiscoverSoftEmptyRow: View {
     let text: String
 
@@ -2309,20 +1768,8 @@ private struct DiscoverSoftEmptyRow: View {
     }
 }
 
-private struct DiscoverHighlight: Identifiable {
-    let id = UUID()
-    let label: String
-    let value: String
-}
-
 private extension PostEntity {
-    var discoverBoostScore: Double {
-        guard isBoosted else { return heatScore }
-        if let boostedUntil, boostedUntil < .now { return heatScore }
-        return heatScore + max(0, boostWeight) * 1_000
-    }
-
-    var discoverTitle: String {
+    func discoverTitle(_ language: AppLanguage) -> String {
         let title = attr(PostAttributeKeys.title)
         if !title.isEmpty { return title }
         let cleaned = previewText
@@ -2330,24 +1777,18 @@ private extension PostEntity {
             .components(separatedBy: .whitespacesAndNewlines)
             .filter { !$0.isEmpty }
             .joined(separator: " ")
-        guard !cleaned.isEmpty else { return "一条新动态" }
+        // 无标题媒体贴的兜底不能硬编码中文,否则日/英用户看到"一条新动态"。
+        guard !cleaned.isEmpty else { return L("untitledPost", language) }
         return cleaned.count > 42 ? "\(cleaned.prefix(42))..." : cleaned
     }
 
-    var discoverSummary: String {
-        for key in [PostAttributeKeys.summary, PostAttributeKeys.description, PostAttributeKeys.content] {
-            let value = attr(key)
-            if !value.isEmpty { return value }
-        }
-        return previewText == discoverTitle ? "" : previewText
-    }
-
-    var discoverLocationLabel: String {
+    func discoverLocationLabel(_ language: AppLanguage) -> String {
         if let region = discoverRegion {
             return region.displayName
         }
         let parts = [country, province, city].filter { !$0.isEmpty }
-        return parts.isEmpty ? "本地" : parts.joined(separator: " · ")
+        // 无地区信息的兜底同样走本地化,避免日/英用户看到中文"本地"。
+        return parts.isEmpty ? L("local", language) : parts.joined(separator: " · ")
     }
 
     var discoverRegion: KaiXRegionDirectory.Region? {
@@ -2367,97 +1808,6 @@ private extension PostEntity {
             || (regionCode.isEmpty && country.isEmpty && city.isEmpty)
     }
 
-    func discoverHighlights(language: AppLanguage) -> [DiscoverHighlight] {
-        let regionValue = attr(PostAttributeKeys.area, fallback: discoverRegion?.cityName ?? city)
-        switch contentType {
-        case .secondhand:
-            return highlights([
-                ("价格", priceText),
-                ("成色", attr(PostAttributeKeys.condition)),
-                ("地区", regionValue),
-            ])
-        case .housing, .roommate:
-            return highlights([
-                ("租金", attr(PostAttributeKeys.rent, fallback: attr(PostAttributeKeys.rentRange))),
-                ("区域", regionValue),
-                ("最近车站", attr(PostAttributeKeys.nearestStation)),
-                ("入住", attr(PostAttributeKeys.moveInDate)),
-            ])
-        case .job_seek:
-            return highlights([
-                ("方向", attr(PostAttributeKeys.desiredJob)),
-                ("技能", attr(PostAttributeKeys.skills)),
-                ("语言", attr(PostAttributeKeys.languages)),
-                ("签证", attr(PostAttributeKeys.visaStatus)),
-            ])
-        case .job_post, .referral:
-            return highlights([
-                ("岗位", attr(PostAttributeKeys.jobTitle)),
-                ("薪资", attr(PostAttributeKeys.salary)),
-                ("公司", attr(PostAttributeKeys.companyName)),
-                ("地点", attr(PostAttributeKeys.workLocation, fallback: regionValue)),
-            ])
-        case .meetup:
-            return highlights([
-                ("类型", attr(PostAttributeKeys.meetupType)),
-                ("时间", attr(PostAttributeKeys.meetupTime)),
-                ("地点", attr(PostAttributeKeys.location, fallback: regionValue)),
-                ("人数", attr(PostAttributeKeys.peopleLimit)),
-            ])
-        case .dining:
-            return highlights([
-                ("时间", attr(PostAttributeKeys.meetupTime)),
-                ("地点", attr(PostAttributeKeys.restaurantOrArea, fallback: attr(PostAttributeKeys.location, fallback: regionValue))),
-                ("预算", attr(PostAttributeKeys.budget)),
-                ("人数", attr(PostAttributeKeys.peopleLimit)),
-            ])
-        case .event:
-            return highlights([
-                ("时间", attr(PostAttributeKeys.eventTime)),
-                ("地点", attr(PostAttributeKeys.location, fallback: regionValue)),
-                ("费用", attr(PostAttributeKeys.fee)),
-                ("报名", attr(PostAttributeKeys.registrationMethod)),
-            ])
-        case .guide:
-            return highlights([
-                ("摘要", attr(PostAttributeKeys.summary)),
-                ("收藏", "\(bookmarkCount)"),
-            ])
-        case .news, .local_info:
-            return highlights([
-                ("来源", attr(PostAttributeKeys.source, fallback: "Machi News")),
-                ("时间", createdAt.formatted(date: .abbreviated, time: .omitted)),
-            ])
-        case .merchant:
-            return highlights([
-                ("评分", attr(PostAttributeKeys.rating)),
-                ("地址", attr(PostAttributeKeys.address, fallback: regionValue)),
-                ("优惠", attr(PostAttributeKeys.discountInfo)),
-            ])
-        case .service:
-            return highlights([
-                ("服务", attr(PostAttributeKeys.serviceType)),
-                ("价格", attr(PostAttributeKeys.priceRange, fallback: priceText)),
-                ("地区", regionValue),
-            ])
-        case .coupon:
-            return highlights([
-                ("优惠", attr(PostAttributeKeys.discountInfo)),
-                ("商家", attr(PostAttributeKeys.merchantName)),
-                ("有效期", attr(PostAttributeKeys.validUntil)),
-            ])
-        default:
-            return []
-        }
-    }
-
-    private var priceText: String {
-        let price = attr(PostAttributeKeys.price)
-        guard !price.isEmpty else { return "" }
-        let currency = attr(PostAttributeKeys.currency)
-        return currency.isEmpty ? price : "\(currency) \(price)"
-    }
-
     private func attr(_ key: String, fallback: String = "") -> String {
         if let value = stringAttribute(key)?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty {
             return value
@@ -2469,109 +1819,5 @@ private extension PostEntity {
             return double == double.rounded() ? "\(Int(double))" : String(format: "%.1f", double)
         }
         return fallback
-    }
-
-    private func highlights(_ items: [(String, String)]) -> [DiscoverHighlight] {
-        items.compactMap { label, value in
-            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? nil : DiscoverHighlight(label: label, value: trimmed)
-        }
-        .prefix(4)
-        .map { $0 }
-    }
-}
-
-// Legacy support for the previous SearchView implementation. The active
-// tab now uses DiscoverView, but keeping these small cards avoids removing
-// the older screen while this page evolves.
-struct DiscoverPulseCard: View {
-    let region: KaiXRegionDirectory.Region?
-    let items: [TrendingItem]
-    let topics: [TopicEntity]
-    let language: AppLanguage
-    let onOpenItem: (TrendingItem) -> Void
-    let onOpenTopic: (TopicEntity) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: KXSpacing.md) {
-            Text(region.map { "\(KaiXRegionDirectory.localizedMetroName(for: $0, language: language) ?? $0.cityName)正在发生" } ?? L("happeningNow", language))
-                .font(.headline.weight(.bold))
-            ForEach(items.prefix(3)) { item in
-                Button { onOpenItem(item) } label: {
-                    HStack {
-                        Text(item.title.isEmpty ? L("untitledPost", language) : item.title)
-                            .font(.subheadline.weight(.semibold))
-                            .lineLimit(2)
-                        Spacer()
-                        HeatPill(score: item.heatScore, rank: 1, compact: true)
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(KXSpacing.md)
-        .kxGlassSurface(radius: KXRadius.lg)
-    }
-}
-
-struct DiscoverOverviewCard: View {
-    let title: String
-    let icon: String
-    let tint: Color
-    let item: TrendingItem?
-    let language: AppLanguage
-    let onOpen: () -> Void
-
-    var body: some View {
-        Button(action: onOpen) {
-            VStack(alignment: .leading, spacing: KXSpacing.sm) {
-                Image(systemName: icon)
-                    .foregroundStyle(tint)
-                Text(title)
-                    .font(.subheadline.weight(.bold))
-                    .lineLimit(1)
-                Text(item?.title.isEmpty == false ? item?.title ?? "" : L("untitledPost", language))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-            .padding(KXSpacing.md)
-            .frame(width: 156, alignment: .leading)
-            .frame(minHeight: 108, alignment: .leading)
-            .kxGlassSurface(radius: KXRadius.lg)
-        }
-        .buttonStyle(.plain)
-        .disabled(item == nil)
-    }
-}
-
-struct DiscoverTypeCard: View {
-    let title: String
-    let icon: String
-    let tint: Color
-    let item: TrendingItem?
-    let isLocal: Bool
-    let language: AppLanguage
-
-    var body: some View {
-        HStack(spacing: KXSpacing.sm) {
-            Image(systemName: icon)
-                .foregroundStyle(tint)
-                .frame(width: 34, height: 34)
-                .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: KXRadius.sm, style: .continuous))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.primary)
-                Text(item?.title.isEmpty == false ? item?.title ?? "" : (isLocal ? KXListingCopy.pickText(language, "本地内容", "地域コンテンツ", "Local content") : KXListingCopy.pickText(language, "入口说明", "入口の説明", "Entry guide")))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(KXSpacing.md)
-        .frame(maxWidth: .infinity, minHeight: 84, alignment: .leading)
-        .kxGlassSurface(radius: KXRadius.lg)
     }
 }

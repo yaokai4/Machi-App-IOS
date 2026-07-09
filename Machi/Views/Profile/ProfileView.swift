@@ -10,7 +10,10 @@ struct ProfileView: View {
     @EnvironmentObject private var postStore: PostStore
     @EnvironmentObject private var userStore: UserStore
     @EnvironmentObject private var router: AppRouter
-    @AppStorage("blockedUserIds") private var blockedUserIdsRaw = ""
+    // 逐账号拉黑键(KXBlocklist),与 ChatView / 设置▸黑名单共用同一事实源。
+    // 旧的设备全局 "blockedUserIds" 会把账号 A 的拉黑漏到同机账号 B 的个人页,
+    // 且与其余屏幕的逐账号键分裂——init 里迁移一次后统一走逐账号键。
+    @AppStorage private var blockedUserIdsRaw: String
     @StateObject private var viewModel = ProfileViewModel()
     @State private var loadedProfileUser: UserEntity?
     @State private var profileLoadState: ScreenState = .idle
@@ -57,6 +60,8 @@ struct ProfileView: View {
         self.showsBackButton = showsBackButton
         self.onLogout = onLogout
         self.onSwitchAccount = onSwitchAccount
+        KXBlocklist.migrateLegacyIfNeeded(to: currentUser.id)
+        _blockedUserIdsRaw = AppStorage(wrappedValue: "", KXBlocklist.storageKey(for: currentUser.id))
         _loadedProfileUser = State(initialValue: profileUser ?? ((profileUserId == nil || profileUserId == currentUser.id) ? currentUser : nil))
     }
 
@@ -131,7 +136,7 @@ struct ProfileView: View {
             } label: {
                 Text(L("loginOrRegister", language))
                     .font(.headline.weight(.bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(KXColor.onAccent)
                     .frame(maxWidth: .infinity)
                     .frame(height: 52)
                     .background(KXColor.accent, in: Capsule())
@@ -276,7 +281,7 @@ struct ProfileView: View {
     private var loadedProfileContent: some View {
         VStack(spacing: 0) {
             topBar
-                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.horizontal, KXSpacing.screen)
                 .padding(.top, KXSpacing.sm)
                 .padding(.bottom, KXSpacing.md)
                 .kxGlassBar(ignoresTopSafeArea: true)
@@ -294,7 +299,7 @@ struct ProfileView: View {
                         .padding(.horizontal, KXSpacing.xxs)
                     stateContent
                 }
-                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.horizontal, KXSpacing.screen)
                 .padding(.top, KXSpacing.sm)
                 .padding(.bottom, (showsBackButton ? KXSpacing.xl : chrome.bottomContentPadding) + 24)
                 .kxReadableWidth()
@@ -316,11 +321,11 @@ struct ProfileView: View {
             HStack(spacing: 14) {
                 Image(systemName: "square.grid.2x2.fill")
                     .font(.title2.weight(.bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(KXColor.onAccent)
                     .frame(width: 50, height: 50)
                     .background(
                         LinearGradient(colors: [KXColor.accent, KXColor.accent.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                        in: RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                     )
                 VStack(alignment: .leading, spacing: 3) {
                     Text(KXListingCopy.pickText(language, "我的工作台", "マイワークベンチ", "My Workbench"))
@@ -1086,13 +1091,28 @@ struct ProfileView: View {
             menuMessage = L("userBlocked", language)
             isNowBlocking = true
         }
+        // Optimistic UI update.
+        let snapshot = blockedUserIdsRaw
         blockedUserIdsRaw = ids.removingDuplicates().joined(separator: "|")
-        // Sync the block to the unified backend so it persists across devices
-        // and the web client, and is enforced server-side — not just hidden
-        // locally. Optimistic: the local list above already updated the UI;
-        // the network call is fire-and-forget and a no-op when unauthenticated.
+        // For a signed-in account the server blocklist is the source of truth,
+        // and Settings ▸ Blocklist REPLACES this local mirror on its next load.
+        // A silently-swallowed write failure here would leave the block only
+        // local, then get erased on the next reload — a silent un-block of a
+        // harassment/safety control. So the server write must stick: snapshot +
+        // roll back on failure, matching BlocklistSettingsView.unblock.
+        // A guest has no server session (setBlock would 401) and its local
+        // mirror is never clobbered by loadBlockedUsers, so its block stays
+        // purely local — don't attempt the sync or the rollback.
+        guard !currentUser.isGuest else { return }
         let targetId = profileUserId
-        Task { try? await KaiXAPIClient.shared.setBlock(targetId, isNowBlocking) }
+        Task {
+            do {
+                try await KaiXAPIClient.shared.setBlock(targetId, isNowBlocking)
+            } catch {
+                blockedUserIdsRaw = snapshot
+                menuMessage = error.kaixUserMessage
+            }
+        }
     }
 
     private var roleTitle: String {
@@ -1462,12 +1482,12 @@ private struct ReputationDetailSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 14) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                         .fill(LinearGradient(colors: [KXColor.accent, KXColor.accent.opacity(0.78)], startPoint: .topLeading, endPoint: .bottomTrailing))
                         .frame(width: 56, height: 56)
                     Image(systemName: "rosette")
                         .font(.title.weight(.bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(KXColor.onAccent)
                 }
                 VStack(alignment: .leading, spacing: 3) {
                     Text(currentName.isEmpty ? "Lv.\(currentLevel)" : "Lv.\(currentLevel) · \(currentName)")
@@ -1485,7 +1505,7 @@ private struct ReputationDetailSheet: View {
         }
         .padding(KXSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: KXRadius.card, style: .continuous))
     }
 
     @ViewBuilder private var progressView: some View {
@@ -1572,7 +1592,7 @@ private struct ReputationDetailSheet: View {
             content()
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
         }
     }
 }
@@ -1600,12 +1620,12 @@ private struct FollowListView: View {
                 LoadingView()
             case .empty:
                 EmptyStateView(title: kind.emptyTitle(language), subtitle: "@\(profileUser.username)", systemImage: kind.emptyIcon)
-                    .padding(KaiXTheme.horizontalPadding)
+                    .padding(KXSpacing.screen)
             case .error(let message):
                 ErrorStateView(message: message) {
                     Task { await load() }
                 }
-                .padding(KaiXTheme.horizontalPadding)
+                .padding(KXSpacing.screen)
             case .loaded:
                 ScrollView {
                     LazyVStack(spacing: 10) {
@@ -1626,7 +1646,7 @@ private struct FollowListView: View {
                             }
                         }
                     }
-                    .padding(.horizontal, KaiXTheme.horizontalPadding)
+                    .padding(.horizontal, KXSpacing.screen)
                     .padding(.top, KXSpacing.md)
                     .padding(.bottom, 28)
                 }
@@ -1642,7 +1662,7 @@ private struct FollowListView: View {
                 KXInlineNotice(message: transientMessage) {
                     self.transientMessage = nil
                 }
-                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.horizontal, KXSpacing.screen)
                 .padding(.top, KXSpacing.sm)
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
@@ -1935,7 +1955,7 @@ struct FavoritesHubView: View {
                 }
                 .accessibilityLabel(L("close", language))
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.top, 14)
             .padding(.bottom, KXSpacing.sm)
 

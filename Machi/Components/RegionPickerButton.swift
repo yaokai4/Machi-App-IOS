@@ -28,7 +28,7 @@ struct RegionPickerButton: View {
                     .font(.system(size: compact ? 17 : 18))
                     .accessibilityHidden(true)
                 Text(label)
-                    .font(.system(size: compact ? 13 : 14, weight: .bold))
+                    .kxScaledFont(compact ? 13 : 14, relativeTo: .footnote, weight: .bold)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(compact ? 0.72 : 0.78)

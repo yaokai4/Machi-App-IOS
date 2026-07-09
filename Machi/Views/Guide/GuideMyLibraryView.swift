@@ -204,7 +204,7 @@ private struct GuideLibraryMaterialRow: View {
                 .kxScaledFont(17, weight: .bold)
                 .foregroundStyle(KXColor.accent)
                 .frame(width: 40, height: 40)
-                .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             VStack(alignment: .leading, spacing: KXSpacing.xs) {
                 HStack(spacing: 6) {
                     Text(material.title)
@@ -231,8 +231,8 @@ private struct GuideLibraryMaterialRow: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
+        .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
         .contentShape(Rectangle())
     }
 }
@@ -247,7 +247,7 @@ private struct GuideLibraryServiceRow: View {
                 .kxScaledFont(17, weight: .bold)
                 .foregroundStyle(.purple)
                 .frame(width: 40, height: 40)
-                .background(Color.purple.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(Color.purple.opacity(0.12), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             VStack(alignment: .leading, spacing: KXSpacing.xs) {
                 Text(service.productTitle?.isEmpty == false ? service.productTitle! : guideText(language, "资料服务", "資料サービス", "Service"))
                     .font(.subheadline.weight(.bold))
@@ -264,8 +264,8 @@ private struct GuideLibraryServiceRow: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
+        .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
     }
 
     private var serviceStatusLabel: String {
@@ -297,7 +297,7 @@ private struct GuideLibraryOrderRow: View {
                 .kxScaledFont(17, weight: .bold)
                 .foregroundStyle(order.isTopUp ? Color.orange : KXColor.accent)
                 .frame(width: 40, height: 40)
-                .background((order.isTopUp ? Color.orange : KXColor.accent).opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background((order.isTopUp ? Color.orange : KXColor.accent).opacity(0.12), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             VStack(alignment: .leading, spacing: KXSpacing.xs) {
                 Text(order.title?.isEmpty == false ? order.title! : guideText(language, "订单", "注文", "Order"))
                     .font(.subheadline.weight(.bold))
@@ -319,8 +319,8 @@ private struct GuideLibraryOrderRow: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
+        .background(KXColor.livingSurface.opacity(0.76), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous).stroke(KXColor.separator.opacity(0.85), lineWidth: 0.8))
     }
 
     private var amountLabel: String {

@@ -93,7 +93,7 @@ struct GuideSchoolListView: View {
                     .buttonBorderShape(.capsule)
                 }
                 .padding(KXSpacing.md)
-                .background(KXColor.softBackground.opacity(0.8), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(KXColor.softBackground.opacity(0.8), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
             }
         }
     }
@@ -279,7 +279,7 @@ struct GuideCompanyListView: View {
                     .buttonBorderShape(.capsule)
                 }
                 .padding(KXSpacing.md)
-                .background(KXColor.softBackground.opacity(0.8), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(KXColor.softBackground.opacity(0.8), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
             }
         }
     }
@@ -567,7 +567,7 @@ struct GuideSchoolDetailView: View {
                         .frame(maxWidth: .infinity)
                         .frame(height: 42)
                         .background(KXColor.accent, in: Capsule())
-                        .foregroundStyle(.white)
+                        .foregroundStyle(KXColor.onAccent)
                 }
                 .buttonStyle(.fullArea)
         .contentShape(Rectangle())
@@ -577,7 +577,7 @@ struct GuideSchoolDetailView: View {
                     .font(.footnote)
                     .lineLimit(2...4)
                     .padding(KXSpacing.md)
-                    .background(KXColor.softBackground.opacity(0.82), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                    .background(KXColor.softBackground.opacity(0.82), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                 Button(guideText(language, "提交纠错", "修正を送信", "Submit correction")) {
                     Task { await submitCorrection(school) }
                 }
@@ -779,7 +779,7 @@ struct GuideCompanyDetailView: View {
                                     .frame(maxWidth: .infinity)
                                     .frame(height: 44)
                                     .background(KXColor.accent, in: Capsule())
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(KXColor.onAccent)
                             }
                             .buttonStyle(.fullArea)
         .contentShape(Rectangle())
@@ -899,7 +899,7 @@ struct GuideCompanyDetailView: View {
                         .frame(maxWidth: .infinity)
                         .frame(height: 42)
                         .background(KXColor.accent, in: Capsule())
-                        .foregroundStyle(.white)
+                        .foregroundStyle(KXColor.onAccent)
                 }
                 .buttonStyle(.fullArea)
         .contentShape(Rectangle())
@@ -909,7 +909,7 @@ struct GuideCompanyDetailView: View {
                     .font(.footnote)
                     .lineLimit(2...4)
                     .padding(KXSpacing.md)
-                    .background(KXColor.softBackground.opacity(0.82), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                    .background(KXColor.softBackground.opacity(0.82), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                 Button(guideText(language, "提交纠错", "修正を送信", "Submit correction")) {
                     Task { await submitCorrection(company) }
                 }
@@ -936,10 +936,10 @@ struct GuideCompanyDetailView: View {
                 FlowLayout(spacing: 6) {
                     GuideBadge(GuideCopy.triStateLabel(company.acceptsForeignApplicants, trueText: guideText(language, "接受外国人申请", "外国人応募可", "Accepts foreign applicants"), language: language), tint: KXColor.rankTeal)
                     GuideBadge(GuideCopy.triStateLabel(company.supportsWorkVisa, trueText: guideText(language, "签证支持", "ビザ支援", "Visa support"), language: language), tint: KXColor.accent)
-                    GuideBadge(GuideCopy.triStateLabel(company.supportsNewGraduate, trueText: "新卒", language: language), tint: KXColor.rankGold)
-                    GuideBadge(GuideCopy.triStateLabel(company.supportsMidCareer, trueText: "中途", language: language), tint: KXColor.rankGold)
+                    GuideBadge(GuideCopy.triStateLabel(company.supportsNewGraduate, trueText: guideText(language, "应届/新卒", "新卒", "New graduate"), language: language), tint: KXColor.rankGold)
+                    GuideBadge(GuideCopy.triStateLabel(company.supportsMidCareer, trueText: guideText(language, "社招/中途", "中途", "Mid-career"), language: language), tint: KXColor.rankGold)
                     GuideBadge(GuideCopy.triStateLabel(company.hasEnglishPositions, trueText: guideText(language, "英文岗位", "英語ポジション", "English roles"), language: language), tint: KXColor.rankSky)
-                    GuideBadge(GuideCopy.triStateLabel(company.hasGlobalRoles, trueText: "Global career", language: language), tint: KXColor.rankSky)
+                    GuideBadge(GuideCopy.triStateLabel(company.hasGlobalRoles, trueText: guideText(language, "全球岗位", "グローバル職", "Global career"), language: language), tint: KXColor.rankSky)
                     GuideBadge(GuideCopy.triStateLabel(company.hasForeignEmployees, trueText: guideText(language, "有外国籍员工", "外国籍社員あり", "Has foreign employees"), language: language), tint: KXColor.rankViolet)
                 }
             }
@@ -978,11 +978,11 @@ struct GuideCompanyDetailView: View {
                         .foregroundStyle(.secondary)
                 }
                 if let scores = company.scores {
-                    GuideScoreRow(title: "外国人友好度", value: scores.foreignerFriendly)
-                    GuideScoreRow(title: "面试难度", value: scores.interviewDifficulty)
-                    GuideScoreRow(title: "加班强度", value: scores.overtime)
-                    GuideScoreRow(title: "薪资福利", value: scores.salaryBenefit)
-                    GuideScoreRow(title: "工作生活平衡", value: scores.workLifeBalance)
+                    GuideScoreRow(title: guideText(language, "外国人友好度", "外国人フレンドリー度", "Foreigner-friendly"), value: scores.foreignerFriendly)
+                    GuideScoreRow(title: guideText(language, "面试难度", "面接難易度", "Interview difficulty"), value: scores.interviewDifficulty)
+                    GuideScoreRow(title: guideText(language, "加班强度", "残業の多さ", "Overtime"), value: scores.overtime)
+                    GuideScoreRow(title: guideText(language, "薪资福利", "給与・待遇", "Pay & benefits"), value: scores.salaryBenefit)
+                    GuideScoreRow(title: guideText(language, "工作生活平衡", "ワークライフバランス", "Work-life balance"), value: scores.workLifeBalance)
                     if let value = scores.visaSupport {
                         GuideScoreRow(title: guideText(language, "签证支持", "ビザ支援", "Visa support"), value: value)
                     }
@@ -1005,7 +1005,7 @@ struct GuideCompanyDetailView: View {
         defer { isSubmitting = false }
         do {
             try await KaiXAPIClient.shared.saveGuideCompany(company.slug.isEmpty ? company.id : company.slug, on: true)
-            toastMessage = "已收藏公司"
+            toastMessage = guideText(language, "已收藏公司", "企業を保存しました", "Company saved")
         } catch {
             toastMessage = error.localizedDescription
         }
@@ -1100,7 +1100,7 @@ struct GuideCompanyReviewsView: View {
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 42)
                                 .background(KXColor.accent, in: Capsule())
-                                .foregroundStyle(.white)
+                                .foregroundStyle(KXColor.onAccent)
                         }
                         .buttonStyle(.fullArea)
         .contentShape(Rectangle())

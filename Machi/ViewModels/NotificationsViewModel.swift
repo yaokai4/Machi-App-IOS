@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import SwiftData
 
+
 @MainActor
 final class NotificationsViewModel: ObservableObject {
     @Published var notifications: [NotificationEntity] = []

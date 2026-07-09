@@ -13,9 +13,16 @@ struct KXStayListingCard: View {
     let variant: Variant
     let onOpen: () -> Void
 
-    @State private var favorited: Bool = false
-    @State private var favoriteSeeded = false
+    /// 收藏态实时从 FavoritesStore 推导(观察 items/removedIds),跨页取消后
+    /// 回到列表红心即刷新——旧的 favoriteSeeded 闩锁会留下过期红心。
+    /// store 没记录时用服务端 DTO 兜底,本会话明确取消过的不再点亮。
+    @ObservedObject private var favorites = FavoritesStore.shared
     @State private var openTaps = 0
+
+    private var favorited: Bool {
+        favorites.contains(listing.id)
+            || (!favorites.wasRemoved(listing.id) && (listing.favorited ?? listing.isFavorited ?? false))
+    }
 
     private var ratingAvg: Double { listing.rating_avg ?? listing.ratingAvg ?? 0 }
     private var ratingCount: Int { listing.rating_count ?? listing.ratingCount ?? 0 }
@@ -36,15 +43,15 @@ struct KXStayListingCard: View {
     private var subline: String {
         switch variant {
         case .stay:
-            let guests = KXListingCopy.attr(listing, "max_guests").flatMap { $0.isEmpty ? nil : "可住 \($0) 人" }
+            let guests = KXListingCopy.attr(listing, "max_guests").flatMap { $0.isEmpty ? nil : KXListingCopy.pickText(language, "可住 \($0) 人", "定員\($0)名", "Sleeps \($0)") }
             return [
                 KXListingCopy.attr(listing, "room_type") ?? KXListingCopy.categoryLabel(listing.category ?? "", language),
                 guests,
-                KXListingCopy.boolAttr(listing, "breakfast_included") ? "含早餐" : nil,
+                KXListingCopy.boolAttr(listing, "breakfast_included") ? KXListingCopy.pickText(language, "含早餐", "朝食付き", "Breakfast included") : nil,
             ].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " · ")
         case .home:
             let area = KXListingCopy.attr(listing, "area_sqm").flatMap { $0.isEmpty ? nil : "\($0)㎡" }
-            let moveIn = KXListingCopy.attr(listing, "move_in_date").flatMap { $0.isEmpty ? nil : "\($0) 入住" }
+            let moveIn = KXListingCopy.attr(listing, "move_in_date").flatMap { $0.isEmpty ? nil : KXListingCopy.pickText(language, "\($0) 入住", "\($0) 入居可", "Move in \($0)") }
             return [KXListingCopy.attr(listing, "layout"), area, moveIn]
                 .compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " · ")
         case .forsale:
@@ -60,16 +67,16 @@ struct KXStayListingCard: View {
         guard variant == .forsale else { return [] }
         var tags: [String] = []
         if let yield = KXListingCopy.attr(listing, "yield_rate"), !yield.isEmpty {
-            tags.append("利回り \(yield)%")
+            tags.append(KXListingCopy.pickText(language, "利回り \(yield)%", "利回り \(yield)%", "Yield \(yield)%"))
         }
         if let land = KXListingCopy.attr(listing, "land_area"), !land.isEmpty {
-            tags.append("土地 \(land)㎡")
+            tags.append(KXListingCopy.pickText(language, "土地 \(land)㎡", "土地 \(land)㎡", "Land \(land)㎡"))
         }
         let intent = KXListingCopy.attr(listing, "listing_intent") ?? ""
         if intent == "investment" {
-            tags.append("投资")
+            tags.append(KXListingCopy.pickText(language, "投资", "投資向け", "Investment"))
         } else if !intent.isEmpty {
-            tags.append("出售")
+            tags.append(KXListingCopy.pickText(language, "出售", "売買", "For sale"))
         }
         return Array(tags.prefix(3))
     }
@@ -79,11 +86,11 @@ struct KXStayListingCard: View {
         var tags: [String] = []
         let deposit = KXListingCopy.attr(listing, "deposit") ?? ""
         let keyMoney = KXListingCopy.attr(listing, "key_money") ?? ""
-        if !deposit.isEmpty, deposit == "0" || deposit.contains("无") || deposit.contains("なし") { tags.append("敷金 0") }
-        if !keyMoney.isEmpty, keyMoney == "0" || keyMoney.contains("无") || keyMoney.contains("なし") { tags.append("礼金 0") }
-        if KXListingCopy.boolAttr(listing, "furnished") { tags.append("家具家电") }
-        if KXListingCopy.boolAttr(listing, "short_term_allowed") { tags.append("可短租") }
-        if KXListingCopy.boolAttr(listing, "pet_allowed") { tags.append("可养宠") }
+        if !deposit.isEmpty, deposit == "0" || deposit.contains("无") || deposit.contains("なし") { tags.append(KXListingCopy.pickText(language, "敷金 0", "敷金 0", "No deposit")) }
+        if !keyMoney.isEmpty, keyMoney == "0" || keyMoney.contains("无") || keyMoney.contains("なし") { tags.append(KXListingCopy.pickText(language, "礼金 0", "礼金 0", "No key money")) }
+        if KXListingCopy.boolAttr(listing, "furnished") { tags.append(KXListingCopy.pickText(language, "家具家电", "家具家電付き", "Furnished")) }
+        if KXListingCopy.boolAttr(listing, "short_term_allowed") { tags.append(KXListingCopy.pickText(language, "可短租", "短期可", "Short-term OK")) }
+        if KXListingCopy.boolAttr(listing, "pet_allowed") { tags.append(KXListingCopy.pickText(language, "可养宠", "ペット可", "Pets OK")) }
         return Array(tags.prefix(3))
     }
 
@@ -121,7 +128,7 @@ struct KXStayListingCard: View {
                                 Text(KXListingCopy.pickText(language, "Machi推荐", "Machiおすすめ", "Machi Pick"))
                             }
                             .font(.caption2.weight(.bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(KXColor.onTint(KXColor.rankGold))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
                             .background(KXColor.rankGold, in: Capsule())
@@ -135,7 +142,9 @@ struct KXStayListingCard: View {
                             HStack(spacing: KXSpacing.xs) {
                                 Image(systemName: "checkmark.seal.fill")
                                     .foregroundStyle(KXColor.accent)
-                                Text(variant == .stay ? "认证房东" : "已核验")
+                                Text(variant == .stay
+                                     ? KXListingCopy.pickText(language, "认证房东", "認証ホスト", "Verified host")
+                                     : KXListingCopy.pickText(language, "已核验", "確認済み", "Verified"))
                                     .foregroundStyle(.primary)
                             }
                             .font(.caption2.weight(.semibold))
@@ -189,7 +198,7 @@ struct KXStayListingCard: View {
                             .lineLimit(1)
                     }
                     HStack(spacing: 6) {
-                        Text(KXListingCopy.priceLabel(listing))
+                        Text(KXListingCopy.priceLabel(listing, language))
                             .kxScaledFont(17, relativeTo: .headline, weight: .bold)   // price = the one accent: a touch bigger + warm
                             .foregroundStyle(KXColor.livingWarm)
                             .lineLimit(1)
@@ -232,24 +241,14 @@ struct KXStayListingCard: View {
         }
         .buttonStyle(KXPressableStyle())
         .sensoryFeedback(.impact(weight: .light), trigger: openTaps)
-        .onAppear {
-            if !favoriteSeeded {
-                favorited = FavoritesStore.shared.contains(listing.id) || (listing.favorited ?? listing.isFavorited ?? false)
-                favoriteSeeded = true
-            }
-        }
     }
 
     private var favoriteSnapshot: FavoriteSnapshot {
-        FavoriteSnapshot(
-            id: listing.id,
-            title: KXListingCopy.displayTitle(listing),
-            priceLabel: KXListingCopy.priceLabel(listing),
-            coverURLString: listing.realCoverURL?.absoluteString,
-            type: listing.type,
-            locationText: stationOrLocation.isEmpty ? listing.location_text : stationOrLocation,
-            savedAt: Date()
-        )
+        // 统一走 snapshot(from:) 以带上原始价格数据(收藏页按当前语言现算),
+        // 只覆写更贴近卡片语境的位置文案。
+        var snapshot = FavoritesStore.snapshot(from: listing)
+        if !stationOrLocation.isEmpty { snapshot.locationText = stationOrLocation }
+        return snapshot
     }
 
     /// 右上角爱心：乐观切换，失败回滚；同时写入本地收藏。游客先弹登录。
@@ -257,13 +256,12 @@ struct KXStayListingCard: View {
         Button {
             guard GuestSession.requireSignedIn(reason: KXListingCopy.pickText(language, "登录后可以收藏喜欢的信息。", "ログインするとお気に入りに保存できます。", "Sign in to save listings you like.")) else { return }
             let next = !favorited
-            favorited = next
+            // 乐观写 store,favorited 即时跟随推导刷新;失败回滚。
             FavoritesStore.shared.set(favoriteSnapshot, on: next)
             Task {
                 do {
                     try await KaiXAPIClient.shared.favoriteListing(listing.id, on: next)
                 } catch {
-                    favorited = !next
                     FavoritesStore.shared.set(favoriteSnapshot, on: !next)
                 }
             }
@@ -284,6 +282,7 @@ struct KXStayListingCard: View {
 
 /// 封面图：listing media 第一张，缺图时按住宿/房源给冷色渐变占位。
 private struct KXStayCoverArtwork: View {
+    @Environment(\.appLanguage) private var language
     let listing: KaiXCityListingDTO
     let isStay: Bool
 
@@ -328,7 +327,9 @@ private struct KXStayCoverArtwork: View {
                 Image(systemName: isStay ? "bed.double.fill" : "house.fill")
                     .kxScaledFont(30, weight: .semibold)
                     .foregroundStyle(KXColor.livingAccent.opacity(0.78))
-                Text(isStay ? "精选住宿" : "精选房源")
+                Text(isStay
+                     ? KXListingCopy.pickText(language, "精选住宿", "おすすめの宿", "Featured stay")
+                     : KXListingCopy.pickText(language, "精选房源", "おすすめ物件", "Featured home"))
                     .font(.caption.weight(.black))
                     .foregroundStyle(KXColor.livingAccent)
                     .padding(.horizontal, 10)

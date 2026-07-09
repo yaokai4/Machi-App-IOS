@@ -142,6 +142,27 @@ struct ChatView: View {
     /// since the user last looked at this thread.
     @State private var unreadAtOpen = 0
     @State private var didCaptureUnread = false
+    /// "以下是新消息" 分割线锚定的消息 id。首次服务端加载完成时一次性解析并固定
+    /// (见 resolveNewMessageAnchorIfNeeded)——原先是对实时变化的 messages 做
+    /// 尾部偏移的计算属性,每来一条新消息分割线就向下漂移,搜索/日期过滤结果里
+    /// 还会凭空出现一条语义错误的分割线。
+    @State private var newMessageAnchorId: String?
+    @State private var didResolveNewMessageAnchor = false
+    /// 本会话所在的宿主 Tab(导航总是压进当前选中的 Tab)。所有刷新/已读路径都
+    /// 以 isChatVisible 为前置——隐藏 Tab 会保留视图和 .task,不加守卫的话,
+    /// 全局同步一更新 lastMessageAt,藏在别的 Tab 里的会话就会把新消息静默标记
+    /// 已读,用户失去全部未读信号。
+    @State private var hostTab: AppTab?
+    /// 用户是否停留在消息列表底部附近。只有贴近底部(或新消息是自己发的)才自动
+    /// 滚底;正在回看历史时绝不拽走视口(微信/iMessage 同款行为)。
+    @State private var isNearBottom = true
+    /// 用户回看历史期间到达的新消息数,驱动"↓ N 条新消息"悬浮胶囊。
+    @State private var pendingNewMessages = 0
+    /// 窗口宽度缓存,喂给每个气泡的 maxWidth。曾是 KXMessageBubble 里每次 body
+    /// 求值都遍历 UIApplication.connectedScenes 的计算属性(滚动热路径,参照
+    /// CityListingChannelView.screenWidth 的修法);滚动几何回调会在 Split View /
+    /// Stage Manager 尺寸变化时刷新它。
+    @State private var windowWidth: CGFloat = ChatView.resolveWindowWidth()
 
     let thread: MessageThreadEntity
     let currentUser: UserEntity
@@ -163,7 +184,9 @@ struct ChatView: View {
                     ChatSkeletonView()
                 case .error(let message):
                     ChatLoadErrorView(message: message) {
-                        Task { await viewModel.load(context: modelContext, thread: thread, messageStore: messageStore) }
+                        // 走 loadAndMarkRead:恢复后既解析"新消息"锚点,也补上
+                        // 可见状态下的已读上报(用户此刻正盯着这个会话)。
+                        Task { await loadAndMarkRead() }
                     }
                 case .empty:
                     ChatEmptyView(language: language)
@@ -197,33 +220,37 @@ struct ChatView: View {
         }
         .task(id: thread.id) {
             // The tab this chat lives on: navigation always pushes onto the
-            // currently-selected tab, so the poll loop can pause itself while
-            // the user is on another tab (a chat left open on a hidden tab
-            // used to keep polling the server forever).
-            let hostTab = chrome.selectedTab
+            // currently-selected tab, so every refresh path can pause itself
+            // while the user is on another tab (a chat left open on a hidden
+            // tab used to keep polling the server forever).
+            hostTab = chrome.selectedTab
             if !didCaptureUnread {
                 unreadAtOpen = messageStore.conversationsById[thread.id]?.unreadCount ?? thread.unreadCount
                 didCaptureUnread = true
             }
             await loadAndMarkRead()
-            await pollMessagesLoop(hostTab: hostTab)
+            await pollMessagesLoop()
         }
         .onChange(of: scenePhase) { _, phase in
             viewModel.isForeground = (phase == .active)
             // Coming back to the foreground: pull once immediately instead of
             // waiting up to 3s for the next poll tick. Never mid-send — the
             // wholesale refresh would clobber the optimistic `.sending` bubble
-            // (and its failure path) before `send` reconciles it.
-            if phase == .active, KaiXBackend.token != nil, !viewModel.hasActiveFilters, !viewModel.isSending {
+            // (and its failure path) before `send` reconciles it. Never while
+            // this chat's tab is hidden (isChatVisible) — 隐藏 Tab 的刷新会顺手
+            // 把新消息标成已读,吞掉未读信号。
+            if phase == .active, KaiXBackend.token != nil, !viewModel.hasActiveFilters, !viewModel.isSending, isChatVisible {
                 Task { await loadAndMarkRead() }
             }
         }
         .onChange(of: messageStore.conversationsById[thread.id]?.lastMessageAt) { _, _ in
-            guard !viewModel.hasActiveFilters, !viewModel.isSending else { return }
+            // isChatVisible:全局 12s 通知同步会在新 DM 到达时更新 lastMessageAt,
+            // 隐藏 Tab 上存活的会话若因此刷新,会把该消息静默标记已读(P1)。
+            guard !viewModel.hasActiveFilters, !viewModel.isSending, isChatVisible else { return }
             Task { await loadAndMarkRead() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .kaiXConversationShouldRefresh)) { note in
-            guard !viewModel.hasActiveFilters, !viewModel.isSending else { return }
+            guard !viewModel.hasActiveFilters, !viewModel.isSending, isChatVisible else { return }
             let conversationId = note.userInfo?["conversationId"] as? String
             guard conversationId == nil || conversationId == thread.id else { return }
             Task { await loadAndMarkRead() }
@@ -266,14 +293,56 @@ struct ChatView: View {
         }
     }
 
-    private func loadAndMarkRead() async {
-        await viewModel.load(context: modelContext, thread: thread, messageStore: messageStore)
-        guard !viewModel.hasActiveFilters else { return }
-        try? await MessageRepository(context: modelContext).markThreadRead(thread)
-        messageStore.setUnreadCount(0, conversationId: thread.id)
+    /// 会话是否真正"在屏上":App 在前台且宿主 Tab 被选中。隐藏 Tab 会保留视图
+    /// (和 .task),所以所有推送式刷新与已读上报都必须以此为前置,否则用户切走
+    /// 后到达的新消息会被静默标记已读(轮询循环使用同一判定)。
+    private var isChatVisible: Bool {
+        viewModel.isForeground && (hostTab.map { chrome.selectedTab == $0 } ?? true)
     }
 
-    private func pollMessagesLoop(hostTab: AppTab) async {
+    private func loadAndMarkRead() async {
+        let previousLatestId = viewModel.messages.last?.id
+        let didLoadFresh = await viewModel.load(context: modelContext, thread: thread, messageStore: messageStore)
+        if didLoadFresh {
+            resolveNewMessageAnchorIfNeeded()
+        }
+        guard !viewModel.hasActiveFilters else { return }
+        // 已读回执只在会话真正可见时上报——隐藏 Tab 的刷新绝不能吞掉未读信号。
+        guard isChatVisible else { return }
+        // 且只在确有新的未读需要确认时才 POST:原先每次 3s 轮询都无条件写服务器
+        // (每个打开的会话 20 次/分钟冗余写,后端是 2 核 2G 单机)。
+        let latest = viewModel.messages.last
+        let sawNewPeerMessage = didLoadFresh
+            && previousLatestId != nil
+            && latest != nil
+            && latest?.id != previousLatestId
+            && latest?.senderId != currentUser.id
+        let unread = messageStore.unreadCounts[thread.id] ?? thread.unreadCount
+        guard unread > 0 || sawNewPeerMessage else { return }
+        do {
+            try await MessageRepository(context: modelContext).markThreadRead(thread)
+            messageStore.setUnreadCount(0, conversationId: thread.id)
+        } catch {
+            // 失败时不再本地清零:离线清零会让角标先清、下一次全局同步又弹回来
+            // (闪烁且与服务器脱钩)。保留本地未读,等下一次可见刷新重试。
+        }
+    }
+
+    /// 首次服务端加载完成时,把"以下是新消息"锚点一次性解析成具体消息 id 并
+    /// 固定,之后新消息到达也不再漂移。过滤(搜索/日期)激活时不解析——结果集
+    /// 的尾部偏移毫无意义。
+    private func resolveNewMessageAnchorIfNeeded() {
+        guard !didResolveNewMessageAnchor,
+              viewModel.state == .loaded,
+              !viewModel.hasActiveFilters else { return }
+        didResolveNewMessageAnchor = true
+        guard unreadAtOpen > 0, viewModel.messages.count >= unreadAtOpen else { return }
+        let candidate = viewModel.messages[viewModel.messages.count - unreadAtOpen]
+        guard candidate.senderId != currentUser.id else { return }
+        newMessageAnchorId = candidate.id
+    }
+
+    private func pollMessagesLoop() async {
         guard KaiXBackend.token != nil else { return }
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(3))
@@ -284,11 +353,16 @@ struct ChatView: View {
             // optimistic pending bubble.
             guard !Task.isCancelled,
                   !viewModel.hasActiveFilters,
-                  viewModel.isForeground,
                   !viewModel.isSending,
-                  chrome.selectedTab == hostTab else { continue }
+                  isChatVisible else { continue }
             await loadAndMarkRead()
         }
+    }
+
+    private static func resolveWindowWidth() -> CGFloat {
+        UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.keyWindow?.bounds.width }
+            .first ?? UIScreen.main.bounds.width
     }
 
     private var chatHeader: some View {
@@ -432,6 +506,7 @@ struct ChatView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: KXSpacing.sm) {
+                    earlierMessagesHeader(proxy: proxy)
                     ForEach(timelineItems) { item in
                         switch item.kind {
                         case .day(let date):
@@ -443,6 +518,8 @@ struct ChatView: View {
                                 message: message,
                                 mediaItems: viewModel.mediaByMessageId[message.id] ?? [],
                                 isMine: message.senderId == currentUser.id,
+                                isReadByPeer: viewModel.readMessageIds.contains(message.id),
+                                bubbleMaxWidth: windowWidth * 0.74,
                                 peer: peer,
                                 onDelete: {
                                     Task { await viewModel.deleteMessage(context: modelContext, thread: thread, message: message, messageStore: messageStore) }
@@ -482,24 +559,48 @@ struct ChatView: View {
                     Color.clear
                         .frame(height: 8)
                         .id(ChatBottomAnchor.id)
+                        // 贴底哨兵:锚点进出可视区近似"贴近底部"。部署目标是
+                        // iOS 17,不能用 iOS 18 的 onScrollGeometryChange;
+                        // 与 SocialRoomDetailView 的哨兵探测同模式。
+                        .onAppear {
+                            isNearBottom = true
+                            pendingNewMessages = 0
+                        }
+                        .onDisappear { isNearBottom = false }
                 }
-                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.horizontal, KXSpacing.screen)
                 .padding(.top, 10)
                 .padding(.bottom, KXSpacing.md)
                 .kxReadableWidth()
                 // Drive the bubble insertion/removal transitions off the message
-                // count so appends/deletes animate rather than snap.
-                .animation(KXMotion.tap, value: viewModel.messages.count)
+                // count so appends/deletes animate rather than snap. 减去已
+                // prepend 的历史条数:「查看更早的消息」翻页时两者同增、差值
+                // 不变,80 条历史不会齐刷刷从底部滑入;尾部收发/删除照常动画。
+                .animation(KXMotion.tap, value: viewModel.messages.count - viewModel.earlierPrependedCount)
             }
             .scrollDismissesKeyboard(.interactively)
+            // 气泡最大宽度跟随滚动容器宽度(Split View / Stage Manager 尺寸变化
+            // 也能更新),替代原先每个气泡 body 都遍历 connectedScenes 的开销。
+            // onGeometryChange 自 iOS 16 可用,替代 iOS 18 的 onScrollGeometryChange。
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.width
+            } action: { width in
+                if width > 0 { windowWidth = width }
+            }
             .onAppear {
                 scrollToLatest(proxy, animated: false)
             }
-            .onChange(of: viewModel.messages.count) { _, _ in
-                scrollToLatest(proxy, animated: true)
-            }
+            // 单触发器:原先 count 与 last?.id 两个 onChange 都调 scrollToLatest,
+            // 一条新消息 = 2×3 次滚动动画;last?.id 已覆盖收发/删尾场景。
             .onChange(of: viewModel.messages.last?.id) { _, _ in
-                scrollToLatest(proxy, animated: true)
+                guard let latest = viewModel.messages.last else { return }
+                if viewModel.hasActiveFilters || isNearBottom || latest.senderId == currentUser.id {
+                    pendingNewMessages = 0
+                    scrollToLatest(proxy, animated: true)
+                } else {
+                    // 用户正在回看历史:不打断,改为"↓ N 条新消息"悬浮胶囊。
+                    pendingNewMessages += 1
+                }
             }
             .onChange(of: viewModel.state) { _, newState in
                 if newState == .loaded {
@@ -509,7 +610,105 @@ struct ChatView: View {
             .onChange(of: viewModel.mediaDrafts.count) { _, _ in
                 scrollToLatest(proxy, animated: true)
             }
+            .overlay(alignment: .bottom) {
+                if pendingNewMessages > 0 {
+                    newMessagesPill {
+                        pendingNewMessages = 0
+                        scrollToLatest(proxy, animated: true)
+                    }
+                }
+            }
         }
+    }
+
+    /// 列表顶部的「查看更早的消息」区:有游标时给按钮,在途转小 spinner,失败
+    /// 给轻量重试(不掀翻会话),翻完(游标空且确实翻过页)显示「已到最早」。
+    /// 与 SocialRoomDetailView 的 loadEarlier 同模式。
+    @ViewBuilder
+    private func earlierMessagesHeader(proxy: ScrollViewProxy) -> some View {
+        if viewModel.isLoadingEarlier {
+            KXSpinner(size: 16, lineWidth: 2, tint: KXColor.accent)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+        } else if viewModel.earlierLoadFailed {
+            Button {
+                loadEarlier(proxy: proxy)
+            } label: {
+                Text(KXListingCopy.pickText(
+                    language,
+                    "更早消息加载失败，点击重试",
+                    "以前のメッセージを読み込めませんでした。タップして再試行",
+                    "Couldn't load earlier messages — tap to retry"
+                ))
+                .font(.caption.weight(.bold))
+                .foregroundStyle(KXColor.heat)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } else if viewModel.earlierCursor != nil {
+            Button {
+                loadEarlier(proxy: proxy)
+            } label: {
+                Text(KXListingCopy.pickText(language, "查看更早的消息", "以前のメッセージ", "Earlier messages"))
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(KXColor.accent)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } else if viewModel.earlierPrependedCount > 0 {
+            Text(KXListingCopy.pickText(language, "已到最早的消息", "これ以上前のメッセージはありません", "Beginning of conversation"))
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+        }
+    }
+
+    private func loadEarlier(proxy: ScrollViewProxy) {
+        Task {
+            guard let anchorId = await viewModel.loadEarlier(context: modelContext, thread: thread, messageStore: messageStore) else { return }
+            // prepend 会把原有内容顶下去:等这帧布局落地后把原首条钉回顶部,
+            // 保持阅读位置不跳。尾部自动滚底只认 last?.id(prepend 不改变它)
+            // 且 isNearBottom 此刻为 false,不会互相打架。
+            try? await Task.sleep(for: .milliseconds(80))
+            proxy.scrollTo(anchorId, anchor: .top)
+        }
+    }
+
+    /// 悬浮"↓ N 条新消息"胶囊:回看历史时新消息不再强制滚底,点按跳到最新。
+    private func newMessagesPill(onTap: @escaping () -> Void) -> some View {
+        Button(action: onTap) {
+            HStack(spacing: 5) {
+                Image(systemName: "arrow.down")
+                    .font(.caption.weight(.bold))
+                Text(newMessagesPillText)
+                    .font(.caption.weight(.bold))
+            }
+            .foregroundStyle(KXColor.onAccent)
+            .padding(.horizontal, KXSpacing.md)
+            .frame(height: 32)
+            .background(KXColor.accent, in: Capsule())
+            .overlay(Capsule().stroke(Color.white.opacity(0.22), lineWidth: 0.8))
+            .shadow(color: KXColor.accent.opacity(0.28), radius: 8, y: 3)
+        }
+        .buttonStyle(.plain)
+        .padding(.bottom, KXSpacing.sm)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .accessibilityLabel(newMessagesPillText)
+    }
+
+    private var newMessagesPillText: String {
+        let count = pendingNewMessages
+        return KXListingCopy.pickText(
+            language,
+            "\(count) 条新消息",
+            "新着メッセージ\(count)件",
+            count == 1 ? "1 new message" : "\(count) new messages"
+        )
     }
 
     private func scrollToLatest(_ proxy: ScrollViewProxy, animated: Bool) {
@@ -526,33 +725,22 @@ struct ChatView: View {
                 action()
             }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-            action()
-        }
+        // 单次兜底:等插入动画/键盘布局落定后再钉一次底。原先是 3 连发
+        // (立即 + 0.08s + 0.28s)× 双触发器 = 一条消息最多 6 次滚动事务。
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
             action()
         }
     }
 
-    /// First message that arrived since the user last read this thread, used to
-    /// anchor the "以下是新消息" divider. The unread count captured at open
-    /// points at the tail of the timeline; we only show the divider when that
-    /// message is from the peer (you never get a "new" banner for your own).
-    private var newMessageAnchorId: String? {
-        guard unreadAtOpen > 0, viewModel.messages.count >= unreadAtOpen else { return nil }
-        let candidate = viewModel.messages[viewModel.messages.count - unreadAtOpen]
-        guard candidate.senderId != currentUser.id else { return nil }
-        return candidate.id
-    }
-
     /// Flattens the message array into a render list with day separators and
     /// the new-message divider interleaved. Computed once per body pass; cheap
     /// (a single linear walk, no per-row work in the bubble itself).
+    /// 搜索/日期过滤时跳过分割线——结果集里的"新消息"锚点没有语义。
     private var timelineItems: [ChatTimelineItem] {
         var result: [ChatTimelineItem] = []
         let calendar = Calendar.current
         var lastDay: Date?
-        let anchor = newMessageAnchorId
+        let anchor = viewModel.hasActiveFilters ? nil : newMessageAnchorId
         for message in viewModel.messages {
             let day = calendar.startOfDay(for: message.createdAt)
             if lastDay != day {
@@ -708,23 +896,21 @@ struct KXMessageBubble: View {
     let message: MessageEntity
     let mediaItems: [MediaEntity]
     let isMine: Bool
+    /// 己方消息对方是否已读(服务端 is_read)。驱动脚注"已发送 → 已读"。
+    let isReadByPeer: Bool
+    /// Cap long text bubbles at ~74% of the app's window so they read like chat
+    /// bubbles and never run edge-to-edge. 由 ChatView 缓存的窗口宽度算好传入
+    /// ——曾是每次气泡 body 求值都遍历 UIApplication.connectedScenes 的计算
+    /// 属性(滚动热路径上的重复系统调用)。
+    let bubbleMaxWidth: CGFloat
     let peer: UserEntity?
     let onDelete: () -> Void
     let onRetry: () -> Void
     let onOpenPeer: () -> Void
 
-    /// Cap long text bubbles at ~74% of the app's window so they read like chat
-    /// bubbles and never run edge-to-edge. Uses the active window scene width
-    /// (Split View / Stage Manager aware) rather than the full-screen bounds.
-    private var bubbleMaxWidth: CGFloat {
-        let windowWidth = UIApplication.shared.connectedScenes
-            .compactMap { ($0 as? UIWindowScene)?.keyWindow?.bounds.width }
-            .first ?? UIScreen.main.bounds.width
-        return windowWidth * 0.74
-    }
-
     private var retryLabel: String { language == .ja ? "再送信" : language == .en ? "Retry" : "点击重试" }
     private var sendingLabel: String { language == .ja ? "送信中…" : language == .en ? "Sending…" : "发送中…" }
+    private var readLabel: String { language == .ja ? "既読" : language == .en ? "Read" : "已读" }
 
     var body: some View {
         let contentType = message.resolvedType(mediaItems: mediaItems)
@@ -744,14 +930,14 @@ struct KXMessageBubble: View {
                 if !mediaItems.isEmpty {
                     MediaGridView(mediaItems: mediaItems)
                         .frame(maxWidth: contentType == .video ? 236 : 216)
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                         .overlay {
                             if message.status == .sending {
-                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                                     .fill(.black.opacity(0.20))
                                 KXSpinner(size: 24, lineWidth: 2.6, tint: .white)
                             } else if message.status == .failed {
-                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                                     .fill(.black.opacity(0.22))
                                 Button(action: onRetry) {
                                     Image(systemName: "arrow.clockwise.circle.fill")
@@ -764,7 +950,7 @@ struct KXMessageBubble: View {
                             }
                         }
                         .overlay(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                                 .stroke(KXColor.separator.opacity(isMine ? 0.10 : 0.22), lineWidth: 0.6)
                         )
                         .compositingGroup()
@@ -781,16 +967,16 @@ struct KXMessageBubble: View {
                         .padding(.horizontal, 13)
                         .padding(.vertical, 9)
                         .background {
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                                 .fill(isMine
                                       ? AnyShapeStyle(LinearGradient(
                                             colors: [KXColor.accent, KXColor.accent.opacity(0.86)],
                                             startPoint: .top, endPoint: .bottom))
                                       : AnyShapeStyle(KXColor.cardBackground))
                         }
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                                 .stroke(isMine ? Color.clear : KXColor.separator, lineWidth: 0.6)
                         )
                         .shadow(color: isMine ? Color.clear : KXColor.glassShadow.opacity(0.65), radius: 5, y: 2)
@@ -816,7 +1002,9 @@ struct KXMessageBubble: View {
                         case .sending:
                             Text(sendingLabel).foregroundStyle(.secondary)
                         default:
-                            Text(L("sent", language)).foregroundStyle(.secondary)
+                            // 服务端一直返回 is_read,过去被映射层丢弃——已读回执
+                            // 数据链路本就存在,只差呈现。
+                            Text(isReadByPeer ? readLabel : L("sent", language)).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -1046,11 +1234,11 @@ private struct ChatAttachTile: View {
                 .foregroundStyle(disabled ? KXColor.livingMuted.opacity(0.5) : KXColor.accent)
                 .frame(width: 54, height: 54)
                 .background(
-                    RoundedRectangle(cornerRadius: 17, style: .continuous)
+                    RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                         .fill(disabled ? KXColor.softBackground.opacity(0.4) : KXColor.accent.opacity(0.1))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 17, style: .continuous)
+                    RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                         .stroke(KXColor.separator.opacity(0.2), lineWidth: 0.7)
                 )
             Text(title)
@@ -1157,7 +1345,7 @@ private struct ChatSkeletonView: View {
                 HStack(alignment: .bottom, spacing: KXSpacing.sm) {
                     if r.mine { Spacer(minLength: 52) }
                     if !r.mine { Circle().fill(KXColor.softBackground).frame(width: 32, height: 32) }
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                         .fill(KXColor.softBackground)
                         .frame(width: UIScreen.main.bounds.width * r.w, height: 40)
                     if !r.mine { Spacer(minLength: 52) }
@@ -1165,7 +1353,7 @@ private struct ChatSkeletonView: View {
             }
             Spacer()
         }
-        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.horizontal, KXSpacing.screen)
         .padding(.top, KXSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
         .redacted(reason: .placeholder)

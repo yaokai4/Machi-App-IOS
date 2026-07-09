@@ -14,21 +14,41 @@ final class ListingGeocodeCache {
     private var hits: [String: CLLocationCoordinate2D] = [:]
     private var misses: Set<String> = []
     private let geocoder = CLGeocoder()
+    /// 串行化闸门:CLGeocoder 一次只接受一个请求。切筛选会让新旧两个
+    /// resolve 循环短暂并发,若不排队,并发调用必抛限流错——曾经的实现把
+    /// 任何 catch 都写进 misses,一批真实车站就此被永久打成「不可映射」。
+    private var chain: Task<Void, Never>?
 
     func resolve(_ key: String) async -> CLLocationCoordinate2D? {
         if let c = hits[key] { return c }
         if misses.contains(key) { return nil }
+        let previous = chain
+        let task = Task<Void, Never> { [weak self] in
+            _ = await previous?.value
+            await self?.performGeocode(key)
+        }
+        chain = task
+        _ = await task.value
+        return hits[key]
+    }
+
+    private func performGeocode(_ key: String) async {
+        // 排队期间可能已被前一个同 key 请求解决。
+        if hits[key] != nil || misses.contains(key) { return }
         do {
             let placemarks = try await geocoder.geocodeAddressString(key)
             if let coord = placemarks.first?.location?.coordinate {
                 hits[key] = coord
-                return coord
+            } else {
+                misses.insert(key)
             }
         } catch {
-            // Network/throttle/no-match all degrade to "unmappable" for this key.
+            // 只有「真·无结果」才永久缓存为 miss;网络抖动 / 限流(kCLErrorNetwork
+            // 等)不缓存,下次进入地图还能重试——否则一次限流会话内不可恢复。
+            if let code = (error as? CLError)?.code, code == .geocodeFoundNoResult {
+                misses.insert(key)
+            }
         }
-        misses.insert(key)
-        return nil
     }
 }
 
@@ -75,7 +95,7 @@ struct ListingMapView: View {
                 VStack {
                     Spacer()
                     selectedCard(selected)
-                        .padding(.horizontal, KaiXTheme.horizontalPadding)
+                        .padding(.horizontal, KXSpacing.screen)
                         .padding(.bottom, 30)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
@@ -87,9 +107,9 @@ struct ListingMapView: View {
     // MARK: pins
 
     private func priceBadge(_ pin: ListingMapPin, isSelected: Bool) -> some View {
-        Text(KXListingCopy.priceLabel(pin.listing))
+        Text(KXListingCopy.priceLabel(pin.listing, language))
             .font(.caption.weight(.black))
-            .foregroundStyle(isSelected ? Color.white : KXColor.livingInk)
+            .foregroundStyle(isSelected ? KXColor.onAccent : KXColor.livingInk)
             .lineLimit(1)
             .padding(.horizontal, 11)
             .frame(height: 30)
@@ -119,7 +139,7 @@ struct ListingMapView: View {
             HStack(spacing: KXSpacing.md) {
                 cover(pin.listing)
                     .frame(width: 76, height: 76)
-                    .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                 VStack(alignment: .leading, spacing: KXSpacing.xs) {
                     Text(KXListingCopy.priceLabel(pin.listing, language))
                         .font(.subheadline.weight(.black))
@@ -180,15 +200,39 @@ struct ListingMapView: View {
     private func resolve() async {
         isResolving = true
         var resolved: [ListingMapPin] = []
+        var coordUse: [String: Int] = [:]   // 相同坐标出现次数 → 环形散开
         // Cap the work so a huge result set doesn't hammer the geocoder.
         for listing in listings.prefix(40) {
+            // .task(id:) 换筛选会启动新循环——旧循环必须立刻让位,否则两个
+            // 循环并发打 CLGeocoder,还会用旧列表的结果覆盖新 pins。
+            if Task.isCancelled { return }
             guard let q = query(for: listing) else { continue }
-            if let coord = await ListingGeocodeCache.shared.resolve(q) {
-                resolved.append(ListingMapPin(id: listing.id, coordinate: coord, listing: listing))
-                pins = resolved   // progressive reveal as pins land
-            }
+            guard let coord = await ListingGeocodeCache.shared.resolve(q) else { continue }
+            if Task.isCancelled { return }
+            let key = String(format: "%.5f,%.5f", coord.latitude, coord.longitude)
+            let dup = coordUse[key, default: 0]
+            coordUse[key] = dup + 1
+            resolved.append(ListingMapPin(id: listing.id, coordinate: Self.displacedCoordinate(coord, index: dup), listing: listing))
+            pins = resolved   // progressive reveal as pins land
         }
+        guard !Task.isCancelled else { return }
         pins = resolved
         isResolving = false
+    }
+
+    /// 同一车站的房源 geocode 出完全相同的坐标,pin 全叠一点只剩最顶层可点,
+    /// 「新宿站步行5分钟」的 15 套房在地图上只见 1 个价签。按重复序号做确定性
+    /// 小偏移(每圈 8 个、约 55m 递增),首个保持原坐标,全部可见可点。
+    private static func displacedCoordinate(_ coord: CLLocationCoordinate2D, index: Int) -> CLLocationCoordinate2D {
+        guard index > 0 else { return coord }
+        let ring = (index - 1) / 8 + 1
+        let slot = (index - 1) % 8
+        let angle = Double(slot) * (.pi / 4) + Double(ring - 1) * (.pi / 8)
+        let radius = 0.0005 * Double(ring)   // ≈55m / 圈
+        let latScale = max(0.2, cos(coord.latitude * .pi / 180))
+        return CLLocationCoordinate2D(
+            latitude: coord.latitude + radius * sin(angle),
+            longitude: coord.longitude + radius * cos(angle) / latScale
+        )
     }
 }

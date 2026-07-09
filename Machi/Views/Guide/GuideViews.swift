@@ -83,16 +83,21 @@ struct GuideHomeView: View {
         } else if let home = viewModel.home {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 18) {
-                    // 资料库导航中心:品牌头 + 搜索框。不再是「今日」行动面板。
+                    // AI 优先:「Machi AI」Tab 的第一屏就是 AI 对话入口 hero,
+                    // 让 Tab 名和落点名实相符;资料库整体下移为第二屏区块。
+                    GuideAIHero()
+
+                    if let message = viewModel.errorMessage, !message.isEmpty {
+                        GuideInlineStatus(message: message)
+                    }
+
+                    // 「浏览资料库」区块头:品牌徽章 + 标题 + 搜索框,
+                    // 是学校库/公司库/分类网格/最新指南整个区域的入口。
                     GuideLibraryHero(
                         searchText: $viewModel.searchText,
                         placeholder: home.hero.searchPlaceholder,
                         quickTags: home.hero.quickTags
                     )
-
-                    if let message = viewModel.errorMessage, !message.isEmpty {
-                        GuideInlineStatus(message: message)
-                    }
 
                     if !viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         GuideSearchResultsSection(
@@ -105,9 +110,6 @@ struct GuideHomeView: View {
                             journeys: viewModel.journeyResults
                         )
                     } else {
-                        // Machi AI —— 原创助手入口，放在资料库与分类网格之前。
-                        GuideAIEntryCard()
-
                         // Journey 门面:把「路径」页的行动路径带到首页第一屏,
                         // 横滑 2-4 张;登录用户叠真实进度,数据为空自动隐藏。
                         GuideJourneySpotlight(
@@ -243,7 +245,7 @@ struct GuideCategoryView: View {
                     .font(.title3.weight(.bold))
                     .foregroundStyle(KXColor.livingAccent)
                     .frame(width: 48, height: 48)
-                    .background(KXColor.livingAccentSoft, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .background(KXColor.livingAccentSoft, in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                 VStack(alignment: .leading, spacing: KXSpacing.xs) {
                     Text("MACHI GUIDE")
                         .font(.caption2.weight(.black))
@@ -282,7 +284,7 @@ struct GuideCategoryView: View {
                     .foregroundStyle(KXColor.livingMuted)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(KXSpacing.md)
-                    .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
             }
         }
         .padding(18)
@@ -535,7 +537,7 @@ struct GuideArticleDetailView: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(KXColor.rankGold.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(KXColor.rankGold.opacity(0.12), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 }
                 FlowLayout(spacing: 10) {
                     if let updated {
@@ -603,9 +605,9 @@ struct GuideArticleDetailView: View {
                 .buttonStyle(.fullArea)
                 .frame(minHeight: 46)
                 .padding(.horizontal, KXSpacing.md)
-                .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KXColor.separator.opacity(0.55), lineWidth: 1))
-                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous).stroke(KXColor.separator.opacity(0.55), lineWidth: 1))
+                .contentShape(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                 .disabled(isSaving)
 
                 ShareLink(
@@ -619,9 +621,9 @@ struct GuideArticleDetailView: View {
                 .buttonStyle(.fullArea)
                 .frame(minHeight: 46)
                 .padding(.horizontal, KXSpacing.md)
-                .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KXColor.separator.opacity(0.55), lineWidth: 1))
-                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(KXColor.livingSurface.opacity(0.72), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous).stroke(KXColor.separator.opacity(0.55), lineWidth: 1))
+                .contentShape(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
             }
 
             Button {
@@ -629,7 +631,7 @@ struct GuideArticleDetailView: View {
             } label: {
                 HStack {
                     if isMarkingRead {
-                        ProgressView().tint(.white)
+                        ProgressView().tint(KXColor.onAccent)
                     } else {
                         Image(systemName: progress >= 95 ? "checkmark.seal.fill" : "checkmark.circle")
                     }
@@ -638,11 +640,11 @@ struct GuideArticleDetailView: View {
                     Text("\(progress)%")
                         .font(.caption.weight(.black))
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(KXColor.onAccent)
                 .padding(.horizontal, 14)
                 .frame(minHeight: 48)
-                .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
-                .contentShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+                .background(KXColor.accent, in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
             }
             .buttonStyle(.fullArea)
             .disabled(isMarkingRead || progress >= 95)
@@ -979,7 +981,7 @@ struct GuideMemberResourcesView: View {
                         .onSubmit { Task { await load() } }
                 }
                 .padding(KXSpacing.md)
-                .background(KXColor.softBackground.opacity(0.8), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(KXColor.softBackground.opacity(0.8), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
             }
         }
     }
@@ -1368,7 +1370,7 @@ struct GuideComingSoonView: View {
                     .frame(height: 44)
                     .padding(.horizontal, 22)
                     .background(KXColor.accent, in: Capsule())
-                    .foregroundStyle(.white)
+                    .foregroundStyle(KXColor.onAccent)
             }
             .buttonStyle(.fullArea)
         .contentShape(Rectangle())
@@ -1435,7 +1437,8 @@ struct GuideSchoolFilterSheet: View {
     }
 }
 
-/// Guide-home hero. 资料库导航中心:品牌头 + 标题「日本指南」+ 搜索框 + 快捷标签。
+/// 「浏览资料库」区块头。AI hero 之后的第二屏:品牌徽章 + 标题 + 搜索框 + 快捷
+/// 标签,统领学校库/公司库/分类网格/最新指南整个资料库区域。
 /// No "今日" / Todo here — personal action tools live in 我的工作台.
 /// Search is driven by a debounced `.onChange` on the bound `searchText` in the
 /// host (`GuideHomeView`), so this view only needs to mutate the binding.
@@ -1463,8 +1466,8 @@ private struct GuideLibraryHero: View {
             .padding(.vertical, 5)
             .background(KXColor.livingAccentSoft, in: Capsule())
 
-            Text(guideText(language, "日本指南", "日本ガイド", "Japan Guide"))
-                .kxScaledFont(30, relativeTo: .largeTitle, weight: .bold, design: .rounded)
+            Text(guideText(language, "浏览资料库", "資料庫を見る", "Browse the library"))
+                .kxScaledFont(24, relativeTo: .title2, weight: .bold, design: .rounded)
                 .foregroundStyle(KXColor.livingInk)
             Text(guideText(
                 language,
@@ -1498,9 +1501,9 @@ private struct GuideLibraryHero: View {
             }
             .padding(.horizontal, 14)
             .frame(height: 50)
-            .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+            .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 17, style: .continuous)
+                RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                     .stroke(KXColor.livingInk.opacity(0.08), lineWidth: 0.8)
             }
 
@@ -1676,86 +1679,108 @@ private struct GuideCategoryGrid: View {
     }
 }
 
-/// 核心资料库:学校库(蓝) + 公司库(青绿)。两张高对比大卡,放在六大指南之前,
-/// 是 Guide 首屏最醒目的高价值入口(比普通指南卡更突出)。
-/// High-quality entry to Machi AI (原创助手). Sits right under the Guide hero,
-/// before the category grid. Branded accent + warm surface; never references any
-/// provider/model — to the user this is Machi's own assistant.
-private struct GuideAIEntryCard: View {
+/// Machi AI hero —— 「Machi AI」Tab 的第一屏主角,让 Tab 名和落点名实相符。
+/// 大号品牌标 + 一句三语价值主张 + 常驻「输入框」样式的 CTA + 场景化快捷问题
+/// chip。主 CTA 进入空聊天页;场景 chip 经 `.guideAI(prompt:)` 载荷把问题预填进
+/// 「原来可以这么问」的示范作用;真正的一键提问 chip 在聊天页里)。
+/// Never references any provider/model — to the user this is Machi's own
+/// assistant. 不带「Beta」标:AI 就是这个 Tab 的正主,不是实验品。
+private struct GuideAIHero: View {
     @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
 
-    var body: some View {
-        Button {
-            router.open(.guideAI, in: .guide)
-        } label: {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: KXSpacing.md) {
-                    MachiAIMark(size: 52)
-                        .shadow(color: KXColor.livingAccent.opacity(0.32), radius: 7, y: 3)
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack(spacing: 6) {
-                            Text("Machi AI")
-                                .font(.title3.weight(.bold))
-                                .foregroundStyle(KXColor.livingInk)
-                            Text("Beta")
-                                .kxScaledFont(10, weight: .bold)
-                                .foregroundStyle(KXColor.livingAccent)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, KXSpacing.xxs)
-                                .background(KXColor.livingAccent.opacity(0.14), in: Capsule())
-                        }
-                        Text(guideText(language,
-                                       "日本生活、升学、就职和 Machi 使用问题，先问问 Machi AI。",
-                                       "日本生活・進学・就職や Machi の使い方、まず Machi AI に聞いてみよう。",
-                                       "Ask Machi AI anything about life, study, work in Japan, or using Machi."))
-                            .font(.caption)
-                            .foregroundStyle(KXColor.livingMuted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength: 0)
-                    // 纯入口:箭头表示「点进去」才是聊天页,不是输入框。
-                    Image(systemName: "arrow.right")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
-                        .background(KXColor.livingAccent, in: Circle())
-                        .shadow(color: KXColor.livingAccent.opacity(0.3), radius: 5, y: 2)
-                }
-
-                HStack(spacing: KXSpacing.sm) {
-                    chip(guideText(language, "生活手续", "生活手続き", "Life admin"))
-                    chip(guideText(language, "升学规划", "進学プラン", "Study plan"))
-                    chip(guideText(language, "就职准备", "就職準備", "Job prep"))
-                    Spacer(minLength: 0)
-                }
-            }
-            .padding(KXSpacing.lg)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous)
-                    .stroke(KXColor.livingInk.opacity(0.06), lineWidth: 1)
-            )
-            .shadow(color: Color.black.opacity(0.06), radius: 14, y: 6)
-        }
-        .buttonStyle(.fullArea)
-        .contentShape(Rectangle())
-        .accessibilityIdentifier("guide.ai.entry")
+    /// 静态三语场景问题:新用户 5 秒内理解「这里可以问什么」。
+    private var starterQuestions: [String] {
+        [
+            guideText(language, "留学签证怎么续？", "留学ビザの更新方法は？", "How do I renew my student visa?"),
+            guideText(language, "东京哪里租房便宜？", "東京で家賃が安いエリアは？", "Where is rent cheaper in Tokyo?"),
+            guideText(language, "日企面试怎么准备？", "日本企業の面接対策は？", "How do I prep for interviews at Japanese firms?")
+        ]
     }
 
-    private func chip(_ text: String) -> some View {
-        Text(text)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(KXColor.livingAccent)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(KXColor.livingSurface.opacity(0.9), in: Capsule())
-            .overlay(Capsule().stroke(KXColor.livingAccent.opacity(0.18), lineWidth: 0.8))
+    var body: some View {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
+            HStack(spacing: KXSpacing.md) {
+                MachiAIMark(size: 56)
+                    .shadow(color: KXColor.livingAccent.opacity(0.32), radius: 7, y: 3)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Machi AI")
+                        .kxScaledFont(24, relativeTo: .title2, weight: .bold, design: .rounded)
+                        .foregroundStyle(KXColor.livingInk)
+                    Text(guideText(language,
+                                   "在日生活、升学、就职，有问题先问它。",
+                                   "日本での生活・進学・就職、まずここで質問。",
+                                   "Life, study, and work in Japan — ask here first."))
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(KXColor.livingMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+
+            // 常驻输入框样式的 CTA:看起来像 composer,点击即进入聊天页。
+            Button {
+                router.open(.guideAI(prompt: nil), in: .guide)
+            } label: {
+                HStack(spacing: KXSpacing.sm) {
+                    MachiAIGlyph(lineWidth: 1.8)
+                        .foregroundStyle(KXColor.livingAccent)
+                        .frame(width: 18, height: 18)
+                    Text(guideText(language, "问问 Machi AI…", "Machi AI に聞いてみよう…", "Ask Machi AI…"))
+                        .font(.subheadline)
+                        .foregroundStyle(KXColor.livingMuted)
+                    Spacer(minLength: 0)
+                    Image(systemName: "arrow.up.circle.fill")
+                        .kxScaledFont(24)
+                        .foregroundStyle(KXColor.livingAccent)
+                }
+                .padding(.horizontal, 14)
+                .frame(height: 50)
+                .frame(maxWidth: .infinity)
+                .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
+                        .stroke(KXColor.livingAccent.opacity(0.28), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.fullArea)
+            .contentShape(Rectangle())
+            .accessibilityIdentifier("guide.ai.entry")
+            .accessibilityLabel(guideText(language, "问问 Machi AI", "Machi AI に聞く", "Ask Machi AI"))
+
+            // 场景化快捷问题:点击同样进入聊天页开始提问。
+            FlowLayout(spacing: 7) {
+                ForEach(starterQuestions, id: \.self) { question in
+                    Button {
+                        router.open(.guideAI(prompt: question), in: .guide)
+                    } label: {
+                        Text(question)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(KXColor.livingAccent)
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 7)
+                            .background(KXColor.livingSurface.opacity(0.9), in: Capsule())
+                            .overlay(Capsule().stroke(KXColor.livingAccent.opacity(0.18), lineWidth: 0.8))
+                    }
+                    .buttonStyle(.fullArea)
+                    .contentShape(Capsule())
+                }
+            }
+        }
+        .padding(KXSpacing.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(KXColor.livingSoft, in: RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous)
+                .stroke(KXColor.livingInk.opacity(0.06), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.06), radius: 14, y: 6)
     }
 }
 
+/// 核心资料库:学校库(蓝) + 公司库(青绿)。两张高对比大卡,放在六大指南之前,
+/// 是资料库区块里最醒目的高价值入口(比普通指南卡更突出)。
 private struct GuideLibraryDualEntry: View {
     @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
@@ -1776,7 +1801,7 @@ private struct GuideLibraryDualEntry: View {
                     title: guideText(language, "日本学校库", "学校データベース", "School library"),
                     subtitle: guideText(language, "大学、大学院、专门学校、语言学校", "大学・大学院・専門・語学", "Universities, grad, vocational, language"),
                     icon: "graduationcap.fill",
-                    colors: [Color.blue, Color.blue.opacity(0.78)],
+                    colors: [KXColor.rankSky, KXColor.rankSky.opacity(0.78)],
                     identifier: "guide.library.schools"
                 ) { router.open(.guideSchools) }
 
@@ -1784,7 +1809,7 @@ private struct GuideLibraryDualEntry: View {
                     title: guideText(language, "就职公司库", "就職企業データベース", "Company library"),
                     subtitle: guideText(language, "外国人友好企业、签证支持与真实评价", "外国人歓迎・ビザ支援・口コミ", "Foreigner-friendly, visa support, reviews"),
                     icon: "building.2.fill",
-                    colors: [Color.teal, Color.teal.opacity(0.78)],
+                    colors: [KXColor.rankTeal, KXColor.rankTeal.opacity(0.78)],
                     identifier: "guide.library.companies"
                 ) { router.open(.guideCompanies) }
             }
@@ -1792,18 +1817,22 @@ private struct GuideLibraryDualEntry: View {
     }
 
     private func card(title: String, subtitle: String, icon: String, colors: [Color], identifier: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        // Ink derived from the gradient's lead tint: white on the deep light-mode
+        // hues, near-black on the brightened dark-mode ones (raw .white washes
+        // out on the bright dark-mode sky/teal).
+        let ink = KXColor.onTint(colors.first ?? KXColor.accent)
+        return Button(action: action) {
             VStack(alignment: .leading, spacing: 9) {
                 Image(systemName: icon)
                     .kxScaledFont(25, weight: .bold)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ink)
                 Text(title)
                     .font(.headline.weight(.bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ink)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(subtitle)
                     .font(.caption2.weight(.medium))
-                    .foregroundStyle(.white.opacity(0.92))
+                    .foregroundStyle(ink.opacity(0.92))
                     .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
@@ -1812,7 +1841,7 @@ private struct GuideLibraryDualEntry: View {
                     Image(systemName: "arrow.right")
                 }
                 .font(.caption.weight(.bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(ink)
             }
             .frame(maxWidth: .infinity, minHeight: 172, alignment: .topLeading)
             .padding(KXSpacing.lg)
@@ -1864,8 +1893,8 @@ private struct GuidePersonalWorkbenchCTA: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity)
-            .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(KXColor.separator.opacity(0.7), lineWidth: 0.8))
+            .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous).stroke(KXColor.separator.opacity(0.7), lineWidth: 0.8))
         }
         .buttonStyle(.fullArea)
         .contentShape(Rectangle())
@@ -2161,8 +2190,8 @@ private struct GuideFAQSection: View {
                             .font(.subheadline.weight(.semibold))
                     }
                     .padding(14)
-                    .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
+                    .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
                 }
             }
         }
@@ -2334,7 +2363,7 @@ struct GuideMemberPriceRow: View {
                 .padding(.horizontal, KXSpacing.md)
                 .padding(.vertical, 9)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             } else {
                 Button(action: onUpgrade) {
                     HStack(spacing: KXSpacing.sm) {
@@ -2343,16 +2372,16 @@ struct GuideMemberPriceRow: View {
                             .foregroundStyle(.blue)
                         (Text(guideText(language, "会员价 ", "会員価格 ", "Member price "))
                             .font(.caption.weight(.semibold))
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                          + Text(memberLabel)
                             .font(.subheadline.weight(.bold))
-                            .foregroundColor(KXColor.accent))
+                            .foregroundStyle(KXColor.accent))
                         Spacer(minLength: 0)
                         Text(isMemberIncludedFree
                              ? guideText(language, "开通会员免费看", "会員なら無料", "Free for members")
                              : guideText(language, "开通会员", "会員登録", "Get membership"))
                             .font(.caption2.weight(.bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(KXColor.onAccent)
                             .padding(.horizontal, KXSpacing.sm)
                             .padding(.vertical, KXSpacing.xs)
                             .background(KXColor.accent, in: Capsule())
@@ -2360,7 +2389,7 @@ struct GuideMemberPriceRow: View {
                     .padding(.horizontal, KXSpacing.md)
                     .padding(.vertical, 9)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -2745,7 +2774,7 @@ struct GuideIconBubble: View {
     var body: some View {
         Image(systemName: icon)
             .font(.system(size: size * 0.40, weight: .bold))
-            .foregroundStyle(.white)
+            .foregroundStyle(KXColor.onTint(color))
             .frame(width: size, height: size)
             .background(color, in: RoundedRectangle(cornerRadius: size * 0.34, style: .continuous))
             .shadow(color: color.opacity(0.22), radius: 9, y: 4)
@@ -2800,8 +2829,8 @@ struct GuideNotePanel: View {
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             .padding(14)
-            .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
+            .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
     }
 }
 

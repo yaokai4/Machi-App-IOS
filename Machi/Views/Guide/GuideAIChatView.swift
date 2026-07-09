@@ -12,11 +12,19 @@ struct GuideAIChatView: View {
     @FocusState private var inputFocused: Bool
     @State private var showHistory = false
     @State private var containerWidth: CGFloat = UIScreen.main.bounds.width
+    /// messageId → 已提交的评价。必须放在父视图:行视图在 LazyVStack 里滚出屏
+    /// 即被回收,行内 @State 归零后已评价的消息恢复成未评价样式,还能对同一条
+    /// 消息连发相反评价,污染反馈数据。
+    @State private var feedbackByMessage: [String: String] = [:]
 
     let currentUser: UserEntity
+    /// 场景快捷问题带入的预填文本(来自 .guideAI(prompt:) 路由载荷)。
+    let initialPrompt: String?
+    @State private var didApplyInitialPrompt = false
 
-    init(currentUser: UserEntity) {
+    init(currentUser: UserEntity, initialPrompt: String? = nil) {
         self.currentUser = currentUser
+        self.initialPrompt = initialPrompt
         let lang = AppLanguage.resolved(from: UserDefaults.standard.string(forKey: "appLanguageCode") ?? AppLanguage.system.rawValue)
         _viewModel = StateObject(wrappedValue: GuideAIViewModel(language: lang))
     }
@@ -41,6 +49,15 @@ struct GuideAIChatView: View {
         .kxEnableSwipeBack()
         .safeAreaInset(edge: .bottom, spacing: 0) { inputBar }
         .task { viewModel.loadBootstrap(isGuest: currentUser.isGuest) }
+        .onAppear {
+            // 场景快捷问题预填:只应用一次,且不覆盖用户已输入的草稿。
+            if !didApplyInitialPrompt, let prompt = initialPrompt,
+               viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                viewModel.inputText = prompt
+                inputFocused = true
+            }
+            didApplyInitialPrompt = true
+        }
         .sheet(isPresented: $showHistory) {
             GuideAIHistorySheet(
                 language: language,
@@ -125,8 +142,13 @@ struct GuideAIChatView: View {
                                 message: message,
                                 language: language,
                                 maxBubbleWidth: containerWidth,
+                                feedback: feedbackByMessage[message.id],
                                 onCopy: { copy(message.content) },
-                                onFeedback: { rating in viewModel.submitFeedback(messageId: message.id, rating: rating) },
+                                onFeedback: { rating in
+                                    guard feedbackByMessage[message.id] == nil else { return }
+                                    feedbackByMessage[message.id] = rating
+                                    viewModel.submitFeedback(messageId: message.id, rating: rating)
+                                },
                                 onOpenSource: { source in open(source) }
                             )
                             .id(message.id)
@@ -316,7 +338,7 @@ struct GuideAIChatView: View {
                 }
                 .padding(.horizontal, KXSpacing.md)
                 .padding(.vertical, KXSpacing.sm)
-                .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
@@ -437,7 +459,10 @@ struct GuideAIChatView: View {
                 } else {
                     Image(systemName: "paperplane.fill")
                         .kxScaledFont(17, weight: .semibold)
-                        .foregroundStyle(.white)
+                        // Ink follows the enabled accent fill (near-black on the
+                        // brightened dark-mode teal); disabled keeps the muted
+                        // translucent fill's original white glyph.
+                        .foregroundStyle(canSend ? KXColor.onTint(KXColor.livingAccent) : Color.white)
                         .offset(x: -1, y: 1)
                 }
             }
@@ -487,11 +512,11 @@ private struct GuideAIMessageRow: View {
     let message: GuideAIChatMessage
     let language: AppLanguage
     let maxBubbleWidth: CGFloat
+    /// 该消息已提交的评价,由父视图持有(行内 @State 会随 LazyVStack 回收丢失)。
+    let feedback: String?
     let onCopy: () -> Void
     let onFeedback: (String) -> Void
     let onOpenSource: (KaiXGuideAISourceDTO) -> Void
-
-    @State private var feedbackGiven: String?
 
     var body: some View {
         if message.role == .user {
@@ -499,11 +524,11 @@ private struct GuideAIMessageRow: View {
                 Spacer(minLength: maxBubbleWidth * 0.18)
                 Text(message.content)
                     .font(.body)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(KXColor.onTint(KXColor.livingAccent))
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
-                    .background(KXColor.livingAccent, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .background(KXColor.livingAccent, in: RoundedRectangle(cornerRadius: KXRadius.card, style: .continuous))
                     // Cap the bubble width so very long / unbroken input (URLs, long
                     // tokens) wraps instead of pushing content off-screen.
                     .frame(maxWidth: maxBubbleWidth * 0.82, alignment: .trailing)
@@ -531,15 +556,15 @@ private struct GuideAIMessageRow: View {
                     GuideAITypingDots()
                         .padding(.horizontal, 14)
                         .padding(.vertical, KXSpacing.md)
-                        .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: KXRadius.card, style: .continuous))
                 } else {
                     MachiAIMarkdownText(text: message.content)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 11)
-                        .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(KXColor.livingInk.opacity(0.05), lineWidth: 0.8))
+                        .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: KXRadius.card, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: KXRadius.card, style: .continuous).stroke(KXColor.livingInk.opacity(0.05), lineWidth: 0.8))
 
                     if let sources = message.sources.nonEmpty {
                         GuideAISourcesView(language: language, sources: sources, onOpen: onOpenSource)
@@ -559,19 +584,19 @@ private struct GuideAIMessageRow: View {
             .accessibilityLabel(guideText(language, "复制", "コピー", "Copy"))
 
             Button {
-                feedbackGiven = "helpful"
                 onFeedback("helpful")
             } label: {
-                Image(systemName: feedbackGiven == "helpful" ? "hand.thumbsup.fill" : "hand.thumbsup")
+                Image(systemName: feedback == "helpful" ? "hand.thumbsup.fill" : "hand.thumbsup")
             }
+            .disabled(feedback != nil)   // 已评价即锁定,防止重复/矛盾提交
             .accessibilityLabel(guideText(language, "有帮助", "役に立った", "Helpful"))
 
             Button {
-                feedbackGiven = "not_helpful"
                 onFeedback("not_helpful")
             } label: {
-                Image(systemName: feedbackGiven == "not_helpful" ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                Image(systemName: feedback == "not_helpful" ? "hand.thumbsdown.fill" : "hand.thumbsdown")
             }
+            .disabled(feedback != nil)
             .accessibilityLabel(guideText(language, "没帮助", "役に立たなかった", "Not helpful"))
         }
         .font(.footnote)
@@ -784,7 +809,7 @@ private struct GuideAIQuotaCard: View {
                     Button(action: onUpgrade) {
                         Text(guideText(language, "查看 Machi 会员", "Machi 会員を見る", "See Machi membership"))
                             .font(.footnote.weight(.bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(KXColor.onTint(KXColor.livingAccent))
                             .padding(.horizontal, 14)
                             .padding(.vertical, 9)
                             .background(KXColor.livingAccent, in: Capsule())
@@ -798,8 +823,8 @@ private struct GuideAIQuotaCard: View {
         }
         .padding(KXSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(KXColor.livingAccentSoft, lineWidth: 1))
+        .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: KXRadius.card, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.card, style: .continuous).stroke(KXColor.livingAccentSoft, lineWidth: 1))
     }
 
     private var title: String {

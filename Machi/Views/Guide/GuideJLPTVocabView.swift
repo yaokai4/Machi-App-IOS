@@ -30,7 +30,15 @@ struct GuideJLPTVocabView: View {
         .background(KXColor.livingBackground.ignoresSafeArea())
         .navigationTitle(guideText(language, "我的单词", "単語", "Vocabulary"))
         .navigationBarTitleDisplayMode(.inline)
-        .task { level = initialLevel; await load() }
+        .task {
+            // 赋值 level 会触发 onChange(of: level) 的 load,若 task 再显式 load 就是
+            // 两次并发抽取互相覆盖(双倍请求 + 状态闪变),所以二者只走其一。
+            if level != initialLevel {
+                level = initialLevel   // onChange 负责 load
+            } else {
+                await load()
+            }
+        }
         .alert(guideText(language, "会员专享", "会員限定", "Members only"),
                isPresented: Binding(get: { upgradeMessage != nil }, set: { if !$0 { upgradeMessage = nil } })) {
             Button(guideText(language, "查看会员", "会員を見る", "See membership")) {
@@ -99,8 +107,8 @@ struct GuideJLPTVocabView: View {
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(KXColor.livingAccent)
                 .frame(width: 46, height: 46)
-                .background(KXColor.livingAccentSoft, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(JLPTStyle.accentRim, lineWidth: 0.8))
+                .background(KXColor.livingAccentSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous).stroke(JLPTStyle.accentRim, lineWidth: 0.8))
             VStack(alignment: .leading, spacing: KXSpacing.xs) {
                 HStack(spacing: 6) {
                     Text(deck.title ?? "")
@@ -158,6 +166,8 @@ struct GuideJLPTDeckDetailView: View {
     @State private var isLoading = true
     @State private var loadFailed = false
     @State private var memberRequired = false
+    /// 掌握标记同步失败的轻提示(掌握进度以服务器为准,失败必须回滚 + 告知)。
+    @State private var markSyncFailed = false
 
     var body: some View {
         ScrollView {
@@ -217,6 +227,16 @@ struct GuideJLPTDeckDetailView: View {
             }
             .padding(.horizontal, KXSpacing.xxs)
 
+            if markSyncFailed {
+                Text(guideText(language,
+                               "同步失败，刚才的掌握标记已还原，请检查网络后再试。",
+                               "同期に失敗したため、直前の習得マークを元に戻しました。通信を確認して再試行してください。",
+                               "Sync failed — the last mastery change was reverted. Check your connection and try again."))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, KXSpacing.xxs)
+            }
+
             ForEach(words) { word in
                 GuideJLPTWordCard(
                     word: word,
@@ -249,8 +269,16 @@ struct GuideJLPTDeckDetailView: View {
     private func toggle(_ word: KaiXJLPTVocabWord) async {
         let willMaster = !mastered.contains(word.id)
         if willMaster { mastered.insert(word.id) } else { mastered.remove(word.id) }
-        _ = try? await KaiXAPIClient.shared.jlptVocabMark(
-            wordId: word.id, state: willMaster ? "mastered" : "learning")
+        do {
+            _ = try await KaiXAPIClient.shared.jlptVocabMark(
+                wordId: word.id, state: willMaster ? "mastered" : "learning")
+            markSyncFailed = false
+        } catch {
+            // 掌握进度是服务器权威:失败时必须回滚乐观更新并提示,否则勾选
+            // 在重进页面后静默消失,进度条与 N/M 统计对不上。
+            if willMaster { mastered.remove(word.id) } else { mastered.insert(word.id) }
+            markSyncFailed = true
+        }
     }
 }
 
@@ -288,6 +316,9 @@ struct GuideJLPTWordCard: View {
                 }
                 .buttonStyle(KXPressableStyle(scale: 0.9))
                 .sensoryFeedback(.selection, trigger: mastered)
+                .accessibilityLabel(mastered
+                    ? guideText(language, "取消已掌握", "習得済みを解除", "Unmark mastered")
+                    : guideText(language, "标记为已掌握", "習得済みにする", "Mark as mastered"))
             }
             if revealed {
                 if let mz = word.meaningZh, !mz.isEmpty {
@@ -344,6 +375,9 @@ struct GuideJLPTVocabQuizView: View {
     @State private var loadFailed = false
     @State private var notEnough = false
     @State private var submitting = false
+    /// 交卷失败的独立状态:绝不能复用 loadFailed——那个分支的重试是 start(),
+    /// 会清空全部作答并换一套新题,一次网络瞬断就把整套测验作废。
+    @State private var submitFailed = false
 
     var body: some View {
         ScrollView {
@@ -360,6 +394,13 @@ struct GuideJLPTVocabQuizView: View {
                               action: { Task { await start() } })
             } else if let r = result {
                 resultView(r)
+            } else if submitFailed {
+                // 保留 answers / sessionId,原地重新交卷,与 placement / exam 一致。
+                JLPTStateView(systemImage: "wifi.slash",
+                              title: guideText(language, "交卷失败", "提出に失敗しました", "Submit failed"),
+                              message: guideText(language, "你的作答已保留，请检查网络后重新交卷。", "回答は保持されています。通信を確認して再提出してください。", "Your answers are kept — check your connection and submit again."),
+                              actionTitle: guideText(language, "重新交卷", "もう一度提出", "Submit again"),
+                              action: { Task { await submit() } })
             } else {
                 quizView
             }
@@ -462,6 +503,7 @@ struct GuideJLPTVocabQuizView: View {
     private func start() async {
         isLoading = true
         loadFailed = false
+        submitFailed = false
         notEnough = false
         result = nil
         cursor = 0
@@ -494,11 +536,12 @@ struct GuideJLPTVocabQuizView: View {
     private func submit() async {
         guard let sid = sessionId, !submitting else { return }
         submitting = true
+        submitFailed = false
         defer { submitting = false }
         do {
             result = try await KaiXAPIClient.shared.jlptVocabQuizSubmit(sessionId: sid, answers: answers)
         } catch {
-            loadFailed = true
+            submitFailed = true
         }
     }
 }

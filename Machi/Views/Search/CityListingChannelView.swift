@@ -182,6 +182,8 @@ struct CityListingChannelView: View {
     /// Debounce for the price fields: each keystroke fires `onChange`, but only
     /// the value that survives ~400ms of silence actually hits the server.
     @State private var priceDebounceTask: Task<Void, Never>?
+    /// Debounce for the search field — see `scheduleQueryReload()`.
+    @State private var queryDebounceTask: Task<Void, Never>?
 
     private var hasMoreListings: Bool {
         nextCursor != nil || nextHiringCursor != nil
@@ -195,7 +197,7 @@ struct CityListingChannelView: View {
     private var marketplaceGridSpacing: CGFloat { 12 }
 
     private var marketplaceCardWidth: CGFloat {
-        let contentWidth = screenWidth - (KaiXTheme.horizontalPadding * 2)
+        let contentWidth = screenWidth - (KXSpacing.screen * 2)
         return max(142, floor((contentWidth - marketplaceGridSpacing) / 2))
     }
 
@@ -215,11 +217,10 @@ struct CityListingChannelView: View {
             .screen.bounds.width ?? 393
     }
 
-    private var secondhandRows: [[KaiXCityListingDTO]] {
-        stride(from: 0, to: visibleItems.count, by: 2).map { start in
-            Array(visibleItems[start..<min(start + 2, visibleItems.count)])
-        }
-    }
+    /// 瀑布流两列分组。曾是计算属性,body 每次求值(收起头部/筛选/isReloading)
+    /// 都对整个 visibleItems 重切一遍 O(n)——分页到数百条后是可省的重复功。
+    /// 现随 visibleItems 一起在 recomputeVisibleItems() 里算好缓存。
+    @State private var secondhandRows: [[KaiXCityListingDTO]] = []
 
     private var region: KaiXRegionDirectory.Region? {
         KaiXRegionDirectory.resolve(regionCode: regionCode)
@@ -320,6 +321,11 @@ struct CityListingChannelView: View {
             return categoryOK && sectionOK && queryOK && priceOK
         }
         visibleItems = filtered.sorted(by: sortMode.sortsBefore)
+        secondhandRows = baseType == "secondhand"
+            ? stride(from: 0, to: visibleItems.count, by: 2).map { start in
+                Array(visibleItems[start..<min(start + 2, visibleItems.count)])
+            }
+            : []
     }
 
     private var selectedArea: ListingScopeArea? {
@@ -421,10 +427,24 @@ struct CityListingChannelView: View {
         lodgingActive && selectedCategory != "全部" ? selectedCategory : nil
     }
 
+    /// 长租 / 工作频道的滑栏是「属性 facet」型（→ attrFilters），不是真实 category
+    /// 值：selectedCategory 恒为「全部」，category 走 attr_<key> 而非 category 参数。
+    /// 其余频道（二手 / 买房 / 优惠 / 民宿…）滑栏是真实 category 值。
+    private var railUsesFacets: Bool {
+        copyType == "rental" || copyType == "work"
+    }
+
     private var serverCategory: String? {
         if lodgingActive { return serverLodgingCategory }
-        if baseType == "local_service", selectedCategory != "全部" { return selectedCategory }
-        return nil
+        if baseType == "local_service" {
+            return selectedCategory != "全部" ? selectedCategory : nil
+        }
+        // 长租 / 工作用 facet 滑栏(→ attrFilters),不下发 category。
+        if railUsesFacets { return nil }
+        // 二手 / 买房等真实类目频道:必须把选中类目下发服务端,否则 serverTotal 与
+        // 翻页游标按未筛选全集计算——头部计数虚高(选了类目仍显示满库数)、分页拉
+        // 的也是未筛选流。服务端 category 为精确匹配(见 web api_listings)。
+        return selectedCategory != "全部" ? selectedCategory : nil
     }
 
     private var serverCategories: [String] {
@@ -443,7 +463,7 @@ struct CityListingChannelView: View {
             // Pinned search-first chrome: search pill + icon rail stay reachable
             // while listings scroll under; secondary rows condense on scroll.
             listingControls
-                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.horizontal, KXSpacing.screen)
                 .padding(.top, KXSpacing.md)
                 .padding(.bottom, 10)
             if mapMode {
@@ -476,7 +496,7 @@ struct CityListingChannelView: View {
                                 .padding(.vertical, KXSpacing.xl)
                         }
                     }
-                    .padding(.horizontal, KaiXTheme.horizontalPadding)
+                    .padding(.horizontal, KXSpacing.screen)
                     .padding(.top, 6)
                     .padding(.bottom, chrome.bottomContentPadding + 28)
                     .kxReadableWidth(820)
@@ -529,6 +549,7 @@ struct CityListingChannelView: View {
         }
         .onChange(of: minimumPrice) { _, _ in schedulePriceReload() }
         .onChange(of: maximumPrice) { _, _ in schedulePriceReload() }
+        .onChange(of: query) { _, _ in scheduleQueryReload() }
         // Instant client-side re-filter the moment any filter changes — the
         // server reload that follows refreshes it again with fresh data. A
         // changed filter is a new search, so the saved-search done state resets.
@@ -597,7 +618,7 @@ struct CityListingChannelView: View {
             } label: {
                 Image(systemName: "plus")
                     .font(.headline.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(KXColor.onAccent)
                     .frame(width: 42, height: 42)
                     .background(KXColor.livingAccent, in: Circle())
                     .shadow(color: KXColor.livingAccent.opacity(0.18), radius: 9, y: 4)
@@ -605,7 +626,7 @@ struct CityListingChannelView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(L("compose", language))
         }
-        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.horizontal, KXSpacing.screen)
         .padding(.top, KXSpacing.sm)
         .padding(.bottom, KXSpacing.md)
         .kxGlassBar(ignoresTopSafeArea: true)
@@ -632,7 +653,7 @@ struct CityListingChannelView: View {
                 systemImage: mapMode ? "list.bullet" : "map.fill"
             )
             .font(.subheadline.weight(.black))
-            .foregroundStyle(.white)
+            .foregroundStyle(KXColor.onTint(KXColor.livingInk))
             .padding(.horizontal, KXSpacing.xl)
             .frame(height: 46)
             .background(KXColor.livingInk, in: Capsule())
@@ -670,7 +691,7 @@ struct CityListingChannelView: View {
         } label: {
             Label(title, systemImage: icon)
                 .font(.subheadline.weight(.black))
-                .foregroundStyle(activeRentalTab == tab ? Color.white : KXColor.livingInk)
+                .foregroundStyle(activeRentalTab == tab ? KXColor.onAccent : KXColor.livingInk)
                 .lineLimit(1)
                 .minimumScaleFactor(0.62)
                 .padding(.horizontal, 10)
@@ -729,7 +750,7 @@ struct CityListingChannelView: View {
         } label: {
             Text(title)
                 .font(.caption.weight(.bold))
-                .foregroundStyle(selected ? Color.white : KXColor.livingInk)
+                .foregroundStyle(selected ? KXColor.onAccent : KXColor.livingInk)
                 .padding(.horizontal, 13)
                 .frame(height: 32)
                 .background(selected ? KXColor.livingAccent : KXColor.softBackground.opacity(0.88), in: Capsule())
@@ -755,11 +776,16 @@ struct CityListingChannelView: View {
                 .submitLabel(.search)
                 .font(.subheadline.weight(.semibold))
                 .padding(.leading, KXSpacing.sm)
-                .onSubmit { Task { await load(quiet: true) } }
+                .onSubmit {
+                    // 回车立即搜索——顺手取消最后一次击键排的防抖,免得同参数打两枪。
+                    queryDebounceTask?.cancel()
+                    Task { await load(quiet: true) }
+                }
             if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Button {
+                    // 只改 query:客户端过滤即时放开,服务端重载交给 onChange 的
+                    // 防抖(scheduleQueryReload),避免与其抢跑发出重复请求。
                     query = ""
-                    Task { await load(quiet: true) }
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.subheadline)
@@ -848,6 +874,21 @@ struct CityListingChannelView: View {
                                 Task { await load(quiet: true) }
                             }
                         }
+                    } else if railUsesFacets {
+                        // 长租 / 工作:滑栏项是属性 facet(→ attrFilters,服务端精确
+                        // 筛选并计入 total),不是真实 category 值。
+                        categoryIconItem(
+                            title: ListingFilterLocalizer.text("全部", language),
+                            icon: "square.grid.2x2",
+                            selected: railFacetsCleared
+                        ) { clearRailFacets() }
+                        ForEach(KXListingCopy.facetChips(for: copyType)) { chip in
+                            categoryIconItem(
+                                title: ListingFilterLocalizer.text(chip.labelKey, language),
+                                icon: KXListingCopy.categoryIcon(chip.labelKey),
+                                selected: attrFilters[chip.key] == chip.value
+                            ) { toggleRailFacet(chip) }
+                        }
                     } else {
                         ForEach(visibleCategoryChips, id: \.self) { category in
                             categoryIconItem(
@@ -866,6 +907,31 @@ struct CityListingChannelView: View {
             sortButton
             filtersButton
         }
+    }
+
+    /// facet 滑栏「全部」选中态：当前没有任何本滑栏管理的 facet 生效。
+    private var railFacetsCleared: Bool {
+        !KXListingCopy.facetChips(for: copyType).contains { attrFilters[$0.key] == $0.value }
+    }
+
+    /// 点 facet chip：命中即取消(再点一次关掉)，否则写入该 attr。同 key 覆盖使
+    /// 兼职⇄全职、时给⇄月给天然互斥。与筛选面板同一 attrFilters,选中态互通。
+    private func toggleRailFacet(_ chip: KXListingCopy.ListingFacetChip) {
+        if attrFilters[chip.key] == chip.value {
+            attrFilters.removeValue(forKey: chip.key)
+        } else {
+            attrFilters[chip.key] = chip.value
+        }
+        Task { await load(quiet: true) }
+    }
+
+    /// 点「全部」：清掉本滑栏所有 facet 的 key(不动其它面板专属条件),已空则不重载。
+    private func clearRailFacets() {
+        let keys = Set(KXListingCopy.facetChips(for: copyType).map(\.key))
+        let removed = keys.contains { attrFilters[$0] != nil }
+        guard removed else { return }
+        for key in keys { attrFilters.removeValue(forKey: key) }
+        Task { await load(quiet: true) }
     }
 
     private func categoryIconItem(title: String, icon: String, selected: Bool, action: @escaping () -> Void) -> some View {
@@ -925,7 +991,7 @@ struct CityListingChannelView: View {
             ZStack(alignment: .topTrailing) {
                 Image(systemName: "slider.horizontal.3")
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(sheetFilterCount > 0 ? Color.white : KXColor.livingInk)
+                    .foregroundStyle(sheetFilterCount > 0 ? KXColor.onAccent : KXColor.livingInk)
                     .frame(width: 44, height: 44)
                     .background(sheetFilterCount > 0 ? KXColor.livingAccent : KXColor.livingSoft.opacity(0.9), in: Circle())
                     .overlay(Circle().stroke(sheetFilterCount > 0 ? Color.clear : KXColor.livingInk.opacity(0.08), lineWidth: 0.8))
@@ -1073,7 +1139,7 @@ struct CityListingChannelView: View {
         NavigationStack {
             ScrollView {
                 scopeFilterPanel
-                    .padding(.horizontal, KaiXTheme.horizontalPadding)
+                    .padding(.horizontal, KXSpacing.screen)
                     .padding(.top, 10)
                     .padding(.bottom, 28)
             }
@@ -1116,7 +1182,7 @@ struct CityListingChannelView: View {
                 .kxGlassButton(prominent: true)
         }
         .buttonStyle(KXPressableStyle(scale: 0.97))
-        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.horizontal, KXSpacing.screen)
         .padding(.top, 10)
         .padding(.bottom, KXSpacing.md)
         .background(.ultraThinMaterial)
@@ -1255,7 +1321,7 @@ struct CityListingChannelView: View {
                             } label: {
                                 Text(KaiXRegionDirectory.localizedShortLabel(city, language: language))
                                     .font(.caption.weight(.bold))
-                                    .foregroundStyle(scopeMode == .selectedCity && selectedScopeRegionCode == city.regionCode ? Color.white : .primary)
+                                    .foregroundStyle(scopeMode == .selectedCity && selectedScopeRegionCode == city.regionCode ? KXColor.onAccent : .primary)
                                     .padding(.horizontal, KXSpacing.md)
                                     .frame(height: 32)
                                     .background(scopeMode == .selectedCity && selectedScopeRegionCode == city.regionCode ? KXColor.accent : KXColor.softBackground.opacity(0.88), in: Capsule())
@@ -1269,7 +1335,7 @@ struct CityListingChannelView: View {
 
         }
         .padding(KXSpacing.md)
-        .background(KXColor.softBackground.opacity(0.58), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(KXColor.softBackground.opacity(0.58), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
     }
 
     /// 「城市范围」单行选项(全国 / 都市圈),统一视觉。
@@ -1292,7 +1358,7 @@ struct CityListingChannelView: View {
             }
             .padding(.horizontal, KXSpacing.md)
             .frame(height: 54)
-            .background(KXColor.softBackground.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(KXColor.softBackground.opacity(0.72), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
         }
         .buttonStyle(.plain)
     }
@@ -1328,7 +1394,7 @@ struct CityListingChannelView: View {
         } label: {
             Text(KaiXRegionDirectory.localizedProvinceName(countryCode: "jp", province: province, language: language))
                 .font(.caption.weight(.bold))
-                .foregroundStyle(selected ? Color.white : .primary)
+                .foregroundStyle(selected ? KXColor.onAccent : .primary)
                 .padding(.horizontal, KXSpacing.md)
                 .frame(height: 32)
                 .background(selected ? KXColor.accent : KXColor.softBackground.opacity(0.88), in: Capsule())
@@ -1373,7 +1439,7 @@ struct CityListingChannelView: View {
         let unique = categories.reduce(into: [String]()) { result, item in
             if !result.contains(item) { result.append(item) }
         }
-        return [("全部", "全部")] + unique.map { ($0, KXListingCopy.categoryLabel($0, language)) }
+        return [("全部", KXListingCopy.pickText(language, "全部", "すべて", "All"))] + unique.map { ($0, KXListingCopy.categoryLabel($0, language)) }
     }
 
     private func filterPriceField(title: String, text: Binding<String>) -> some View {
@@ -1388,8 +1454,8 @@ struct CityListingChannelView: View {
         }
         .padding(.horizontal, KXSpacing.md)
         .frame(height: 42)
-        .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(KXColor.separator.opacity(0.7), lineWidth: 0.7))
+        .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous).stroke(KXColor.separator.opacity(0.7), lineWidth: 0.7))
     }
 
     private func filterChoiceSection(
@@ -1408,7 +1474,7 @@ struct CityListingChannelView: View {
                     } label: {
                         Text(ListingFilterLocalizer.text(option.label, language))
                             .font(.caption.weight(.bold))
-                            .foregroundStyle(selection.wrappedValue == option.value ? Color.white : .primary)
+                            .foregroundStyle(selection.wrappedValue == option.value ? KXColor.onAccent : .primary)
                             .padding(.horizontal, KXSpacing.md)
                             .frame(height: 32)
                             .background(selection.wrappedValue == option.value ? KXColor.accent : Color(.systemBackground), in: Capsule())
@@ -1470,7 +1536,7 @@ struct CityListingChannelView: View {
                     } label: {
                         Label(KXListingCopy.pickText(language, "清空筛选", "条件をクリア", "Clear filters"), systemImage: "arrow.counterclockwise")
                             .font(.subheadline.weight(.bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(KXColor.onAccent)
                             .padding(.horizontal, 22)
                             .frame(height: 48)
                             .background(KXColor.livingAccent, in: Capsule())
@@ -1498,7 +1564,7 @@ struct CityListingChannelView: View {
                     } label: {
                         Label(KXListingCopy.createTitle(for: lodgingActive ? "local_service" : baseType, language), systemImage: "plus.circle.fill")
                             .font(.subheadline.weight(.bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(KXColor.onAccent)
                             .padding(.horizontal, 22)
                             .frame(height: 48)
                             .background(KXColor.livingAccent, in: Capsule())
@@ -1601,9 +1667,24 @@ struct CityListingChannelView: View {
         }
     }
 
+    /// 搜索词每次击键都会立即做客户端过滤把列表缩短,底部分页哨兵随即入屏,
+    /// 用「输入中的新词 + 旧查询流的游标」去分页——偏移/keyset 游标对不同筛选
+    /// 集不可互换,返回的页与屏上列表来自两个查询。词一变先作废游标(哨兵消失),
+    /// 防抖 ~400ms 后整体重载,重载会下发匹配新词的游标与真实总数。
+    private func scheduleQueryReload() {
+        nextCursor = nil
+        nextHiringCursor = nil
+        queryDebounceTask?.cancel()
+        queryDebounceTask = Task {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            await load(quiet: true)
+        }
+    }
+
     private func load(quiet: Bool = false) async {
         guard let region else {
-            errorMessage = "城市无法识别，请重新选择城市。"
+            errorMessage = KXListingCopy.pickText(language, "城市无法识别，请重新选择城市。", "都市を認識できません。都市を選び直してください。", "Couldn't identify the city — please pick it again.")
             isLoading = false
             return
         }
@@ -1700,7 +1781,9 @@ struct CityListingChannelView: View {
                 isLoading = false
                 return
             }
-            errorMessage = error.localizedDescription
+            // kaixUserMessage:三语 + 脱敏;localizedDescription 会把 NSURLError
+            // 英文原文直接糊在错误页上。
+            errorMessage = error.kaixUserMessage
             isLoading = false
         }
     }
@@ -1890,7 +1973,7 @@ struct UserListingsView: View {
             }
             Spacer()
         }
-        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.horizontal, KXSpacing.screen)
         .padding(.top, KXSpacing.sm)
         .padding(.bottom, KXSpacing.md)
         .background(KXColor.livingBackground.opacity(0.94))
@@ -1935,7 +2018,7 @@ struct UserListingsView: View {
                     }
                 }
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.top, 14)
             .padding(.bottom, chrome.bottomContentPadding + 24)
         }

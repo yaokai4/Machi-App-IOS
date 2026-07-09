@@ -223,7 +223,7 @@ struct OnboardingView: View {
             Spacer()
             Image(systemName: card.icon)
                 .kxScaledFont(60, weight: .bold)
-                .foregroundStyle(.white)
+                .foregroundStyle(KXColor.onTint(card.tint))
                 .frame(width: 124, height: 124)
                 .background(
                     LinearGradient(colors: [card.tint, card.tint.opacity(0.7)], startPoint: .topLeading, endPoint: .bottomTrailing),

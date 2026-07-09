@@ -1,5 +1,43 @@
 import SwiftUI
 
+// MARK: - 社交模块共享 DateFormatter 缓存
+
+/// 约局/活动的列表卡在滚动热路径上逐卡格式化时间;DateFormatter 构建做
+/// ICU/calendar setup、开销可观(见 ServerEntityFactory 里 KXDateParsing 的注释),
+/// 必须构建一次复用。key = 模板(或固定格式)|语言|时区。项目默认 MainActor
+/// 隔离,SwiftUI body 内访问安全。
+enum KXSocialDateFormatters {
+    private static var cache: [String: DateFormatter] = [:]
+
+    private static func locale(for language: AppLanguage) -> Locale {
+        Locale(identifier: language == .ja ? "ja_JP" : (language == .en ? "en_US" : "zh_CN"))
+    }
+
+    /// setLocalizedDateFormatFromTemplate 版(ICU 模板解析最贵,更要缓存)。
+    static func templated(_ template: String, language: AppLanguage, timeZone: TimeZone = .current) -> DateFormatter {
+        let key = "t|\(template)|\(language.rawValue)|\(timeZone.identifier)"
+        if let cached = cache[key] { return cached }
+        let f = DateFormatter()
+        f.locale = locale(for: language)
+        f.timeZone = timeZone
+        f.setLocalizedDateFormatFromTemplate(template)
+        cache[key] = f
+        return f
+    }
+
+    /// dateFormat 固定格式版。
+    static func fixed(_ format: String, language: AppLanguage, timeZone: TimeZone = .current) -> DateFormatter {
+        let key = "f|\(format)|\(language.rawValue)|\(timeZone.identifier)"
+        if let cached = cache[key] { return cached }
+        let f = DateFormatter()
+        f.locale = locale(for: language)
+        f.timeZone = timeZone
+        f.dateFormat = format
+        cache[key] = f
+        return f
+    }
+}
+
 // MARK: - 活动样式速查
 
 /// 活动 = 正式策划活动。分类按「活动的形式」(名词,你去参加的东西),与约局
@@ -34,19 +72,22 @@ enum KXEventStyle {
         }
     }
 
+    /// 显式表取 KXColor trait-aware 语义色(rank 系 + chart 扩展色):同类目
+    /// 色彩稳定、暗色模式提亮一档仍可读;原先的原生 .purple/.indigo… 彩虹在
+    /// 暗色下不成体系且与全局调色板脱节。
     static func tint(_ key: String) -> Color {
         switch canonical(key) {
-        case "exhibition": .purple
-        case "show": .indigo
-        case "talk": .blue
-        case "workshop": .orange
-        case "market": .brown
-        case "party": .pink
-        case "sports": .mint
-        case "reading": .teal
-        case "film": .cyan
-        case "outdoor": .green
-        default: .gray
+        case "exhibition": KXColor.rankViolet
+        case "show": KXColor.rankVioletGlow
+        case "talk": KXColor.rankSky
+        case "workshop": KXColor.rankGold
+        case "market": KXColor.livingWarm
+        case "party": KXColor.chartPink
+        case "sports": KXColor.rankTeal
+        case "reading": KXColor.chartSlate
+        case "film": KXColor.rankCoral
+        case "outdoor": KXColor.chartGreen
+        default: KXColor.categoryNeutral
         }
     }
 
@@ -70,26 +111,27 @@ enum KXEventStyle {
         return fallback ?? key
     }
 
+    /// 服务端 starts_at 是 UTC 瞬时、活动页时间行下方标注 event.timezone(服务端
+    /// 默认恒为 Asia/Tokyo);渲染必须用同一时区,否则设备时区≠JST 的用户(回国
+    /// 探亲/来日前规划)会看到「18:00 / Asia/Tokyo」实为 19:00 JST 的错误墙钟。
+    static func displayTimeZone(_ raw: String?) -> TimeZone {
+        TimeZone(identifier: raw ?? "Asia/Tokyo") ?? TimeZone(identifier: "Asia/Tokyo") ?? .current
+    }
+
     /// Luma 式日期块:「7月」+「12」两行。
-    static func dateBadge(_ raw: String?, language: AppLanguage) -> (month: String, day: String)? {
+    static func dateBadge(_ raw: String?, timezone: String?, language: AppLanguage) -> (month: String, day: String)? {
         guard let raw, let date = KXDateParsing.parse(raw) else { return nil }
-        let monthFormatter = DateFormatter()
-        monthFormatter.locale = Locale(identifier: language == .ja ? "ja_JP" : (language == .en ? "en_US" : "zh_CN"))
-        monthFormatter.setLocalizedDateFormatFromTemplate("MMM")
-        let dayFormatter = DateFormatter()
-        dayFormatter.dateFormat = "d"
+        let tz = displayTimeZone(timezone)
+        let monthFormatter = KXSocialDateFormatters.templated("MMM", language: language, timeZone: tz)
+        let dayFormatter = KXSocialDateFormatters.fixed("d", language: language, timeZone: tz)
         return (monthFormatter.string(from: date), dayFormatter.string(from: date))
     }
 
-    static func timeLine(_ startRaw: String?, _ endRaw: String?, language: AppLanguage) -> String {
+    static func timeLine(_ startRaw: String?, _ endRaw: String?, timezone: String?, language: AppLanguage) -> String {
         guard let startRaw, let start = KXDateParsing.parse(startRaw) else { return startRaw ?? "" }
-        let locale = Locale(identifier: language == .ja ? "ja_JP" : (language == .en ? "en_US" : "zh_CN"))
-        let dayFormatter = DateFormatter()
-        dayFormatter.locale = locale
-        dayFormatter.setLocalizedDateFormatFromTemplate("MMMdEEE")
-        let timeFormatter = DateFormatter()
-        timeFormatter.locale = locale
-        timeFormatter.dateFormat = "HH:mm"
+        let tz = displayTimeZone(timezone)
+        let dayFormatter = KXSocialDateFormatters.templated("MMMdEEE", language: language, timeZone: tz)
+        let timeFormatter = KXSocialDateFormatters.fixed("HH:mm", language: language, timeZone: tz)
         var line = "\(dayFormatter.string(from: start)) \(timeFormatter.string(from: start))"
         if let endRaw, let end = KXDateParsing.parse(endRaw) {
             line += " – \(timeFormatter.string(from: end))"
@@ -118,6 +160,10 @@ struct EventsListView: View {
     @State private var isLoadingMore = false
     @State private var errorMessage: String?
     @State private var loadGeneration = 0
+    /// loadMore 瞬时失败标记:保留 nextOffset 给内联重试,而不是静默终结分页。
+    @State private var loadMoreFailed = false
+    /// 已成功整表加载过的筛选组合;pop 回来 task 重启时据此走静默刷新而非整表重置。
+    @State private var loadedFilterKey: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -127,11 +173,25 @@ struct EventsListView: View {
                 LazyVStack(spacing: KXSpacing.lg) {
                     stateContent
                     if !isLoading, errorMessage == nil, nextOffset != nil {
-                        KXInlineLoader()
-                            .task(id: "\(items.count)|\(nextOffset ?? -1)") { await loadMore() }
+                        if loadMoreFailed {
+                            // 失败不打死分页:点一下重新挂载 loader,其 .task 会再次 loadMore。
+                            Button {
+                                loadMoreFailed = false
+                            } label: {
+                                Text(KXListingCopy.pickText(language, "加载失败,点此重试", "読み込みに失敗しました。タップして再試行", "Couldn't load more — tap to retry"))
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(KXColor.accent)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            KXInlineLoader()
+                                .task(id: "\(items.count)|\(nextOffset ?? -1)") { await loadMore() }
+                        }
                     }
                 }
-                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.horizontal, KXSpacing.screen)
                 .padding(.top, KXSpacing.sm)
                 .padding(.bottom, chrome.bottomContentPadding + 84)
                 .kxReadableWidth(700)
@@ -142,10 +202,26 @@ struct EventsListView: View {
         .toolbar(.hidden, for: .navigationBar)
         .overlay(alignment: .bottomTrailing) {
             createButton
-                .padding(.trailing, KaiXTheme.horizontalPadding)
+                .padding(.trailing, KXSpacing.screen)
                 .padding(.bottom, chrome.bottomContentPadding + 18)
         }
-        .task(id: "\(selectedCategory)|\(when)") { await load() }
+        .onReceive(NotificationCenter.default.publisher(for: .kaiXEventRemoved)) { note in
+            // 详情页删除活动后精确剔除该卡:refreshSilently 的分页保留策略不会
+            // 删除掉出首页的条目,靠这条广播定向移除,避免留死卡点进去 404。
+            guard let id = note.userInfo?["id"] as? String else { return }
+            items.removeAll { $0.id == id }
+            total = max(0, total - 1)
+        }
+        .task(id: "\(selectedCategory)|\(when)") {
+            // NavigationStack 里 push 详情再 pop 回来,.task 会以相同 id 重启:
+            // 此时只做静默合并刷新,保留 loadMore 累积的分页与滚动位置;
+            // 只有筛选真正变化(或首载/上次失败)才整表重载。
+            if loadedFilterKey == "\(selectedCategory)|\(when)", !items.isEmpty {
+                await refreshSilently()
+            } else {
+                await load()
+            }
+        }
     }
 
     private var header: some View {
@@ -174,7 +250,7 @@ struct EventsListView: View {
             .pickerStyle(.segmented)
             .frame(width: 160)
         }
-        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.horizontal, KXSpacing.screen)
         .padding(.top, KXSpacing.sm)
         .padding(.bottom, KXSpacing.sm)
         .kxGlassBar(ignoresTopSafeArea: true)
@@ -188,7 +264,7 @@ struct EventsListView: View {
                     categoryChip(key: category.key, label: KXEventStyle.label(category.key, fallback: category.label, language), icon: KXEventStyle.icon(category.key))
                 }
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.vertical, 9)
         }
     }
@@ -213,7 +289,7 @@ struct EventsListView: View {
                     .font(.caption.weight(.bold))
                     .lineLimit(1)
             }
-            .foregroundStyle(isSelected ? Color.white : tint)
+            .foregroundStyle(isSelected ? KXColor.onTint(tint) : tint)
             .padding(.horizontal, 12)
             .frame(height: 34)
             .background(isSelected ? tint : tint.opacity(0.10), in: Capsule())
@@ -245,7 +321,7 @@ struct EventsListView: View {
                 } label: {
                     Label(KXListingCopy.pickText(language, "创建活动", "イベントを作成", "Create event"), systemImage: "plus.circle.fill")
                         .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(KXColor.onAccent)
                         .padding(.horizontal, 22)
                         .frame(height: 48)
                         .background(KXColor.accent, in: Capsule())
@@ -269,7 +345,7 @@ struct EventsListView: View {
         } label: {
             Image(systemName: "plus")
                 .font(.title3.weight(.bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(KXColor.onAccent)
                 .frame(width: 56, height: 56)
                 .background(KXColor.accent.gradient, in: Circle())
                 .shadow(color: KXColor.accent.opacity(0.35), radius: 14, y: 6)
@@ -287,6 +363,7 @@ struct EventsListView: View {
         isLoading = items.isEmpty
         loadGeneration += 1
         let generation = loadGeneration
+        let filterKey = "\(selectedCategory)|\(when)"
         errorMessage = nil
         do {
             let page = try await KaiXAPIClient.shared.events(
@@ -298,6 +375,8 @@ struct EventsListView: View {
             items = page.items
             total = page.total
             nextOffset = page.nextOffset
+            loadMoreFailed = false
+            loadedFilterKey = filterKey
             if !page.categories.isEmpty { categories = page.categories }
             isLoading = false
         } catch {
@@ -309,6 +388,23 @@ struct EventsListView: View {
             errorMessage = error.kaixUserMessage
             isLoading = false
         }
+    }
+
+    /// 从详情页返回时的静默刷新:仅用第一页更新已有条目状态(报名数/viewer 状态等)、
+    /// 把新出现的活动插到最前;不重置 items/nextOffset,保住分页进度与滚动位置。
+    private func refreshSilently() async {
+        let generation = loadGeneration
+        guard let page = try? await KaiXAPIClient.shared.events(
+            countryCode: RegionStore.shared.current?.countryCode ?? "jp",
+            category: selectedCategory.isEmpty ? nil : selectedCategory,
+            when: when
+        ) else { return }
+        guard generation == loadGeneration else { return }
+        total = page.total
+        if !page.categories.isEmpty { categories = page.categories }
+        let refreshed = Dictionary(page.items.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let existing = Set(items.map(\.id))
+        items = page.items.filter { !existing.contains($0.id) } + items.map { refreshed[$0.id] ?? $0 }
     }
 
     private func loadMore() async {
@@ -327,9 +423,13 @@ struct EventsListView: View {
             let existing = Set(items.map(\.id))
             items += page.items.filter { !existing.contains($0.id) }
             nextOffset = page.nextOffset
+            loadMoreFailed = false
         } catch {
             guard generation == loadGeneration else { return }
-            nextOffset = nil
+            if error is CancellationError || (error as? URLError)?.code == .cancelled { return }
+            // 一次瞬时失败不能置 nextOffset=nil 永久终结分页(用户会以为「就这么多」),
+            // 保留 offset、亮出内联重试。
+            loadMoreFailed = true
         }
     }
 }
@@ -377,7 +477,7 @@ private struct EventCard: View {
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                     VStack(alignment: .leading, spacing: 4) {
-                        Label(KXEventStyle.timeLine(event.starts_at, event.ends_at, language: language), systemImage: "clock")
+                        Label(KXEventStyle.timeLine(event.starts_at, event.ends_at, timezone: event.timezone, language: language), systemImage: "clock")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -430,7 +530,7 @@ private struct EventCard: View {
                     .overlay {
                         Image(systemName: KXEventStyle.icon(event.category ?? "party"))
                             .font(.system(size: 44, weight: .bold))
-                            .foregroundStyle(.white.opacity(0.85))
+                            .foregroundStyle(KXColor.onTint(tint).opacity(0.85))
                     }
                 }
             }
@@ -438,7 +538,7 @@ private struct EventCard: View {
             .aspectRatio(16.0 / 9.0, contentMode: .fit)
             .clipped()
 
-            if let badge = KXEventStyle.dateBadge(event.starts_at, language: language) {
+            if let badge = KXEventStyle.dateBadge(event.starts_at, timezone: event.timezone, language: language) {
                 VStack(spacing: 0) {
                     Text(badge.month)
                         .font(.caption2.weight(.black))
@@ -448,7 +548,7 @@ private struct EventCard: View {
                         .foregroundStyle(.primary)
                 }
                 .frame(width: 48, height: 50)
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 .padding(10)
             }
         }

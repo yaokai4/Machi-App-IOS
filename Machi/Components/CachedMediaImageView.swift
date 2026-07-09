@@ -73,6 +73,8 @@ struct CachedMediaImageView: View {
                 }
             }
             .buttonStyle(.plain)
+            // 图标-only 重试按钮:旁白只能念出 SF Symbol 名,须给三语标签。
+            .accessibilityLabel(KXListingCopy.pickText(language, "图片加载失败，点击重试", "画像を読み込めませんでした。タップして再試行", "Image failed to load — tap to retry"))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
@@ -217,6 +219,11 @@ struct MediaVideoView: View {
     /// signed URL rotates. Nil for public covers (keyed by URL, no re-sign).
     var posterStableKey: String? = nil
     var posterOnResign: (() async -> URL?)? = nil
+    /// 视频正文的重签钩子(复用 MessageRepository.resignAttachmentURL)。私密
+    /// DM 视频的签名 URL 约 4 分钟过期;轮询暂停时(搜索/日期过滤激活)没有人
+    /// 保鲜,播放失败后的重试若仍用同一个死 URL 会永远失败,看起来像视频损坏。
+    /// 有此钩子时,重试先重签一次再重建 player。公开视频保持 nil。
+    var bodyOnResign: (() async -> URL?)? = nil
 
     @State private var player: AVPlayer?
     @State private var isPlaying = false
@@ -248,8 +255,18 @@ struct MediaVideoView: View {
                 }
                 if sourceURL != nil {
                     Button {
+                        let isRetry = playbackFailed
                         playbackFailed = false
-                        configurePlayer(shouldPlay: true)
+                        // 播放失败后的重试:签名 URL 大概率已过期,先重签拿到
+                        // 活 URL 再重建播放器,而不是重放同一个死 URL。
+                        if isRetry, let bodyOnResign {
+                            Task { @MainActor in
+                                let fresh = await bodyOnResign()
+                                configurePlayer(with: fresh ?? sourceURL, shouldPlay: true)
+                            }
+                        } else {
+                            configurePlayer(shouldPlay: true)
+                        }
                     } label: {
                         Image(systemName: playbackFailed ? "arrow.clockwise" : "play.fill")
                             .font(.title3.weight(.black))
@@ -308,18 +325,19 @@ struct MediaVideoView: View {
         }
     }
 
+    /// `overrideURL`:重签得到的新 URL(见重试按钮)。默认沿用 sourceURL。
     @MainActor
-    private func configurePlayer(shouldPlay: Bool) {
+    private func configurePlayer(with overrideURL: URL? = nil, shouldPlay: Bool) {
         player?.pause()
-        guard let sourceURL else {
+        guard let target = overrideURL ?? sourceURL else {
             player = nil
             isPlaying = false
             loadedSourceURL = nil
             return
         }
-        let nextPlayer = AVPlayer(url: sourceURL)
+        let nextPlayer = AVPlayer(url: target)
         player = nextPlayer
-        loadedSourceURL = sourceURL
+        loadedSourceURL = target
         isPlaying = shouldPlay
         playbackFailed = false
         if shouldPlay {

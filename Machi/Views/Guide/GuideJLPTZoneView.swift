@@ -243,7 +243,7 @@ struct GuideJLPTZoneView: View {
                     .frame(width: 40, height: 40)
                     .background(
                         (enabled && primary ? KXColor.livingAccent : KXColor.livingAccentSoft),
-                        in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
                     )
                 Spacer(minLength: 4)
                 Text(title)
@@ -293,14 +293,15 @@ struct GuideJLPTZoneView: View {
 
     private func studyPlanCTA(title: String, subtitle: String?) -> some View {
         Button {
-            router.open(.guidePlan)
+            // 学习计划 CTA 指向生成器(而非普通 Todo 列表,见 .guideStudyPlan)。
+            router.open(.guideStudyPlan(level: nil))
         } label: {
             HStack(spacing: KXSpacing.md) {
                 Image(systemName: "map.fill")
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(KXColor.onAccent)
                     .frame(width: 44, height: 44)
-                    .background(Color.white.opacity(0.16), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .background(Color.white.opacity(0.16), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
                         .font(.subheadline.weight(.bold))
@@ -340,8 +341,8 @@ struct GuideJLPTZoneView: View {
                 .kxScaledFont(17, weight: .black, design: .rounded)
                 .foregroundStyle(KXColor.livingAccent)
                 .frame(width: 46, height: 46)
-                .background(level.badgeTint, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(JLPTStyle.accentRim, lineWidth: 0.8))
+                .background(level.badgeTint, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous).stroke(JLPTStyle.accentRim, lineWidth: 0.8))
 
             VStack(alignment: .leading, spacing: KXSpacing.xs) {
                 HStack(spacing: KXSpacing.sm) {

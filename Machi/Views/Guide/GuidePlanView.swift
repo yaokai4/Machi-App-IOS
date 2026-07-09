@@ -47,8 +47,8 @@ struct GuideOSPlanCard: View {
             }
             .buttonStyle(.fullArea)
             .contentShape(Rectangle())
-            .foregroundStyle(.white)
-            .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .foregroundStyle(KXColor.onAccent)
+            .background(KXColor.accent, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
         }
         .padding(15)
         .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))

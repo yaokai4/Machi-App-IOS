@@ -47,7 +47,9 @@ struct MediaPreviewView: View {
                 posterURL: media.previewURL,
                 autoPlay: selection == media.id,
                 posterStableKey: media.posterStableCacheKey,
-                posterOnResign: posterResignHandler(for: media)
+                posterOnResign: posterResignHandler(for: media),
+                // 私密 DM 视频正文的重签钩子:签名 URL 过期后重试不再重放死 URL
+                bodyOnResign: resignHandler(for: media)
             )
                 .padding()
         } else if let url = imageURL(for: media) {
@@ -104,6 +106,8 @@ struct MediaPreviewView: View {
                         .background(.black.opacity(0.55))
                         .clipShape(Circle())
                 }
+                // 图标-only 关闭按钮:旁白只能念出符号名,须给三语标签。
+                .accessibilityLabel(KXListingCopy.pickText(language, "关闭", "閉じる", "Close"))
             }
             .padding(.top, 18)
             .padding(.horizontal, 18)
@@ -121,7 +125,11 @@ struct MediaPreviewView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: originalImageIDs.contains(current.id) ? "checkmark.circle.fill" : "arrow.down.circle")
-                        Text(originalImageIDs.contains(current.id) ? "已加载原图" : "查看原图")
+                        // 无既有 L() 键,按仓库惯例用内联三语(pickText),
+                        // 不能写死中文——ja/en 用户也会看到这个按钮。
+                        Text(originalImageIDs.contains(current.id)
+                            ? KXListingCopy.pickText(language, "已加载原图", "元画像を読み込み済み", "Original loaded")
+                            : KXListingCopy.pickText(language, "查看原图", "元画像を表示", "View original"))
                     }
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(.white)

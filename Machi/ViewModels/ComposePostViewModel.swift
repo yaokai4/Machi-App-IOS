@@ -30,6 +30,15 @@ final class ComposePostViewModel: ObservableObject {
     /// Typed attribute values for the current contentType. Mutated
     /// directly by the per-type form sub-views via binding.
     @Published var attributes: [String: KaiXAttributeValue] = [:]
+    /// Keys the typed forms auto-seed with a default value on first
+    /// appearance (currency=JPY, status=available, job_type=part_time,
+    /// review_status=under_review, anonymous=true, …), together with the
+    /// value we seeded. Kept so `hasDraft` can tell "user merely opened a
+    /// typed form" (only untouched defaults present) apart from "user
+    /// actually started a draft". Without this, picking a content type
+    /// would immediately pop the discard-confirmation dialog on Cancel and
+    /// let a blank draft (only defaults, no title/price/body) be saved.
+    private var seededDefaultAttributes: [String: KaiXAttributeValue] = [:]
     /// Explicit content-language tag for the post. Default is the
     /// user's resolved preferred content language (so a JP-living user
     /// posting in Japanese gets `ja` automatically). Author can
@@ -54,6 +63,11 @@ final class ComposePostViewModel: ObservableObject {
         // blocked publishing for anyone exploring the form. The
         // detail view tolerates missing optional fields anyway.
         if contentType.hasTypedForm {
+            // Body-first 类型(图文/长文/吐槽/匿名)的 required 集合为空,
+            // 「空集合恒满足」不能等同于「可发布」——否则正文/媒体/话题全空
+            // 也能点发布,产出空白帖或只剩服务端一句笼统失败。此时回退为
+            // 与 .dynamic 相同的 hasGenericPayload 要求。
+            if requiredAttributeKeys.isEmpty { return hasGenericPayload }
             return hasRequiredTypedAttributes || hasGenericPayload
         }
         return hasGenericPayload
@@ -67,6 +81,7 @@ final class ComposePostViewModel: ObservableObject {
         guard type != contentType else { return }
         contentType = type
         attributes = [:]
+        seededDefaultAttributes = [:]
     }
 
     /// Typed binding helpers — string / double / int / bool — bound to
@@ -132,12 +147,43 @@ final class ComposePostViewModel: ObservableObject {
         }
     }
 
+    /// Seed a default *string* value for `key` when the field is still
+    /// empty, remembering it as a seeded default so it doesn't, by itself,
+    /// make the composer look like it has an unsaved draft. Called by the
+    /// typed forms on appear (currency=JPY, status=available, …).
+    func seedFormDefault(_ key: String, _ value: String) {
+        guard attributes[key] == nil else { return }
+        let seeded = KaiXAttributeValue(string: value)
+        attributes[key] = seeded
+        seededDefaultAttributes[key] = seeded
+    }
+
+    /// Seed a default *bool* value for `key` (e.g. anonymous=true) when the
+    /// field is still empty, remembering it as a seeded default.
+    func seedFormDefault(_ key: String, _ value: Bool) {
+        guard attributes[key] == nil else { return }
+        let seeded = KaiXAttributeValue(bool: value)
+        attributes[key] = seeded
+        seededDefaultAttributes[key] = seeded
+    }
+
     var hasDraft: Bool {
         !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !mediaDrafts.isEmpty
             || !selectedTopics.isEmpty
             || hasPendingTopic
-            || !attributes.isEmpty
+            || hasUserEnteredAttributes
+    }
+
+    /// True when `attributes` holds at least one value the user actually
+    /// entered — anything that isn't a still-untouched seeded default. A
+    /// seeded field starts equal to the value we seeded; once the user
+    /// changes it (edits the currency, flips the anonymous toggle, taps a
+    /// different status chip) its value no longer matches and it counts.
+    private var hasUserEnteredAttributes: Bool {
+        attributes.contains { key, value in
+            seededDefaultAttributes[key] != value
+        }
     }
 
     var hasPendingMediaUploads: Bool {
@@ -158,8 +204,20 @@ final class ComposePostViewModel: ObservableObject {
         }
     }
 
+    /// 选大视频后 prepareVideo(内部可能有数十秒的 1080p 转码)期间 draft
+    /// 尚未 append 进 mediaDrafts,.compressing 状态只挂在临时 preparingId
+    /// 上。必须单独暴露这个阶段,否则转码全程界面毫无反馈、像卡死。
+    var isPreparingMedia: Bool {
+        mediaUploadStates.contains { id, uploadState in
+            uploadState == .compressing && !mediaDrafts.contains(where: { $0.id == id })
+        }
+    }
+
     var shouldShowUploadProgress: Bool {
-        !mediaDrafts.isEmpty && (hasPendingMediaUploads || hasFailedMediaUploads || isPublishing)
+        // 准备/转码阶段 mediaDrafts 还是空的,也要显示"处理中"横幅
+        // (视图侧 uploadProgressText 为空时回退到 processingMedia 文案)。
+        if isPreparingMedia { return true }
+        return !mediaDrafts.isEmpty && (hasPendingMediaUploads || hasFailedMediaUploads || isPublishing)
     }
 
     var uploadProgressText: String {
@@ -403,13 +461,25 @@ final class ComposePostViewModel: ObservableObject {
         mediaDrafts.removeAll { $0.id == draft.id }
         mediaUploadStates.removeValue(forKey: draft.id)
         mediaUploadProgress.removeValue(forKey: draft.id)
+        // 同步清掉 KaiXMedia 里的暂存副本(视频最大 200MB),不再只靠启动时
+        // 48h 老化回收。上传任务已先 cancel,其失败回调会因 draft 已移除而
+        // 提前 return,不会闪出错误条。
+        Task { await UploadService.shared.cleanupDraftFiles(draft) }
         if let uploaded {
             Task { try? await KaiXAPIClient.shared.deleteUploadedFile(uploaded.id) }
         }
     }
 
     func reportMediaFailure(language: AppLanguage) {
-        errorMessage = L("permissionDenied", language)
+        // loadTransferable 返回 nil 多半是 iCloud 原件没下完/格式不支持/
+        // 传输中断,与相册权限无关——权限不足时 PhotosPicker 根本不会交出
+        // item。之前误用 permissionDenied 会把用户引去改系统设置,无济于事。
+        errorMessage = KXListingCopy.pickText(
+            language,
+            "无法读取所选文件，请稍后重试。",
+            "選択したファイルを読み込めませんでした。しばらくしてからもう一度お試しください。",
+            "Couldn't load the selected file. Please try again."
+        )
         state = .error(errorMessage ?? L("mediaFailed", language))
     }
 
@@ -490,7 +560,37 @@ final class ComposePostViewModel: ObservableObject {
 
     func saveDraft(context: ModelContext, currentUser: UserEntity, language: AppLanguage) async -> Bool {
         commitTopicDraft()
-        guard canPublish else { return false }
+        // 草稿本就未定稿——不要求 canPublish(typed form 必填项可以缺,
+        // 仓库层有自己的"至少有点内容"校验)。但媒体上传进行中/失败时仍要
+        // 拦下:仓库存草稿会同步重传未完成媒体,与在飞的上传任务撞车会重复
+        // 上传。之前 guard canPublish 静默 return false,用户点「保存草稿」
+        // 却毫无反馈;现在每个拦截都写明原因(视图侧对 false 弹 toast)。
+        guard hasDraft else { return false }
+        if content.count > KaiXConfig.maxPostCharacters {
+            errorMessage = KXListingCopy.pickText(
+                language,
+                "正文超出字数上限，请精简后再保存。",
+                "本文が文字数の上限を超えています。短くしてから保存してください。",
+                "Post exceeds the character limit. Please shorten it before saving."
+            )
+            state = .error(errorMessage ?? L("databaseSaveFailed", language))
+            return false
+        }
+        guard !hasPendingMediaUploads else {
+            errorMessage = KXListingCopy.pickText(
+                language,
+                "媒体还在处理，请等它完成后再保存草稿。",
+                "メディアを処理中です。完了してから下書きを保存してください。",
+                "Media is still processing. Please wait for it to finish before saving the draft."
+            )
+            state = .error(errorMessage ?? L("databaseSaveFailed", language))
+            return false
+        }
+        guard !hasFailedMediaUploads else {
+            errorMessage = L("mediaUploadFailedRetry", language)
+            state = .error(errorMessage ?? L("databaseSaveFailed", language))
+            return false
+        }
         state = .loading
         errorMessage = nil
 
@@ -544,11 +644,23 @@ final class ComposePostViewModel: ObservableObject {
 
     func resetDraft(keepError: Bool = false) {
         cancelUploadTasks()
+        // 发布成功/存草稿/丢弃后主动清理 KaiXMedia 暂存副本,不再只靠启动
+        // 48h/500MB 老化。本地兜底构建(DEBUG 测试)例外:local 帖/草稿的
+        // MediaEntity 直接引用这些文件路径,删了媒体会变黑图。
+        if !KaiXRuntimeFlags.allowLocalStoreFallback, !mediaDrafts.isEmpty {
+            let staged = mediaDrafts
+            Task {
+                for draft in staged {
+                    await UploadService.shared.cleanupDraftFiles(draft)
+                }
+            }
+        }
         content = ""
         mediaDrafts = []
         topicDraft = ""
         selectedTopics = []
         attributes = [:]
+        seededDefaultAttributes = [:]
         contentType = .dynamic
         mediaUploadStates = [:]
         mediaUploadProgress = [:]

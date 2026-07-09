@@ -28,6 +28,23 @@ enum PushTokenService {
         await upload()
     }
 
+    /// P-4 游客召回:游客通过软引导授予了通知权限。这里只做系统侧注册 ——
+    /// APNs 签发的 device token 经 AppDelegate 回调落进本地缓存
+    /// (`systemDidIssue`)。**不做**服务端上传:后端注册端点要求登录 bearer
+    /// (web/server.py `api_register_push_token` → `require_user`),带着
+    /// GuestSession.stableClientId 发也只会 401;缓存的 token 会在首次真实
+    /// 登录后由 `refreshRegistration()`(ContentView 登录态 task 已调用)
+    /// 自动补上传,游客期间授的权一分不浪费。
+    static func registerForGuest() async {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        guard settings.authorizationStatus == .authorized
+                || settings.authorizationStatus == .provisional
+                || settings.authorizationStatus == .ephemeral else { return }
+        UIApplication.shared.registerForRemoteNotifications()
+        // upload() intentionally not called: it already no-ops without a
+        // bearer token, and there is no guest-capable endpoint yet.
+    }
+
     private static func upload() async {
         guard KaiXBackend.token != nil,
               let hex = UserDefaults.standard.string(forKey: cacheKey),

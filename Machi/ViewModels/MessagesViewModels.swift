@@ -8,12 +8,35 @@ final class MessagesViewModel: ObservableObject {
     @Published var threads: [MessageThreadEntity] = []
     @Published var peers: [String: UserEntity] = [:]
     @Published var state: ScreenState = .idle
-    @Published var transientError: String?
+    @Published var transientError: String? {
+        // 任何新错误默认视为"需要用户处理"(删除/标记失败等);只有 load 的
+        // catch 会随后把它标记回 transient,允许下一次成功刷新自动清除。
+        didSet { if transientError != oldValue { transientErrorIsLoadFailure = false } }
+    }
     /// False while the app is backgrounded so the 8s inbox poll skips network
     /// work (battery + server load). Mirrors ChatViewModel.isForeground.
     var isForeground = true
+    /// 在途守卫 + 尾随合流:8s 轮询/回前台/切 Tab/刷新通知/下拉刷新会并发触发
+    /// load,重叠请求纯属浪费。在途时记一笔,当前这轮结束后补跑一次。
+    private var isLoading = false
+    private var needsReload = false
+    /// transientError 是否由 load 失败设置——只有这类横幅在恢复后自动消失。
+    private var transientErrorIsLoadFailure = false
 
     func load(context: ModelContext, currentUser: UserEntity, messageStore: MessageStore? = nil) async {
+        if isLoading {
+            needsReload = true
+            return
+        }
+        isLoading = true
+        defer { isLoading = false }
+        repeat {
+            needsReload = false
+            await performLoad(context: context, currentUser: currentUser, messageStore: messageStore)
+        } while needsReload
+    }
+
+    private func performLoad(context: ModelContext, currentUser: UserEntity, messageStore: MessageStore?) async {
         let hasCachedContent = !threads.isEmpty
         if !hasCachedContent {
             state = .loading
@@ -29,9 +52,12 @@ final class MessagesViewModel: ObservableObject {
                 peers = Dictionary(uniqueKeysWithValues: users.map { ($0.id, $0) })
             }
             state = threads.isEmpty ? .empty : .loaded
+            // 一次瞬时网络抖动留下的横幅在恢复后自动消失,不再永久钉着。
+            if transientErrorIsLoadFailure { transientError = nil }
         } catch {
             if hasCachedContent {
                 transientError = error.kaixUserMessage
+                transientErrorIsLoadFailure = true
                 state = .loaded
             } else {
                 state = .error(error.kaixUserMessage)
@@ -95,7 +121,40 @@ final class ChatViewModel: ObservableObject {
     /// nil when there is no in-flight media upload. Drives the ring on the
     /// draft thumbnails.
     @Published var sendUploadProgress: Double?
-    @Published var errorMessage: String?
+    @Published var errorMessage: String? {
+        // 任何新错误默认视为"需要用户处理"(send/媒体失败要陪着 .failed 气泡);
+        // 只有 load 的 catch 会随后把它标记回 transient,允许成功刷新自动清除。
+        didSet { if errorMessage != oldValue { errorMessageIsLoadFailure = false } }
+    }
+    /// 己方消息中"对方已读"的消息 id 集合(服务端 is_read),驱动气泡的已读回执。
+    @Published var readMessageIds: Set<String> = []
+    /// 更早历史页的服务端游标(上一页响应的 next_cursor)。nil = 已到最早或
+    /// 分页链尚未建立。只在两处写入:整页加载重建列表时(上下文重置/无历史
+    /// 前缀)与 loadEarlier 成功翻页时——3s 轮询的最新页响应在已有历史前缀时
+    /// 绝不覆盖它,否则「查看更早」会退回去重复翻已加载的页。
+    @Published var earlierCursor: String?
+    /// 顶部「查看更早的消息」是否在途,驱动顶部小 spinner + 防重入。
+    @Published var isLoadingEarlier = false
+    /// 更早页加载失败 → 顶部轻量重试条(绝不掀翻整个会话视图)。
+    @Published var earlierLoadFailed = false
+    /// 已通过「查看更早的消息」prepend 到头部的历史条数。ChatView 用
+    /// (messages.count - earlierPrependedCount) 作气泡插入动画的触发值:历史
+    /// prepend 时两者同增、差值不变 → 不触发"80 条历史从底部滑入"的视觉噪音;
+    /// 尾部收发/删除仍正常动画。
+    @Published var earlierPrependedCount = 0
+    /// 分页链所属上下文(会话 id + 搜索 + 日期)。上下文变化(切会话/改过滤器/
+    /// 账号切换后重开)时整页加载会整体重建列表并重置游标,历史前缀不跨上下文
+    /// 保留——同一个 ChatViewModel 实例被复用到另一会话时,旧会话消息绝不会
+    /// 被当作"历史前缀"错保进新列表。
+    private var paginationContextKey: String?
+    /// errorMessage 是否由 load 失败设置——只有这类横幅在下一次成功刷新时自动
+    /// 清除,否则 3s 轮询一次瞬时抖动的"网络错误"会永久钉在输入栏上方。
+    private var errorMessageIsLoadFailure = false
+    /// 在途守卫 + 尾随合流:3s 轮询/回前台/store lastMessageAt/刷新通知四路
+    /// Task 互不协调,重叠 load 既重复打网络,二段媒体解析交错时旧 resolveMedia
+    /// 结果还可能后落地闪错媒体。在途时记一笔,结束后用最新 query/day 补跑。
+    private var isLoading = false
+    private var needsReload = false
 
     var canSend: Bool {
         !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !mediaDrafts.isEmpty
@@ -105,7 +164,26 @@ final class ChatViewModel: ObservableObject {
         !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || selectedDay != nil
     }
 
-    func load(context: ModelContext, thread: MessageThreadEntity, messageStore: MessageStore? = nil) async {
+    /// 返回值:本次调用是否真正执行了一次(成功的)服务端加载。被在途守卫合流
+    /// 掉的调用返回 false——调用方(如"新消息"锚点解析)据此避免拿缓存半成品
+    /// 当服务端真相。
+    @discardableResult
+    func load(context: ModelContext, thread: MessageThreadEntity, messageStore: MessageStore? = nil) async -> Bool {
+        if isLoading {
+            needsReload = true
+            return false
+        }
+        isLoading = true
+        defer { isLoading = false }
+        var succeeded = false
+        repeat {
+            needsReload = false
+            succeeded = await performLoad(context: context, thread: thread, messageStore: messageStore)
+        } while needsReload
+        return succeeded
+    }
+
+    private func performLoad(context: ModelContext, thread: MessageThreadEntity, messageStore: MessageStore?) async -> Bool {
         // Cache-first: seed from the in-memory conversation cache so the chat
         // shows its last messages instantly instead of a blank "加载中" spinner
         // while the network round-trips. The fetch below then reconciles.
@@ -124,7 +202,7 @@ final class ChatViewModel: ObservableObject {
             // then sign private attachments asynchronously and patch them in.
             // A multi-image thread no longer blanks the whole conversation while
             // N signing round-trips complete.
-            let (fetched, pending) = try await repository.fetchMessagesTextFirst(
+            let (fetched, pending, fetchedCursor) = try await repository.fetchMessagesTextFirst(
                 threadId: thread.id,
                 query: searchQuery,
                 day: selectedDay.map(Self.serverDayString)
@@ -133,11 +211,20 @@ final class ChatViewModel: ObservableObject {
             // this wholesale refresh — the 3s poll, scene-phase / notification
             // pulls — never silently drops a failed bubble and its tap-to-retry
             // affordance (which would re-manifest the original silent-send bug).
-            messages = Self.mergePreservingFailed(fetched, into: messages)
+            // applyServerWindow then keeps any paged-in earlier history in front
+            // (the newest-page window must not wipe it) and manages the cursor.
+            let merged = Self.mergePreservingFailed(fetched, into: messages)
+            applyServerWindow(merged: merged, fetched: fetched, nextCursor: fetchedCursor, threadId: thread.id)
             messageStore?.setMessages(messages, conversationId: thread.id)
             let ids = Set(messages.map(\.id))
             mediaByMessageId = try await repository.fetchMedia(threadId: thread.id, messageIds: ids)
+            // 服务端每条消息都带 is_read(过去被丢弃)——发布已读集合供气泡
+            // 渲染己方消息的已读回执。
+            readMessageIds = repository.readMessageIds(threadId: thread.id)
             state = messages.isEmpty ? .empty : .loaded
+            // 轮询恢复正常后自动清掉 load 自己挂上的瞬时错误横幅
+            // (send 失败的横幅不动,要陪着 .failed 气泡直到用户处理)。
+            if errorMessageIsLoadFailure { errorMessage = nil }
 
             // Second pass: sign the pending attachments and patch the media in
             // without disturbing the already-rendered text.
@@ -148,19 +235,115 @@ final class ChatViewModel: ObservableObject {
                 let visibleIds = Set(messages.map(\.id))
                 mediaByMessageId = resolved.filter { visibleIds.contains($0.key) }
             }
+            return true
         } catch {
             if hasCachedContent {
                 errorMessage = error.kaixUserMessage
+                errorMessageIsLoadFailure = true
                 state = .loaded
             } else {
                 state = .error(error.kaixUserMessage)
             }
+            return false
         }
     }
 
     func clearFilters() {
         searchQuery = ""
         selectedDay = nil
+    }
+
+    /// 把「最新一页」的服务端窗口落到 messages 上。
+    /// - 上下文变化(切会话/改搜索/改日期):整体替换 + 重置游标与历史计数。
+    /// - 上下文未变:保留已翻出的更早历史前缀——prepend 的历史页既不参与
+    ///   failed 合并窗口,也不能被 3s 轮询 / 发送后刷新的整页窗口抹掉。同时把
+    ///   被新消息挤出 80 条窗口的旧尾部消息顺势并入前缀,消息不会凭空消失。
+    /// - 游标只在没有历史前缀时才跟随最新页响应:有前缀时,最新页的
+    ///   next_cursor 指向比已加载历史更新的位置,采纳它会让「查看更早」重复
+    ///   翻已有页;保留旧游标恰好紧接当前最早一条,语义正确。
+    private func applyServerWindow(
+        merged: [MessageEntity],
+        fetched: [MessageEntity],
+        nextCursor fetchedCursor: String?,
+        threadId: String
+    ) {
+        let contextKey = Self.paginationContext(
+            threadId: threadId,
+            query: searchQuery,
+            day: selectedDay.map(Self.serverDayString)
+        )
+        if contextKey != paginationContextKey {
+            paginationContextKey = contextKey
+            messages = merged
+            earlierCursor = fetchedCursor
+            earlierPrependedCount = 0
+            earlierLoadFailed = false
+            return
+        }
+        // 服务端返回空窗口 = 会话在服务端已被清空,本地前缀不该幸存。
+        guard let windowStart = fetched.first?.createdAt else {
+            messages = merged
+            earlierCursor = fetchedCursor
+            earlierPrependedCount = 0
+            return
+        }
+        // merged 已含 fetched + 幸存的 .failed 气泡;前缀只保留严格早于本页
+        // 窗口、且不在 merged 里的服务端消息(.failed 由 mergePreservingFailed
+        // 全权处理,这里排除以免内容级去重刚丢弃的失败气泡被复活)。
+        let mergedIds = Set(merged.map(\.id))
+        let preserved = messages.filter {
+            !mergedIds.contains($0.id) && $0.status != .failed && $0.createdAt < windowStart
+        }
+        messages = preserved + merged
+        if preserved.isEmpty { earlierCursor = fetchedCursor }
+    }
+
+    private static func paginationContext(threadId: String, query: String, day: String?) -> String {
+        "\(threadId)|\(query.trimmingCharacters(in: .whitespacesAndNewlines))|\(day ?? "")"
+    }
+
+    /// 加载更早的历史页(顶部「查看更早的消息」)。历史页做纯 prepend(按 id
+    /// 去重),绝不经过 mergePreservingFailed——失败气泡逻辑与分页互不干扰;
+    /// 轮询/发送路径也继续只操作尾部窗口。返回 prepend 前的原首条消息 id,
+    /// 视图用它把阅读位置钉回原处(scrollTo anchor: .top);返回 nil = 无需锚定
+    /// (在途/游标已失效/去重后为空/加载失败)。
+    func loadEarlier(context: ModelContext, thread: MessageThreadEntity, messageStore: MessageStore? = nil) async -> String? {
+        guard let cursor = earlierCursor, !isLoadingEarlier else { return nil }
+        isLoadingEarlier = true
+        defer { isLoadingEarlier = false }
+        do {
+            let repository = MessageRepository(context: context)
+            let page = try await repository.fetchEarlierMessages(
+                threadId: thread.id,
+                query: searchQuery,
+                day: selectedDay.map(Self.serverDayString),
+                cursor: cursor
+            )
+            // 网络往返期间上下文可能已重建(切会话/改过滤器):游标不再是当前
+            // 链上的这一枚就丢弃结果,防止旧上下文的历史 prepend 进新列表。
+            guard earlierCursor == cursor else { return nil }
+            earlierLoadFailed = false
+            let existingIds = Set(messages.map(\.id))
+            let fresh = page.messages.filter { !existingIds.contains($0.id) }
+            let anchorId = messages.first?.id
+            earlierCursor = page.nextCursor
+            guard !fresh.isEmpty else { return nil }
+            messages = fresh + messages
+            earlierPrependedCount += fresh.count
+            if let media = try? await repository.fetchMedia(threadId: thread.id, messageIds: Set(messages.map(\.id))) {
+                mediaByMessageId = media
+            }
+            readMessageIds = repository.readMessageIds(threadId: thread.id)
+            messageStore?.setMessages(messages, conversationId: thread.id)
+            return anchorId
+        } catch is CancellationError {
+            return nil
+        } catch {
+            if (error as? URLError)?.code == .cancelled { return nil }
+            // 顶部轻量重试,不动 state、不掀翻已加载的会话内容。
+            earlierLoadFailed = true
+            return nil
+        }
     }
 
     func addMedia(data: Data, isVideo: Bool, contentType: UTType? = nil, language: AppLanguage, messageStore: MessageStore? = nil) async {
@@ -321,6 +504,8 @@ final class ChatViewModel: ObservableObject {
             }
             mediaByMessageId[message.id] = media
             state = .loaded
+            // 发送成功:清掉遗留的错误横幅(旧失败气泡自身的重试入口仍在)。
+            errorMessage = nil
             messageStore?.setMessages(messages, conversationId: thread.id)
             messageStore?.removeFromQueue(message.id)
             drafts.forEach { messageStore?.removeUpload($0.id) }
@@ -443,6 +628,8 @@ final class ChatViewModel: ObservableObject {
                 }
                 mediaByMessageId[sent.id] = []
                 state = .loaded
+                // 重试成功:自动收起之前发送失败留下的错误横幅。
+                errorMessage = nil
                 messageStore?.setMessages(messages, conversationId: thread.id)
             } catch {
                 if let idx = messages.firstIndex(where: { $0.id == failedId }) {
@@ -493,6 +680,7 @@ final class ChatViewModel: ObservableObject {
                 messages.sort { $0.createdAt < $1.createdAt }
             }
             state = messages.isEmpty ? .empty : .loaded
+            errorMessage = nil
             messageStore?.setMessages(messages, conversationId: thread.id)
         } catch {
             message.status = previousStatus
@@ -568,18 +756,22 @@ final class ChatViewModel: ObservableObject {
     ) async {
         guard !hasActiveFilters else { return }
         do {
-            let latestMessages = try await repository.fetchMessages(threadId: thread.id)
+            let page = try await repository.fetchMessagesPage(threadId: thread.id)
             // Same failed-send preservation as `load`: a later successful send
             // must not wipe an earlier, still-failed bubble off the screen.
-            let mergedMessages = Self.mergePreservingFailed(latestMessages, into: messages)
+            // applyServerWindow additionally keeps paged-in earlier history in
+            // front — a send at the bottom must not evict the scrolled-back
+            // pages (nor clobber the pagination cursor).
+            let mergedMessages = Self.mergePreservingFailed(page.messages, into: messages)
+            applyServerWindow(merged: mergedMessages, fetched: page.messages, nextCursor: page.nextCursor, threadId: thread.id)
             let latestMedia = try await repository.fetchMedia(
                 threadId: thread.id,
-                messageIds: Set(mergedMessages.map(\.id))
+                messageIds: Set(messages.map(\.id))
             )
-            messages = mergedMessages
             mediaByMessageId = latestMedia
-            state = mergedMessages.isEmpty ? .empty : .loaded
-            messageStore?.setMessages(mergedMessages, conversationId: thread.id)
+            readMessageIds = repository.readMessageIds(threadId: thread.id)
+            state = messages.isEmpty ? .empty : .loaded
+            messageStore?.setMessages(messages, conversationId: thread.id)
             if let latestThread = try await repository.fetchThreads(currentUserId: currentUser.id).first(where: { $0.id == thread.id }) {
                 messageStore?.upsertConversation(latestThread)
             }

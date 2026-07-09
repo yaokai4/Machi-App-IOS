@@ -9,11 +9,19 @@ import SwiftUI
 struct FavoriteSnapshot: Codable, Identifiable, Hashable {
     let id: String            // listingId
     var title: String
+    /// 创建快照时语言下的价格标签——仅作老持久化数据的回退展示。
     var priceLabel: String
     var coverURLString: String?
     var type: String
     var locationText: String?
     var savedAt: Date
+    // 原始价格数据(v2):收藏页渲染时用当前语言现算,不再把中文标签持久化
+    // 后混进日/英界面。全部可选 → 老数据缺字段时解码为 nil,回退 priceLabel。
+    var price: Double? = nil
+    var currency: String? = nil
+    var priceType: String? = nil
+    var listingMode: String? = nil
+    var hasPriceData: Bool? = nil
 
     var coverURL: URL? { coverURLString.flatMap { URL(string: $0) } }
 }
@@ -24,24 +32,33 @@ final class FavoritesStore: ObservableObject {
 
     private let key = "kx.favorites.v1"
     @Published private(set) var items: [FavoriteSnapshot] = []
+    /// 本会话内被用户明确取消收藏的 id。列表 DTO 里过期的 favorited=true 不该
+    /// 再点亮红心——卡片以 store 为准,DTO 只作兜底(见各卡片的 favorited 推导)。
+    /// 会话级即可:重启后服务端 DTO 已反映删除。
+    @Published private(set) var removedIds: Set<String> = []
     @Published private(set) var isSyncing = false
 
     private init() { load() }
 
     func contains(_ id: String) -> Bool { items.contains { $0.id == id } }
 
+    func wasRemoved(_ id: String) -> Bool { removedIds.contains(id) }
+
     /// Toggle a listing in/out of the local wishlist. Newest first.
     func set(_ snapshot: FavoriteSnapshot, on: Bool) {
         if on {
+            removedIds.remove(snapshot.id)
             guard !contains(snapshot.id) else { return }
             items.insert(snapshot, at: 0)
         } else {
+            removedIds.insert(snapshot.id)
             items.removeAll { $0.id == snapshot.id }
         }
         persist()
     }
 
     func remove(_ id: String) {
+        removedIds.insert(id)
         items.removeAll { $0.id == id }
         persist()
     }
@@ -54,7 +71,12 @@ final class FavoritesStore: ObservableObject {
             coverURLString: listing.realCoverURL?.absoluteString,
             type: listing.type,
             locationText: listing.location_text,
-            savedAt: Date()
+            savedAt: Date(),
+            price: listing.price,
+            currency: listing.currency,
+            priceType: listing.price_type ?? listing.priceType,
+            listingMode: listing.attributes?["listing_mode"]?.listingDisplayValue,
+            hasPriceData: true
         )
     }
 
@@ -63,7 +85,9 @@ final class FavoritesStore: ObservableObject {
     /// sync. Aborts WITHOUT touching local state if any call fails (guest /
     /// offline), so a 401 never wipes the local list.
     func syncFromServer() async {
-        let types = ["secondhand", "rental", "job", "hiring", "local_service", "discount"]
+        // for_sale(买房)与其余频道同样可收藏(KXStayListingCard .forsale 变体
+        // 和详情页都有心形)——漏在这张表里会被下面的整体替换把收藏静默清掉。
+        let types = ["secondhand", "rental", "for_sale", "job", "hiring", "local_service", "discount"]
         isSyncing = true
         defer { isSyncing = false }
         var collected: [FavoriteSnapshot] = []
@@ -79,7 +103,13 @@ final class FavoritesStore: ObservableObject {
                 return
             }
         }
-        items = collected
+        // 服务端按 type 逐个拉取——上面未覆盖的类型(未来新增的可收藏类型)
+        // 保留本地 snapshot,整体替换不能连它们的缓存一起删掉。
+        let covered = Set(types)
+        let preserved = items.filter { !covered.contains($0.type) && !seen.contains($0.id) }
+        items = collected + preserved
+        // 服务端此刻的收藏就是真相,本会话的「已取消」标记完成使命。
+        removedIds = []
         persist()
     }
 
@@ -161,7 +191,7 @@ struct WishlistView: View {
                                 )
                             }
                         }
-                        .padding(.horizontal, KaiXTheme.horizontalPadding)
+                        .padding(.horizontal, KXSpacing.screen)
                         .padding(.vertical, 14)
                     }
                 }
@@ -172,7 +202,7 @@ struct WishlistView: View {
                     KXInlineNotice(message: removalNotice) {
                         self.removalNotice = nil
                     }
-                    .padding(.horizontal, KaiXTheme.horizontalPadding)
+                    .padding(.horizontal, KXSpacing.screen)
                     .padding(.top, KXSpacing.sm)
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
@@ -211,14 +241,30 @@ private struct WishlistRow: View {
     let onOpen: () -> Void
     let onRemove: () -> Void
 
+    /// 有原始价格数据的快照用当前语言现算(切语言即时生效);老快照回退
+    /// 持久化时的标签——否则日/英用户的收藏页会整行混入中文价签。
+    private var priceText: String {
+        if item.hasPriceData == true {
+            return KXListingCopy.formatPrice(
+                price: item.price,
+                currency: item.currency,
+                priceType: item.priceType,
+                type: item.type,
+                listingMode: item.listingMode,
+                language
+            )
+        }
+        return item.priceLabel
+    }
+
     var body: some View {
         Button(action: onOpen) {
             HStack(spacing: KXSpacing.md) {
                 cover
                     .frame(width: 86, height: 86)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(item.priceLabel)
+                    Text(priceText)
                         .font(.subheadline.weight(.black))
                         .foregroundStyle(KXColor.livingWarm)
                         .lineLimit(1)

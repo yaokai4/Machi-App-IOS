@@ -297,8 +297,11 @@ struct AccountPasswordSettingsView: View {
 struct ContactSettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
-    @AppStorage("accountEmail") private var storedEmail = ""
-    @AppStorage("accountPhone") private var phone = ""
+    /// 手机号存 Keychain(KaiXSecureStore),不再用 @AppStorage:UserDefaults
+    /// 是明文 plist,会进未加密备份——与 token/邮箱迁 Keychain 是同一个坑。
+    @State private var phone: String
+
+    private static let phoneKeychainKey = "accountPhone"
     @State private var verificationMethod: AccountSecurityVerificationMethod = .password
     @State private var currentPassword = ""
     @State private var currentEmailCode = ""
@@ -314,8 +317,21 @@ struct ContactSettingsView: View {
 
     init(user: UserEntity) {
         self.user = user
-        let fallbackEmail = UserDefaults.standard.string(forKey: "accountEmail") ?? ""
-        _email = State(initialValue: user.email.isEmpty ? fallbackEmail : user.email)
+        // 邮箱只走内存态 user.email(服务端真相):旧实现把账号邮箱明文写进
+        // UserDefaults("accountEmail"),会进未加密备份、还跨账号串显——这正是
+        // KeychainTokenStore 把 token 迁出 UserDefaults 的同一个坑。这里顺手把
+        // 历史遗留的明文键删掉。
+        UserDefaults.standard.removeObject(forKey: "accountEmail")
+        _email = State(initialValue: user.email)
+        // 手机号一次性迁移:旧版本明文写在 UserDefaults("accountPhone")。
+        // 首读时取出 → 写 Keychain → 删 UserDefaults 键;之后只走 Keychain。
+        if let legacyPhone = UserDefaults.standard.string(forKey: Self.phoneKeychainKey) {
+            if !legacyPhone.isEmpty {
+                KaiXSecureStore.write(legacyPhone, for: Self.phoneKeychainKey)
+            }
+            UserDefaults.standard.removeObject(forKey: Self.phoneKeychainKey)
+        }
+        _phone = State(initialValue: KaiXSecureStore.read(Self.phoneKeychainKey) ?? "")
     }
 
     var body: some View {
@@ -362,6 +378,11 @@ struct ContactSettingsView: View {
                 statusBanner(message)
             }
         }
+        // 与旧 @AppStorage 行为对齐:每次输入即持久化,只是落点从明文
+        // UserDefaults 换成 Keychain;清空输入框会删除 Keychain 条目。
+        .onChange(of: phone) { _, newValue in
+            KaiXSecureStore.write(newValue, for: Self.phoneKeychainKey)
+        }
     }
 
     private var contactHero: some View {
@@ -384,9 +405,9 @@ struct ContactSettingsView: View {
             }
         }
         .padding(KXSpacing.md)
-        .background(KXColor.softBackground.opacity(0.9), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(KXColor.softBackground.opacity(0.9), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                 .stroke(KXColor.separator.opacity(0.45), lineWidth: 0.6)
         }
     }
@@ -412,9 +433,9 @@ struct ContactSettingsView: View {
             content()
         }
         .padding(KXSpacing.md)
-        .background(KXColor.softBackground.opacity(0.72), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(KXColor.softBackground.opacity(0.72), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                 .stroke(KXColor.separator.opacity(0.45), lineWidth: 0.6)
         }
     }
@@ -492,7 +513,7 @@ struct ContactSettingsView: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(canSaveEmail ? Color.white : Color.secondary)
+        .foregroundStyle(canSaveEmail ? KXColor.onAccent : Color.secondary)
         .background(canSaveEmail ? KXColor.accent : KXColor.softBackground, in: Capsule())
         .overlay {
             Capsule().stroke(KXColor.separator.opacity(canSaveEmail ? 0 : 0.55), lineWidth: 0.65)
@@ -511,7 +532,7 @@ struct ContactSettingsView: View {
         }
         .padding(KXSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(KXColor.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(KXColor.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
     }
 
     private var normalizedEmail: String {
@@ -561,7 +582,6 @@ struct ContactSettingsView: View {
                 }
                 user.email = normalizedEmail
             }
-            storedEmail = user.email
             user.updatedAt = .now
             try modelContext.save()
             currentPassword = ""
@@ -672,6 +692,10 @@ struct AccountProfileSettingsView: View {
             SettingsRowLink(icon: "pencil", tint: .indigo, title: L("editProfile", language), subtitle: L("editProfileSubtitle", language)) {
                 EditProfileView(user: currentUser)
             }
+            // 「切换账号」只在 DEBUG 本地夹具流程可用:生产没有多会话 token 存储,
+            // 旧实现会把服务端热门用户(陌生人)列成"可切换账号",切换也不换
+            // token——绝不能对真实用户暴露。等有多会话 Keychain 存储再放开。
+            #if DEBUG
             SettingsDivider()
             SettingsRowLink(icon: "arrow.triangle.2.circlepath", tint: .purple, title: L("switchAccount", language), subtitle: L("switchAccountSubtitle", language)) {
                 AccountSwitcherView(currentUser: currentUser) { user in
@@ -679,6 +703,7 @@ struct AccountProfileSettingsView: View {
                     onDismissSettings()
                 }
             }
+            #endif
         }
     }
 }
@@ -1357,7 +1382,7 @@ struct MediaLibraryView: View {
                 }
             }
             .pickerStyle(.segmented)
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.top, 10)
 
             ManagedPostListView(
@@ -1430,8 +1455,8 @@ struct DraftsSettingsView: View {
                     }
                 }
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
-            .padding(.top, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
+            .padding(.top, KXSpacing.screen)
             .kxTabBarSafeBottomPadding()
         }
         .kxPageBackground()
@@ -1516,7 +1541,7 @@ private struct ManagedPostListView: View {
                     }
                 }
             }
-            .padding(KaiXTheme.horizontalPadding)
+            .padding(KXSpacing.screen)
             .kxTabBarSafeBottomPadding()
         }
         .kxPageBackground()
@@ -1646,7 +1671,7 @@ private struct DraftCard: View {
             .font(.subheadline.weight(.bold))
         }
         .padding(KXSpacing.lg)
-        .kxGlassSurface(radius: KaiXTheme.cardRadius)
+        .kxGlassSurface(radius: KXRadius.card)
     }
 }
 
@@ -1678,19 +1703,19 @@ private struct DraftEditorView: View {
                     .padding(KXSpacing.lg)
                     .frame(minHeight: 220)
                     .kxGlassSurface(radius: KXRadius.lg)
-                    .padding(KaiXTheme.horizontalPadding)
+                    .padding(KXSpacing.screen)
                     .padding(.top, 14)
 
                 if !mediaItems.isEmpty {
                     MediaGridView(mediaItems: mediaItems)
-                        .padding(KaiXTheme.horizontalPadding)
+                        .padding(KXSpacing.screen)
                 }
 
                 if let errorMessage {
                     Text(errorMessage)
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.red)
-                        .padding(.horizontal, KaiXTheme.horizontalPadding)
+                        .padding(.horizontal, KXSpacing.screen)
                 }
 
                 Spacer()
@@ -1871,9 +1896,20 @@ struct PrivacySettingsView: View {
     let currentUser: UserEntity
     // Mirrors the server's `privacy_protect` / `privacy_allow_dm` —
     // identical semantics to the Web settings page. AppStorage keeps the
-    // last known values for offline display.
-    @AppStorage("privacyProtect") private var privacyProtect = false
-    @AppStorage("privacyAllowDM") private var privacyAllowDM = "everyone"
+    // last known values for offline display. 键按账号区分:设备全局键会在
+    // 切号后、服务端回填前把账号 A 的隐私开关显示给账号 B(离线时持续错)。
+    @AppStorage private var privacyProtect: Bool
+    @AppStorage private var privacyAllowDM: String
+
+    init(currentUser: UserEntity) {
+        self.currentUser = currentUser
+        _privacyProtect = AppStorage(wrappedValue: false, "privacyProtect.\(currentUser.id)")
+        _privacyAllowDM = AppStorage(wrappedValue: "everyone", "privacyAllowDM.\(currentUser.id)")
+        // 旧的设备全局键一次性清掉,避免残留上一账号的偏好(不迁移:值从
+        // 服务端回填,不值得为一个展示缓存做跨账号猜测)。
+        UserDefaults.standard.removeObject(forKey: "privacyProtect")
+        UserDefaults.standard.removeObject(forKey: "privacyAllowDM")
+    }
 
     var body: some View {
         SettingsFormPage(title: L("privacySettings", language)) {
@@ -2551,7 +2587,7 @@ struct SettingsFormPage<Content: View>: View {
             .padding(KXSpacing.lg)
             .frame(maxWidth: .infinity, alignment: .leading)
             .kxGlassSurface(radius: KXRadius.sheet)
-            .padding(KaiXTheme.horizontalPadding)
+            .padding(KXSpacing.screen)
             .padding(.top, KXSpacing.sm)
             .kxTabBarSafeBottomPadding()
         }

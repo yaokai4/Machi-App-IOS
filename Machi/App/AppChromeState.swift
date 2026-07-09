@@ -37,7 +37,7 @@ final class AppChromeState: ObservableObject {
     }
 
     var bottomContentPadding: CGFloat {
-        isTabBarHidden ? KXSpacing.lg : KaiXTheme.bottomContentPadding
+        isTabBarHidden ? KXSpacing.lg : KXLayout.bottomContentPadding
     }
 
     func select(_ tab: AppTab) {

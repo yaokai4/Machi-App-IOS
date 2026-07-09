@@ -607,11 +607,31 @@ struct KaiXGuideTodoDTO: Codable, Equatable, Identifiable, Hashable {
     var isDone: Bool { status == "done" }
     var displayDate: String? { plannedDate ?? dueAt ?? reminderAt }
     /// "daily" / "weekly" / "" — a recurring study habit vs a one-off task.
+    /// 该文案会被 View 层直接拼进三语模板(如 r+"循环" / r+"繰り返し" /
+    /// r+" repeat"),必须随 App 语言返回,否则英/日界面出现"每日 repeat"
+    /// 中外混排。DTO 拿不到 @Environment,按仓库既有模式(GuideOSViewModel
+    /// / PostRepository)从 UserDefaults 解析当前语言。
     var recurrenceLabel: String? {
+        let language = AppLanguage.resolved(from: UserDefaults.standard.string(forKey: "appLanguageCode") ?? "")
         switch recurrence {
-        case "daily": return "每日"
-        case "weekly": return "每周"
-        case "monthly": return "每月"
+        case "daily":
+            switch language {
+            case .ja: return "毎日"
+            case .en: return "Daily"
+            default: return "每日"
+            }
+        case "weekly":
+            switch language {
+            case .ja: return "毎週"
+            case .en: return "Weekly"
+            default: return "每周"
+            }
+        case "monthly":
+            switch language {
+            case .ja: return "毎月"
+            case .en: return "Monthly"
+            default: return "每月"
+            }
         default: return nil
         }
     }
@@ -1460,6 +1480,20 @@ struct KaiXGuideServiceRequestPayload: Encodable {
 struct KaiXPageDTO<Item: Codable>: Codable {
     let items: [Item]
     let next_cursor: String?
+
+    init(items: [Item], next_cursor: String?) {
+        self.items = items
+        self.next_cursor = next_cursor
+    }
+
+    enum CodingKeys: String, CodingKey { case items, next_cursor }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // items 逐条容错:单条坏数据只丢该条,不让个人主页(帖子/回复分页)整屏报错。
+        items = try container.decode(KaiXLossyDecodableArray<Item>.self, forKey: .items).elements
+        next_cursor = try container.decodeIfPresent(String.self, forKey: .next_cursor)
+    }
 }
 
 struct KaiXLoginResponse: Codable {
@@ -1509,16 +1543,76 @@ struct KaiXVerifyCodeResponse: Codable, Equatable {
     let message: String?
 }
 
+/// 逐条容错的数组解码:单条脏数据(缺字段/类型漂移的一帖)只丢弃该条,
+/// 绝不让整页解码失败——否则服务端混进一条坏帖就是整屏 feed 报错。
+struct KaiXLossyDecodableArray<Element: Codable>: Codable {
+    let elements: [Element]
+
+    /// 空壳 Decodable:解码必然成功且不读取内容,专门用来"消费"解码失败的
+    /// 那一条——unkeyedContainer 解码失败不会推进 currentIndex,不消费会死循环。
+    private struct AnyDecodableSkip: Codable {
+        init() {}
+        init(from decoder: Decoder) throws {}
+        func encode(to encoder: Encoder) throws { var c = encoder.singleValueContainer(); try c.encodeNil() }
+    }
+
+    init(_ elements: [Element]) { self.elements = elements }
+
+    init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        var result: [Element] = []
+        if let count = container.count { result.reserveCapacity(count) }
+        while !container.isAtEnd {
+            if let value = try? container.decode(Element.self) {
+                result.append(value)
+            } else {
+                _ = try? container.decode(AnyDecodableSkip.self)
+            }
+        }
+        elements = result
+    }
+
+    func encode(to encoder: Encoder) throws {
+        try elements.encode(to: encoder)
+    }
+}
+
 struct KaiXFeedResponse: Codable {
     let items: [KaiXPostDTO]
     let next_cursor: String?
     let mode: String
+
+    init(items: [KaiXPostDTO], next_cursor: String?, mode: String) {
+        self.items = items
+        self.next_cursor = next_cursor
+        self.mode = mode
+    }
+
+    enum CodingKeys: String, CodingKey { case items, next_cursor, mode }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // items 逐条容错:一条坏帖只丢该条,不让整页 feed 变成错误页。
+        items = try container.decode(KaiXLossyDecodableArray<KaiXPostDTO>.self, forKey: .items).elements
+        next_cursor = try container.decodeIfPresent(String.self, forKey: .next_cursor)
+        mode = try container.decode(String.self, forKey: .mode)
+    }
 }
 
 struct KaiXTrendingResponse: Codable {
     let posts: [KaiXPostDTO]
     let topics: [KaiXTopicDTO]
     let users: [KaiXUserDTO]
+
+    enum CodingKeys: String, CodingKey { case posts, topics, users }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // posts 逐条容错:单条坏帖只丢该条,不让整个热榜变错误页(与主 feed 一致)。
+        posts = try container.decode(KaiXLossyDecodableArray<KaiXPostDTO>.self, forKey: .posts).elements
+        topics = try container.decode([KaiXTopicDTO].self, forKey: .topics)
+        users = try container.decode([KaiXUserDTO].self, forKey: .users)
+    }
 }
 
 struct KaiXExplorePostsResponse: Codable {
@@ -1528,6 +1622,17 @@ struct KaiXExplorePostsResponse: Codable {
     let fallbackUsed: Bool?
 
     var orderedPosts: [KaiXPostDTO] { items ?? posts ?? [] }
+
+    enum CodingKeys: String, CodingKey { case items, posts, days, fallbackUsed }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // items/posts 逐条容错:单条坏帖只丢该条,不让发现页(happening/hot)整屏报错。
+        items = try container.decodeIfPresent(KaiXLossyDecodableArray<KaiXPostDTO>.self, forKey: .items)?.elements
+        posts = try container.decodeIfPresent(KaiXLossyDecodableArray<KaiXPostDTO>.self, forKey: .posts)?.elements
+        days = try container.decodeIfPresent(Int.self, forKey: .days)
+        fallbackUsed = try container.decodeIfPresent(Bool.self, forKey: .fallbackUsed)
+    }
 }
 
 struct KaiXExploreTopicsResponse: Codable {
@@ -1610,6 +1715,17 @@ struct KaiXSearchResponse: Codable {
     // O7: cross-city listing hits when called with kind=listing. Optional so
     // responses that omit it (older/posts-only) still decode.
     let listings: [KaiXCityListingDTO]?
+
+    enum CodingKeys: String, CodingKey { case posts, users, topics, listings }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // posts 逐条容错:单条坏帖只丢该条,不让搜索结果页整屏报错(与主 feed 一致)。
+        posts = try container.decode(KaiXLossyDecodableArray<KaiXPostDTO>.self, forKey: .posts).elements
+        users = try container.decode([KaiXUserDTO].self, forKey: .users)
+        topics = try container.decode([KaiXTopicDTO].self, forKey: .topics)
+        listings = try container.decodeIfPresent([KaiXCityListingDTO].self, forKey: .listings)
+    }
 }
 
 struct KaiXNotificationsResponse: Codable {
@@ -1619,6 +1735,14 @@ struct KaiXNotificationsResponse: Codable {
 
 struct KaiXMessagesResponse: Codable {
     let items: [KaiXMessageDTO]
+    /// 服务端历史分页信号(配合 before_id 游标);旧服务端不下发时为 nil,
+    /// 调用方可退化为 items.count == limit 的启发式判断。
+    let has_more: Bool?
+
+    init(items: [KaiXMessageDTO], has_more: Bool? = nil) {
+        self.items = items
+        self.has_more = has_more
+    }
 }
 
 struct KaiXBootstrapResponse: Codable {
@@ -1626,6 +1750,17 @@ struct KaiXBootstrapResponse: Codable {
     let feed: [KaiXPostDTO]
     let unread_notifications: Int
     let server_time: String
+
+    enum CodingKeys: String, CodingKey { case user, feed, unread_notifications, server_time }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        user = try container.decode(KaiXUserDTO.self, forKey: .user)
+        // feed 逐条容错:单条坏帖只丢该条,不让首屏 bootstrap 整屏报错(与主 feed 一致)。
+        feed = try container.decode(KaiXLossyDecodableArray<KaiXPostDTO>.self, forKey: .feed).elements
+        unread_notifications = try container.decode(Int.self, forKey: .unread_notifications)
+        server_time = try container.decode(String.self, forKey: .server_time)
+    }
 }
 
 // MARK: - My Library (purchased + member-unlocked resources, services, orders)
@@ -2072,6 +2207,33 @@ struct KaiXJLPTExamsResponse: Codable, Equatable {
     let exams: [KaiXJLPTExam]?
 }
 
+/// One previously-saved answer echoed back when `/exam/start` resumes an
+/// in-progress session (B15-D). Snake/camel dual-key tolerant.
+struct KaiXJLPTExamResumeAnswer: Codable, Equatable, Hashable {
+    let questionId: String?
+    let selectedIndex: Int?
+
+    enum CodingKeys: String, CodingKey { case questionId, selectedIndex }
+    private enum SnakeKeys: String, CodingKey {
+        case questionId = "question_id"
+        case selectedIndex = "selected_index"
+    }
+
+    init(questionId: String?, selectedIndex: Int?) {
+        self.questionId = questionId
+        self.selectedIndex = selectedIndex
+    }
+
+    init(from decoder: Decoder) throws {
+        let camel = try decoder.container(keyedBy: CodingKeys.self)
+        let snake = try decoder.container(keyedBy: SnakeKeys.self)
+        questionId = try camel.decodeIfPresent(String.self, forKey: .questionId)
+            ?? snake.decodeIfPresent(String.self, forKey: .questionId)
+        selectedIndex = try camel.decodeIfPresent(Int.self, forKey: .selectedIndex)
+            ?? snake.decodeIfPresent(Int.self, forKey: .selectedIndex)
+    }
+}
+
 struct KaiXJLPTExamStartResponse: Codable, Equatable {
     let status: String?
     let sessionId: String?
@@ -2083,6 +2245,41 @@ struct KaiXJLPTExamStartResponse: Codable, Equatable {
     let total: Int?
     let questions: [KaiXJLPTQuestionDTO]?
     let disclaimer: String?
+    // Resume overlay (B15-D) — present only when the server handed back an
+    // existing in-progress session instead of a fresh one. All optional so an
+    // older server (which omits them) keeps decoding fine.
+    let resumed: Bool?
+    let answers: [KaiXJLPTExamResumeAnswer]?
+    /// Server-computed seconds left on the clock — the server is the timing
+    /// authority on resume; the client re-anchors its deadline to this.
+    let remainingSeconds: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case status, sessionId, examId, level, title, durationSeconds, passScore,
+             total, questions, disclaimer, resumed, answers, remainingSeconds
+    }
+    private enum SnakeKeys: String, CodingKey {
+        case remainingSeconds = "remaining_seconds"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        status = try c.decodeIfPresent(String.self, forKey: .status)
+        sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId)
+        examId = try c.decodeIfPresent(String.self, forKey: .examId)
+        level = try c.decodeIfPresent(String.self, forKey: .level)
+        title = try c.decodeIfPresent(String.self, forKey: .title)
+        durationSeconds = try c.decodeIfPresent(Int.self, forKey: .durationSeconds)
+        passScore = try c.decodeIfPresent(Int.self, forKey: .passScore)
+        total = try c.decodeIfPresent(Int.self, forKey: .total)
+        questions = try c.decodeIfPresent([KaiXJLPTQuestionDTO].self, forKey: .questions)
+        disclaimer = try c.decodeIfPresent(String.self, forKey: .disclaimer)
+        resumed = try c.decodeIfPresent(Bool.self, forKey: .resumed)
+        answers = try c.decodeIfPresent([KaiXJLPTExamResumeAnswer].self, forKey: .answers)
+        let snake = try decoder.container(keyedBy: SnakeKeys.self)
+        remainingSeconds = try c.decodeIfPresent(Int.self, forKey: .remainingSeconds)
+            ?? snake.decodeIfPresent(Int.self, forKey: .remainingSeconds)
+    }
 }
 
 struct KaiXJLPTExamAnswerResponse: Codable, Equatable {

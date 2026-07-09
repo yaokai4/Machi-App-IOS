@@ -180,11 +180,13 @@ extension KaiXAPIClient {
             let capacity: Int
         }
         struct Response: Decodable { let room: KaiXRoomDTO }
+        // 创建类端点按库内约定带 Idempotency-Key:超时后响应丢失、用户手动重试
+        // 不会重复开局,顺带让 request() 的安全自动重试生效。
         let data = try await request("POST", "/api/rooms", body: Body(
             title: title, description: description, room_type: roomType,
             country_code: countryCode, city_slug: citySlug, region_code: regionCode,
             location_hint: locationHint, starts_at: startsAt, capacity: capacity
-        ))
+        ), idempotencyKey: "room-create-\(UUID().uuidString)")
         let response: Response = try decode(data)
         return response.room
     }
@@ -238,7 +240,10 @@ extension KaiXAPIClient {
 
     func sendRoomMessage(_ roomId: String, content: String) async throws -> KaiXRoomMessageDTO {
         struct Response: Decodable { let message: KaiXRoomMessageDTO }
-        let data = try await request("POST", "/api/rooms/\(roomId.encodedPathSegment)/messages", body: ["content": content])
+        // 带 Idempotency-Key,弱网重试不会把同一条消息重复落库(与 DM sendMessage 同款)。
+        let data = try await request("POST", "/api/rooms/\(roomId.encodedPathSegment)/messages",
+                                     body: ["content": content],
+                                     idempotencyKey: "room-msg-\(roomId)-\(UUID().uuidString)")
         let response: Response = try decode(data)
         return response.message
     }
@@ -280,7 +285,7 @@ extension KaiXAPIClient {
         if let category, !category.isEmpty { q.append(URLQueryItem(name: "category", value: category)) }
         if featuredOnly { q.append(URLQueryItem(name: "featured", value: "1")) }
         if mine { q.append(URLQueryItem(name: "mine", value: "1")) }
-        let data = try await request("GET", "/api/events", queryItems: q)
+        let data = try await request("GET", "/api/machi-events", queryItems: q)
         let response: Response = try decode(data)
         return EventsPage(
             items: response.items,
@@ -292,7 +297,7 @@ extension KaiXAPIClient {
 
     func event(_ idOrSlug: String) async throws -> KaiXEventDTO {
         struct Response: Decodable { let event: KaiXEventDTO }
-        let data = try await request("GET", "/api/events/\(idOrSlug.encodedPathSegment)")
+        let data = try await request("GET", "/api/machi-events/\(idOrSlug.encodedPathSegment)")
         let response: Response = try decode(data)
         return response.event
     }
@@ -318,7 +323,9 @@ extension KaiXAPIClient {
 
     func createEvent(_ payload: CreateEventPayload) async throws -> KaiXEventDTO {
         struct Response: Decodable { let event: KaiXEventDTO }
-        let data = try await request("POST", "/api/events", body: payload)
+        // 创建类端点按库内约定带 Idempotency-Key,防超时重试创建出重复活动。
+        let data = try await request("POST", "/api/machi-events", body: payload,
+                                     idempotencyKey: "event-create-\(UUID().uuidString)")
         let response: Response = try decode(data)
         return response.event
     }
@@ -326,20 +333,20 @@ extension KaiXAPIClient {
     func registerForEvent(_ idOrSlug: String, answers: [String: String]) async throws -> KaiXEventDTO {
         struct Body: Encodable { let answers: [String: String] }
         struct Response: Decodable { let event: KaiXEventDTO }
-        let data = try await request("POST", "/api/events/\(idOrSlug.encodedPathSegment)/register", body: Body(answers: answers))
+        let data = try await request("POST", "/api/machi-events/\(idOrSlug.encodedPathSegment)/register", body: Body(answers: answers))
         let response: Response = try decode(data)
         return response.event
     }
 
     func cancelEventRegistration(_ idOrSlug: String) async throws -> KaiXEventDTO {
         struct Response: Decodable { let event: KaiXEventDTO }
-        let data = try await request("DELETE", "/api/events/\(idOrSlug.encodedPathSegment)/register")
+        let data = try await request("DELETE", "/api/machi-events/\(idOrSlug.encodedPathSegment)/register")
         let response: Response = try decode(data)
         return response.event
     }
 
     /// Organizer / admin only — soft-deletes the event (server enforces).
     func deleteEvent(_ idOrSlug: String) async throws {
-        _ = try await request("DELETE", "/api/events/\(idOrSlug.encodedPathSegment)")
+        _ = try await request("DELETE", "/api/machi-events/\(idOrSlug.encodedPathSegment)")
     }
 }

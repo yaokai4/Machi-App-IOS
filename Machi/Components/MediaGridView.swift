@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct MediaGridView: View {
+    @Environment(\.appLanguage) private var language
     @EnvironmentObject private var chrome: AppChromeState
     let mediaItems: [MediaEntity]
     @State private var selectedMedia: MediaEntity?
@@ -81,6 +82,10 @@ struct MediaGridView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    // 图标/图片-only 磁贴按钮:给旁白一个可理解的三语标签。
+                    .accessibilityLabel(item.type == .video
+                        ? KXListingCopy.pickText(language, "播放视频", "動画を再生", "Play video")
+                        : KXListingCopy.pickText(language, "查看图片", "画像を表示", "View image"))
                     .kxMatchedTransitionSource(id: item.id, in: mediaZoomNamespace)
                 }
             }

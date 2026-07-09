@@ -38,9 +38,7 @@ struct AnonymousFormView: View {
             .toggleStyle(.switch)
         }
         .onAppear {
-            if viewModel.attributes[PostAttributeKeys.anonymous] == nil {
-                viewModel.attributes[PostAttributeKeys.anonymous] = KaiXAttributeValue(bool: true)
-            }
+            viewModel.seedFormDefault(PostAttributeKeys.anonymous, true)
         }
     }
 }

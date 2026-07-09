@@ -61,6 +61,10 @@ final class MembershipStore: ObservableObject {
     private var productID: String = MembershipStore.defaultProductID
     private var productsByID: [String: Product] = [:]
     private var updatesTask: Task<Void, Never>?
+    /// 监听 app 级 IAPTransactionObserver 的结算广播(Ask to Buy 事后批准、
+    /// 后台自动续费、跨设备购买)。观察者激活时本 store 只是页面镜像,不订阅
+    /// 就会停在 .pending、会员态陈旧。与 WalletStore.settledObserver 同款。
+    private var settledObserver: NSObjectProtocol?
 
     /// Begin listening for transaction updates and load product + status.
     ///
@@ -80,12 +84,42 @@ final class MembershipStore: ObservableObject {
                 }
             }
         }
+        // 观察者事后结算(家长批准 Ask to Buy、后台续费)只走 Transaction.updates
+        // → IAPTransactionObserver,不会回调本 store。订阅其成功广播,把停留的
+        // .pending / .verifying 收敛并重拉服务器会员态,用户无需退出重进。
+        // 订阅随 start()/stop() 生命周期,nil 守卫防重复订阅。
+        if settledObserver == nil {
+            settledObserver = NotificationCenter.default.addObserver(
+                forName: .kaixIAPTransactionSettled, object: nil, queue: .main
+            ) { [weak self] note in
+                guard let productID = note.userInfo?["productID"] as? String,
+                      !WalletStore.isPointsProduct(productID) else { return }
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    await self.refreshMembership()
+                    switch self.state {
+                    case .pending, .verifying:
+                        self.state = self.membershipActive ? .success : .idle
+                    case .verifyFailedPendingCredit where self.membershipActive:
+                        // The observer's retry got the server to credit the
+                        // charge — the "don't purchase again" hold can lift.
+                        self.state = .success
+                    default:
+                        break
+                    }
+                }
+            }
+        }
         Task { await loadProductAndStatus() }
     }
 
     func stop() {
         updatesTask?.cancel()
         updatesTask = nil
+        if let settledObserver {
+            NotificationCenter.default.removeObserver(settledObserver)
+            self.settledObserver = nil
+        }
     }
 
     func loadProductAndStatus() async {

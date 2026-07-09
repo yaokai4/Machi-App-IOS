@@ -53,6 +53,9 @@ final class SearchViewModel: ObservableObject {
     // clobbering the whole page state with `.error` (which used to replace
     // Discover/Search with a full-screen error over a single failed follow).
     @Published var followErrorMessage: String?
+    // 服务端搜索失败必须暴露给 UI：静默吞错会把"网络失败"伪装成"无结果"空态,
+    // 用户会以为平台上真的没有这个内容。取消类错误(新查询顶替/清空)除外。
+    @Published var searchErrorMessage: String?
     /// Monotonic ticket for server searches: "last issued wins".
     private var serverSearchGeneration = 0
 
@@ -86,6 +89,9 @@ final class SearchViewModel: ObservableObject {
             async let suggestedUsersFetch = try? userRepository.fetchRecommendedUsers(excluding: currentUserId, limit: 12)
             async let followingIdsFetch = try? userRepository.followingIds(for: currentUserId)
 
+            // 三个 explore 请求是否全部失败(nil = 请求抛错被 try? 吞掉;成功但
+            // 内容为空是合法的 loaded 空态,不算失败)。
+            var remoteAllFailed = false
             if allowRemote {
                 // The three explore requests are mutually independent — issue
                 // them concurrently (async let) instead of back-to-back. Each
@@ -97,21 +103,26 @@ final class SearchViewModel: ObservableObject {
                 async let hotFetch = try? KaiXAPIClient.shared.exploreHot(region: region, limit: 30)
                 async let topicsFetch = try? KaiXAPIClient.shared.exploreTopics(region: region, limit: 20)
 
-                if let response = await happeningFetch {
+                let happeningResponse = await happeningFetch
+                let hotResponse = await hotFetch
+                let topicsResponse = await topicsFetch
+                remoteAllFailed = happeningResponse == nil && hotResponse == nil && topicsResponse == nil
+
+                if let response = happeningResponse {
                     let bundle = ServerEntityFactory.postBundle(from: response.orderedPosts)
                     loadedHappening = bundle.orderedPosts
                     loadedAuthors.merge(bundle.authors) { _, fresh in fresh }
                     loadedMediaByPostId.merge(bundle.mediaByPostId) { _, fresh in fresh }
                 }
 
-                if let response = await hotFetch {
+                if let response = hotResponse {
                     let bundle = ServerEntityFactory.postBundle(from: response.orderedPosts)
                     loadedHot = bundle.orderedPosts
                     loadedAuthors.merge(bundle.authors) { _, fresh in fresh }
                     loadedMediaByPostId.merge(bundle.mediaByPostId) { _, fresh in fresh }
                 }
 
-                if let response = await topicsFetch {
+                if let response = topicsResponse {
                     loadedTopics = response.orderedTopics.map(ServerEntityFactory.topic(from:))
                 }
             }
@@ -124,6 +135,25 @@ final class SearchViewModel: ObservableObject {
             }
             if loadedTopics.isEmpty && KaiXRuntimeFlags.allowLocalStoreFallback {
                 loadedTopics = try await topicRepository.fetchTrending(limit: 20)
+            }
+
+            // Release 下所有远端请求都是 try?、本地回退被 allowLocalStoreFallback
+            // 关死,下面的 catch 实际不可达 —— 断网/后端全挂时页面会以 loaded
+            // 渲染,把网络故障伪装成"你的城市暂无内容"。三个 explore 全部失败且
+            // 无任何可展示内容时,显式走 .error(ErrorStateView 带重试);已有缓存
+            // 内容时保留现有页面,不用空数组清掉。部分失败仍维持原有降级。
+            if allowRemote, remoteAllFailed, loadedHappening.isEmpty, loadedHot.isEmpty, loadedTopics.isEmpty {
+                if hasCachedContent {
+                    state = .loaded
+                    searchStore?.setLoadingState(.loaded)
+                } else {
+                    let lang = AppLanguage.resolved(
+                        from: UserDefaults.standard.string(forKey: "appLanguageCode") ?? AppLanguage.system.rawValue
+                    )
+                    state = .error(L("errNetwork", lang))
+                    searchStore?.setLoadingState(state)
+                }
+                return
             }
 
             happeningPosts = loadedHappening
@@ -243,15 +273,31 @@ final class SearchViewModel: ObservableObject {
     func searchServer() async {
         let q = debouncedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else {
+            // 清空查询也必须作废在途请求(generation +1):否则旧关键词的迟到响应
+            // 会穿过下面的 stale guard(gen 未变),把已清空的四个数组整体写回,
+            // 下一个关键词在途期间旧结果会被当作新查询的命中展示。
+            serverSearchGeneration += 1
             serverPostItems = []
             serverTopics = []
             serverUsers = []
             searchedListings = []
+            searchErrorMessage = nil
             return
         }
         serverSearchGeneration += 1
         let generation = serverSearchGeneration
+        // 换新非空查询:先把上一查询的服务端命中作用域化清空,否则从'东京'改查
+        // '拉面'时 combinedPostItems 仍拼上冻结的'东京'结果冒充新词命中,且非空
+        // 的陈旧结果令 SearchView.hasResults 恒真,把其后的 serverSearchLoading
+        // (LoadingView) 分支彻底挡死 —— 用户在整个网络往返窗口看到旧词结果挂在
+        // 新词下且无任何加载提示。清空后:客户端即时过滤仍提供新词的瞬时反馈,
+        // 无命中时 hasResults 转假,LoadingView 得以在结果回来前显示。
+        serverPostItems = []
+        serverTopics = []
+        serverUsers = []
+        searchedListings = []
         serverSearchLoading = true
+        searchErrorMessage = nil
         defer {
             // Only the newest request may clear the spinner — a cancelled
             // predecessor unwinding late must not hide the in-flight one.
@@ -262,15 +308,23 @@ final class SearchViewModel: ObservableObject {
         do {
             let response = try await KaiXAPIClient.shared.search(q, kind: .all)
             // Stale guard: the user kept typing while this was in flight.
-            guard generation == serverSearchGeneration else { return }
+            // Task.isCancelled 双保险:取消未及时以错误形式传播时也不写状态。
+            guard generation == serverSearchGeneration, !Task.isCancelled else { return }
             let bundle = ServerEntityFactory.postBundle(from: response.posts)
             authors.merge(bundle.authors) { _, fresh in fresh }
             serverPostItems = bundle.orderedPosts.map(makePostTrendingItem)
             serverTopics = response.topics.map(ServerEntityFactory.topic(from:))
             serverUsers = response.users.map(UserRepository.entity(from:))
             searchedListings = response.listings ?? []
+            searchErrorMessage = nil
         } catch {
-            // Keep whatever the instant client filters already show.
+            // 取消(新查询顶替/清空)不是失败;真实失败要暴露给 UI,否则断网时
+            // 搜索呈现"无结果"空态误导用户。仅最新一代请求可写错误。
+            if error is CancellationError || (error as? URLError)?.code == .cancelled || Task.isCancelled {
+                return
+            }
+            guard generation == serverSearchGeneration else { return }
+            searchErrorMessage = error.kaixUserMessage
         }
     }
 

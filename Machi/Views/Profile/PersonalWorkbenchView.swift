@@ -138,8 +138,8 @@ struct PersonalWorkbenchView: View {
             .tint(KXColor.accent)
         }
         .padding(14)
-        .background(KXColor.accentSoft.opacity(0.5), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(KXColor.accent.opacity(0.25), lineWidth: 1))
+        .background(KXColor.accentSoft.opacity(0.5), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous).stroke(KXColor.accent.opacity(0.25), lineWidth: 1))
     }
 
     // MARK: 今日摘要
@@ -195,7 +195,7 @@ struct PersonalWorkbenchView: View {
                     Image(systemName: "arrow.right")
                 }
                 .font(.subheadline.weight(.bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(KXColor.onAccent)
                 .padding(.horizontal, KXSpacing.lg)
                 .frame(height: 48)
                 .frame(maxWidth: .infinity)
@@ -307,7 +307,7 @@ struct PersonalWorkbenchView: View {
         VStack(alignment: .leading, spacing: 10) {
             Image(systemName: affair.icon)
                 .kxScaledFont(20, weight: .bold)
-                .foregroundStyle(.white)
+                .foregroundStyle(KXColor.onTint(affair.tint))
                 .frame(width: 42, height: 42)
                 .background(affair.tint, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             Text(affair.title)

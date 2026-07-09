@@ -69,6 +69,7 @@ struct ListingPhotoViewer: View {
                         .background(.black.opacity(0.55))
                         .clipShape(Circle())
                 }
+                .accessibilityLabel(KXListingCopy.pickText(language, "关闭", "閉じる", "Close"))
             }
             .padding(.top, 18)
             .padding(.horizontal, 18)

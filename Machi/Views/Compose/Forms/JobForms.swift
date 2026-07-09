@@ -6,7 +6,7 @@ struct JobSeekFormView: View {
     var body: some View {
         TypedFormSection(titleKey: "ct_jobseek", icon: "briefcase") {
             TypedTextField("fld_desired_job", text: viewModel.stringBinding(PostAttributeKeys.desiredJob), isRequired: true)
-            TypedTextField("fld_skills", text: viewModel.stringBinding(PostAttributeKeys.skills), axis: .vertical, isRequired: true)
+            TypedTextField("fld_skills", text: viewModel.stringBinding(PostAttributeKeys.skills), axis: .vertical)
             TypedTextField("fld_languages", text: viewModel.stringBinding(PostAttributeKeys.languages))
             TypedTextField("fld_visa_status", text: viewModel.stringBinding(PostAttributeKeys.visaStatus))
             TypedTextField("fld_availability", text: viewModel.stringBinding(PostAttributeKeys.availability))
@@ -25,7 +25,7 @@ struct JobPostFormView: View {
         TypedFormSection(titleKey: "ct_jobpost", icon: "building.2") {
             TypedTextField("fld_job_title", text: viewModel.stringBinding(PostAttributeKeys.jobTitle), isRequired: true)
             TypedTextField("fld_company_name", text: viewModel.stringBinding(PostAttributeKeys.companyName), isRequired: true)
-            TypedTextField("fld_salary", text: viewModel.stringBinding(PostAttributeKeys.salary), isRequired: true)
+            TypedTextField("fld_salary", text: viewModel.stringBinding(PostAttributeKeys.salary))
             TypedChoiceRow(
                 titleKey: "fld_job_type",
                 selection: viewModel.stringBinding(PostAttributeKeys.jobType),
@@ -38,7 +38,7 @@ struct JobPostFormView: View {
             )
             TypedTextField("fld_language_req", text: viewModel.stringBinding(PostAttributeKeys.languageRequirement))
             TypedTextField("fld_visa_req", text: viewModel.stringBinding(PostAttributeKeys.visaRequirement))
-            TypedTextField("fld_work_location", text: viewModel.stringBinding(PostAttributeKeys.workLocation), isRequired: true)
+            TypedTextField("fld_work_location", text: viewModel.stringBinding(PostAttributeKeys.workLocation))
             TypedTextField("fld_contact_method", text: viewModel.stringBinding(PostAttributeKeys.contactMethod))
             Toggle(isOn: viewModel.boolBinding(PostAttributeKeys.companyVerified)) {
                 Text(L("companyVerified", language))
@@ -47,7 +47,7 @@ struct JobPostFormView: View {
             .toggleStyle(.switch)
         }
         .onAppear {
-            viewModel.seedDefaultAttribute(PostAttributeKeys.jobType, "part_time")
+            viewModel.seedFormDefault(PostAttributeKeys.jobType, "part_time")
         }
     }
 }
@@ -58,7 +58,7 @@ struct ReferralFormView: View {
     var body: some View {
         TypedFormSection(titleKey: "ct_referral", icon: "person.crop.circle.badge.checkmark") {
             TypedTextField("fld_job_title", text: viewModel.stringBinding(PostAttributeKeys.jobTitle), isRequired: true)
-            TypedTextField("fld_company_name", text: viewModel.stringBinding(PostAttributeKeys.companyName), isRequired: true)
+            TypedTextField("fld_company_name", text: viewModel.stringBinding(PostAttributeKeys.companyName))
             TypedTextField("fld_work_location", text: viewModel.stringBinding(PostAttributeKeys.workLocation))
             TypedTextField("fld_contact_method", text: viewModel.stringBinding(PostAttributeKeys.contactMethod))
             TypedTextField("fld_description", text: viewModel.stringBinding(PostAttributeKeys.description), axis: .vertical)

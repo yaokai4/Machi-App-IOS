@@ -98,7 +98,7 @@ struct GuideProfileSetupView: View {
                         .buttonStyle(.fullArea)
                         .contentShape(Rectangle())
                         .foregroundStyle(KXColor.accent)
-                        .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                        .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                         Toggle(guideOSText(language, "目前在日本", "現在日本にいる", "Currently in Japan"), isOn: $isInJapan)
                     }
                     .padding(15)
@@ -135,8 +135,8 @@ struct GuideProfileSetupView: View {
                     }
                     .buttonStyle(.fullArea)
                     .contentShape(Rectangle())
-                    .foregroundStyle(.white)
-                    .background(KXColor.accent, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                    .foregroundStyle(KXColor.onAccent)
+                    .background(KXColor.accent, in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
 
                     if let message = model.message { GuideOSNotice(message: message) }
                     if let message = locator.message { GuideOSNotice(message: message) }
@@ -200,9 +200,9 @@ private struct GuideReminderDateCard: View {
             HStack(alignment: .top, spacing: 11) {
                 Image(systemName: icon)
                     .kxScaledFont(18, weight: .bold)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(KXColor.onTint(tint))
                     .frame(width: 40, height: 40)
-                    .background(tint, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(tint, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
                         .font(.subheadline.weight(.bold))
@@ -296,7 +296,10 @@ private final class GuideProfileLocationProvider: NSObject, ObservableObject, CL
             manager.requestLocation()
         } else if manager.authorizationStatus == .denied || manager.authorizationStatus == .restricted {
             isLocating = false
-            message = "定位权限未开启，可以手动填写城市。"
+            let lang = AppLanguage.resolved(from: UserDefaults.standard.string(forKey: "appLanguageCode") ?? "")
+            message = guideOSText(lang, "定位权限未开启，可以手动填写城市。",
+                                  "位置情報が許可されていません。都市は手動で入力できます。",
+                                  "Location access is off. You can enter the city manually.")
         }
     }
 
@@ -317,6 +320,9 @@ private final class GuideProfileLocationProvider: NSObject, ObservableObject, CL
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         isLocating = false
-        message = "定位失败，可以手动填写城市。"
+        let lang = AppLanguage.resolved(from: UserDefaults.standard.string(forKey: "appLanguageCode") ?? "")
+        message = guideOSText(lang, "定位失败，可以手动填写城市。",
+                              "位置情報の取得に失敗しました。都市は手動で入力できます。",
+                              "Couldn't get your location. You can enter the city manually.")
     }
 }

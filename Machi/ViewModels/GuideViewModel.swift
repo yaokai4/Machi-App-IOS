@@ -46,6 +46,12 @@ final class GuideViewModel: ObservableObject {
         home?.status == "coming_soon"
     }
 
+    /// 当前界面语言。所有 @Published 用户可见提示与 GuestGate.requireLogin reason
+    /// 必须三语——此前硬编码中文,日/英用户在首页/搜索/工作台只见中文。
+    private var uiLanguage: AppLanguage {
+        AppLanguage.resolved(from: UserDefaults.standard.string(forKey: "appLanguageCode") ?? AppLanguage.system.rawValue)
+    }
+
     func load(country: String, force: Bool = false) async {
         let normalizedCountry = country.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let language = currentGuideLanguage()
@@ -86,7 +92,10 @@ final class GuideViewModel: ObservableObject {
                 home = GuideFallbackContent.home(language: language)
                 loadedCountry = normalizedCountry
                 loadedLanguage = language
-                errorMessage = "网络暂时不可用，已载入内置日本指南。联网后下拉即可刷新最新内容。"
+                errorMessage = guideText(uiLanguage,
+                    "网络暂时不可用，已载入内置日本指南。联网后下拉即可刷新最新内容。",
+                    "ネットワークに一時的に接続できないため、内蔵の日本ガイドを表示しています。オンラインになったら下に引っ張って最新の内容に更新できます。",
+                    "Network is temporarily unavailable — loaded the built-in Japan guide. Pull to refresh for the latest content once you're back online.")
             } else {
                 errorMessage = error.localizedDescription
             }
@@ -125,14 +134,20 @@ final class GuideViewModel: ObservableObject {
         do {
             guideOS = try await KaiXAPIClient.shared.guideActivePlan(language: currentGuideLanguage())
         } catch {
-            guideOSMessage = "个人计划暂时无法同步，稍后下拉刷新即可恢复。"
+            guideOSMessage = guideText(uiLanguage,
+                "个人计划暂时无法同步，稍后下拉刷新即可恢复。",
+                "個人の計画を一時的に同期できません。しばらくしてから下に引っ張って更新してください。",
+                "Couldn't sync your personal plan right now. Pull to refresh in a moment.")
         }
     }
 
     @discardableResult
     func completeGuideTodo(_ todo: KaiXGuideTodoDTO) async -> Bool {
         guard KaiXBackend.token != nil else {
-            GuestGate.shared.requireLogin("登录后可以同步 Guide 计划、Todo 和提醒。")
+            GuestGate.shared.requireLogin(guideText(uiLanguage,
+                "登录后可以同步 Guide 计划、Todo 和提醒。",
+                "ログインすると Guide の計画・Todo・リマインダーを同期できます。",
+                "Sign in to sync your Guide plans, todos and reminders."))
             return false
         }
         do {
@@ -140,7 +155,10 @@ final class GuideViewModel: ObservableObject {
             await loadGuideOS(force: true)
             return true
         } catch {
-            guideOSMessage = "任务完成状态没有保存成功，请稍后再试。"
+            guideOSMessage = guideText(uiLanguage,
+                "任务完成状态没有保存成功，请稍后再试。",
+                "タスクの完了状態を保存できませんでした。しばらくしてからもう一度お試しください。",
+                "Couldn't save the task's completion status. Please try again later.")
             return false
         }
     }
@@ -150,7 +168,10 @@ final class GuideViewModel: ObservableObject {
         let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return false }
         guard KaiXBackend.token != nil else {
-            GuestGate.shared.requireLogin("登录后可以保存 Todo、日历和提醒。")
+            GuestGate.shared.requireLogin(guideText(uiLanguage,
+                "登录后可以保存 Todo、日历和提醒。",
+                "ログインすると Todo・カレンダー・リマインダーを保存できます。",
+                "Sign in to save todos, calendar items and reminders."))
             return false
         }
         isGuideOSLoading = true
@@ -165,7 +186,10 @@ final class GuideViewModel: ObservableObject {
             await loadGuideOS(force: true)
             return true
         } catch {
-            guideOSMessage = "Todo 添加失败，请稍后再试。"
+            guideOSMessage = guideText(uiLanguage,
+                "Todo 添加失败，请稍后再试。",
+                "Todo の追加に失敗しました。しばらくしてからもう一度お試しください。",
+                "Couldn't add the todo. Please try again later.")
             return false
         }
     }
@@ -173,7 +197,10 @@ final class GuideViewModel: ObservableObject {
     @discardableResult
     func startPlan(journeyKey: String, planType: String = "guide") async -> Bool {
         guard KaiXBackend.token != nil else {
-            GuestGate.shared.requireLogin("登录后可以把指南生成可执行计划。")
+            GuestGate.shared.requireLogin(guideText(uiLanguage,
+                "登录后可以把指南生成可执行计划。",
+                "ログインするとガイドから実行可能な計画を作成できます。",
+                "Sign in to turn the guide into an actionable plan."))
             return false
         }
         do {
@@ -181,7 +208,10 @@ final class GuideViewModel: ObservableObject {
             await loadGuideOS(force: true)
             return true
         } catch {
-            guideOSMessage = "计划生成失败，请稍后再试。"
+            guideOSMessage = guideText(uiLanguage,
+                "计划生成失败，请稍后再试。",
+                "計画の作成に失敗しました。しばらくしてからもう一度お試しください。",
+                "Couldn't create the plan. Please try again later.")
             return false
         }
     }
@@ -285,7 +315,15 @@ final class GuideViewModel: ObservableObject {
                     .joined(separator: " ")
                     .localizedCaseInsensitiveContains(q)
             }
-            errorMessage = searchResults.isEmpty ? "搜索暂时无法连接服务器，换个关键词或下拉刷新试试。" : "搜索暂时无法连接服务器，先显示内置指南结果。"
+            errorMessage = searchResults.isEmpty
+                ? guideText(uiLanguage,
+                    "搜索暂时无法连接服务器，换个关键词或下拉刷新试试。",
+                    "検索サーバーに一時的に接続できません。キーワードを変えるか、下に引っ張って更新してみてください。",
+                    "Search can't reach the server right now. Try another keyword or pull to refresh.")
+                : guideText(uiLanguage,
+                    "搜索暂时无法连接服务器，先显示内置指南结果。",
+                    "検索サーバーに一時的に接続できません。まずは内蔵ガイドの結果を表示しています。",
+                    "Search can't reach the server right now — showing built-in guide results for now.")
         }
         let schoolsResponse = try? await KaiXAPIClient.shared.guideSchools(country: country, keyword: q, pageSize: 8)
         let companiesResponse = try? await KaiXAPIClient.shared.guideCompanies(country: country, keyword: q, pageSize: 8)

@@ -44,7 +44,7 @@ struct EventDetailView: View {
                             attendeesCard(event)
                             descriptionBlock(event)
                         }
-                        .padding(.horizontal, KaiXTheme.horizontalPadding)
+                        .padding(.horizontal, KXSpacing.screen)
                     }
                     .padding(.bottom, chrome.bottomContentPadding + 96)
                 }
@@ -123,7 +123,10 @@ struct EventDetailView: View {
                         .background(.thinMaterial, in: Circle())
                 }
                 .accessibilityLabel(KXListingCopy.pickText(language, "分享", "共有", "Share"))
-                if event.organizer_user_id == currentUser.id || currentUser.displaysOfficialBadge {
+                // 删除权限与服务端 api_event_delete 对齐:organizer 或 role==admin。
+                // 不能用 displaysOfficialBadge(徽章展示概念,含非管理员的官方/种子号),
+                // 否则这些账号会看到必得 403 的删除入口。
+                if event.organizer_user_id == currentUser.id || currentUser.role == .admin {
                     Menu {
                         Button(role: .destructive) {
                             showDeleteConfirm = true
@@ -141,7 +144,7 @@ struct EventDetailView: View {
                 }
             }
         }
-        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.horizontal, KXSpacing.screen)
         .padding(.top, KXSpacing.sm)
     }
 
@@ -161,7 +164,7 @@ struct EventDetailView: View {
                     .overlay {
                         Image(systemName: KXEventStyle.icon(event.category ?? "party"))
                             .font(.system(size: 64, weight: .bold))
-                            .foregroundStyle(.white.opacity(0.8))
+                            .foregroundStyle(KXColor.onTint(tint).opacity(0.8))
                     }
                 }
             }
@@ -176,7 +179,7 @@ struct EventDetailView: View {
                 )
             }
 
-            if let badge = KXEventStyle.dateBadge(event.starts_at, language: language) {
+            if let badge = KXEventStyle.dateBadge(event.starts_at, timezone: event.timezone, language: language) {
                 VStack(spacing: 0) {
                     Text(badge.month)
                         .font(.caption.weight(.black))
@@ -186,7 +189,7 @@ struct EventDetailView: View {
                         .foregroundStyle(.primary)
                 }
                 .frame(width: 56, height: 60)
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                 .padding(14)
             }
         }
@@ -237,9 +240,9 @@ struct EventDetailView: View {
                     .font(.headline.weight(.bold))
                     .foregroundStyle(tint)
                     .frame(width: 40, height: 40)
-                    .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(KXEventStyle.timeLine(event.starts_at, event.ends_at, language: language))
+                    Text(KXEventStyle.timeLine(event.starts_at, event.ends_at, timezone: event.timezone, language: language))
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.primary)
                     Text(event.timezone ?? "Asia/Tokyo")
@@ -254,7 +257,7 @@ struct EventDetailView: View {
                         .font(.headline.weight(.bold))
                         .foregroundStyle(tint)
                         .frame(width: 40, height: 40)
-                        .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                     VStack(alignment: .leading, spacing: 2) {
                         if let venue = event.venue_name, !venue.isEmpty {
                             Text(venue)
@@ -271,10 +274,7 @@ struct EventDetailView: View {
                     Spacer(minLength: 0)
                     if let query = mapQuery(event) {
                         Button {
-                            let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
-                            if let url = URL(string: "maps://?q=\(encoded)") {
-                                UIApplication.shared.open(url)
-                            }
+                            openInMaps(query)
                         } label: {
                             Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
                                 .font(.title3)
@@ -298,6 +298,20 @@ struct EventDetailView: View {
         return combined.isEmpty ? nil : combined
     }
 
+    /// .urlQueryAllowed 不转义 &/=/+/? 这类 query 结构字符:地址含「A館&B館」
+    /// 会被 Maps 在 & 处截断、'+' 被当空格,导航到错误地点。这里把它们也
+    /// percent-encode 掉;maps:// 打不开时回退网页版 Apple Maps,点了不再毫无反应。
+    private func openInMaps(_ query: String) {
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "&=+?/")
+        let encoded = query.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
+        guard !encoded.isEmpty, let url = URL(string: "maps://?q=\(encoded)") else { return }
+        UIApplication.shared.open(url) { opened in
+            guard !opened, let webURL = URL(string: "https://maps.apple.com/?q=\(encoded)") else { return }
+            UIApplication.shared.open(webURL)
+        }
+    }
+
     private func registrationCard(_ event: KaiXEventDTO) -> some View {
         VStack(alignment: .leading, spacing: KXSpacing.sm) {
             HStack {
@@ -318,7 +332,7 @@ struct EventDetailView: View {
             } else if event.viewerWaitlisted {
                 Label(KXListingCopy.pickText(language, "已进入候补名单,有空位会自动顶上", "キャンセル待ちに登録済みです", "You're on the waitlist"), systemImage: "hourglass")
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(KXColor.heat)
             } else if (event.capacity ?? 0) > 0 {
                 let left = max(0, (event.capacity ?? 0) - event.goingCountValue)
                 Text(left > 0
@@ -458,7 +472,7 @@ struct EventDetailView: View {
                              : KXListingCopy.pickText(language, "报名参加", "参加する", "Register"))
                             .font(.headline.weight(.bold))
                     }
-                    .foregroundStyle(.white)
+                    .foregroundStyle(KXColor.onTint(tint))
                     .frame(maxWidth: .infinity)
                     .frame(height: 52)
                     .background(tint.gradient, in: Capsule())
@@ -468,7 +482,7 @@ struct EventDetailView: View {
                 .disabled(isRegistering)
             }
         }
-        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.horizontal, KXSpacing.screen)
         .padding(.vertical, 10)
         .kxGlassBar()
     }
@@ -521,6 +535,10 @@ struct EventDetailView: View {
         do {
             try await KaiXAPIClient.shared.deleteEvent(idOrSlug)
             UINotificationFeedbackGenerator().notificationOccurred(.success)
+            // 通知列表页立即剔除该卡:静默合并刷新保留掉出首页的旧条目,
+            // 不广播的话刚删的活动仍显示,点进去才 404。id 用详情实体的真实 id。
+            let removedId = event?.id ?? idOrSlug
+            NotificationCenter.default.post(name: .kaiXEventRemoved, object: nil, userInfo: ["id": removedId])
             dismiss()
         } catch {
             actionMessage = error.kaixUserMessage
@@ -579,7 +597,7 @@ private struct EventRegistrationSheet: View {
                             .foregroundStyle(KXColor.heat)
                     }
                 }
-                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.horizontal, KXSpacing.screen)
                 .padding(.vertical, KXSpacing.lg)
             }
             .kxPageBackground()
@@ -631,7 +649,7 @@ private struct EventRegistrationSheet: View {
                         } label: {
                             Text(option)
                                 .font(.caption.weight(.bold))
-                                .foregroundStyle(isSelected ? .white : .primary)
+                                .foregroundStyle(isSelected ? KXColor.onAccent : .primary)
                                 .padding(.horizontal, 12)
                                 .frame(height: 32)
                                 .background(isSelected ? KXColor.accent : KXColor.softBackground.opacity(0.85), in: Capsule())

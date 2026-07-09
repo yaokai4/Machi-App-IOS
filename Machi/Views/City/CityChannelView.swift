@@ -10,6 +10,7 @@ struct CityChannelView: View {
     @EnvironmentObject private var router: AppRouter
     @ObservedObject private var languageManager = LanguageManager.shared
     @EnvironmentObject private var composeStore: ComposeStore
+    @EnvironmentObject private var toastManager: ToastManager
     @StateObject private var viewModel = CityChannelViewModel()
     @State private var primary: CityChannel.Primary = .recommend
 
@@ -56,10 +57,24 @@ struct CityChannelView: View {
         }
         .kxPageBackground()
         .toolbar(.hidden, for: .navigationBar)
+        .onReceive(NotificationCenter.default.publisher(for: .kaiXPostRemoved)) { note in
+            // 详情页删帖后剔除幽灵卡(同 HomeTimelineView)。
+            if let ids = note.userInfo?["ids"] as? [String] { viewModel.removePosts(ids: ids) }
+        }
         .task(id: "\(regionCode).\(initialChannel.rawValue)") {
             primary = initialChannel.primary
             viewModel.configure(regionCode: regionCode, channel: initialChannel)
             await viewModel.loadInitial(context: modelContext, currentUser: currentUser, postStore: postStore, clearExisting: true)
+        }
+        .onChange(of: primary) { _, newPrimary in
+            // 主分类切换必须把频道真正落地到新分类首项:secondaryBinding 的
+            // getter 兜底值只用于渲染、从不回写,不落地的话 chip 高亮显示新
+            // 分类首项而 viewModel.channel / Feed / 描述仍是旧频道(UI 撒谎)。
+            // 用户点二级 chip 时 setter 已保证 channel ∈ primary.channels,
+            // 此处 contains 成立即 no-op,不会引起重复加载。
+            if !newPrimary.channels.contains(viewModel.channel) {
+                viewModel.channel = newPrimary.channels.first ?? .recommend
+            }
         }
         .onChange(of: viewModel.channel) { _, _ in
             Task {
@@ -80,6 +95,21 @@ struct CityChannelView: View {
                     clearExisting: true
                 )
             }
+        }
+        .onChange(of: viewModel.transientError) { _, message in
+            // 互动(赞/藏/转/引用)失败走全局 toast,绝不整页替换 feed ——
+            // 与 HomeTimelineView 同一模式:弱网下一次点赞失败曾让满屏内容
+            // 瞬间变成错误页并丢滚动位置。展示后清回 nil(guard 挡住 nil
+            // 触发,不会 onChange 死循环),同一条错误再次出现时才会重弹。
+            guard let message else { return }
+            toastManager.show(.custom(
+                title: KXListingCopy.pickText(language, "操作未完成", "操作を完了できませんでした", "Action didn't complete"),
+                message: message,
+                systemImage: "xmark.octagon",
+                tint: .red,
+                technicalDetails: nil
+            ))
+            viewModel.transientError = nil
         }
     }
 
@@ -134,7 +164,7 @@ struct CityChannelView: View {
         HStack(alignment: .center, spacing: 7) {
             Image(systemName: viewModel.channel == .hot ? "flame.fill" : "info.circle.fill")
                 .font(.caption2.weight(.bold))
-                .foregroundStyle(viewModel.channel == .hot ? KaiXTheme.heat : KXColor.accent)
+                .foregroundStyle(viewModel.channel == .hot ? KXColor.heat : KXColor.accent)
             Text(viewModel.channel.description(language))
                 .font(.caption2.weight(.medium))
                 .foregroundStyle(.secondary)
@@ -142,7 +172,7 @@ struct CityChannelView: View {
                 .minimumScaleFactor(0.85)
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.horizontal, KXSpacing.screen)
         .padding(.vertical, 5)
         .background(KXColor.softBackground.opacity(0.72))
         .overlay(alignment: .bottom) {
@@ -188,7 +218,7 @@ struct CityChannelView: View {
                     KXInlineLoader()
                 }
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.vertical, KXSpacing.sm)
             .padding(.bottom, chrome.bottomContentPadding)
         }

@@ -68,7 +68,7 @@ struct ContentTypePickerView: View {
                                         .foregroundStyle(.primary)
                                 }
                             }
-                            .padding(.horizontal, KaiXTheme.horizontalPadding)
+                            .padding(.horizontal, KXSpacing.screen)
                             .tint(KXColor.accent)
                         }
                     }
@@ -90,7 +90,7 @@ struct ContentTypePickerView: View {
         Text(L("ct_picker_sub", language))
             .font(.subheadline)
             .foregroundStyle(.secondary)
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
     }
 
     private var searchField: some View {
@@ -115,7 +115,7 @@ struct ContentTypePickerView: View {
         .padding(.horizontal, 14)
         .frame(height: 44)
         .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
-        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.horizontal, KXSpacing.screen)
     }
 
     private func section(title: String?, types: [ContentType]) -> some View {
@@ -124,14 +124,14 @@ struct ContentTypePickerView: View {
                 Text(title)
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(.primary)
-                    .padding(.horizontal, KaiXTheme.horizontalPadding)
+                    .padding(.horizontal, KXSpacing.screen)
             }
             LazyVGrid(columns: columns, spacing: KXSpacing.md) {
                 ForEach(types, id: \.self) { type in
                     cell(for: type)
                 }
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
         }
     }
 

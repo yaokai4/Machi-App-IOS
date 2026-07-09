@@ -81,7 +81,7 @@ struct HomeJourneyNextStepCard: View {
                             .kxScaledFont(15, weight: .bold)
                             .foregroundStyle(KXColor.accent)
                             .frame(width: 36, height: 36)
-                            .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                            .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: KXRadius.sm, style: .continuous))
                         VStack(alignment: .leading, spacing: KXSpacing.xxs) {
                             Text(KXListingCopy.pickText(language, "下一步该办什么", "次にやること", "Next step"))
                                 .font(.caption2.weight(.bold))
@@ -111,7 +111,11 @@ struct HomeJourneyNextStepCard: View {
                 .buttonStyle(.fullArea)
             }
         }
-        .task(id: currentUser.id) {
+        // 组合键带上应用语言:journey 标题按加载时语言从服务端取
+        // (vm.load → guideJourneys(language:)),只以用户 id 为键的话,
+        // 切换语言后首页整体已重载而这张卡仍是旧语言(中日/中英混排),
+        // 直到换账号才恢复。
+        .task(id: "\(currentUser.id)-\(language.rawValue)") {
             await vm.load(isGuest: currentUser.isGuest, persona: onboardingPersona)
         }
     }

@@ -12,22 +12,39 @@ enum ErrorState {
     /// (e.g. "查看") whose closure is supplied via `ToastManager.show(retry:)`.
     case publishedSuccess(title: String, actionTitle: String)
 
+    /// 内建 case 的文案曾是硬编码中文,断网/同步延迟时日英用户也只看到中文。
+    /// ErrorState 是模型层拿不到 @Environment(\.appLanguage),按仓库既有模式
+    /// (GuideOSViewModel / PostRepository)从 UserDefaults 解析当前语言,
+    /// 展示时(计算属性)实时求值,切语言后新 toast 立即生效。
+    private var language: AppLanguage {
+        AppLanguage.resolved(from: UserDefaults.standard.string(forKey: "appLanguageCode") ?? "")
+    }
+
+    /// 内联三语(LocalizationService 缺这些键;禁止改动该文件,故就地内联)。
+    private func t(_ zh: String, _ ja: String, _ en: String) -> String {
+        switch language {
+        case .ja: ja
+        case .en: en
+        default: zh
+        }
+    }
+
     var title: String {
         switch self {
         case .offline:
-            "当前离线"
+            t("当前离线", "現在オフラインです", "You're offline")
         case .databaseRecovered:
-            "数据库已修复"
+            t("数据库已修复", "データベースを修復しました", "Database repaired")
         case .databaseRecoveryMode:
             #if DEBUG
-            "数据库恢复模式"
+            t("数据库恢复模式", "データベース復旧モード", "Database recovery mode")
             #else
-            "本地数据恢复中"
+            t("本地数据恢复中", "ローカルデータを復旧中", "Recovering local data")
             #endif
         case .syncDelayed:
-            "同步稍后继续"
+            t("同步稍后继续", "同期は後で再開します", "Sync will continue later")
         case .requestFailed:
-            "操作未完成"
+            t("操作未完成", "操作は完了しませんでした", "Action didn't complete")
         case .custom(let title, _, _, _, _):
             title
         case .publishedSuccess(let title, _):
@@ -38,13 +55,17 @@ enum ErrorState {
     var message: String {
         switch self {
         case .offline:
-            "网络恢复后会自动刷新内容。"
+            t("网络恢复后会自动刷新内容。",
+              "接続が回復すると自動的に更新されます。",
+              "Content refreshes automatically once you're back online.")
         case .databaseRecovered(let message, _):
             message
         case .databaseRecoveryMode(let message, _):
             message
         case .syncDelayed:
-            "当前内容已保存在本机，稍后会继续同步。"
+            t("当前内容已保存在本机，稍后会继续同步。",
+              "内容はこの端末に保存済みです。後で自動的に同期されます。",
+              "Saved on this device; it will sync again later.")
         case .requestFailed(let message, _):
             message
         case .custom(_, let message, _, _, _):
@@ -97,11 +118,11 @@ enum ErrorState {
         case .offline:
             nil
         case .databaseRecovered, .databaseRecoveryMode, .requestFailed:
-            "重试"
+            L("retry", language)
         case .syncDelayed:
             nil
         case .custom:
-            "重试"
+            L("retry", language)
         case .publishedSuccess(_, let actionTitle):
             actionTitle
         }

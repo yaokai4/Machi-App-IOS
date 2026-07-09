@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import SwiftData
 
+
 @MainActor
 final class PostStore: ObservableObject {
     @Published private(set) var postsById: [String: PostEntity] = [:]
@@ -284,6 +285,11 @@ final class PostStore: ObservableObject {
 
         do {
             try await PostRepository(context: context).deletePost(post: post)
+            // 广播删除:feed/城市频道列表以 `?? post` 回退渲染,PostStore 忘掉该
+            // 实体后 HomeViewModel.posts 仍强引用它 → 详情页删除会留可点击幽灵卡。
+            // 让各列表从自己的 posts/loadedIds 里同步剔除(与房间/活动删除同模式)。
+            NotificationCenter.default.post(name: .kaiXPostRemoved, object: nil,
+                                            userInfo: ["ids": [postId] + localRepostIds])
         } catch {
             postsById = previousPosts
             feedIds = previousFeedIds

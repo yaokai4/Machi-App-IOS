@@ -14,6 +14,12 @@ struct GuideStudyPlanView: View {
 
     private let levels = ["N1", "N2", "N3", "N4", "N5"]
 
+    /// 从定级结果等入口进入时携带推荐等级(.guideStudyPlan 路由的关联值)。
+    init(initialLevel: String? = nil) {
+        let lv = (initialLevel ?? "").trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        _level = State(initialValue: ["N1", "N2", "N3", "N4", "N5"].contains(lv) ? lv : "N2")
+    }
+
     var body: some View {
         ZStack {
             GuideBackground()
@@ -72,7 +78,7 @@ private struct GuideStudyTodoRow: View {
                 .font(.subheadline)
                 .foregroundStyle(KXColor.accent)
                 .frame(width: 30, height: 30)
-                .background(KXColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .background(KXColor.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: KXRadius.sm, style: .continuous))
             VStack(alignment: .leading, spacing: 3) {
                 Text(todo.title).font(.subheadline.weight(.bold)).foregroundStyle(.primary).lineLimit(2)
                 HStack(spacing: 6) {

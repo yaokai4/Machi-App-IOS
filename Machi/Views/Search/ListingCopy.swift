@@ -64,6 +64,21 @@ enum KXListingCopy {
             subtitleEn: "Restaurants, cafes and booking deals use dining, menu, set and cancellation fields.",
             categories: foodSectionCategories
         ),
+        // 民宿必须有自己的一级分区:民宿 tab 的「+」路由到本表单,而
+        // activeTaxonomyCategories 会过滤掉住宿类目(isStayCategory),没有
+        // 这个分区,用户只能在自由文本框逐字输入简体「民宿」才能发布——
+        // 日/英用户完全无路可走(serviceCreateSectionKey 的 "lodging" 也曾悬空)。
+        .init(
+            id: "lodging",
+            icon: "bed.double",
+            zh: "民宿",
+            ja: "民泊・宿泊",
+            en: "Stays",
+            subtitleZh: "民宿与住宿填写房型、可住人数、入住退房时间、房量与取消规则。",
+            subtitleJa: "民泊・宿泊は部屋タイプ、定員、チェックイン・アウト、空室状況、取消規定を入力します。",
+            subtitleEn: "Stays use room type, guests, check-in/out, availability and cancellation fields.",
+            categories: lodgingSectionCategories
+        ),
         .init(
             id: "travel",
             icon: "map",
@@ -134,7 +149,8 @@ enum KXListingCopy {
     static let serviceCreateCategories = uniqueCategories(serviceCreateSections.flatMap(\.categories))
     /// 生活服务只展示第一阶段正式入口；旧伞类目仍在映射中兼容已有数据。
     static let lifeSectionCategories = paperworkSectionCategories + movingSectionCategories + lifeSetupSectionCategories + beautyHealthSectionCategories
-    static let homestayCategories = ["民宿"]
+    // 「民泊」= 日语用户手输的民宿别名,一并按民宿归档/筛选。
+    static let homestayCategories = ["民宿", "民泊"]
     static let hotelCategories = ["酒店", "温泉旅馆", "公寓式酒店", "短住公寓", "酒店民宿"]
     static let stayCategories = homestayCategories + hotelCategories
     static let stayChips = ["全部", "民宿"]
@@ -173,6 +189,7 @@ enum KXListingCopy {
         "餐饮点评": .diningBooking,
         "优惠预约": .diningBooking,
         "民宿": .lodging,
+        "民泊": .lodging,
         "酒店": .lodging,
         "温泉旅馆": .lodging,
         "公寓式酒店": .lodging,
@@ -522,8 +539,12 @@ enum KXListingCopy {
         if category != normalized { return category }
         let attribute = attributeLabel(normalized, language)
         if attribute != normalized { return attribute }
-        let intake = ListingIntakeLocalizer.text(normalized, language)
-        if intake != normalized { return intake }
+        // 频道筛选表与发布表单共用同一批中文枚举(新旧程度/发布类型/可宠物…)。
+        // 兜底链缺了它,选项行会中外混排——如「全新/几乎全新/良好/有使用痕迹」
+        // 留中文而同行的「可用」显示 Fair。ListingFilterLocalizer 自身继续兜底
+        // 到 ListingIntakeLocalizer,链条完整,无递归。
+        let filter = ListingFilterLocalizer.text(normalized, language)
+        if filter != normalized { return filter }
         return value
     }
 
@@ -669,7 +690,21 @@ enum KXListingCopy {
         "例如 新宿站面交，邮寄需买家承担运费": ("例：新宿駅で手渡し、配送は購入者送料負担", "e.g. meetup at Shinjuku Station, buyer pays shipping"),
         "完整填写车站、面积和入住时间，能明显减少重复私信询问。": ("駅、面積、入居時期を具体的に書くと、重複問い合わせを減らせます。", "Clear station, size, and move-in timing reduce repeated messages."),
         "请先在基本信息里选择一个标准服务分类，例如 餐厅、景点门票、一日游、机场接送、翻译手续、搬家清洁、生活开通或美容健康。": ("まず基本情報で標準サービス分類を選んでください。例：飲食店、観光チケット、日帰り、空港送迎、翻訳手続き、引越し清掃、生活セットアップ、美容健康。", "Choose a standard service category in Basic info first, such as restaurants, tickets, day tours, airport transfer, paperwork, moving/cleaning, life setup, or beauty/health."),
-        "建议写清购买时间、瑕疵、配件、是否含包装和交易地点，减少来回确认。": ("購入時期、傷、付属品、箱の有無、受け渡し場所を書くと確認の往復が減ります。", "Add purchase time, defects, accessories, packaging, and handoff location to reduce back-and-forth.")
+        "建议写清购买时间、瑕疵、配件、是否含包装和交易地点，减少来回确认。": ("購入時期、傷、付属品、箱の有無、受け渡し場所を書くと確認の往復が減ります。", "Add purchase time, defects, accessories, packaging, and handoff location to reduce back-and-forth."),
+        // —— 分类专属字段此前对日/英用户回落为中文的标题/选项/占位 —— //
+        "福利待遇": ("福利厚生", "Benefits"),
+        "服务时长": ("施術時間", "Service duration"),
+        "最少入住晚数": ("最低宿泊数", "Minimum nights"),
+        "房量与日期说明": ("空室・日程について", "Availability & dates"),
+        "不保证结果": ("結果保証なし", "No result guarantee"),
+        "例如 池袋站 步行 8 分钟": ("例：池袋駅 徒歩8分", "e.g. 8 min walk from Ikebukuro Stn"),
+        "例如 7 月上旬 / 即可入住": ("例：7月上旬 / 即入居可", "e.g. early July / available now"),
+        "例如 新宿咖啡店 / 株式会社...": ("例：新宿のカフェ / 株式会社...", "e.g. Shinjuku cafe / Co., Ltd. ..."),
+        "例如 周末 10:00-18:00": ("例：週末 10:00-18:00", "e.g. weekends 10:00-18:00"),
+        "11:00-22:00 / 周一休": ("11:00-22:00 / 月曜定休", "11:00-22:00 / closed Mondays"),
+        "人均 ¥2,500-3,500": ("一人あたり ¥2,500-3,500", "¥2,500-3,500 per person"),
+        "平日晚上 / 周末 / 需提前 2 天": ("平日夜 / 週末 / 2日前まで", "Weekday evenings / weekends / 2 days ahead"),
+        "例如 2026-08-31": ("例：2026-08-31", "e.g. 2026-08-31")
     ]
 
     static func icon(for type: String) -> String {
@@ -709,6 +744,8 @@ enum KXListingCopy {
         case "整租": return "house.fill"
         case "家具家电": return "sofa.fill"
         case "近车站": return "tram.fill"
+        case "可宠物": return "pawprint.fill"
+        case "短租": return "calendar.badge.clock"
         // 民宿
         case "民宿", "酒店", "温泉旅馆", "公寓式酒店", "短住公寓", "整套房": return "bed.double.fill"
         // 工作
@@ -779,6 +816,55 @@ enum KXListingCopy {
         }
     }
 
+    /// 频道类目滑栏里的「属性 facet」型 chip（租房长租 / 工作频道）：点一下写入一个
+    /// `attr_<key>=value` 服务端筛选（与筛选面板同一套参数）。长租与工作的滑栏项
+    /// 本质是属性（家具/合租/薪资形态/日语等级/签证/无经验…）而非真实 `category`
+    /// 值——旧实现把它们塞进 `categories(for:)` 当 category：服务端精确匹配
+    /// `category` 列匹配不到、客户端 `category.contains` 也匹配不到，于是选中即清空
+    /// 列表，而头部计数仍按未筛选全集显示（虚高）、翻页拉的也是未筛选流。改成
+    /// facet 后由服务端精确筛选并计入 total，翻页也带上同一条件。key 取自
+    /// `server_config.LISTING_ATTRIBUTE_KEYS`（该类型白名单内），值与筛选面板一致。
+    struct ListingFacetChip: Identifiable {
+        /// `attr_<key>` 的 key（须在服务端该类型白名单内）。
+        let key: String
+        /// attr 值（布尔用 "true"；签证兼容老数据用 "available,true"）。
+        let value: String
+        /// 显示/图标用的中文枚举（走 ListingFilterLocalizer + categoryIcon）。
+        let labelKey: String
+        var id: String { "\(key)=\(value)" }
+    }
+
+    static func facetChips(for type: String) -> [ListingFacetChip] {
+        switch type {
+        case "rental":
+            // 长租快捷筛选：家具家电 / 合租 / 可宠物 / 短租——均为 rental 白名单内
+            // 的布尔属性，与筛选面板 toggle 同一 key，滑栏与面板选中态互通。
+            return [
+                .init(key: "furnished", value: "true", labelKey: "家具家电"),
+                .init(key: "share_allowed", value: "true", labelKey: "合租"),
+                .init(key: "pet_allowed", value: "true", labelKey: "可宠物"),
+                .init(key: "short_term_allowed", value: "true", labelKey: "短租"),
+            ]
+        case "work", "job", "hiring":
+            // 工作快捷筛选：雇佣形态 / 薪资形态 / 日语等级 / 签证 / 无经验。同 key
+            // 多值互斥（兼职⇄全职、时给⇄月给）天然由字典同 key 覆盖实现。工作频道
+            // 同时查 job+hiring 两流，facet 会同时应用到两流（旧 category=兼职 会把
+            // category=招聘 的 hiring 全部误排除，且 total 仍按两流未筛选之和虚高）。
+            return [
+                .init(key: "employment_type", value: "part_time", labelKey: "兼职"),
+                .init(key: "employment_type", value: "full_time", labelKey: "全职"),
+                .init(key: "salary_type", value: "hourly", labelKey: "时给"),
+                .init(key: "salary_type", value: "monthly", labelKey: "月给"),
+                .init(key: "japanese_level", value: "N3", labelKey: "N3 可"),
+                // 与筛选面板「签证支持」选项同值："available,true" 兼容早期布尔存法。
+                .init(key: "visa_support", value: "available,true", labelKey: "签证支持"),
+                .init(key: "no_experience_ok", value: "true", labelKey: "无经验可"),
+            ]
+        default:
+            return []
+        }
+    }
+
     /// Display-only ja/en labels for category values. The zh string is the
     /// CANONICAL wire/storage format (listings store and filter by it —
     /// mirrors `CATEGORY_LABELS` in web ListingKit.tsx), so only the label
@@ -845,6 +931,7 @@ enum KXListingCopy {
         "韩国料理": ("韓国料理", "Korean"),
         "酒店民宿": ("ホテル・民泊", "Hotels & stays"),
         "民宿": ("民泊", "Guesthouse"),
+        "民泊": ("民泊", "Guesthouse"),
         "酒店": ("ホテル", "Hotel"),
         "温泉旅馆": ("温泉旅館", "Onsen ryokan"),
         "公寓式酒店": ("アパートホテル", "Aparthotel"),
@@ -1207,19 +1294,36 @@ enum KXListingCopy {
     }
 
     static func formatPrice(_ listing: KaiXCityListingDTO, _ language: AppLanguage = .zh) -> String {
-        let type = listing.type
-        let priceType = normalized(listing.price_type ?? "")
+        formatPrice(
+            price: listing.price,
+            currency: listing.currency,
+            priceType: listing.price_type ?? listing.priceType,
+            type: listing.type,
+            listingMode: listing.attributes?["listing_mode"]?.listingDisplayValue,
+            language
+        )
+    }
+
+    /// 原始数据版价格标签:收藏快照等没有完整 DTO 的场景也能用当前语言现算。
+    /// listingMode 传 attributes["listing_mode"] 原值——发布端 price_type 恒按
+    /// 类型写死(二手=fixed),按表单指引「免费送可填 0」发布的商品若只看
+    /// price>0 会掉进「价格咨询」,与卡上「免费送」徽章直接矛盾。
+    static func formatPrice(price: Double?, currency: String?, priceType rawPriceType: String?, type: String, listingMode: String? = nil, _ language: AppLanguage = .zh) -> String {
+        let priceType = normalized(rawPriceType ?? "")
         if priceType == "free" { return pickText(language, "免费", "無料", "Free") }
+        if let mode = listingMode.map(normalized), mode == "free" || mode == "giveaway" || mode == "免费送" {
+            return pickText(language, "免费", "無料", "Free")
+        }
         if ["appointment_only", "quote_required", "consultation", "negotiable"].contains(priceType) {
             return fallbackPriceLabel(for: type, language)
         }
-        guard let price = listing.price, price.isFinite, price > 0 else {
+        guard let price, price.isFinite, price > 0 else {
             return fallbackPriceLabel(for: type, language)
         }
         let amount = price.rounded() == price
             ? NumberFormatter.localizedString(from: NSNumber(value: Int(price)), number: .decimal)
             : String(format: "%.2f", price)
-        let code = (listing.currency ?? "JPY").uppercased()
+        let code = (currency ?? "JPY").uppercased()
         let prefix: String = {
             switch code {
             case "JPY", "CNY": return "¥"

@@ -28,6 +28,13 @@ final class LocationService: NSObject, ObservableObject {
 
     private let manager = CLLocationManager()
     private var continuation: CheckedContinuation<CLLocation?, Never>?
+    /// 在途的一次定位。共享单例 + 单 continuation 槽,重叠调用(启动自动定位 vs
+    /// RegionPicker「使用当前位置」)必须合流到同一次定位,否则第二次会覆盖第一
+    /// 次的 continuation(永不 resume → CONTINUATION MISUSE 泄漏)。
+    private var inFlightFix: Task<CLLocation?, Never>?
+    /// 12s 看门狗句柄:成功 resume 时必须 cancel,否则前一次残留的看门狗会把
+    /// 下一次还在等待的定位用 nil 提前打断。
+    private var watchdog: Task<Void, Never>?
 
     override init() {
         super.init()
@@ -62,8 +69,32 @@ final class LocationService: NSObject, ObservableObject {
     // MARK: - One fix
 
     private func requestLocation() async -> CLLocation? {
+        // 重叠调用合流:第二个调用者直接等同一次定位结果,绝不覆盖单例上
+        // 唯一的 continuation 槽。
+        if let inFlight = inFlightFix {
+            return await inFlight.value
+        }
+        let task = Task { @MainActor in
+            await self.performLocationFix()
+        }
+        inFlightFix = task
+        let result = await task.value
+        inFlightFix = nil
+        return result
+    }
+
+    private func performLocationFix() async -> CLLocation? {
         await withCheckedContinuation { (cont: CheckedContinuation<CLLocation?, Never>) in
             self.continuation = cont
+            // Watchdog: never leave the await hanging if no callback arrives.
+            // 先建看门狗再走 switch(default 分支会同步 finish 并顺手 cancel 它);
+            // 句柄保存在 self.watchdog,finish() 时取消,防止陈旧看门狗打断
+            // 下一次定位。
+            watchdog = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 12_000_000_000)
+                guard !Task.isCancelled else { return }
+                self.finish(nil)
+            }
             switch manager.authorizationStatus {
             case .notDetermined:
                 // The auth-change delegate kicks off requestLocation() once granted.
@@ -73,15 +104,12 @@ final class LocationService: NSObject, ObservableObject {
             default:
                 finish(nil)
             }
-            // Watchdog: never leave the await hanging if no callback arrives.
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 12_000_000_000)
-                self.finish(nil)
-            }
         }
     }
 
     private func finish(_ location: CLLocation?) {
+        watchdog?.cancel()
+        watchdog = nil
         guard let cont = continuation else { return }
         continuation = nil
         cont.resume(returning: location)

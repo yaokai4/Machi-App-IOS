@@ -26,9 +26,11 @@ struct PostCardView: View, Equatable {
     var originalAuthor: UserEntity?
     var originalMediaItems: [MediaEntity] = []
     var showsMenu = true
-    /// When true (post detail), tapping anywhere in the body/card expands the
-    /// truncated text instead of navigating — the whole post is the tap target,
-    /// not just the small「查看全文」link. Feed cards keep `false` (tap = open).
+    /// When true (post detail), the body text is never truncated: the detail
+    /// page is the ONLY place the full text lives, and the character-count
+    /// heuristic (`shouldShowExpand`) can miss real CJK / large-Dynamic-Type
+    /// wrapping — a miss there would leave the clipped tail unreachable.
+    /// Feed cards keep `false` (4-line clamp, tap = open detail).
     var expandOnTap = false
     var onOpen: () -> Void = {}
     var onOpenOriginal: () -> Void = {}
@@ -185,34 +187,41 @@ struct PostCardView: View, Equatable {
                         // 附带回答数 / 作答 CTA,让人一眼认出「这是一个提问」。
                         questionPanel(for: contentPost)
                     } else if !contentPost.previewText.isEmpty {
-                        Button {
-                            if expandOnTap {
-                                expandTextIfPossible(contentPost.previewText)
-                            } else {
-                                onOpen()
-                            }
-                        } label: {
+                        if expandOnTap {
+                            // 详情页是全文的唯一去处:shouldShowExpand 的字符数启发式与真实
+                            // 折行无关(CJK 每行仅 20 余字、动态大字号下更少),约 60–96 字的
+                            // 多段帖会被截在 4 行却不出现「查看全文」,后面的内容彻底不可达。
+                            // 所以详情页正文永不截断;折叠/展开只保留在 Feed 卡片上。
                             Text(contentPost.previewText)
                                 .kxScaledFont(15, relativeTo: .body, weight: .regular)
                                 .foregroundStyle(.primary)
                                 .lineSpacing(2)
-                                .lineLimit(isTextExpanded ? nil : 4)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .buttonStyle(.plain)
-                        if shouldShowExpand(for: contentPost.previewText) {
-                            Button {
-                                withAnimation(.snappy(duration: 0.18)) {
-                                    isTextExpanded.toggle()
-                                }
-                            } label: {
-                                Text(isTextExpanded ? L("collapseText", language) : L("viewFullText", language))
-                                    .font(.caption.weight(.bold))
-                                    .foregroundStyle(KXColor.accent)
+                        } else {
+                            Button(action: onOpen) {
+                                Text(contentPost.previewText)
+                                    .kxScaledFont(15, relativeTo: .body, weight: .regular)
+                                    .foregroundStyle(.primary)
+                                    .lineSpacing(2)
+                                    .lineLimit(isTextExpanded ? nil : 4)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
                             }
                             .buttonStyle(.plain)
-                            .padding(.top, -2)
+                            if shouldShowExpand(for: contentPost.previewText) {
+                                Button {
+                                    withAnimation(.snappy(duration: 0.18)) {
+                                        isTextExpanded.toggle()
+                                    }
+                                } label: {
+                                    Text(isTextExpanded ? L("collapseText", language) : L("viewFullText", language))
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(KXColor.accent)
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.top, -2)
+                            }
                         }
                     }
 
@@ -246,11 +255,9 @@ struct PostCardView: View, Equatable {
                 .kxGlassSurface(radius: KXRadius.lg)
                 .contentShape(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
                 .gesture(TapGesture().onEnded {
-                    if expandOnTap {
-                        expandTextIfPossible(contentPost.previewText)
-                    } else {
-                        onOpen()
-                    }
+                    // 详情页(expandOnTap)正文已永不截断,整卡点按不再承担
+                    // 「展开」职责;保留手势本身吞掉点按,避免误触穿透。
+                    if !expandOnTap { onOpen() }
                 }, including: .gesture)
             }
         }
@@ -367,15 +374,9 @@ struct PostCardView: View, Equatable {
         )
     }
 
-    /// Expands the truncated body when tapped anywhere (detail view only).
-    /// One-way: a full-card tap only opens the text — collapsing stays on the
-    /// explicit「收起」button so an accidental tap never re-truncates a post the
-    /// reader is midway through.
-    private func expandTextIfPossible(_ text: String) {
-        guard !isTextExpanded, shouldShowExpand(for: text) else { return }
-        withAnimation(.snappy(duration: 0.18)) { isTextExpanded = true }
-    }
-
+    /// Feed 卡片「查看全文」入口的启发式。注意它与真实折行行数无关(只看字符
+    /// 数/段落数),所以只允许用在 Feed 上 —— Feed 漏判时点开详情仍能读到全文;
+    /// 详情页(expandOnTap)一律不截断,绝不能依赖这个启发式。
     private func shouldShowExpand(for text: String) -> Bool {
         text.count > 96 || text.components(separatedBy: .newlines).count > 4
     }
@@ -413,7 +414,9 @@ struct PostCardView: View, Equatable {
                         .kxScaledFont(16, relativeTo: .body, weight: .semibold)
                         .foregroundStyle(.primary)
                         .lineSpacing(2)
-                        .lineLimit(4)
+                        // 与正文同理:详情页是问题全文的唯一去处(结构化区块对
+                        // question 只展示分类),永不截断;Feed 卡片保留行数上限。
+                        .lineLimit(expandOnTap ? nil : 4)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -422,7 +425,7 @@ struct PostCardView: View, Equatable {
                         .kxScaledFont(14, relativeTo: .subheadline, weight: .regular)
                         .foregroundStyle(.secondary)
                         .lineSpacing(2)
-                        .lineLimit(3)
+                        .lineLimit(expandOnTap ? nil : 3)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -573,7 +576,17 @@ struct PostCardView: View, Equatable {
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(.secondary)
                 .frame(width: 34, height: 34)
-                .kxGlassCircle()
+                // 不用 kxGlassCircle:它在 iOS<26 回退为 .ultraThinMaterial 实时
+                // 模糊,且 .shadow 打在合成结果上(离屏 pass)——每张可见卡片都
+                // 多付一次,×N 逐帧累加,与卡片主阴影的 120 Hz 优化(kxGlassSurface
+                // 从不透明形状投射阴影)背道而驰。改为不透明圆 + 由该不透明形状
+                // 直接投射同参数阴影:外观几乎一致,零模糊、零离屏合成。
+                .background {
+                    Circle()
+                        .fill(KXColor.softBackground)
+                        .shadow(color: KXColor.glassShadow.opacity(0.22), radius: 3, y: 1)
+                }
+                .overlay(Circle().stroke(KXColor.glassStroke, lineWidth: 0.75))
         }
         .disabled(isPostMutationInFlight)
         .accessibilityLabel(L("postActions", language))
@@ -668,7 +681,13 @@ struct PostCardView: View, Equatable {
     }
 
     private func handleRepostTap() {
-        if (originalPost ?? post).isRepostedByCurrentUser {
+        // 「是否已转发」的判定必须与交互条展示、onRepost 的作用目标(列表页的
+        // targetPost / 详情页的 interactionTarget)取同一个帖子:引用转发卡的
+        // 交互条作用于引用帖本身,不是被引用的原帖。此前这里取 (originalPost
+        // ?? post),引用卡拿到的是【原帖】状态 —— 用户转发过原帖 A 再看引用帖
+        // Q 时,按钮未激活却弹「撤销转发」,选撤销反而对 Q 新建一条转发。
+        // menuTargetPost 与 body 的 contentPost 是同一解析,直接复用。
+        if menuTargetPost.isRepostedByCurrentUser {
             isShowingRepostOptions = true
         } else {
             onRepost()
@@ -797,11 +816,14 @@ struct KXInteractionBar: View {
     let onBookmark: () -> Void
 
     var body: some View {
+        // activeStateText: VoiceOver 需要「已转发/已点赞/已收藏」的开关状态 ——
+        // heart→heart.fill 的视觉变化对旁白不可见。词表无现成 L(key),按约定
+        // 用内联三语(pickText);评论按钮无开关语义,不传。
         HStack(spacing: KXSpacing.xxs) {
             MetricButton(icon: "bubble.left", value: post.commentCount, isActive: false, label: L("comments", language), tint: .teal, action: onComment)
-            MetricButton(icon: "arrow.2.squarepath", value: post.repostCount, isActive: post.isRepostedByCurrentUser, label: L("repost", language), tint: .green, action: onRepost)
-            MetricButton(icon: post.isLikedByCurrentUser ? "heart.fill" : "heart", value: post.likeCount, isActive: post.isLikedByCurrentUser, label: L("like", language), tint: .pink, action: onLike)
-            MetricButton(icon: post.isBookmarkedByCurrentUser ? "bookmark.fill" : "bookmark", value: post.bookmarkCount, isActive: post.isBookmarkedByCurrentUser, label: L("bookmark", language), tint: .blue, action: onBookmark)
+            MetricButton(icon: "arrow.2.squarepath", value: post.repostCount, isActive: post.isRepostedByCurrentUser, label: L("repost", language), activeStateText: KXListingCopy.pickText(language, "已转发", "リポスト済み", "Reposted"), tint: .green, action: onRepost)
+            MetricButton(icon: post.isLikedByCurrentUser ? "heart.fill" : "heart", value: post.likeCount, isActive: post.isLikedByCurrentUser, label: L("like", language), activeStateText: KXListingCopy.pickText(language, "已点赞", "いいね済み", "Liked"), tint: .pink, action: onLike)
+            MetricButton(icon: post.isBookmarkedByCurrentUser ? "bookmark.fill" : "bookmark", value: post.bookmarkCount, isActive: post.isBookmarkedByCurrentUser, label: L("bookmark", language), activeStateText: KXListingCopy.pickText(language, "已收藏", "保存済み", "Bookmarked"), tint: .blue, action: onBookmark)
         }
         .padding(.top, KXSpacing.xs)
     }
@@ -812,6 +834,10 @@ private struct MetricButton: View {
     let value: Int
     let isActive: Bool
     let label: String
+    /// 选中态的 VoiceOver 文案(已点赞/已转发/已收藏)。图标 fill/变色只对
+    /// 明眼人可见;不补这个状态,旁白用户无法判断再点一下是点赞还是取消。
+    /// nil(评论按钮)表示该按钮没有开关语义。
+    var activeStateText: String? = nil
     var tint: Color = .secondary
     let action: () -> Void
 
@@ -845,6 +871,10 @@ private struct MetricButton: View {
         .buttonStyle(KXPressableStyle(scale: 0.90, dim: 0.8))
         .sensoryFeedback(.selection, trigger: isActive)
         .accessibilityLabel("\(label) \(value)")
+        // 已选中状态进入可访问性属性:value 播报应用语言的「已点赞」等文案,
+        // .isSelected 让系统再补一句本地化的「已选定」,双保险。
+        .accessibilityValue(isActive ? (activeStateText ?? "") : "")
+        .accessibilityAddTraits(isActive ? .isSelected : [])
     }
 }
 

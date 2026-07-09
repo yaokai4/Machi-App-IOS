@@ -45,8 +45,14 @@ struct GuideJLPTPracticeView: View {
         .navigationTitle(guideText(language, "题库自测", "問題演習", "Practice"))
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            level = initialLevel
-            await load()
+            // 赋值 level 会触发 onChange(of: level) 的 load,若 task 再显式 load 就是
+            // 两次并发抽题竞跑:sessionId 互相覆盖(前一个 attempt 会话统计被丢弃)、
+            // cursor/questions 闪变,还多烧一次抽题。所以二者只走其一。
+            if level != initialLevel {
+                level = initialLevel   // onChange 负责 load
+            } else {
+                await load()
+            }
         }
         .alert(guideText(language, "会员专享", "会員限定", "Members only"),
                isPresented: Binding(get: { upgradeMessage != nil }, set: { if !$0 { upgradeMessage = nil } })) {

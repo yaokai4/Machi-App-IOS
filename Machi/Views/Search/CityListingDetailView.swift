@@ -26,6 +26,11 @@ struct ListingBookingSection: View {
     @State private var inFlightSlotId: String?
     @State private var bookedTick = 0
     @State private var toast: String?
+    /// Whether the current toast reports a success (vs. a failure). Drives the
+    /// icon/color and VoiceOver semantics — never infer this from the copy, since
+    /// the toast text is localized (ja/en) and the success strings don't contain
+    /// any stable substring like "成功".
+    @State private var toastIsSuccess = false
     @State private var showAddSheet = false
     @State private var pendingDeleteSlot: KaiXBookingSlotDTO?
     @State private var pendingCancelSlot: KaiXBookingSlotDTO?
@@ -66,9 +71,9 @@ struct ListingBookingSection: View {
                             }
                         }
                         if let toast {
-                            Label(toast, systemImage: toast.contains("成功") ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                            Label(toast, systemImage: toastIsSuccess ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(toast.contains("成功") ? KXColor.livingAccent : KXColor.livingWarm)
+                                .foregroundStyle(toastIsSuccess ? KXColor.livingAccent : KXColor.livingWarm)
                                 .transition(.opacity.combined(with: .move(edge: .top)))
                         }
                         // After a successful booking, give the user a stable way to
@@ -153,7 +158,7 @@ struct ListingBookingSection: View {
                         .frame(width: 52, height: 60)
                         .foregroundStyle(key == selectedDayKey ? .white : KXColor.livingInk)
                         .background(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                                 .fill(key == selectedDayKey ? AnyShapeStyle(KXColor.livingAccent) : AnyShapeStyle(KXColor.livingAccentSoft.opacity(0.5)))
                         )
                     }
@@ -272,9 +277,13 @@ struct ListingBookingSection: View {
             await MainActor.run {
                 if selectedDayKey == nil { selectedDayKey = dayKeys.first }
                 toast = KXListingCopy.pickText(language, "时段已添加", "枠を追加しました", "Slot added")
+                toastIsSuccess = true
             }
         } catch {
-            await MainActor.run { toast = KXListingCopy.pickText(language, "添加失败，请重试", "追加に失敗しました", "Failed to add") }
+            await MainActor.run {
+                toast = KXListingCopy.pickText(language, "添加失败，请重试", "追加に失敗しました", "Failed to add")
+                toastIsSuccess = false
+            }
         }
     }
 
@@ -285,9 +294,13 @@ struct ListingBookingSection: View {
             await MainActor.run {
                 if let key = selectedDayKey, !dayKeys.contains(key) { selectedDayKey = dayKeys.first }
                 toast = KXListingCopy.pickText(language, "时段已删除", "枠を削除しました", "Slot removed")
+                toastIsSuccess = true
             }
         } catch {
-            await MainActor.run { toast = KXListingCopy.pickText(language, "删除失败，请重试", "削除に失敗しました", "Failed to remove") }
+            await MainActor.run {
+                toast = KXListingCopy.pickText(language, "删除失败，请重试", "削除に失敗しました", "Failed to remove")
+                toastIsSuccess = false
+            }
         }
     }
 
@@ -295,14 +308,23 @@ struct ListingBookingSection: View {
         do {
             let mine = try await KaiXAPIClient.shared.myReservations()
             guard let booking = mine.first(where: { $0.slotId == slot.id && ($0.status ?? "confirmed") == "confirmed" }) else {
-                await MainActor.run { toast = KXListingCopy.pickText(language, "未找到该预约", "予約が見つかりません", "Reservation not found") }
+                await MainActor.run {
+                    toast = KXListingCopy.pickText(language, "未找到该预约", "予約が見つかりません", "Reservation not found")
+                    toastIsSuccess = false
+                }
                 return
             }
             try await KaiXAPIClient.shared.cancelReservation(booking.id)
             await reload()
-            await MainActor.run { toast = KXListingCopy.pickText(language, "已取消预约", "予約をキャンセルしました", "Reservation cancelled") }
+            await MainActor.run {
+                toast = KXListingCopy.pickText(language, "已取消预约", "予約をキャンセルしました", "Reservation cancelled")
+                toastIsSuccess = true
+            }
         } catch {
-            await MainActor.run { toast = KXListingCopy.pickText(language, "取消失败，请重试", "キャンセルに失敗しました", "Failed to cancel") }
+            await MainActor.run {
+                toast = KXListingCopy.pickText(language, "取消失败，请重试", "キャンセルに失敗しました", "Failed to cancel")
+                toastIsSuccess = false
+            }
         }
     }
 
@@ -318,11 +340,13 @@ struct ListingBookingSection: View {
                 inFlightSlotId = nil
                 bookedTick += 1
                 toast = KXListingCopy.pickText(language, "预约成功，已加入「我的预约」", "予約が完了しました", "Reserved — see My reservations")
+                toastIsSuccess = true
             }
         } catch {
             await MainActor.run {
                 inFlightSlotId = nil
                 toast = bookingErrorText(error)
+                toastIsSuccess = false
             }
         }
     }
@@ -481,7 +505,10 @@ struct CityListingDetailView: View {
                 } else if let listing {
                     detailContent(listing)
                 } else {
-                    EmptyStateView(title: "信息不存在", subtitle: "它可能已下架或正在审核。", systemImage: "tray")
+                    EmptyStateView(
+                        title: KXListingCopy.pickText(language, "信息不存在", "情報が見つかりません", "Listing not found"),
+                        subtitle: KXListingCopy.pickText(language, "它可能已下架或正在审核。", "取り下げられたか審査中の可能性があります。", "It may have been removed or is under review."),
+                        systemImage: "tray")
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -605,7 +632,7 @@ struct CityListingDetailView: View {
             } label: {
                 Text(ownListing ? KXListingCopy.pickText(language, "编辑发布", "投稿を編集", "Edit listing") : ListingIntakeLocalizer.text(spec.title, language))
                     .font(.subheadline.weight(.black))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(KXColor.onAccent)
                     .padding(.horizontal, 28)
                     .frame(height: 50)
                     .background(KXColor.livingAccent, in: Capsule())
@@ -614,7 +641,7 @@ struct CityListingDetailView: View {
             .buttonStyle(KXPressableStyle(scale: 0.96))
             .disabled(isBusy)
         }
-        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.horizontal, KXSpacing.screen)
         .padding(.top, 10)
         .padding(.bottom, KXSpacing.sm)
         .background {
@@ -685,7 +712,7 @@ struct CityListingDetailView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(L("like", language))
         }
-        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.horizontal, KXSpacing.screen)
         .padding(.top, KXSpacing.sm)
         .padding(.bottom, KXSpacing.md)
         .background(KXColor.livingBackground.opacity(0.94))
@@ -804,7 +831,7 @@ struct CityListingDetailView: View {
                                     Text(KXListingCopy.pickText(language, "Machi推荐", "Machiおすすめ", "Machi Pick"))
                                 }
                                 .font(.caption.weight(.bold))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(KXColor.onTint(KXColor.rankGold))
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 5)
                                 .background(KXColor.rankGold, in: Capsule())
@@ -922,7 +949,7 @@ struct CityListingDetailView: View {
 
                 contactPanel(listing)
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.top, 14)
             .padding(.bottom, 24)
         }
@@ -1115,8 +1142,8 @@ struct CityListingDetailView: View {
             }
         }
         .aspectRatio(16.0 / 10.0, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .background(KXColor.livingSoft, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous))
+        .background(KXColor.livingSoft, in: RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous))
         .shadow(color: Color.black.opacity(0.07), radius: 16, y: 7)
         .fullScreenCover(isPresented: $photoViewerPresented) {
             ListingPhotoViewer(media: imageMedia, startIndex: photoViewerStart)
@@ -1159,7 +1186,7 @@ struct CityListingDetailView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 13)
                             .background(KXColor.livingAccent, in: Capsule())
-                            .foregroundStyle(Color.white)
+                            .foregroundStyle(KXColor.onAccent)
                     }
                     .buttonStyle(.plain)
                     .disabled(isBusy)
@@ -1173,7 +1200,7 @@ struct CityListingDetailView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 13)
                             .background(KXColor.livingAccent, in: Capsule())
-                            .foregroundStyle(Color.white)
+                            .foregroundStyle(KXColor.onAccent)
                     }
                     .buttonStyle(.plain)
                     .disabled(isBusy)
@@ -1525,7 +1552,7 @@ private struct ListingInquirySuccessSheet: View {
                         .font(.title.weight(.black))
                         .foregroundStyle(KXColor.accent)
                         .frame(width: 52, height: 52)
-                        .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                     VStack(alignment: .leading, spacing: KXSpacing.xs) {
                         Text(receipt.successTitle)
                             .font(.title3.weight(.black))
@@ -1560,7 +1587,7 @@ private struct ListingInquirySuccessSheet: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(KXColor.softBackground.opacity(0.72), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(KXColor.softBackground.opacity(0.72), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
 
             if !receipt.details.isEmpty {
                 VStack(alignment: .leading, spacing: KXSpacing.sm) {
@@ -1585,9 +1612,9 @@ private struct ListingInquirySuccessSheet: View {
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(KXColor.softBackground.opacity(0.82), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .background(KXColor.softBackground.opacity(0.82), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                         .stroke(KXColor.separator.opacity(0.5), lineWidth: 0.7)
                 }
             }
@@ -1599,7 +1626,7 @@ private struct ListingInquirySuccessSheet: View {
                             .frame(maxWidth: .infinity)
                             .frame(height: 48)
                             .background(KXColor.accent, in: Capsule())
-                            .foregroundStyle(Color.white)
+                            .foregroundStyle(KXColor.onAccent)
                     }
                     .buttonStyle(.plain)
 
@@ -1627,7 +1654,7 @@ private struct ListingInquirySuccessSheet: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(KaiXTheme.horizontalPadding)
+            .padding(KXSpacing.screen)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .kxPageBackground()
@@ -1786,7 +1813,111 @@ enum ListingIntakeLocalizer {
         "注意事项": ("注意事項", "Notes"),
         "预约日期": ("予約日", "Appointment date"),
         "预约时段": ("予約時間帯", "Appointment time"),
-        "服务项目": ("サービス項目", "Service item")
+        "服务项目": ("サービス項目", "Service item"),
+
+        // Field labels / note labels that the specs use but weren't yet mapped —
+        // without these, JA/EN users saw an English label above Chinese options.
+        "人数": ("人数", "People"),
+        "入住时间": ("入居時期", "Move-in"),
+        "服务城市": ("利用エリア", "City"),
+        "服务场景": ("利用シーン", "Scenario"),
+        "人数/件数": ("人数 / 個数", "People / items"),
+        "备注": ("備考", "Notes"),
+        "留言": ("メッセージ", "Message"),
+        "备注（忌口 / 包间 / 儿童座椅等）": ("備考（アレルギー / 個室 / 子供椅子など）", "Notes (allergies / private room / child seat)"),
+
+        // Picker options — people / rooms / party / ticket counts
+        "1 人": ("1名", "1 person"),
+        "2 人": ("2名", "2 people"),
+        "3 人": ("3名", "3 people"),
+        "4 人": ("4名", "4 people"),
+        "5 人及以上": ("5名以上", "5+ people"),
+        "4 人及以上": ("4名以上", "4+ people"),
+        "1 间": ("1部屋", "1 room"),
+        "2 间": ("2部屋", "2 rooms"),
+        "3 间及以上": ("3部屋以上", "3+ rooms"),
+        "1-2 人": ("1-2名", "1-2 people"),
+        "3-4 人": ("3-4名", "3-4 people"),
+        "5-8 人": ("5-8名", "5-8 people"),
+        "8 人以上": ("8名以上", "8+ people"),
+        "5 及以上": ("5以上", "5+"),
+        "无要求": ("指定なし", "No preference"),
+        // Preferred-language options — localize the autonyms so each locale sees a
+        // coherent picker (an EN reviewer shouldn't see raw CJK options).
+        "中文": ("中国語", "Chinese"),
+        "日本語": ("日本語", "Japanese"),
+        "English": ("英語", "English"),
+        "1-2 件": ("1-2個", "1-2 pieces"),
+        "3-4 件": ("3-4個", "3-4 pieces"),
+        "5 件及以上": ("5個以上", "5+ pieces"),
+
+        // Time-of-day / dining time options
+        "上午": ("午前", "Morning"),
+        "下午": ("午後", "Afternoon"),
+        "晚上": ("夜", "Evening"),
+        "周末": ("週末", "Weekend"),
+        "午市 11:00-14:00": ("ランチ 11:00-14:00", "Lunch 11:00-14:00"),
+        "下午 14:00-17:00": ("午後 14:00-17:00", "Afternoon 14:00-17:00"),
+        "晚市 17:00-20:00": ("ディナー 17:00-20:00", "Dinner 17:00-20:00"),
+        "晚市 20:00 之后": ("ディナー 20:00以降", "Dinner after 20:00"),
+
+        // Rental applicant situation
+        "在日本": ("日本在住", "In Japan"),
+        "海外": ("海外", "Overseas"),
+        "学生": ("学生", "Student"),
+        "在职": ("在職中", "Employed"),
+
+        // Job — visa status & Japanese level
+        "留学": ("留学", "Student visa"),
+        "工作签证": ("就労ビザ", "Work visa"),
+        "永住": ("永住", "Permanent resident"),
+        "家族滞在": ("家族滞在", "Dependent visa"),
+        "其他": ("その他", "Other"),
+        "日常会话": ("日常会話", "Conversational"),
+        "暂不会": ("未習得", "None yet"),
+
+        // Local-service scenario options
+        "到店预约": ("来店予約", "In-store booking"),
+        "景点门票": ("観光チケット", "Attraction tickets"),
+        "一日游": ("日帰りツアー", "Day tour"),
+        "机场接送": ("空港送迎", "Airport transfer"),
+        "翻译手续": ("翻訳・手続き", "Translation/paperwork"),
+        "搬家清洁": ("引越し・清掃", "Moving/cleaning"),
+        "生活开通": ("生活セットアップ", "Life setup"),
+        "美容健康": ("美容・健康", "Beauty/health"),
+
+        // Secondhand — inquiry intent & trade method
+        "想购买": ("購入したい", "Want to buy"),
+        "想议价": ("値段を相談したい", "Want to negotiate"),
+        "想看实物": ("現物を見たい", "Want to see it"),
+        "想预约自取": ("引き取りを予約したい", "Want to arrange pickup"),
+        "询问是否还在": ("在庫確認", "Is it still available?"),
+        "自取 / 面交": ("引き取り / 手渡し", "Pickup / meetup"),
+        "希望邮寄": ("配送希望", "Prefer shipping"),
+        "都可以": ("どちらでも", "Either is fine"),
+
+        // Free-text placeholders (non-date) shown in the intake fields
+        "微信 / LINE / 电话": ("WeChat / LINE / 電話", "WeChat / LINE / phone"),
+        "例如 7 月 1 日": ("例：7月1日", "e.g. Jul 1"),
+        "例如 7 月 3 日": ("例：7月3日", "e.g. Jul 3"),
+        "例如 6 月 15 日": ("例：6月15日", "e.g. Jun 15"),
+        "到店报姓名即可": ("来店時にお名前をお伝えください", "Just give your name on arrival"),
+        "成田机场 -> 新宿 / 东京站 -> 住处": ("成田空港→新宿 / 東京駅→自宅", "Narita → Shinjuku / Tokyo Sta. → home"),
+        "例如 NH878 / 新干线到达时间": ("例：NH878 / 新幹線到着時刻", "e.g. NH878 / Shinkansen arrival"),
+        "住民票 / 银行卡 / 手机卡 / 材料翻译": ("住民票 / 銀行口座 / SIM / 書類翻訳", "Residence cert / bank / SIM / doc translation"),
+        "例如 本周内 / 3 个工作日": ("例：今週中 / 3営業日", "e.g. this week / 3 business days"),
+        "新宿区 / 丰岛区": ("新宿区 / 豊島区", "Shinjuku / Toshima ward"),
+        "1K / 纸箱 20 个 / 大件 3 件": ("1K / 段ボール20箱 / 大型3点", "1K / 20 boxes / 3 large items"),
+        "手机卡 / 网络 / 水电煤 / 地址登记": ("SIM / ネット / 光熱費 / 住所登録", "SIM / internet / utilities / address reg"),
+        "例如 到日当天 / 本周末": ("例：到着当日 / 今週末", "e.g. arrival day / this weekend"),
+        "剪发 / 美甲 / 按摩 / 体检预约": ("カット / ネイル / マッサージ / 健診予約", "Haircut / nails / massage / checkup"),
+        "例如 7 月上旬 / 即可入住": ("例：7月上旬 / 即入居可", "e.g. early Jul / move-in now"),
+        "例如 月租 8 万以内": ("例：家賃8万円以内", "e.g. under ¥80k/month"),
+        "平日晚上 / 周末": ("平日夜 / 週末", "Weekday evenings / weekends"),
+        "例如 立即 / 7 月起": ("例：即日 / 7月から", "e.g. immediately / from Jul"),
+        "例如 2 人 / 3 件行李 / 1 套资料": ("例：2名 / 荷物3個 / 書類1式", "e.g. 2 people / 3 bags / 1 doc set"),
+        "例如 新宿站 / 池袋 / 可线上确认": ("例：新宿駅 / 池袋 / オンライン可", "e.g. Shinjuku Sta. / Ikebukuro / online OK"),
+        "例如 今天晚上 / 周末下午 / 平日 19:00 后": ("例：今夜 / 週末午後 / 平日19:00以降", "e.g. tonight / weekend PM / weekday after 19:00")
     ]
 }
 
@@ -2106,7 +2237,7 @@ private struct ListingIntakeSheet: View {
                             .background(Color(.systemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                     }
                     .padding(KXSpacing.md)
-                    .background(KXColor.softBackground.opacity(0.62), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .background(KXColor.softBackground.opacity(0.62), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
 
                     if let errorMessage {
                         Text(errorMessage)
@@ -2119,23 +2250,23 @@ private struct ListingIntakeSheet: View {
                         .foregroundStyle(KXColor.heat)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(KXSpacing.md)
-                        .background(KXColor.heat.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .background(KXColor.heat.opacity(0.08), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
 
                     Button(action: submit) {
                         HStack {
-                            if submitting { KXSpinner(size: 18, lineWidth: 2.2, tint: .white) }
+                            if submitting { KXSpinner(size: 18, lineWidth: 2.2, tint: KXColor.onAccent) }
                             Text(submitting ? ListingIntakeLocalizer.text("提交中", language) : ListingIntakeLocalizer.text(spec.title, language))
                                 .font(.headline.weight(.bold))
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 13)
                         .background(KXColor.accent, in: Capsule())
-                        .foregroundStyle(.white)
+                        .foregroundStyle(KXColor.onAccent)
                     }
                     .buttonStyle(.plain)
                     .disabled(submitting)
                 }
-                .padding(KaiXTheme.horizontalPadding)
+                .padding(KXSpacing.screen)
             }
             .kxPageBackground()
             .toolbar {
@@ -2192,7 +2323,7 @@ private struct ListingIntakeSheet: View {
             }
         }
         .padding(KXSpacing.md)
-        .background(KXColor.softBackground.opacity(0.62), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(KXColor.softBackground.opacity(0.62), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
     }
 
     private func binding(for field: ListingIntakeField) -> Binding<String> {
@@ -2341,7 +2472,7 @@ struct ListingPublishSuccessSheet: View {
                         row(pick("状态", "状態", "Status"), receipt.published ? pick("已发布", "公開中", "Live") : pick("审核中", "審査中", "In review"))
                     }
                     .padding(KXSpacing.md)
-                    .background(KXColor.softBackground.opacity(0.7), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .background(KXColor.softBackground.opacity(0.7), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                 }
                 .padding(.horizontal, KXSpacing.lg)
                 .padding(.bottom, KXSpacing.md)
@@ -2351,7 +2482,7 @@ struct ListingPublishSuccessSheet: View {
                 Button(action: onViewListing) {
                     Text(pick("查看发布", "投稿を見る", "View listing"))
                         .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(KXColor.onAccent)
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
                         .background(KXColor.accent, in: Capsule())

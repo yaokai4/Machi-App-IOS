@@ -74,7 +74,8 @@ struct NotificationsView: View {
     private var header: some View {
         HStack {
             Text(L("notifications", language))
-                .font(KXTypography.largeTitle)
+                // 与 MessagesView 大标题一致,随 Dynamic Type 缩放(原冻结字号 token 不缩放)。
+                .kxScaledFont(32, relativeTo: .largeTitle, weight: .bold)
             Spacer()
             Button {
                 Task {
@@ -163,7 +164,7 @@ struct NotificationsView: View {
                 systemImage: "bell.badge",
                 accent: .orange
             )
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.top, 34)
             .padding(.bottom, chrome.bottomContentPadding + 24)
         }
@@ -177,7 +178,7 @@ struct NotificationsView: View {
         KXSegmentedControl(NotificationFilter.allCases, selection: $filter, itemMinWidth: 54, itemHeight: 32) { item in
             Text(item.title(language))
         }
-        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.horizontal, KXSpacing.screen)
         .padding(.vertical, 10)
     }
 
@@ -298,7 +299,7 @@ private struct NotificationCard: View {
             // A slim accent rail marks unread items at a glance, the way Mail
             // does — far cleaner than a "已读/未读" pill on every single row.
             if isUnread {
-                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                RoundedRectangle(cornerRadius: KXRadius.xxs, style: .continuous)
                     .fill(KXColor.accent)
                     .frame(width: 3.5)
                     .padding(.vertical, KXSpacing.md)
@@ -320,7 +321,7 @@ private struct NotificationCard: View {
             // with a colored shadow, instead of a flat solid circle.
             Image(systemName: icon)
                 .kxScaledFont(9, weight: .black)
-                .foregroundStyle(.white)
+                .foregroundStyle(KXColor.onTint(color))
                 .frame(width: 20, height: 20)
                 .background(
                     Circle().fill(
@@ -331,7 +332,7 @@ private struct NotificationCard: View {
                         )
                     )
                 )
-                .overlay(Circle().stroke(KaiXTheme.cardBackground, lineWidth: 2))
+                .overlay(Circle().stroke(KXColor.elevatedBackground, lineWidth: 2))
                 .shadow(color: color.opacity(0.32), radius: 2.5, y: 1)
                 .offset(x: 3, y: 3)
         }

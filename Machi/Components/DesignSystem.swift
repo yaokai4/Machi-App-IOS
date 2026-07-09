@@ -12,18 +12,35 @@ enum KXSpacing {
 }
 
 enum KXRadius {
-    // Rhythmic 2pt-stepped set (was 7/9/13 — "prime-number" radii with no
-    // visual logic). Same-tier surfaces should share one token, not hardcode.
-    // Tier map: control/chip = md, standard card = card(20), showcase/hero
-    // surface = hero(22), bottom sheet / large panel = sheet(26).
+    // Single source of truth for corner radii — same-tier surfaces share one
+    // token instead of hardcoding a literal. Tier semantics:
+    //   xxs(4)   → progress bars, skeleton bones, hairline dividers, micro chips
+    //   xs(8)    → small controls (thumbnails, mini buttons, tiny tags)
+    //   sm(10)   → chips / compact tags
+    //   md(14)   → controls & input fields (buttons, text fields, menus)
+    //   tile(16) → compact tiles & standard cards in dense grids/lists
+    //   card(20) → full-width primary content cards
+    //   lg(20)   → legacy alias of the card tier (prefer `card` in new code)
+    //   hero(22) → showcase / hero surfaces (feature banners, covers)
+    //   sheet(26)→ bottom sheets / large panels
+    //   pill(999)→ capsules (or use `Capsule()` directly)
+    static let xxs: CGFloat = 4
     static let xs: CGFloat = 8
     static let sm: CGFloat = 10
     static let md: CGFloat = 14
+    static let tile: CGFloat = 16
     static let lg: CGFloat = 20
     static let card: CGFloat = 20
     static let hero: CGFloat = 22
     static let sheet: CGFloat = 26
     static let pill: CGFloat = 999
+}
+
+/// 悬浮玻璃 TabBar 的布局常量(非视觉 token):可滚动界面用
+/// bottomContentPadding 预留底部内边距,保证最后一张卡不被悬浮栏盖住。
+enum KXLayout {
+    static let bottomBarHeight: CGFloat = 66
+    static let bottomContentPadding: CGFloat = 98
 }
 
 enum KXTypography {
@@ -273,6 +290,60 @@ enum KXColor {
             ? UIColor(red: 0.62, green: 0.66, blue: 0.68, alpha: 1)
             : UIColor(red: 0.42, green: 0.46, blue: 0.48, alpha: 1)
     })
+
+    // MARK: Chart / categorical extension palette
+    // Trait-aware categorical colors for data visuals (记账 charts, Discover
+    // social entry tiles) — replaces frozen `Color(red:)` literals and native
+    // system-color rainbows that ignore dark mode. Same recipe as the rank
+    // set: hand-tuned RGB via a UIColor trait closure, brightened one step in
+    // dark mode so slices, legends and tinted tiles stay legible on dark
+    // surfaces. The three new hues below fill gaps the rank set doesn't cover.
+    static let chartGreen = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.380, green: 0.800, blue: 0.460, alpha: 1)
+            : UIColor(red: 0.220, green: 0.620, blue: 0.300, alpha: 1)
+    })
+    static let chartPink = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.980, green: 0.480, blue: 0.720, alpha: 1)
+            : UIColor(red: 0.870, green: 0.320, blue: 0.600, alpha: 1)
+    })
+    static let chartSlate = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.620, green: 0.670, blue: 0.780, alpha: 1)
+            : UIColor(red: 0.400, green: 0.450, blue: 0.580, alpha: 1)
+    })
+    /// Ordered categorical palette (8 hues) for pie/bar segments and tinted
+    /// entry cards. Sequence is tuned so adjacent slices land on clearly
+    /// separated hues (teal → coral → sky → gold → violet → green → pink →
+    /// slate); index with `chartPalette[i % chartPalette.count]`.
+    static let chartPalette: [Color] = [
+        rankTeal, rankCoral, rankSky, rankGold, rankViolet,
+        chartGreen, chartPink, chartSlate,
+    ]
+
+    /// Foreground for text/icons sitting ON an arbitrary colored fill (tinted
+    /// chips, category tiles, chart legends, event covers). A hardcoded
+    /// `.white` fails WCAG AA on bright tints (gold, brightened dark-mode
+    /// hues); this picks the readable side per trait: it resolves the tint's
+    /// RGB components for the current light/dark appearance, estimates
+    /// perceived luminance (Rec. 601 luma on the UIColor components), and
+    /// returns near-black ink (same 0.08 white as `onAccent`'s dark variant)
+    /// on bright fills (> 0.6) or `.white` on deep fills — keeping label
+    /// contrast at AA on both appearance variants of a trait-aware tint.
+    static func onTint(_ tint: Color) -> Color {
+        Color(UIColor { traits in
+            let resolved = UIColor(tint).resolvedColor(with: traits)
+            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            guard resolved.getRed(&r, green: &g, blue: &b, alpha: &a) else {
+                // Non-RGB-convertible (e.g. pattern) fill — keep the
+                // conventional light-on-color default.
+                return .white
+            }
+            let luminance = 0.299 * r + 0.587 * g + 0.114 * b
+            return luminance > 0.6 ? UIColor(white: 0.08, alpha: 1) : .white
+        })
+    }
 }
 
 /// iOS-17-safe descriptor for the Liquid Glass styles. SwiftUI's `Glass`
@@ -945,27 +1016,27 @@ struct KXSkeletonFeedCard: View {
                     .fill(bone)
                     .frame(width: KXAvatarSize.md, height: KXAvatarSize.md)
                 VStack(alignment: .leading, spacing: 6) {
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    RoundedRectangle(cornerRadius: KXRadius.xxs, style: .continuous)
                         .fill(bone)
                         .frame(width: 118, height: 11)
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    RoundedRectangle(cornerRadius: KXRadius.xxs, style: .continuous)
                         .fill(bone)
                         .frame(width: 74, height: 9)
                 }
                 Spacer()
             }
             VStack(alignment: .leading, spacing: 7) {
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                RoundedRectangle(cornerRadius: KXRadius.xxs, style: .continuous)
                     .fill(bone)
                     .frame(maxWidth: .infinity)
                     .frame(height: 11)
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                RoundedRectangle(cornerRadius: KXRadius.xxs, style: .continuous)
                     .fill(bone)
                     .frame(width: 210, height: 11)
             }
             HStack(spacing: KXSpacing.xl) {
                 ForEach(0..<4, id: \.self) { _ in
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    RoundedRectangle(cornerRadius: KXRadius.xxs, style: .continuous)
                         .fill(bone)
                         .frame(width: 34, height: 9)
                 }
@@ -1014,10 +1085,10 @@ struct KXGuideListSkeleton: View {
                         .fill(bone)
                         .frame(width: 40, height: 40)
                     VStack(alignment: .leading, spacing: 7) {
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        RoundedRectangle(cornerRadius: KXRadius.xxs, style: .continuous)
                             .fill(bone)
                             .frame(width: 150, height: 11)
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        RoundedRectangle(cornerRadius: KXRadius.xxs, style: .continuous)
                             .fill(bone)
                             .frame(maxWidth: .infinity)
                             .frame(height: 9)

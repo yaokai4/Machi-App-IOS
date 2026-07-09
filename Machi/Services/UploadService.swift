@@ -38,6 +38,10 @@ actor UploadService {
             try compressed.data.write(to: imageURL, options: .atomic)
             try thumbnail.data.write(to: thumbnailURL, options: .atomic)
         } catch {
+            // 半写状态(主图成功、缩略图失败)也要清干净,失败的 draft
+            // 不留暂存尸体。
+            try? FileManager.default.removeItem(at: imageURL)
+            try? FileManager.default.removeItem(at: thumbnailURL)
             throw UploadError.writeFailed
         }
 
@@ -147,9 +151,13 @@ actor UploadService {
             // or a transcode that produced no output. Stop now with a clear, retry-
             // able error instead of building a broken draft that only fails later
             // at upload time with an opaque message.
+            // 抛错前删掉刚写入的暂存文件,失败的 draft 不该留最大 200MB 的
+            // 尸体等 48h 老化。下面几个 throw 同理。
+            try? FileManager.default.removeItem(at: videoURL)
             throw UploadError.emptyMedia
         }
         guard uploadFileSize <= Self.postVideoUploadLimitBytes else {
+            try? FileManager.default.removeItem(at: videoURL)
             throw UploadError.mediaTooLarge
         }
 
@@ -159,12 +167,15 @@ actor UploadService {
         let videoSize = await videoPresentationSize(asset: asset)
         let thumbnail = await VideoThumbnailService.shared.thumbnail(for: videoURL) ?? videoPlaceholderThumbnail()
         guard let thumbnailData = thumbnail.jpegData(compressionQuality: 0.72) else {
+            try? FileManager.default.removeItem(at: videoURL)
             throw UploadError.thumbnailFailed
         }
 
         do {
             try thumbnailData.write(to: thumbnailURL, options: .atomic)
         } catch {
+            try? FileManager.default.removeItem(at: videoURL)
+            try? FileManager.default.removeItem(at: thumbnailURL)
             throw UploadError.writeFailed
         }
 
@@ -183,7 +194,8 @@ actor UploadService {
         )
     }
 
-    /// Re-encode a video to ≤1080p (mp4) when its longest side exceeds 1080.
+    /// Re-encode a video to ≤1080p (mp4) when it is actually above 1080p
+    /// (shorter side > 1080), or when the source exceeds the upload limit.
     /// Returns the new file URL, or nil when no transcode is needed/possible
     /// (caller keeps the original — never blocks publishing).
     private func transcodeTo1080pIfNeeded(
@@ -195,8 +207,12 @@ actor UploadService {
         let asset = AVURLAsset(url: sourceURL)
         guard let track = try? await asset.loadTracks(withMediaType: .video).first,
               let size = try? await track.load(.naturalSize) else { return nil }
-        let longest = Swift.max(abs(size.width), abs(size.height))
-        guard longest > 1080 || sourceByteCount > Self.postVideoUploadLimitBytes else {
+        // 「是否超过 1080p」必须用较短边判断:1080p 视频无论横竖总有一条边
+        // 是 1920,用最长边判会把所有标准 1080p/720p 手机视频拉去整段重编码
+        // (每次发视频白等 10-30s、还多一代 H.264 画质损失);真正需要降采样
+        // 的是短边 >1080 的 4K/2K 源。短边/长边取 min/max 与旋转无关。
+        let shortSide = Swift.min(abs(size.width), abs(size.height))
+        guard shortSide > 1080 || sourceByteCount > Self.postVideoUploadLimitBytes else {
             return nil
         }
         guard let export = AVAssetExportSession(asset: asset, presetName: AVAssetExportPreset1920x1080) else { return nil }

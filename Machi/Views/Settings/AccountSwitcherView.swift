@@ -68,7 +68,7 @@ struct AccountSwitcherView: View {
                     }
                 }
             }
-            .padding(KaiXTheme.horizontalPadding)
+            .padding(KXSpacing.screen)
         }
         .kxPageBackground()
         .navigationTitle(L("switchAccount", language))
@@ -79,7 +79,18 @@ struct AccountSwitcherView: View {
     private func load() async {
         state = .loading
         do {
-            users = try await UserRepository(context: modelContext).fetchUsers()
+            // 只列本机 SwiftData 里已登录过的账号(DEBUG 本地夹具流程)。绝不走
+            // UserRepository.fetchUsers():那个在生产返回服务端 trending 用户——
+            // 把热门陌生人列成"可切换账号"且切换不换 token,等于顶着自己的
+            // token 冒充别人的身份展示。生产入口已在设置里 #if DEBUG 移除,
+            // 这里再兜底一层。
+            if KaiXRuntimeFlags.allowLocalStoreFallback, KaiXBackend.token == nil {
+                users = try modelContext.fetch(
+                    FetchDescriptor<UserEntity>(sortBy: [SortDescriptor(\.displayName)])
+                )
+            } else {
+                users = []
+            }
             state = users.isEmpty ? .empty : .loaded
         } catch {
             state = .error(error.kaixUserMessage)

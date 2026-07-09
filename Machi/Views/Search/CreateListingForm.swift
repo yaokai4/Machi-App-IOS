@@ -147,6 +147,7 @@ struct CreateCityListingView: View {
     @State private var shareAllowed = false
     @State private var shortTermAllowed = false
     @State private var furnished = false
+    @State private var petAllowed = false
     @State private var visaSupport = false
     @State private var noExperienceOK = false
     @State private var studentOK = false
@@ -364,12 +365,32 @@ struct CreateCityListingView: View {
         return serverValues.filter { seen.insert($0).inserted }
     }
 
+    /// 数字输入解析:剥离逗号/货币符/空格并把全角数字转半角——「1,200」
+    /// 「¥8000」「１２００」都按用户意图成数;纯文字返回 nil。此前直接
+    /// Double(price),粘贴带符号的价格会静默发布成无价("价格咨询")。
+    static func parsePrice(_ raw: String) -> Double? {
+        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty else { return nil }
+        s = s.applyingTransform(.fullwidthToHalfwidth, reverse: false) ?? s
+        let strip = CharacterSet(charactersIn: ",，、¥￥$€₩円元 ")
+        s = String(String.UnicodeScalarView(s.unicodeScalars.filter { !strip.contains($0) }))
+        guard !s.isEmpty else { return nil }
+        return Double(s)
+    }
+
+    /// 价格若有输入必须可解析为数字——「必填价格」不能静默变成无价发布。
+    private var priceInputValid: Bool {
+        let trimmed = price.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty || Self.parsePrice(trimmed) != nil
+    }
+
     private var canSubmit: Bool {
         // 出二手不再要求交易地点——买卖双方私聊约地点,展示位置由发布地区
         // 自动兜底(见 submit 的 resolvedLocationText)。其余类型保持必填。
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && (listingType == "secondhand" || !location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             && region != nil
+            && priceInputValid
             && typeRequiredFieldsReady
             && !hasBlockingMediaUpload
             && !isSubmitting
@@ -391,7 +412,8 @@ struct CreateCityListingView: View {
     private var typeRequiredFieldsReady: Bool {
         let filled: (String) -> Bool = { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         if listingType == "rental" {
-            return filled(layout) && filled(area) && filled(station) && filled(moveIn)
+            // 面积必须能解析成数字——Double 失败静默写 0 会产出面积 0 的脏属性。
+            return filled(layout) && Self.parsePrice(area) != nil && filled(station) && filled(moveIn)
         }
         if listingType == "work" || listingType == "job" || listingType == "hiring" {
             return filled(companyName) && filled(workingHours)
@@ -424,8 +446,8 @@ struct CreateCityListingView: View {
         }
         if listingType == "secondhand" {
             // 出二手只要求 标题+分类+价格+描述(标题在 canSubmit 里全类型必填);
-            // 新旧程度等交易细节全部可选,降低发布门槛。
-            return filled(category) && filled(price) && filled(description)
+            // 新旧程度等交易细节全部可选,降低发布门槛。价格必须可解析(0=免费送)。
+            return filled(category) && Self.parsePrice(price) != nil && filled(description)
         }
         return true
     }
@@ -596,12 +618,12 @@ struct CreateCityListingView: View {
         let filled: (String) -> Bool = { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         // 出二手的必填集独立:标题/分类/价格/描述,无交易地点。
         if listingType == "secondhand" {
-            let values = [filled(title), filled(category), filled(price), filled(description)]
+            let values = [filled(title), filled(category), Self.parsePrice(price) != nil, filled(description)]
             return (values.filter { $0 }.count, values.count)
         }
         var values = [filled(title), filled(location)]
         if listingType == "rental" {
-            values += [filled(layout), filled(area), filled(station), filled(moveIn)]
+            values += [filled(layout), Self.parsePrice(area) != nil, filled(station), filled(moveIn)]
         } else if listingType == "work" || listingType == "job" || listingType == "hiring" {
             values += [filled(companyName), filled(workingHours)]
         } else if listingType == "local_service" {
@@ -637,6 +659,10 @@ struct CreateCityListingView: View {
     private var missingRequiredCopy: String {
         let filled: (String) -> Bool = { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         if !filled(title) { return KXListingCopy.pickText(language, "请先补充标题", "タイトルを入力してください", "Add a title first") }
+        // 填了却解析不出数字(如「¥8,000日元」「面议」)要点名说清,否则用户
+        // 对着"已填"的字段看通用提示不知所措。
+        if filled(price), !priceInputValid { return KXListingCopy.pickText(language, "价格需为数字，例如 8000；免费送可填 0", "価格は数字で入力してください（例：8000）。無料譲渡は 0", "Price must be a number, e.g. 8000. Use 0 for free items") }
+        if listingType == "rental", filled(area), Self.parsePrice(area) == nil { return KXListingCopy.pickText(language, "面积需为数字，例如 24", "面積は数字で入力してください（例：24）", "Size must be a number, e.g. 24") }
         if listingType != "secondhand", !filled(location) { return KXListingCopy.pickText(language, "请补充地区、车站或交易地点", "エリア、駅、または受け渡し場所を入力してください", "Add an area, station, or meetup location") }
         if region == nil { return KXListingCopy.pickText(language, "请先选择可发布的城市", "投稿先の都市を選んでください", "Choose a city before posting") }
         if listingType == "rental" && !typeRequiredFieldsReady { return KXListingCopy.pickText(language, "请补充户型、面积、最近车站和入住时间", "間取り、面積、最寄り駅、入居時期を入力してください", "Add layout, size, nearest station, and move-in date") }
@@ -668,10 +694,10 @@ struct CreateCityListingView: View {
                             .foregroundStyle(messageIsPositive(message) ? KXColor.accent : KXColor.heat)
                             .padding(KXSpacing.md)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background((messageIsPositive(message) ? KXColor.accent : KXColor.heat).opacity(0.09), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .background((messageIsPositive(message) ? KXColor.accent : KXColor.heat).opacity(0.09), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                     }
                 }
-                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.horizontal, KXSpacing.screen)
                 .padding(.top, 14)
                 .padding(.bottom, canSubmit || isSubmitting ? 22 : chrome.bottomContentPadding + 22)
             }
@@ -819,8 +845,8 @@ struct CreateCityListingView: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(KXColor.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KXColor.accent.opacity(0.3), lineWidth: 0.8))
+            .background(KXColor.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous).stroke(KXColor.accent.opacity(0.3), lineWidth: 0.8))
         }
         .buttonStyle(.plain)
     }
@@ -849,15 +875,35 @@ struct CreateCityListingView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background((depleted ? KXColor.heat : KXColor.accent).opacity(0.07), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke((depleted ? KXColor.heat : KXColor.accent).opacity(0.25), lineWidth: 0.8))
+        .background((depleted ? KXColor.heat : KXColor.accent).opacity(0.07), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous).stroke((depleted ? KXColor.heat : KXColor.accent).opacity(0.25), lineWidth: 0.8))
     }
 
     /// Clears the per-listing fields so the user can immediately publish another
-    /// in the same region (keeps 发布地区 + media-less form).
+    /// in the same region (keeps 发布地区 + media-less form)。
+    /// 类型专属 @State 必须全部复位——它们在 submit 时被无条件写进 attributes,
+    /// 漏清会把上一条的瑕疵/品牌/原价/户型/入住时间等泄漏进下一条发布。
     private func resetFormForAnother() {
         title = ""; price = ""; location = ""; description = ""
         category = ""; station = ""; area = ""; serviceArea = ""
+        // 二手
+        listingMode = "出售"; condition = "良好"
+        brandModel = ""; originalPrice = ""; purchaseTime = ""; accessories = ""
+        defectNote = ""; secondhandAvailableTime = ""; secondhandPickupNotes = ""
+        pickupAvailable = true; secondhandShippingAvailable = false; priceNegotiable = false
+        // 租房
+        layout = "1K"; moveIn = ""
+        shareAllowed = false; shortTermAllowed = false; furnished = false; petAllowed = false
+        // 招聘
+        employmentType = "兼职"; japaneseLevel = "N3"
+        companyName = ""; workingHours = ""; jobHolidays = ""; jobBenefits = ""
+        visaSupport = false; noExperienceOK = false; studentOK = false; remoteOK = false
+        // 服务(细分字段统一走既有清理器)
+        serviceBusinessName = ""; serviceType = ""; certifiedProvider = false
+        clearServiceSpecificFields()
+        // 优惠
+        merchantName = ""; discountInfo = ""; validUntil = ""; usageRules = ""
+        merchantVerified = false
         mediaDrafts = []; uploadedMedia = [:]; existingMedia = []
         mediaUploadPhases = [:]; pickerItems = []
         message = nil
@@ -874,7 +920,7 @@ struct CreateCityListingView: View {
                     Text(region?.countryEmoji ?? "🌐")
                         .kxScaledFont(30)
                         .frame(width: 46, height: 46)
-                        .background(KXColor.softBackground.opacity(0.9), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                        .background(KXColor.softBackground.opacity(0.9), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                     VStack(alignment: .leading, spacing: 3) {
                         Text(region.map { KaiXRegionDirectory.localizedHeaderLabel($0, language: language) }
                              ?? KXListingCopy.pickText(language, "尚未选择城市", "都市が未選択", "No city selected"))
@@ -892,32 +938,48 @@ struct CreateCityListingView: View {
                     }
                     Spacer(minLength: 0)
                 }
-                HStack(spacing: 10) {
-                    Button {
-                        selectedRegion = RegionStore.shared.current ?? selectedRegion
-                    } label: {
-                        Label(KXListingCopy.pickText(language, "使用当前位置", "現在地を使う", "Use current"), systemImage: "location.fill")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(KXColor.accent)
-                            .padding(.horizontal, 14)
-                            .frame(height: 38)
-                            .frame(maxWidth: .infinity)
-                            .background(KXColor.accent.opacity(0.10), in: Capsule())
+                if isEditing {
+                    // 编辑走 PATCH /api/listings/:id,body 里没有任何 region 字段——
+                    // 「更换城市」改了也不会保存,成功回执还会用本地新选值谎报
+                    // 「已保存到新地区」。在服务端支持改区之前,编辑态锁定发布地区。
+                    KXListingHintRow(
+                        text: KXListingCopy.pickText(
+                            language,
+                            "编辑时发布地区不可修改。如需更换城市，请删除本条后重新发布。",
+                            "編集では公開エリアを変更できません。都市を変えるには削除して再投稿してください。",
+                            "The publish area can't be changed while editing. To move cities, delete this listing and repost."
+                        ),
+                        icon: "lock.fill",
+                        tint: Color.secondary
+                    )
+                } else {
+                    HStack(spacing: 10) {
+                        Button {
+                            selectedRegion = RegionStore.shared.current ?? selectedRegion
+                        } label: {
+                            Label(KXListingCopy.pickText(language, "使用当前位置", "現在地を使う", "Use current"), systemImage: "location.fill")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(KXColor.accent)
+                                .padding(.horizontal, 14)
+                                .frame(height: 38)
+                                .frame(maxWidth: .infinity)
+                                .background(KXColor.accent.opacity(0.10), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        Button {
+                            isShowingRegionPicker = true
+                        } label: {
+                            Label(KXListingCopy.pickText(language, "更换城市", "都市を変更", "Change city"), systemImage: "arrow.left.arrow.right")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.primary)
+                                .padding(.horizontal, 14)
+                                .frame(height: 38)
+                                .frame(maxWidth: .infinity)
+                                .background(KXColor.softBackground.opacity(0.9), in: Capsule())
+                                .overlay(Capsule().stroke(KXColor.separator.opacity(0.6), lineWidth: 0.7))
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
-                    Button {
-                        isShowingRegionPicker = true
-                    } label: {
-                        Label(KXListingCopy.pickText(language, "更换城市", "都市を変更", "Change city"), systemImage: "arrow.left.arrow.right")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.primary)
-                            .padding(.horizontal, 14)
-                            .frame(height: 38)
-                            .frame(maxWidth: .infinity)
-                            .background(KXColor.softBackground.opacity(0.9), in: Capsule())
-                            .overlay(Capsule().stroke(KXColor.separator.opacity(0.6), lineWidth: 0.7))
-                    }
-                    .buttonStyle(.plain)
                 }
             }
         }
@@ -943,7 +1005,7 @@ struct CreateCityListingView: View {
             }
             Spacer()
         }
-        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.horizontal, KXSpacing.screen)
         .padding(.top, KXSpacing.sm)
         .padding(.bottom, KXSpacing.md)
         .kxGlassBar(ignoresTopSafeArea: true)
@@ -957,7 +1019,7 @@ struct CreateCityListingView: View {
                 .font(.title3.weight(.bold))
                 .foregroundStyle(typeAccent)
                 .frame(width: 52, height: 52)
-                .background(typeAccent.opacity(0.12), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .background(typeAccent.opacity(0.12), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
 
             VStack(alignment: .leading, spacing: KXSpacing.sm) {
                 HStack(alignment: .firstTextBaseline) {
@@ -1006,9 +1068,9 @@ struct CreateCityListingView: View {
                     }
                     .padding(KXSpacing.md)
                     .frame(maxWidth: .infinity, minHeight: 86, alignment: .leading)
-                    .background(KXColor.softBackground.opacity(0.62), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .background(KXColor.softBackground.opacity(0.62), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                     .overlay {
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                             .stroke(typeAccent.opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [6, 5]))
                     }
                 }
@@ -1029,7 +1091,7 @@ struct CreateCityListingView: View {
                                     }
                                 }
                                 .frame(width: 112, height: 112)
-                                .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+                                .clipShape(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                                 .overlay(alignment: .topLeading) {
                                     Text(index == 0 ? KXListingCopy.pickText(language, "封面", "カバー", "Cover") : "\(index + 1)")
                                         .font(.caption2.weight(.black))
@@ -1074,7 +1136,7 @@ struct CreateCityListingView: View {
                                     }
                                 }
                                 .frame(width: 112, height: 112)
-                                .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+                                .clipShape(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
                                 .overlay(alignment: .topLeading) {
                                     Text(existingMedia.isEmpty && index == 0 ? KXListingCopy.pickText(language, "封面", "カバー", "Cover") : "\(existingMedia.count + index + 1)")
                                         .font(.caption2.weight(.black))
@@ -1154,7 +1216,7 @@ struct CreateCityListingView: View {
                         } label: {
                             Text(taxonomyCategoryLabel(chip))
                                 .font(.caption.weight(.bold))
-                                .foregroundStyle(category == chip ? Color.white : .primary)
+                                .foregroundStyle(category == chip ? KXColor.onAccent : .primary)
                                 .padding(.horizontal, 11)
                                 .frame(height: 28)
                                 .background(category == chip ? KXColor.accent : KXColor.softBackground.opacity(0.88), in: Capsule())
@@ -1189,7 +1251,7 @@ struct CreateCityListingView: View {
                                     .font(.caption.weight(.black))
                                     .lineLimit(1)
                             }
-                            .foregroundStyle(isSelected ? Color.white : KXColor.livingInk)
+                            .foregroundStyle(isSelected ? KXColor.onTint(KXColor.livingInk) : KXColor.livingInk)
                             .padding(.horizontal, 13)
                             .frame(height: 38)
                             .background(isSelected ? KXColor.livingInk : KXColor.softBackground.opacity(0.88), in: Capsule())
@@ -1226,7 +1288,7 @@ struct CreateCityListingView: View {
                     } label: {
                         Text(taxonomyCategoryLabel(chip))
                             .font(.caption.weight(.bold))
-                            .foregroundStyle(category == chip ? Color.white : .primary)
+                            .foregroundStyle(category == chip ? KXColor.onTint(typeAccent) : .primary)
                             .padding(.horizontal, KXSpacing.md)
                             .frame(height: 34)
                             .background(category == chip ? typeAccent : KXColor.softBackground.opacity(0.82), in: Capsule())
@@ -1273,9 +1335,9 @@ struct CreateCityListingView: View {
                 Spacer(minLength: 0)
             }
             .padding(KXSpacing.md)
-            .background(typeAccent.opacity(0.08), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(typeAccent.opacity(0.08), in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                     .stroke(typeAccent.opacity(0.16), lineWidth: 0.8)
             }
         }
@@ -1304,12 +1366,12 @@ struct CreateCityListingView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(canSubmit ? typeAccent : Color.secondary.opacity(0.18), in: Capsule())
-                .foregroundStyle(canSubmit ? Color.white : Color.secondary)
+                .foregroundStyle(canSubmit ? KXColor.onTint(typeAccent) : Color.secondary)
             }
             .buttonStyle(.plain)
             .disabled(!canSubmit)
         }
-        .padding(.horizontal, KaiXTheme.horizontalPadding)
+        .padding(.horizontal, KXSpacing.screen)
         .padding(.top, 10)
         .padding(.bottom, 10)
         .background(KXColor.pageBackground.opacity(0.98))
@@ -1327,11 +1389,15 @@ struct CreateCityListingView: View {
                     }
                     KXListingFormField(title: "最近车站", placeholder: "例如 池袋站 步行 8 分钟", icon: "tram", text: $station)
                     KXListingFormField(title: "入住时间", placeholder: "例如 7 月上旬 / 即可入住", icon: "calendar", text: $moveIn)
+                    // 频道筛选面板提供 可宠物/可短租 toggle,发布端必须能写这两个
+                    // 属性——否则 iOS 发布的房源在这些筛选下永远不可见。
                     HStack(spacing: 10) {
                         KXListingToggleChip(title: "可合租", icon: "person.2", isOn: $shareAllowed, tint: typeAccent)
+                        KXListingToggleChip(title: "可短租", icon: "calendar.badge.clock", isOn: $shortTermAllowed, tint: typeAccent)
                     }
                     HStack(spacing: 10) {
                         KXListingToggleChip(title: "家具家电", icon: "bed.double", isOn: $furnished, tint: typeAccent)
+                        KXListingToggleChip(title: "可宠物", icon: "pawprint", isOn: $petAllowed, tint: typeAccent)
                     }
                     KXListingHintRow(text: "完整填写车站、面积和入住时间，能明显减少重复私信询问。", icon: "sparkles", tint: typeAccent)
                 }
@@ -1578,6 +1644,7 @@ struct CreateCityListingView: View {
             shareAllowed = bool("share_allowed")
             shortTermAllowed = bool("short_term_allowed")
             furnished = bool("furnished")
+            petAllowed = bool("pet_allowed")
         case "job", "hiring":
             companyName = raw("company_name")
             workingHours = raw("working_hours")
@@ -1669,33 +1736,38 @@ struct CreateCityListingView: View {
     private func loadImages(_ items: [PhotosPickerItem]) async {
         guard !items.isEmpty else { return }
         var next = mediaDrafts
-        var videoCount = mediaDrafts.filter { $0.type == .video }.count
-        var imageCount = mediaDrafts.filter { $0.type == .image }.count
-        var mediaCount = mediaDrafts.count
+        // 编辑时既有媒体(existingMedia)也占「最多 N 个 / 最多 1 个视频」额度——
+        // submit 会把两者的 media_ids 合并提交,只数 drafts 会超出 UI 承诺的上限。
+        let existingVideoCount = existingMedia.filter { ($0.media_type ?? $0.mediaType ?? $0.type) == "video" }.count
+        var videoCount = mediaDrafts.filter { $0.type == .video }.count + existingVideoCount
+        var imageCount = mediaDrafts.filter { $0.type == .image }.count + (existingMedia.count - existingVideoCount)
+        var mediaCount = mediaDrafts.count + existingMedia.count
         var warning: String?
         for item in items.prefix(imageLimit) {
             let isVideo = item.supportedContentTypes.contains { $0.conforms(to: .movie) }
             do {
                 guard mediaCount < imageLimit else {
-                    warning = "媒体最多上传 \(imageLimit) 个，其中最多 1 个视频。"
+                    warning = KXListingCopy.pickText(language, "媒体最多上传 \(imageLimit) 个，其中最多 1 个视频。", "メディアは最大 \(imageLimit) 件、うち動画は 1 件までです。", "Up to \(imageLimit) media items, including at most 1 video.")
                     continue
                 }
                 if isVideo {
                     guard videoCount < 1 else {
-                        warning = "每条信息最多上传 1 个视频。"
+                        warning = KXListingCopy.pickText(language, "每条信息最多上传 1 个视频。", "1件の投稿につき動画は1件までです。", "Only 1 video per listing.")
                         continue
                     }
                     guard let picked = try? await item.loadTransferable(type: PickedVideoFile.self) else {
-                        warning = "无法读取所选媒体，请重新选择。"
+                        warning = KXListingCopy.pickText(language, "无法读取所选媒体，请重新选择。", "選択したメディアを読み込めません。選び直してください。", "Couldn't read the selected media. Please pick again.")
                         continue
                     }
                     guard fileByteCount(at: picked.url) <= (listingType == "rental" ? 300 * 1024 * 1024 : KaiXConfig.maxPostVideoSourceBytes) else {
-                        warning = "视频文件过大，请压缩后重试。"
+                        warning = KXListingCopy.pickText(language, "视频文件过大，请压缩后重试。", "動画ファイルが大きすぎます。圧縮してからお試しください。", "Video file is too large. Please compress and retry.")
                         continue
                     }
                     let draft = try await UploadService.shared.prepareVideo(fileURL: picked.url, contentType: item.supportedContentTypes.first { $0.conforms(to: .movie) })
                     guard draft.duration <= (listingType == "rental" ? 600 : 300) else {
-                        warning = listingType == "rental" ? "房源视频最长 10 分钟。" : "视频最长 5 分钟。"
+                        warning = listingType == "rental"
+                            ? KXListingCopy.pickText(language, "房源视频最长 10 分钟。", "物件動画は最長10分です。", "Property videos can be up to 10 minutes.")
+                            : KXListingCopy.pickText(language, "视频最长 5 分钟。", "動画は最長5分です。", "Videos can be up to 5 minutes.")
                         continue
                     }
                     next.append(draft)
@@ -1703,11 +1775,11 @@ struct CreateCityListingView: View {
                     mediaCount += 1
                 } else {
                     guard imageCount < imageLimit else {
-                        warning = "图片最多上传 \(imageLimit) 张。"
+                        warning = KXListingCopy.pickText(language, "图片最多上传 \(imageLimit) 张。", "画像は最大 \(imageLimit) 枚までです。", "Up to \(imageLimit) images.")
                         continue
                     }
                     guard let data = try? await item.loadTransferable(type: Data.self) else {
-                        warning = "无法读取所选媒体，请重新选择。"
+                        warning = KXListingCopy.pickText(language, "无法读取所选媒体，请重新选择。", "選択したメディアを読み込めません。選び直してください。", "Couldn't read the selected media. Please pick again.")
                         continue
                     }
                     let draft = try await UploadService.shared.prepareImage(data: data)
@@ -1716,7 +1788,7 @@ struct CreateCityListingView: View {
                     mediaCount += 1
                 }
             } catch {
-                warning = "媒体处理失败，请重新选择。"
+                warning = KXListingCopy.pickText(language, "媒体处理失败，请重新选择。", "メディアの処理に失敗しました。選び直してください。", "Media processing failed. Please pick again.")
             }
         }
         mediaDrafts = next
@@ -1779,7 +1851,7 @@ struct CreateCityListingView: View {
                     title: title,
                     description: description,
                     category: category.isEmpty ? KXListingCopy.defaultCategory(for: listingType) : category,
-                    price: Double(price),
+                    price: Self.parsePrice(price),
                     locationText: resolvedLocationText,
                     mediaIds: mediaIds,
                     attributes: attributes
@@ -1794,7 +1866,7 @@ struct CreateCityListingView: View {
                     title: title,
                     description: description,
                     category: category.isEmpty ? KXListingCopy.defaultCategory(for: listingType) : category,
-                    price: Double(price),
+                    price: Self.parsePrice(price),
                     locationText: resolvedLocationText,
                     mediaIds: mediaIds,
                     attributes: attributes
@@ -1877,19 +1949,26 @@ struct CreateCityListingView: View {
 
     private var attributes: [String: KaiXAttributeValue] {
         if listingType == "rental" {
-            return [
-                "rent": .init(double: Double(price) ?? 0),
+            var result: [String: KaiXAttributeValue] = [
                 "layout": .init(string: layout),
-                "area_sqm": .init(double: Double(area) ?? 0),
                 "nearest_station": .init(string: station),
                 "move_in_date": .init(string: moveIn),
                 "share_allowed": .init(bool: shareAllowed),
+                // short_term_allowed 此前只在编辑时 hydrate 不回写——在 iOS 编辑
+                // 一次就会把 web 端标好的「可短租」从完整 attributes 里丢掉。
+                "short_term_allowed": .init(bool: shortTermAllowed),
                 "furnished": .init(bool: furnished),
+                "pet_allowed": .init(bool: petAllowed),
             ]
+            // 解析失败不再静默写 0(租金 0/面积 0 的脏属性);可解析性由
+            // typeRequiredFieldsReady / priceInputValid 在提交前把关。
+            if let rent = Self.parsePrice(price) { result["rent"] = .init(double: rent) }
+            if let sqm = Self.parsePrice(area) { result["area_sqm"] = .init(double: sqm) }
+            return result
         }
         if listingType == "work" || listingType == "job" || listingType == "hiring" {
             return [
-                "salary_min": .init(double: Double(price) ?? 0),
+                "salary_min": .init(double: Self.parsePrice(price) ?? 0),
                 "salary_type": .init(string: "hourly"),
                 "employment_type": .init(string: KXListingCopy.employmentTypeKey(employmentType)),
                 "japanese_level": .init(string: japaneseLevel),
@@ -2118,7 +2197,7 @@ private struct KXListingChoiceRow: View {
                     } label: {
                         Text(KXListingCopy.formText(option, language))
                             .font(.caption.weight(.bold))
-                            .foregroundStyle(selection == option ? Color.white : .primary)
+                            .foregroundStyle(selection == option ? KXColor.onTint(tint) : .primary)
                             .padding(.horizontal, KXSpacing.md)
                             .frame(height: 34)
                             .background(selection == option ? tint : KXColor.softBackground.opacity(0.82), in: Capsule())
@@ -2185,7 +2264,7 @@ private struct KXListingHintRow: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(tint.opacity(0.07), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+        .background(tint.opacity(0.07), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
     }
 }
 

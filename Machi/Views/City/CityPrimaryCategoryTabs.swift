@@ -32,7 +32,7 @@ struct CityPrimaryCategoryTabs: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.vertical, KXSpacing.sm)
         }
         .background(KXColor.cardBackground.opacity(0.78))

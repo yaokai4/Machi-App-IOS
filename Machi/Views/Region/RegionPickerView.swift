@@ -74,7 +74,7 @@ struct RegionPickerView: View {
                         }
                     }
                 }
-                .padding(.horizontal, KaiXTheme.horizontalPadding)
+                .padding(.horizontal, KXSpacing.screen)
                 .padding(.top, KXSpacing.md)
                 .padding(.bottom, KXSpacing.xl)
             }
@@ -430,7 +430,7 @@ private struct CircleCityListView: View {
             }
             .padding(.horizontal, KXSpacing.md)
             .kxGlassSurface(radius: KXRadius.lg)
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.top, KXSpacing.md)
         }
         .kxPageBackground()
@@ -505,7 +505,7 @@ private struct ProvinceListView: View {
             }
             .padding(.horizontal, KXSpacing.md)
             .kxGlassSurface(radius: KXRadius.lg)
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.top, KXSpacing.md)
         }
         .kxPageBackground()
@@ -546,7 +546,7 @@ private struct CityListView: View {
             }
             .padding(.horizontal, KXSpacing.md)
             .kxGlassSurface(radius: KXRadius.lg)
-            .padding(.horizontal, KaiXTheme.horizontalPadding)
+            .padding(.horizontal, KXSpacing.screen)
             .padding(.top, KXSpacing.md)
         }
         .kxPageBackground()

@@ -90,6 +90,14 @@ final class IAPTransactionObserver {
             // failure the transaction is deliberately left unfinished and is
             // retried on the next launch / next verifyUnfinished() pass.
             await transaction.finish()
+            // 广播结算成功:观察者激活时页面 store(WalletStore 等)只是镜像,
+            // Ask to Buy 事后批准若无此通知,已打开的钱包/会员页会停在 .pending、
+            // 余额陈旧。userInfo 只带 productID,绝不携带 JWS/token。
+            NotificationCenter.default.post(
+                name: .kaixIAPTransactionSettled,
+                object: nil,
+                userInfo: ["productID": transaction.productID]
+            )
         } catch {
             // Never finish on failure — a paid transaction must survive until
             // the server has actually credited it. StoreKit re-delivers it, so

@@ -41,7 +41,10 @@ struct DataManagementView: View {
             case .data:
                 return T("清除帖子 / 页面数据缓存", "投稿・ページデータを消去", "Clear posts & page data")
             case .localData:
-                return T("清除聊天记录与本地数据", "チャット履歴とローカルデータを消去", "Clear chats & local data")
+                // 生产 SwiftData 是内存态、服务器唯一真相:聊天记录不落盘,
+                // 本地库只有 SQLite/WAL 骨架 + 旧版本升级残留——文案如实描述,
+                // 不宣称"清除聊天记录"。
+                return T("清除本地数据库残留", "ローカルデータベースの残存データを消去", "Clear local database leftovers")
             case .all:
                 return T("清除全部缓存", "すべてのキャッシュを消去", "Clear all cache")
             }
@@ -54,7 +57,7 @@ struct DataManagementView: View {
             case .data:
                 return T("清空首页、发现页和详情页的本地快照。", "ホーム、発見、詳細ページのローカルスナップショットを消去します。", "Remove local snapshots for feeds, discovery, and detail pages.")
             case .localData:
-                return T("重启 App 后清除本机数据库与离线聊天记录。", "App 再起動後、端末内データベースとオフラインチャットを消去します。", "Clear the local database and offline chats after app restart.")
+                return T("重启 App 后清空本机数据库骨架与旧版本残留数据。", "App 再起動後、端末内データベースの骨組みと旧バージョンの残存データを消去します。", "Clears the local database skeleton and old-version leftovers after app restart.")
             case .all:
                 return T("一次清理所有可重建缓存，并安排本地数据清除。", "再構築可能なキャッシュをすべて消去し、ローカルデータ削除を予約します。", "Clear all rebuildable cache and schedule local data removal.")
             }
@@ -130,7 +133,9 @@ struct DataManagementView: View {
                 id: "local",
                 icon: "bubble.left.and.bubble.right.fill",
                 title: T("本地数据", "ローカルデータ", "Local data"),
-                detail: T("会话、聊天记录、资料", "会話、チャット履歴、プロフィール", "Threads, chats, profile data"),
+                // 如实描述:生产聊天记录/会话在内存态(服务器唯一真相),这里
+                // 量到的是 SwiftData 库骨架 + 旧版本残留,不是离线聊天缓存。
+                detail: T("本地数据库骨架与旧版本残留", "ローカルDBの骨組みと旧バージョンの残存データ", "Database skeleton & old-version leftovers"),
                 bytes: cache.dbBytes,
                 tint: .green
             )
@@ -294,9 +299,9 @@ struct DataManagementView: View {
                 Text(T("重启后完成清除", "再起動後に完了", "Finishes after restart"))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
-                Text(T("聊天记录与本地数据已安排清除。完全释放空间需要关闭并重新打开 App。",
-                       "チャット履歴とローカルデータの削除を予約しました。完全に解放するには App を閉じて再起動してください。",
-                       "Chats and local data are scheduled for removal. Close and reopen the app to fully reclaim space."))
+                Text(T("本地数据已安排清除。完全释放空间需要关闭并重新打开 App。",
+                       "ローカルデータの削除を予約しました。完全に解放するには App を閉じて再起動してください。",
+                       "Local data is scheduled for removal. Close and reopen the app to fully reclaim space."))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

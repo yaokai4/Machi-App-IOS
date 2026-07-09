@@ -9,6 +9,20 @@ extension Notification.Name {
     /// new activity. Active chat/inbox screens use this to refresh immediately
     /// instead of waiting for their next polling tick.
     static let kaiXConversationShouldRefresh = Notification.Name("KaiXConversationShouldRefresh")
+    /// Posted after the user deletes an activity from its detail page.
+    /// userInfo: ["id": String]. The events list removes that card immediately
+    /// instead of leaving a dead card that 404s on tap (refreshSilently's
+    /// pagination-preserve merge never drops rows that fell off page 1).
+    static let kaiXEventRemoved = Notification.Name("KaiXEventRemoved")
+    /// Posted after a room is disbanded (host) or left (member) from its detail
+    /// page. userInfo: ["id": String]. The rooms list removes/refreshes it.
+    static let kaiXRoomRemoved = Notification.Name("KaiXRoomRemoved")
+    /// Posted after a post is deleted (from its detail page or the card menu).
+    /// userInfo: ["ids": [String]] — the post plus any local reposts of it.
+    /// Feed/city-channel lists drop those rows so a detail-page delete doesn't
+    /// leave a tappable ghost card (the `?? post` fallback would otherwise keep
+    /// rendering the in-memory entity that PostStore already forgot).
+    static let kaiXPostRemoved = Notification.Name("KaiXPostRemoved")
 }
 
 /// Bridges server-side social notifications (likes, comments, follows…)
@@ -53,6 +67,24 @@ final class SystemNotificationService: NSObject {
             _ = try? await center.requestAuthorization(options: [.alert, .badge, .sound])
         }
         await PushTokenService.refreshRegistration()
+    }
+
+    /// P-4 游客召回:游客在软引导 sheet 上点了「开启提醒」。弹一次系统权限
+    /// 弹窗(已决定过则跳过),授权成功就注册 APNs 把 device token 缓存好。
+    /// 游客侧到此为止 —— 服务端 push-token 端点要求登录态(web/server.py
+    /// api_register_push_token → require_user),token 的真正上传发生在首次
+    /// 登录后的 refreshRegistration()。Returns whether permission ended up
+    /// granted.
+    @discardableResult
+    func requestGuestAuthorization() async -> Bool {
+        let settings = await center.notificationSettings()
+        if settings.authorizationStatus == .notDetermined {
+            _ = try? await center.requestAuthorization(options: [.alert, .badge, .sound])
+        }
+        let status = await center.notificationSettings().authorizationStatus
+        guard status == .authorized || status == .provisional || status == .ephemeral else { return false }
+        await PushTokenService.registerForGuest()
+        return true
     }
 
     /// Surface freshly-synced, unread server notifications as system

@@ -74,7 +74,7 @@ struct GuideDigestCardView: View {
                     .font(.footnote).foregroundStyle(.secondary)
                     .padding(KXSpacing.md)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(KXColor.accentSoft.opacity(0.4), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(KXColor.accentSoft.opacity(0.4), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             } else {
                 VStack(spacing: KXSpacing.xxs) {
                     ForEach(rows) { row in

@@ -8,6 +8,10 @@ struct SavedSearchesView: View {
     @State private var items: [KaiXSavedSearchDTO] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
+    /// 串行删除链:连续左滑会各自起 Task 并发删除;旧实现里前一个删除失败触发的
+    /// 整表 load() 会把仍在途的后一个删除"复活"回列表(回载与在途删除竞态),之后
+    /// 那条在服务端删成功了本地却不再更新。所有删除排到同一条链上串行执行。
+    @State private var deleteChain: Task<Void, Never>?
 
     var body: some View {
         Group {
@@ -117,17 +121,23 @@ struct SavedSearchesView: View {
         }
     }
 
-    /// 乐观删除:先移出列表,服务端失败再整表重载恢复。
+    /// 乐观删除:先移出列表;失败只把失败项插回原位,绝不整表 load()(整表回载
+    /// 会与其他在途删除竞态,见 deleteChain 注释)。
     private func delete(at indexSet: IndexSet) {
-        let removed = indexSet.map { items[$0] }
+        let removed = indexSet.map { (index: $0, item: items[$0]) }
         items.remove(atOffsets: indexSet)
-        Task {
-            for item in removed {
+        let previous = deleteChain
+        deleteChain = Task {
+            // 排在上一批删除之后串行执行,保证任意时刻至多一个删除在途。
+            await previous?.value
+            for entry in removed {
                 do {
-                    try await KaiXAPIClient.shared.deleteSavedSearch(item.id)
+                    try await KaiXAPIClient.shared.deleteSavedSearch(entry.item.id)
                 } catch {
-                    await load()
-                    return
+                    // 恢复该项(行重新出现即失败信号,与旧行为一致)。
+                    if !items.contains(where: { $0.id == entry.item.id }) {
+                        items.insert(entry.item, at: min(entry.index, items.count))
+                    }
                 }
             }
         }
