@@ -62,6 +62,9 @@ enum KXRoute: Hashable {
     /// Machi 活动(Luma 式):活动列表 / 详情(slug 或 id)/ 创建。
     case events
     case eventDetail(idOrSlug: String)
+    /// 主办方管理报名(名单 / 审核 / 候补 / 签到 / 群发)—— 仅主办方 / 管理员可达,
+    /// 服务端同样强制权限。
+    case eventManage(idOrSlug: String)
     case createEvent
 }
 
@@ -204,7 +207,7 @@ extension KXRoute {
             return .none
         case .postDetailComment(_, let commentId):
             return commentId.map { .comment($0) } ?? .comments
-        case .profile, .topic, .city, .cityChannel, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .myInquiries, .myReservations, .businessDirectory, .businessProfile, .guideCategory, .guideJourney, .guidePlan, .guideStudyPlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideFinance, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications, .guideServices, .guideMemberResources, .guideMyLibrary, .personalWorkbench, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .guideAI, .conversation, .search, .savedSearches, .socialRooms, .socialRoom, .events, .eventDetail, .createEvent:
+        case .profile, .topic, .city, .cityChannel, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .myInquiries, .myReservations, .businessDirectory, .businessProfile, .guideCategory, .guideJourney, .guidePlan, .guideStudyPlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideFinance, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications, .guideServices, .guideMemberResources, .guideMyLibrary, .personalWorkbench, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .guideAI, .conversation, .search, .savedSearches, .socialRooms, .socialRoom, .events, .eventDetail, .eventManage, .createEvent:
             return .none
         }
     }
@@ -215,7 +218,7 @@ extension KXRoute {
         // occludes the calendar / list footers (the bar covered the Calendar's
         // bottom rows). They keep their own nav bar + edge-swipe back, so users
         // are never stranded. The 我的工作台 hub itself keeps the tab bar.
-        case .postDetail, .postDetailComment, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .businessProfile, .guideArticle, .guideProduct, .guideJourney, .guideSchool, .guideCompany, .guideCompanyReviews, .conversation, .guidePlan, .guideStudyPlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideFinance, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications, .guideAI, .socialRoom, .eventDetail, .createEvent:
+        case .postDetail, .postDetailComment, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .businessProfile, .guideArticle, .guideProduct, .guideJourney, .guideSchool, .guideCompany, .guideCompanyReviews, .conversation, .guidePlan, .guideStudyPlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideFinance, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications, .guideAI, .socialRoom, .eventDetail, .eventManage, .createEvent:
             true
         case .profile, .topic, .city, .cityChannel, .myInquiries, .myReservations, .businessDirectory, .guideCategory, .guideServices, .guideMemberResources, .guideMyLibrary, .personalWorkbench, .guideSchools, .guideCompanies, .guideInterviewReviews, .search, .savedSearches, .socialRooms, .events:
             false
@@ -238,7 +241,7 @@ extension KXRoute {
             L("emptyMessages", language)
         case .search:
             L("emptySearch", language)
-        case .socialRooms, .socialRoom, .events, .eventDetail, .createEvent:
+        case .socialRooms, .socialRoom, .events, .eventDetail, .eventManage, .createEvent:
             L("emptyFeed", language)
         }
     }
@@ -366,6 +369,8 @@ private struct KXRouteDestinations: ViewModifier {
                     EventsListView(currentUser: currentUser)
                 case .eventDetail(let idOrSlug):
                     EventDetailView(idOrSlug: idOrSlug, currentUser: currentUser)
+                case .eventManage(let idOrSlug):
+                    EventHostManageView(idOrSlug: idOrSlug, currentUser: currentUser)
                 case .createEvent:
                     CreateEventView(currentUser: currentUser)
                 }
@@ -550,6 +555,9 @@ private extension KXRoute {
         case .eventDetail(let idOrSlug):
             let id = idOrSlug.trimmingCharacters(in: .whitespacesAndNewlines)
             return id.isEmpty ? nil : .eventDetail(idOrSlug: id)
+        case .eventManage(let idOrSlug):
+            let id = idOrSlug.trimmingCharacters(in: .whitespacesAndNewlines)
+            return id.isEmpty ? nil : .eventManage(idOrSlug: id)
         case .createEvent:
             return .createEvent
         }

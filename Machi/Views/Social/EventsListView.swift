@@ -519,8 +519,8 @@ private struct EventCard: View {
     private var cover: some View {
         ZStack(alignment: .topLeading) {
             Group {
-                if let raw = event.cover_url, let url = raw.kaixMediaURL {
-                    CachedMediaImageView(url: url, targetPixelSize: 1200)
+                if let url = event.coverThumbURL {
+                    CachedMediaImageView(url: url, targetPixelSize: 1000)
                 } else {
                     LinearGradient(
                         colors: [tint.opacity(0.85), tint.opacity(0.45)],

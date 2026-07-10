@@ -20,6 +20,9 @@ struct EventDetailView: View {
     @State private var registrationOpen = false
     @State private var showCancelConfirm = false
     @State private var showDeleteConfirm = false
+    /// 「添加到日历」:拉到 .ics 文本写临时文件后,用系统分享面板加进日历(免日历权限)。
+    @State private var calendarShare: ShareableFile?
+    @State private var isPreparingCalendar = false
 
     private var tint: Color { KXEventStyle.tint(event?.category ?? "party") }
 
@@ -67,6 +70,9 @@ struct EventDetailView: View {
                     self.event = updated
                 }
             }
+        }
+        .sheet(item: $calendarShare) { share in
+            ActivityView(activityItems: [share.url])
         }
         .confirmationDialog(
             KXListingCopy.pickText(language, "取消报名?", "参加をキャンセルしますか?", "Cancel your registration?"),
@@ -128,6 +134,11 @@ struct EventDetailView: View {
                 // 否则这些账号会看到必得 403 的删除入口。
                 if event.organizer_user_id == currentUser.id || currentUser.role == .admin {
                     Menu {
+                        Button {
+                            router.open(.eventManage(idOrSlug: event.slug ?? event.id))
+                        } label: {
+                            Label(KXListingCopy.pickText(language, "管理报名", "参加者を管理", "Manage guests"), systemImage: "person.2.badge.gearshape")
+                        }
                         Button(role: .destructive) {
                             showDeleteConfirm = true
                         } label: {
@@ -153,7 +164,7 @@ struct EventDetailView: View {
     private func hero(_ event: KaiXEventDTO) -> some View {
         ZStack(alignment: .bottomLeading) {
             Group {
-                if let raw = event.cover_url, let url = raw.kaixMediaURL {
+                if let url = event.coverFullURL {
                     CachedMediaImageView(url: url, targetPixelSize: 1600)
                 } else {
                     LinearGradient(
@@ -250,6 +261,22 @@ struct EventDetailView: View {
                         .foregroundStyle(.tertiary)
                 }
                 Spacer(minLength: 0)
+                Button {
+                    Task { await addToCalendar(event) }
+                } label: {
+                    Group {
+                        if isPreparingCalendar {
+                            KXSpinner(size: 17, lineWidth: 2)
+                        } else {
+                            Image(systemName: "calendar.badge.plus")
+                                .font(.title3)
+                        }
+                    }
+                    .foregroundStyle(tint)
+                }
+                .buttonStyle(.plain)
+                .disabled(isPreparingCalendar)
+                .accessibilityLabel(KXListingCopy.pickText(language, "添加到日历", "カレンダーに追加", "Add to calendar"))
             }
             if (event.venue_name?.isEmpty == false) || (event.address?.isEmpty == false) {
                 HStack(alignment: .top, spacing: KXSpacing.md) {
@@ -325,7 +352,11 @@ struct EventDetailView: View {
                         .foregroundStyle(KXColor.livingWarm)
                 }
             }
-            if event.viewerGoing {
+            if event.viewerPending {
+                Label(KXListingCopy.pickText(language, "待审核 · 主办方通过后即报名成功", "承認待ち · 主催者の承認をお待ちください", "Pending approval · the host will review you"), systemImage: "clock.badge.questionmark")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(KXColor.livingWarm)
+            } else if event.viewerGoing {
                 Label(KXListingCopy.pickText(language, "你已报名这场活动", "参加予定です", "You're going"), systemImage: "checkmark.circle.fill")
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(KXColor.accent)
@@ -443,7 +474,32 @@ struct EventDetailView: View {
             } else if ended {
                 ctaLabel(KXListingCopy.pickText(language, "活动已结束", "イベントは終了しました", "Event ended"), style: .disabled)
             } else if isOrganizer {
-                ctaLabel(KXListingCopy.pickText(language, "你是这场活动的主办方", "あなたが主催者です", "You're the host"), style: .neutral)
+                Button {
+                    router.open(.eventManage(idOrSlug: event.slug ?? event.id))
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "person.2.badge.gearshape")
+                            .font(.headline.weight(.bold))
+                        Text(KXListingCopy.pickText(language, "管理报名", "参加者を管理", "Manage guests"))
+                            .font(.headline.weight(.bold))
+                    }
+                    .foregroundStyle(KXColor.onTint(tint))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(tint.gradient, in: Capsule())
+                    .shadow(color: tint.opacity(0.3), radius: 12, y: 5)
+                }
+                .buttonStyle(KXPressableStyle(scale: 0.97))
+            } else if event.viewerPending {
+                Button {
+                    showCancelConfirm = true
+                } label: {
+                    ctaLabel(
+                        KXListingCopy.pickText(language, "待审核 · 点此撤回申请", "承認待ち · タップで取消", "Pending approval · tap to cancel"),
+                        style: .secondary
+                    )
+                }
+                .buttonStyle(KXPressableStyle(scale: 0.97))
             } else if event.viewerGoing || event.viewerWaitlisted {
                 Button {
                     showCancelConfirm = true
@@ -526,6 +582,30 @@ struct EventDetailView: View {
     private func cancelRegistration() async {
         do {
             event = try await KaiXAPIClient.shared.cancelEventRegistration(idOrSlug)
+        } catch {
+            actionMessage = error.kaixUserMessage
+        }
+    }
+
+    /// 拉取服务端 .ics 文本 → 写临时文件 → 走系统分享面板加入日历。全程免日历权限
+    /// (不 import EventKit),把「加进哪本日历」交给系统的 Add-to-Calendar 分享动作。
+    private func addToCalendar(_ event: KaiXEventDTO) async {
+        guard !isPreparingCalendar else { return }
+        isPreparingCalendar = true
+        defer { isPreparingCalendar = false }
+        do {
+            let ics = try await KaiXAPIClient.shared.eventICS(idOrSlug)
+            guard !ics.isEmpty, let data = ics.data(using: .utf8) else {
+                actionMessage = KXListingCopy.pickText(language, "生成日历文件失败,请稍后再试", "カレンダーの作成に失敗しました", "Couldn't build the calendar file")
+                return
+            }
+            // 文件名只保留字母数字,避免 slug 里的斜杠 / 空格生成非法路径。
+            let base = (event.slug ?? event.id).replacingOccurrences(of: "/", with: "-")
+            let safe = base.components(separatedBy: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_")).inverted).joined()
+            let name = safe.isEmpty ? "event" : safe
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("machi-\(name).ics")
+            try data.write(to: url, options: .atomic)
+            calendarShare = ShareableFile(url: url)
         } catch {
             actionMessage = error.kaixUserMessage
         }
@@ -696,4 +776,22 @@ private struct EventRegistrationSheet: View {
             errorMessage = error.kaixUserMessage
         }
     }
+}
+
+// MARK: - 分享面板(加日历用)
+
+/// A file URL wrapped for `.sheet(item:)` — URL itself isn't Identifiable.
+private struct ShareableFile: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+/// 极薄的 UIActivityViewController 包装:把 .ics 临时文件交给系统分享面板,
+/// 用户可选「加入日历」而无需 App 申请任何日历权限。
+private struct ActivityView: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

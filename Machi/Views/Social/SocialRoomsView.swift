@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 
 // MARK: - 房间样式速查
@@ -455,6 +456,15 @@ private struct SocialRoomCard: View {
     var body: some View {
         Button(action: onOpen) {
             VStack(alignment: .leading, spacing: KXSpacing.md) {
+                // 有封面时,顶部铺一条紧凑的封面带(3:1);没有封面则维持原样,
+                // 由下方 44×44 类型图标块承担视觉身份(不把紧凑卡撑成活动卡的高 16:9)。
+                if let coverURL = room.coverThumbURL {
+                    CachedMediaImageView(url: coverURL, targetPixelSize: 1000)
+                        .frame(maxWidth: .infinity)
+                        .aspectRatio(3.0 / 1.0, contentMode: .fit)
+                        .clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+                }
                 HStack(alignment: .top, spacing: KXSpacing.md) {
                     Image(systemName: KXRoomStyle.icon(room.typeKey))
                         .kxScaledFont(18, weight: .bold)
@@ -572,14 +582,28 @@ private struct CreateRoomSheet: View {
     @State private var isSubmitting = false
     @State private var errorMessage: String?
 
+    @State private var coverItem: PhotosPickerItem?
+    @State private var coverImage: UIImage?
+    @State private var coverUploadedURL = ""
+    @State private var coverUploadedFileID = ""
+    @State private var isUploadingCover = false
+    /// 封面上传代际:快速连选两张图时,旧的慢上传完成后不得覆写新图的 URL/收尾
+    /// 守卫,否则 last-writer-wins 会开出与预览不符封面的局。
+    @State private var coverLoadGeneration = 0
+
+    private var tint: Color { KXRoomStyle.tint(roomType) }
+
     private var canSubmit: Bool {
-        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSubmitting
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !isSubmitting
+            && !isUploadingCover
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: KXSpacing.lg) {
+                    coverPicker
                     typePicker
                     VStack(alignment: .leading, spacing: 7) {
                         fieldLabel(KXListingCopy.pickText(language, "局的名字", "タイトル", "Room name"), required: true)
@@ -645,6 +669,9 @@ private struct CreateRoomSheet: View {
                 .padding(.vertical, KXSpacing.lg)
             }
             .kxPageBackground()
+            .onChange(of: coverItem) { _, newValue in
+                Task { await loadCover(newValue) }
+            }
             .navigationTitle(KXListingCopy.pickText(language, "开个局", "ルームを作る", "Start a room"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -680,6 +707,39 @@ private struct CreateRoomSheet: View {
         }
     }
 
+    private var coverPicker: some View {
+        PhotosPicker(selection: $coverItem, matching: .images) {
+            ZStack {
+                if let coverImage {
+                    Image(uiImage: coverImage)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    LinearGradient(colors: [tint.opacity(0.55), tint.opacity(0.25)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    VStack(spacing: 8) {
+                        Image(systemName: "photo.badge.plus")
+                            .font(.system(size: 30, weight: .semibold))
+                        Text(KXListingCopy.pickText(language, "添加封面(可选)", "カバー画像を追加(任意)", "Add a cover (optional)"))
+                            .font(.caption.weight(.bold))
+                    }
+                    .foregroundStyle(.white)
+                }
+                if isUploadingCover {
+                    Color.black.opacity(0.35)
+                    KXSpinner(size: 26, lineWidth: 3)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .aspectRatio(16.0 / 9.0, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous)
+                    .stroke(KXColor.glassStroke.opacity(0.6), lineWidth: 0.8)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
     private var typePicker: some View {
         VStack(alignment: .leading, spacing: KXSpacing.sm) {
             fieldLabel(KXListingCopy.pickText(language, "这是个什么局?", "どんなルーム?", "What kind of room?"), required: true)
@@ -707,6 +767,64 @@ private struct CreateRoomSheet: View {
         }
     }
 
+    private func loadCover(_ item: PhotosPickerItem?) async {
+        guard let item else { return }
+        // 新选图立刻作废上一代任务:旧任务的所有状态写入(URL/file id/预览/收尾)都要
+        // 过代际比对,否则「选 A(慢)再选 B(快)」时 A 完成后会覆写 coverUploadedURL,
+        // 开出预览是 B、实际封面是 A 的局。
+        coverLoadGeneration += 1
+        let generation = coverLoadGeneration
+        guard let data = try? await item.loadTransferable(type: Data.self),
+              let image = UIImage(data: data) else {
+            if generation == coverLoadGeneration {
+                coverImage = nil
+                coverUploadedURL = ""
+                coverUploadedFileID = ""
+                isUploadingCover = false
+                errorMessage = KXListingCopy.pickText(language, "封面读取失败,换一张试试", "画像を読み込めませんでした", "Couldn't load that image")
+            }
+            return
+        }
+        guard generation == coverLoadGeneration else { return }
+        coverImage = image
+        coverUploadedURL = "" // 旧图 URL/file id 立刻作废:上传窗口内点开局不能带上旧封面
+        coverUploadedFileID = ""
+        isUploadingCover = true
+        errorMessage = nil
+        // 收尾只允许最新代做:旧代清 isUploadingCover 会提前解锁 canSubmit。
+        defer { if generation == coverLoadGeneration { isUploadingCover = false } }
+        do {
+            // 压到 2048 宽以内再传,房间封面不需要原图。
+            let resized = image.kxResized(maxDimension: 2048)
+            guard let jpeg = resized.jpegData(compressionQuality: 0.82) else {
+                if generation == coverLoadGeneration {
+                    coverImage = nil
+                    errorMessage = KXListingCopy.pickText(language, "封面处理失败,换一张试试", "画像を処理できませんでした", "Couldn't process that image")
+                }
+                return
+            }
+            // 封面用 room_cover 通道:S3 持久化 + 缩略图 + 免遭孤儿 GC(与 post_image 不同)。
+            let uploaded = try await KaiXAPIClient.shared.uploadFile(
+                data: jpeg,
+                mime: "image/jpeg",
+                fileName: "room-cover.jpg",
+                purpose: "room_cover",
+                entityType: "room",
+                width: Int(resized.size.width),
+                height: Int(resized.size.height)
+            )
+            guard generation == coverLoadGeneration else { return }
+            coverUploadedURL = uploaded.media.publicUrl ?? uploaded.media.url ?? ""
+            coverUploadedFileID = uploaded.file.id
+        } catch {
+            guard generation == coverLoadGeneration else { return }
+            coverImage = nil
+            coverUploadedURL = ""
+            coverUploadedFileID = ""
+            errorMessage = error.kaixUserMessage
+        }
+    }
+
     private func submit() async {
         guard canSubmit else { return }
         isSubmitting = true
@@ -722,7 +840,9 @@ private struct CreateRoomSheet: View {
                 regionCode: region?.regionCode ?? "",
                 locationHint: locationHint.trimmingCharacters(in: .whitespacesAndNewlines),
                 startsAt: hasStartTime ? KXDateParsing.iso.string(from: startsAt) : "",
-                capacity: hasCapacity ? capacity : 0
+                capacity: hasCapacity ? capacity : 0,
+                coverURL: coverUploadedURL,
+                coverFileID: coverUploadedFileID
             )
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             isSubmitting = false
@@ -731,6 +851,19 @@ private struct CreateRoomSheet: View {
         } catch {
             isSubmitting = false
             errorMessage = error.kaixUserMessage
+        }
+    }
+}
+
+private extension UIImage {
+    func kxResized(maxDimension: CGFloat) -> UIImage {
+        let largest = max(size.width, size.height)
+        guard largest > maxDimension else { return self }
+        let scale = maxDimension / largest
+        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        return renderer.image { _ in
+            draw(in: CGRect(origin: .zero, size: newSize))
         }
     }
 }

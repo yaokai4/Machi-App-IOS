@@ -155,9 +155,30 @@ struct SocialRoomDetailView: View {
     /// 整页越撑越长(之前的 bug)。
     private func content(_ room: KaiXRoomDTO) -> some View {
         VStack(spacing: 0) {
+            heroCover(room)
             roomInfoDisclosure(room)
             chatScroll(room)
             bottomBar(room)
+        }
+    }
+
+    /// 房间封面 hero:设了封面才铺一条定高(200pt)横幅,加载/失败时露出类型渐变
+    /// 兜底;没有封面的局保持原样(聊天优先、不占高),下面定高聊天区布局不受影响。
+    @ViewBuilder
+    private func heroCover(_ room: KaiXRoomDTO) -> some View {
+        if let url = room.coverFullURL {
+            ZStack {
+                LinearGradient(colors: [tint.opacity(0.85), tint.opacity(0.45)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    .overlay {
+                        Image(systemName: KXRoomStyle.icon(room.typeKey))
+                            .font(.system(size: 44, weight: .bold))
+                            .foregroundStyle(KXColor.onTint(tint).opacity(0.85))
+                    }
+                CachedMediaImageView(url: url, targetPixelSize: 1400, failureMode: .transparent)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 200)
+            .clipped()
         }
     }
 

@@ -22,12 +22,14 @@ struct CreateEventView: View {
     @State private var address = ""
     @State private var hasCapacity = false
     @State private var capacity = 20
+    @State private var requiresApproval = false
     @State private var priceText = ""
     @State private var externalURL = ""
 
     @State private var coverItem: PhotosPickerItem?
     @State private var coverImage: UIImage?
     @State private var coverUploadedURL = ""
+    @State private var coverUploadedFileID = ""
     @State private var isUploadingCover = false
     /// 封面上传代际:快速连选两张图时,旧的慢上传完成后不得覆写新图的 URL/收尾
     /// 守卫,否则 last-writer-wins 会发布出与预览不符的封面。
@@ -265,6 +267,16 @@ struct CreateEventView: View {
                 }
             }
             VStack(alignment: .leading, spacing: 7) {
+                Toggle(isOn: $requiresApproval.animation(.snappy(duration: 0.2))) {
+                    Text(KXListingCopy.pickText(language, "报名需要我审核", "参加に承認が必要", "Require my approval"))
+                        .font(.subheadline.weight(.semibold))
+                }
+                .tint(KXColor.accent)
+                Text(KXListingCopy.pickText(language, "开启后报名先待审核,由你逐个通过", "オンにすると承認待ちになり個別に承認します", "Guests wait for your approval before they're in"))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            VStack(alignment: .leading, spacing: 7) {
                 sectionLabel(KXListingCopy.pickText(language, "费用展示", "料金表示", "Price display"))
                 TextField(KXListingCopy.pickText(language, "例如 免费 / ¥1,500(现场付)", "例:無料 / ¥1,500(現地払い)", "e.g. Free / ¥1,500 at door"), text: $priceText)
                     .font(.subheadline.weight(.semibold))
@@ -344,6 +356,7 @@ struct CreateEventView: View {
                 // 保证预览与 coverUploadedURL 永远成对一致。
                 coverImage = nil
                 coverUploadedURL = ""
+                coverUploadedFileID = ""
                 isUploadingCover = false
                 errorMessage = KXListingCopy.pickText(language, "封面读取失败,换一张试试", "画像を読み込めませんでした", "Couldn't load that image")
             }
@@ -352,6 +365,7 @@ struct CreateEventView: View {
         guard generation == coverLoadGeneration else { return }
         coverImage = image
         coverUploadedURL = "" // 旧图 URL 立刻作废:上传窗口内点发布不能带上旧封面
+        coverUploadedFileID = ""
         isUploadingCover = true
         errorMessage = nil
         // 收尾只允许最新代做:旧代清 isUploadingCover 会提前解锁 canSubmit。
@@ -371,17 +385,19 @@ struct CreateEventView: View {
                 data: jpeg,
                 mime: "image/jpeg",
                 fileName: "event-cover.jpg",
-                purpose: "post_image",
+                purpose: "event_cover",
                 entityType: "event",
                 width: Int(resized.size.width),
                 height: Int(resized.size.height)
             )
             guard generation == coverLoadGeneration else { return }
             coverUploadedURL = uploaded.media.publicUrl ?? uploaded.media.url ?? ""
+            coverUploadedFileID = uploaded.file.id
         } catch {
             guard generation == coverLoadGeneration else { return }
             coverImage = nil
             coverUploadedURL = ""
+            coverUploadedFileID = ""
             errorMessage = error.kaixUserMessage
         }
     }
@@ -400,6 +416,7 @@ struct CreateEventView: View {
             payload.description = description.trimmingCharacters(in: .whitespacesAndNewlines)
             payload.category = category
             payload.cover_url = coverUploadedURL
+            payload.cover_file_id = coverUploadedFileID
             // 兜底:即便 UI 钳制被绕过,也绝不提交早于开始时间的结束时间
             // (否则服务端按 COALESCE(ends,starts) 归类会把未来活动判成"往期"而消失)。
             payload.ends_at = hasEndTime ? KXDateParsing.iso.string(from: max(endsAt, startsAt.addingTimeInterval(3600))) : ""
@@ -409,6 +426,7 @@ struct CreateEventView: View {
             payload.city_slug = region?.cityCode ?? ""
             payload.region_code = region?.regionCode ?? ""
             payload.capacity = hasCapacity ? capacity : 0
+            payload.requires_approval = requiresApproval
             payload.price_text = priceText.trimmingCharacters(in: .whitespacesAndNewlines)
             payload.external_url = externalURL.trimmingCharacters(in: .whitespacesAndNewlines)
             let event = try await KaiXAPIClient.shared.createEvent(payload)
