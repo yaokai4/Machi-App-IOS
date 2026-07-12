@@ -144,13 +144,20 @@ struct MediaGridView: View {
     /// Aspect ratio (width / height) for a lone feed photo. Uses the image's
     /// natural ratio — so a landscape food shot is shown short and uncropped
     /// instead of being force-squared — but clamps it to a comfortable window
-    /// (4:5 portrait … 16:9 landscape) so a tall portrait can't dominate the
+    /// (1:1 square … 1.91 landscape) so a tall portrait can't dominate the
     /// card and a panorama can't shrink to a sliver. Unknown dimensions fall
     /// back to a calm 4:3.
+    ///
+    /// The portrait floor is 1:1 (was 4:5 = 0.80): at the ~345pt feed width a
+    /// 4:5 photo rendered ~431pt tall (~57% of the phone) and dominated the
+    /// card. Squaring caps the tallest single photo at ~345pt (~46%), matches
+    /// the multi-image 九宫格 rhythm, and lets a second card peek — the full,
+    /// uncropped image is always one tap away in MediaPreviewView. The 1.91
+    /// ceiling unifies with Web and the IG/X/Threads landscape standard.
     static func singleImageAspectRatio(width: Double, height: Double) -> CGFloat {
         let natural = (width > 0 && height > 0) ? CGFloat(width / height) : 4.0 / 3.0
-        let minRatio: CGFloat = 4.0 / 5.0   // 0.80 — tallest allowed (portrait)
-        let maxRatio: CGFloat = 16.0 / 9.0  // 1.78 — widest allowed (landscape)
+        let minRatio: CGFloat = 1.0   // 1:1 — tallest allowed (a taller portrait is squared)
+        let maxRatio: CGFloat = 1.91  // widest allowed (landscape) — unified with Web / IG-X-Threads
         return min(max(natural, minRatio), maxRatio)
     }
 
