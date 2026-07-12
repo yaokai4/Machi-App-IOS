@@ -14,6 +14,9 @@ final class NotificationEntity {
     // Conversation deep-link for 'message' / 'listing_inquiry' rows.
     // Optional so SwiftData lightweight-migrates existing local stores.
     var targetConversationId: String?
+    // Custom title for admin/system broadcast rows. Empty for typed
+    // notifications, whose card title is derived from the type instead.
+    var customTitle: String = ""
     var content: String
     var isRead: Bool
     var createdAt: Date
@@ -31,6 +34,7 @@ final class NotificationEntity {
         targetCommentId: String? = nil,
         targetListingId: String? = nil,
         targetConversationId: String? = nil,
+        customTitle: String = "",
         content: String,
         isRead: Bool = false,
         createdAt: Date = .now,
@@ -47,6 +51,7 @@ final class NotificationEntity {
         self.targetCommentId = targetCommentId
         self.targetListingId = targetListingId
         self.targetConversationId = targetConversationId
+        self.customTitle = customTitle
         self.content = content
         self.isRead = isRead
         self.createdAt = createdAt

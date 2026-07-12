@@ -132,11 +132,17 @@ final class NotificationStore: ObservableObject {
     /// so adding them into the app-icon badge would double-count every unread
     /// DM (and contradict the messages tab badge).
     var socialUnreadCount: Int {
-        notificationsById.values.reduce(into: 0) { count, notification in
-            guard !notification.isRead,
-                  notification.type != .message,
-                  notification.type != .listingInquiry else { return }
-            count += 1
+        // Count unread GROUPS (one per aggregated card the notifications list
+        // renders), not raw rows — so a badge of "3" opens to exactly 3 unread
+        // cards instead of, say, one "X and 4 others liked your post" card. Reuses
+        // the same groupedNotificationIds the list is built from. DM-backed types
+        // stay excluded: MessageStore already counts those per-thread.
+        groupedNotificationIds.reduce(into: 0) { count, ids in
+            guard let type = ids.first.flatMap({ notificationsById[$0]?.type }),
+                  type != .message, type != .listingInquiry else { return }
+            if ids.contains(where: { notificationsById[$0]?.isRead == false }) {
+                count += 1
+            }
         }
     }
 

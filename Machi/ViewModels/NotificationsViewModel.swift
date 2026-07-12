@@ -20,7 +20,29 @@ final class NotificationsViewModel: ObservableObject {
             .sorted { $0.createdAt > $1.createdAt }
     }
 
+    /// Seed the view-model from the already-synced NotificationStore (populated
+    /// by ContentView's 12s poll) so re-opening the sheet paints immediately
+    /// instead of flashing a spinner + issuing a redundant fetch. Actors are
+    /// resolved from the local SwiftData store so rows don't briefly render as
+    /// "Machi" with blank avatars before the network refresh lands.
+    func hydrate(from store: NotificationStore, context: ModelContext) async {
+        guard notifications.isEmpty else { return }
+        let cached = Array(store.notificationsById.values)
+        guard !cached.isEmpty else { return }
+        notifications = cached
+        rebuildGroupedNotifications()
+        if let users = try? await UserRepository(context: context).fetchUsers(ids: Set(cached.map(\.actorId))) {
+            actors = Dictionary(uniqueKeysWithValues: users.map { ($0.id, $0) })
+        }
+        state = notifications.isEmpty ? .empty : .loaded
+    }
+
     func load(context: ModelContext, notificationStore: NotificationStore? = nil) async {
+        // Capture the acting session so a response landing after a logout /
+        // account switch can't re-seed the shared store (and app-icon badge)
+        // with the previous account's notifications — mirrors the poll path's
+        // isSessionStillCurrent guard in ContentView.
+        let actingUserId = AuthService.shared.currentUserId
         let hasCachedContent = !notifications.isEmpty
         if !hasCachedContent {
             state = .loading
@@ -29,6 +51,9 @@ final class NotificationsViewModel: ObservableObject {
         do {
             if KaiXBackend.token != nil {
                 let response = try await KaiXAPIClient.shared.notifications(kind: "all")
+                guard !Task.isCancelled,
+                      KaiXBackend.token != nil,
+                      AuthService.shared.currentUserId == actingUserId else { return }
                 notifications = response.items.map(Self.entity(from:))
                 rebuildGroupedNotifications()
                 notificationStore?.setNotifications(notifications)
@@ -177,6 +202,7 @@ final class NotificationsViewModel: ObservableObject {
             targetCommentId: dto.target_comment_id,
             targetListingId: dto.target_listing_id,
             targetConversationId: dto.target_conversation_id,
+            customTitle: dto.title ?? "",
             content: dto.content ?? "",
             isRead: dto.is_read,
             createdAt: parseDate(dto.created_at) ?? .now,
@@ -197,6 +223,7 @@ struct AggregatedNotification: Identifiable {
     let actorIds: [String]
 
     var type: NotificationType { latest.type }
+    var customTitle: String { latest.customTitle }
     var targetPostId: String? { latest.targetPostId }
     var targetCommentId: String? { latest.targetCommentId }
     var targetListingId: String? { latest.targetListingId }

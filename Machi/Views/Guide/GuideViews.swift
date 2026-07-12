@@ -83,10 +83,6 @@ struct GuideHomeView: View {
         } else if let home = viewModel.home {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 18) {
-                    // AI 优先:「Machi AI」Tab 的第一屏就是 AI 对话入口 hero,
-                    // 让 Tab 名和落点名实相符;资料库整体下移为第二屏区块。
-                    GuideAIHero()
-
                     if let message = viewModel.errorMessage, !message.isEmpty {
                         GuideInlineStatus(message: message)
                     }
@@ -121,6 +117,10 @@ struct GuideHomeView: View {
                         GuideLibraryDualEntry()
 
                         GuideCategoryGrid(categories: GuideSupportCatalog.orderedCategories(from: home.categories))
+
+                        // Machi AI 对话入口:置于资料库导航区之后、内容流中部,
+                        // 作为「查资料」与「读内容」之间的功能分隔(从首屏顶部下移)。
+                        GuideAIHero()
 
                         // 推荐内容 / 最新指南 / 热门资料 —— 承接 web /guide 内容资产。
                         // 两个 section 在数据为空时自动隐藏,不会留空位。

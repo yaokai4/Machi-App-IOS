@@ -805,10 +805,34 @@ struct KaiXNotificationDTO: Codable, Equatable {
     let target_comment_id: String?
     let target_listing_id: String?
     let target_conversation_id: String?
+    // Custom title for admin/system broadcasts; empty/absent for typed
+    // notifications whose title the client derives from the type.
+    let title: String?
     let content: String?
     let is_read: Bool
     let created_at: String
     let actor: KaiXUserDTO?
+}
+
+/// One admin push-broadcast task (mirrors the server's serialize_push_campaign).
+/// Only the audience + admin-authored copy + aggregate counts — never the
+/// recipients' identities.
+struct KaiXPushCampaignDTO: Codable, Equatable, Identifiable {
+    let id: String
+    let title: String
+    let body: String
+    let audience: String
+    let audienceUserIds: [String]?
+    let audienceUserCount: Int?
+    let deepLinkType: String?
+    let deepLinkId: String?
+    let urgent: Bool
+    let status: String
+    let recipientCount: Int
+    let sentCount: Int
+    let failedCount: Int
+    let createdAt: String?
+    let updatedAt: String?
 }
 
 struct KaiXMessageDTO: Codable, Equatable {

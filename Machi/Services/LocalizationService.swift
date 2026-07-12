@@ -491,6 +491,17 @@ struct LocalizationService {
         "markUnread": [.zh: "标记未读", .ja: "未読にする", .en: "Mark unread"],
         "markViewed": [.zh: "已查看", .ja: "確認済み", .en: "Viewed"],
         "markUnviewed": [.zh: "未查看", .ja: "未確認", .en: "Unread"],
+        // VoiceOver value spoken after an unread notification row.
+        "unread": [.zh: "未读", .ja: "未読", .en: "Unread"],
+        // Admin-only Settings section (shown only for role == .admin).
+        "adminGroup": [.zh: "管理员", .ja: "管理者", .en: "Admin"],
+        "adminPushTitle": [.zh: "推送广播", .ja: "プッシュ配信", .en: "Push broadcast"],
+        "adminPushSubtitle": [.zh: "向 App 用户发送自定义通知", .ja: "アプリユーザーへカスタム通知を送信", .en: "Send custom notifications to app users"],
+        // Empty state shown when a notification filter (关注/评论…) matches nothing
+        // but other categories still hold notifications — distinct from a truly
+        // empty inbox so it never implies "you have no notifications at all".
+        "noFilteredNotifications": [.zh: "这个分类暂时没有通知", .ja: "このカテゴリの通知はまだありません", .en: "Nothing in this category yet"],
+        "noFilteredNotificationsHint": [.zh: "切换上方的分类，查看其它通知", .ja: "上のタブを切り替えて他の通知を確認できます", .en: "Switch the tabs above to see your other notifications"],
         "notifLiked": [.zh: "喜欢了你的帖子", .ja: "があなたの投稿にいいねしました", .en: "liked your post"],
         "notifReposted": [.zh: "转发了你的帖子", .ja: "があなたの投稿をリポストしました", .en: "reposted your post"],
         "notifCommented": [.zh: "评论了你的帖子", .ja: "があなたの投稿にコメントしました", .en: "commented on your post"],

@@ -316,16 +316,13 @@ final class HomeViewModel: ObservableObject {
             loadedIds = Set(posts.map(\.id))
             postStore.setFeed(posts, append: false)
             currentPage += 1
-            // Hot has no server cursor (single ranked page) — after it,
-            // deterministic local windows keep deeper browsing alive.
+            // 热搜 now paginates like the other tabs: page 1 is the ranked
+            // trending board and the server hands back a recency next_cursor, so
+            // "load more" walks the full timeline below the trending top instead
+            // of stopping at one page. remoteHasMore therefore drives hot too; the
+            // local-store fallback flag only matters in test/UI-test builds where
+            // there is no server cursor at all.
             if canLoadMore {
-                // Hot has no server cursor (single ranked page). Deeper browsing
-                // via deterministic local windows only exists in the local-store
-                // fallback build; in production `fetchPage(.hot)` re-requests the
-                // same first page with no cursor, so keeping canLoadMore true
-                // there just re-pulls an all-duplicate page on every scroll-to-
-                // bottom. Only preserve the hot "load more" when the local
-                // fallback can actually serve deeper windows.
                 canLoadMore = usedRemotePage
                     ? (remoteHasMore || (requestedMode == .hot && KaiXRuntimeFlags.allowLocalStoreFallback))
                     : (page.count == KaiXConfig.pageSize || remoteHasMore)

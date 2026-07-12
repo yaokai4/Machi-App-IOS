@@ -130,6 +130,7 @@ final class NotificationRepository {
             targetCommentId: dto.target_comment_id,
             targetListingId: dto.target_listing_id,
             targetConversationId: dto.target_conversation_id,
+            customTitle: dto.title ?? "",
             content: dto.content ?? "",
             isRead: dto.is_read,
             createdAt: parseDate(dto.created_at) ?? .now,

@@ -29,6 +29,10 @@ struct NotificationsView: View {
         .kxPageBackground()
         .toolbar(.hidden, for: .navigationBar)
         .task {
+            // Seed from the already-synced NotificationStore so re-opening the
+            // sheet renders instantly instead of flashing a full-screen spinner
+            // and re-fetching; load() then refreshes silently in the background.
+            await viewModel.hydrate(from: notificationStore, context: modelContext)
             await viewModel.load(context: modelContext, notificationStore: notificationStore)
         }
         .onAppear {
@@ -64,7 +68,11 @@ struct NotificationsView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .loaded:
             if filteredNotifications.isEmpty {
-                emptyContent
+                // The state machine only reaches .loaded when the inbox is
+                // non-empty, so an empty *filtered* set means the active filter
+                // matched nothing — show filter-specific copy, not "no
+                // notifications at all" (which would contradict the All tab).
+                filteredEmptyContent
             } else {
                 notificationList
             }
@@ -114,13 +122,17 @@ struct NotificationsView: View {
                         onOpenTarget: {
                             if let route = route(for: item) {
                                 openNotification(item, route: route)
-                            } else if item.type == .system {
-                                // Target-less system notices are announcements:
-                                // the tap just acknowledges them. A "内容已删除"
-                                // alert here would be wrong and alarming.
-                                markReadInBackground(item)
-                            } else {
+                            } else if item.type.isPostBearing {
+                                // A post-bearing interaction (like/comment/…) whose
+                                // post is unreachable genuinely means it was deleted.
                                 router.routeErrorMessage = L("postDeletedHelp", language)
+                            } else {
+                                // Target-less announcements (system / city digest /
+                                // follow digest) and any row missing its deep-link id:
+                                // just acknowledge, exactly like the push path, which
+                                // never errors. A "内容已删除" alert here is wrong and
+                                // alarming — this was the city_digest tap-error bug.
+                                markReadInBackground(item)
                             }
                         }
                     )
@@ -174,6 +186,24 @@ struct NotificationsView: View {
         }
     }
 
+    private var filteredEmptyContent: some View {
+        ScrollView {
+            KXStatePanel(
+                title: L("noFilteredNotifications", language),
+                subtitle: L("noFilteredNotificationsHint", language),
+                systemImage: "line.3.horizontal.decrease.circle",
+                accent: .orange
+            )
+            .padding(.horizontal, KXSpacing.screen)
+            .padding(.top, 34)
+            .padding(.bottom, chrome.bottomContentPadding + 24)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .refreshable {
+            await viewModel.load(context: modelContext, notificationStore: notificationStore)
+        }
+    }
+
     private var filterPicker: some View {
         KXSegmentedControl(NotificationFilter.allCases, selection: $filter, itemMinWidth: 54, itemHeight: 32) { item in
             Text(item.title(language))
@@ -183,27 +213,47 @@ struct NotificationsView: View {
     }
 
     private func route(for item: AggregatedNotification) -> KXRoute? {
+        // Every target id is validated non-empty here: an empty/whitespace id
+        // would build a route that KXRoute.normalized later rejects, surfacing a
+        // second "无法打开" error alert. Treating "" as absent funnels those rows
+        // into the graceful acknowledge fallback instead.
         if (item.type == .message || item.type == .listingInquiry),
-           let conversationId = item.targetConversationId {
+           let conversationId = item.targetConversationId,
+           !conversationId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return .conversation(conversationId: conversationId)
         }
         // Saved-search + favorite (price drop / closed) rows all deep-link to
         // the listing they carry.
         if item.type == .savedSearch || item.type == .favoritePriceDrop || item.type == .favoriteClosed,
-           let listingId = item.targetListingId {
+           let listingId = item.targetListingId,
+           !listingId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return .cityListingDetail(listingId: listingId)
         }
-        if let postId = item.targetPostId {
+        if let postId = item.targetPostId,
+           !postId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             switch item.type {
             case .comment, .reply:
                 return .postDetailComment(postId: postId, commentId: item.targetCommentId)
+            case .mention:
+                // Focus the mentioning comment when the server pinpointed one; a
+                // post-body mention (no comment id) opens at the top of the post.
+                return item.targetCommentId == nil
+                    ? .postDetail(postId: postId)
+                    : .postDetailComment(postId: postId, commentId: item.targetCommentId)
             default:
                 return .postDetail(postId: postId)
             }
         }
-        // A follow or batched follow digest opens the (primary) actor's profile.
-        if item.type == .follow || item.type == .followDigest, let actorId = item.actorIds.first {
+        // A single follow opens the follower's profile.
+        if item.type == .follow, let actorId = item.actorIds.first,
+           !actorId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return .profile(userId: actorId)
+        }
+        // A batched follow digest has no single actor (the server stamps the
+        // recipient's own id as actor_id), so open the recipient's own profile —
+        // where the follower list lives. Keeps in-app and push routing in lockstep.
+        if item.type == .followDigest {
+            return .profile(userId: currentUser.id)
         }
         return nil
     }
@@ -291,6 +341,9 @@ private struct NotificationCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            // Unread is otherwise conveyed only visually (accent rail/dot, bold
+            // title). Speak it so VoiceOver can distinguish read from unread.
+            .accessibilityValue(isUnread ? L("unread", language) : "")
         }
         .padding(.vertical, 11)
         .padding(.horizontal, 13)
@@ -368,7 +421,10 @@ private struct NotificationCard: View {
         case .favoriteClosed: return L("notifFavoriteClosed", language)
         case .followDigest: return L("notifFollowDigest", language)
         case .cityDigest: return L("notifCityDigest", language)
-        case .system: return L("systemNotification", language)
+        // Admin broadcasts carry their own custom title; fall back to the
+        // generic "系统通知" only when none was set.
+        case .system:
+            return notification.customTitle.isEmpty ? L("systemNotification", language) : notification.customTitle
         }
     }
 
@@ -450,9 +506,23 @@ private enum NotificationFilter: String, CaseIterable, Identifiable {
         case .interactions: [.like, .repost, .bookmark, .mention].contains(type)
         case .comments: [.comment, .reply].contains(type)
         case .follows: type == .follow || type == .followDigest
-        // Favorite/city digests are non-social announcements — group them with
-        // system so they still surface under a filter (and not just "all").
-        case .system: [.system, .favoritePriceDrop, .favoriteClosed, .cityDigest].contains(type)
+        // Saved-search matches + favorite (price drop / closed) + city digests are
+        // non-social announcements — grouped under System so they surface under a
+        // filter, not just "All". (message / listing_inquiry are intentionally
+        // All-only: they are DM-backed and belong to the Messages tab.)
+        case .system: [.system, .savedSearch, .favoritePriceDrop, .favoriteClosed, .cityDigest].contains(type)
+        }
+    }
+}
+
+private extension NotificationType {
+    /// True for interactions that hang off a specific post. Only these should
+    /// surface a "post deleted" alert when their target can't be resolved — every
+    /// other type (system / digests / DM-backed) is acknowledged silently instead.
+    var isPostBearing: Bool {
+        switch self {
+        case .like, .repost, .comment, .reply, .mention, .bookmark: return true
+        default: return false
         }
     }
 }

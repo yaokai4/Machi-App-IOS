@@ -38,6 +38,11 @@ struct SettingsView: View {
                     serviceSection
                         .kxSettingsEntrance(didEnter, index: 4)
 
+                    if currentUser.role == .admin {
+                        adminSection
+                            .kxSettingsEntrance(didEnter, index: 5)
+                    }
+
                     Button {
                         showLogoutConfirm = true
                     } label: {
@@ -305,6 +310,21 @@ struct SettingsView: View {
                 subtitle: KXListingCopy.pickText(language, "缓存与存储清理", "キャッシュと保存容量", "Cache & storage")
             ) {
                 DataManagementView()
+            }
+        }
+    }
+
+    // Admin-only tools. Shown solely for role == .admin; every endpoint behind
+    // it is independently gated by require_admin server-side.
+    private var adminSection: some View {
+        SettingsSectionCard(title: L("adminGroup", language)) {
+            SettingsRowLink(
+                icon: "megaphone.fill",
+                tint: .red,
+                title: L("adminPushTitle", language),
+                subtitle: L("adminPushSubtitle", language)
+            ) {
+                AdminPushComposeView(currentUser: currentUser)
             }
         }
     }

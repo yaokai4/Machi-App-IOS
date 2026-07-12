@@ -503,9 +503,20 @@ struct ContentView: View {
             appRouter.open(.cityListingDetail(listingId: listingId), in: .search)
             return
         }
-        // Follow / follow-digest banners open the actor's profile, matching the
-        // in-app NotificationsView.route(for:) behavior.
-        if (type == .follow || type == .followDigest), let actorId, !actorId.isEmpty {
+        // A follow-digest's payload actorId is unreliable — the recipient's own
+        // id when delivered locally, "" over APNs — so route it to the current
+        // user's own profile (where the follower list lives), regardless of the
+        // payload, so local / APNs / in-app all agree (matches route(for:)).
+        if type == .followDigest {
+            appChrome.select(.home)
+            appRouter.setActiveTab(.home)
+            if let uid = appState.currentUser?.id, !uid.isEmpty {
+                appRouter.open(.profile(userId: uid), in: .home)
+            }
+            return
+        }
+        // A single follow banner opens the follower's profile.
+        if type == .follow, let actorId, !actorId.isEmpty {
             appChrome.select(.home)
             appRouter.setActiveTab(.home)
             appRouter.open(.profile(userId: actorId), in: .home)
@@ -520,7 +531,13 @@ struct ContentView: View {
         appChrome.select(.home)
         appRouter.setActiveTab(.home)
         if let postId, !postId.isEmpty {
-            appRouter.open(.postDetail(postId: postId), in: .home)
+            // Comment / reply banners focus the specific comment, matching the
+            // in-app route(for:) behavior; everything else opens the post top.
+            if type == .comment || type == .reply {
+                appRouter.open(.postDetailComment(postId: postId, commentId: userInfo?["commentId"] as? String), in: .home)
+            } else {
+                appRouter.open(.postDetail(postId: postId), in: .home)
+            }
         }
     }
 
@@ -678,6 +695,7 @@ struct ContentView: View {
             targetCommentId: dto.target_comment_id,
             targetListingId: dto.target_listing_id,
             targetConversationId: dto.target_conversation_id,
+            customTitle: dto.title ?? "",
             content: dto.content ?? "",
             isRead: dto.is_read,
             createdAt: parseServerDate(dto.created_at) ?? .now,

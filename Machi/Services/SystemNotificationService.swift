@@ -122,6 +122,9 @@ final class SystemNotificationService: NSObject {
             // in-app NotificationsView.route(for:) behavior.
             if !notification.actorId.isEmpty { info["actorId"] = notification.actorId }
             if let postId = notification.targetPostId { info["postId"] = postId }
+            // Carry the comment id so a comment/reply banner tap can scroll
+            // straight to the comment, matching the in-app list's route(for:).
+            if let commentId = notification.targetCommentId { info["commentId"] = commentId }
             if let listingId = notification.targetListingId { info["listingId"] = listingId }
             if let conversationId = notification.targetConversationId { info["conversationId"] = conversationId }
             content.userInfo = info
@@ -242,6 +245,7 @@ extension SystemNotificationService: UNUserNotificationCenterDelegate {
         if let type = userInfo["type"] as? String { payload["type"] = type }
         if let actorId = userInfo["actorId"] as? String { payload["actorId"] = actorId }
         if let postId = userInfo["postId"] as? String { payload["postId"] = postId }
+        if let commentId = userInfo["commentId"] as? String { payload["commentId"] = commentId }
         if let listingId = userInfo["listingId"] as? String { payload["listingId"] = listingId }
         if let conversationId = userInfo["conversationId"] as? String { payload["conversationId"] = conversationId }
         if let conversationId = Self.conversationId(from: userInfo) {
