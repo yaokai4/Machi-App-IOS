@@ -106,40 +106,16 @@ struct GuideHomeView: View {
                             journeys: viewModel.journeyResults
                         )
                     } else {
-                        // Journey 门面:把「路径」页的行动路径带到首页第一屏,
-                        // 横滑 2-4 张;登录用户叠真实进度,数据为空自动隐藏。
-                        GuideJourneySpotlight(
-                            journeys: viewModel.homeJourneys.isEmpty ? (home.journeys ?? []) : viewModel.homeJourneys,
-                            progress: viewModel.journeyProgress
-                        )
-
-                        // 高价值资料库优先:学校库 / 公司库在六大指南之前。
-                        GuideLibraryDualEntry()
-
-                        GuideCategoryGrid(categories: GuideSupportCatalog.orderedCategories(from: home.categories))
-
-                        // Machi AI 对话入口:置于资料库导航区之后、内容流中部,
-                        // 作为「查资料」与「读内容」之间的功能分隔(从首屏顶部下移)。
+                        // 首页按用户要求精简:浏览资料库(含 8 入口,恒显)+ Machi AI(主打)
+                        // + 学校库/公司库 + 六大指南入口。已移除「你现在想解决什么」(Journey)、
+                        // 「最新指南」、「热门资料与服务」、「个人工作台」入口 —— 不再堆内容流。
                         GuideAIHero()
 
-                        // 推荐内容 / 最新指南 / 热门资料 —— 承接 web /guide 内容资产。
-                        // 两个 section 在数据为空时自动隐藏,不会留空位。
-                        GuideArticleSection(
-                            title: guideText(language, "最新指南", "最新ガイド", "Latest guides"),
-                            subtitle: guideText(language, "热门与最近更新的指南文章", "人気・最近更新のガイド記事", "Popular and recently updated guides"),
-                            articles: Array(home.featuredArticles.prefix(4)),
-                            compact: true
-                        )
+                        // 高价值资料库:学校库 / 公司库。
+                        GuideLibraryDualEntry()
 
-                        GuideProductsSection(
-                            products: home.featuredProducts,
-                            title: guideText(language, "热门资料与服务", "人気の資料・サービス", "Popular resources & services"),
-                            subtitle: guideText(language, "资料包、模板、清单与人工辅导", "資料パック・テンプレート・サポート", "Packs, templates, and coaching")
-                        )
-
-                        // 个人行动类工具(Todo/日历/管理)已移出指南首页,只留一个去
-                        // 「我的工作台」的轻入口,避免「查资料」和「办事」混在一起。
-                        GuidePersonalWorkbenchCTA()
+                        // 六大指南入口:日本升学 / 日本就职 / 海外留学 / JLPT / 日本生活 / 资料与服务。
+                        GuideCategoryGrid(categories: GuideSupportCatalog.orderedCategories(from: home.categories))
                     }
                 }
                 .padding(.horizontal, KXSpacing.screen)
@@ -1514,14 +1490,15 @@ private struct GuideLibraryHero: View {
                             searchText = tag
                         } label: {
                             Text(tag)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.primary.opacity(0.78))
-                                .padding(.horizontal, 11)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(KXColor.livingInk.opacity(0.74))
+                                .padding(.horizontal, 12)
                                 .padding(.vertical, 7)
-                                .background(KXColor.livingSurface.opacity(0.82), in: Capsule())
+                                .background(KXColor.livingSurface, in: Capsule())
+                                .overlay(Capsule().stroke(KXColor.livingInk.opacity(0.06), lineWidth: 0.8))
                         }
                         .buttonStyle(.fullArea)
-                        .contentShape(Rectangle())
+                        .contentShape(Capsule())
                     }
                 }
             }
@@ -1699,69 +1676,66 @@ private struct GuideAIHero: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: KXSpacing.md) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: KXSpacing.md) {
-                MachiAIMark(size: 56)
-                    .shadow(color: KXColor.livingAccent.opacity(0.32), radius: 7, y: 3)
+                MachiAIMark(size: 50)
+                    .shadow(color: KXColor.livingAccent.opacity(0.26), radius: 8, y: 3)
 
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text("Machi AI")
-                        .kxScaledFont(24, relativeTo: .title2, weight: .bold, design: .rounded)
+                        .kxScaledFont(22, relativeTo: .title3, weight: .bold, design: .rounded)
                         .foregroundStyle(KXColor.livingInk)
                     Text(guideText(language,
                                    "在日生活、升学、就职，有问题先问它。",
                                    "日本での生活・進学・就職、まずここで質問。",
                                    "Life, study, and work in Japan — ask here first."))
-                        .font(.footnote.weight(.semibold))
+                        .font(.footnote)
                         .foregroundStyle(KXColor.livingMuted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
             }
 
-            // 常驻输入框样式的 CTA:看起来像 composer,点击即进入聊天页。
+            // 主 CTA:纤细胶囊按钮——点一下直接进入 Machi AI 对话页
+            //(onAccent 文字在浅/深色下都对比充足)。
             Button {
                 router.open(.guideAI(prompt: nil), in: .guide)
             } label: {
-                HStack(spacing: KXSpacing.sm) {
-                    MachiAIGlyph(lineWidth: 1.8)
-                        .foregroundStyle(KXColor.livingAccent)
-                        .frame(width: 18, height: 18)
-                    Text(guideText(language, "问问 Machi AI…", "Machi AI に聞いてみよう…", "Ask Machi AI…"))
-                        .font(.subheadline)
-                        .foregroundStyle(KXColor.livingMuted)
+                HStack(spacing: 7) {
+                    MachiAIGlyph(lineWidth: 1.6)
+                        .foregroundStyle(KXColor.onAccent)
+                        .frame(width: 15, height: 15)
+                    Text(guideText(language, "问问 Machi AI", "Machi AI に聞く", "Ask Machi AI"))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(KXColor.onAccent)
                     Spacer(minLength: 0)
-                    Image(systemName: "arrow.up.circle.fill")
-                        .kxScaledFont(24)
-                        .foregroundStyle(KXColor.livingAccent)
+                    Image(systemName: "arrow.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(KXColor.onAccent.opacity(0.8))
                 }
-                .padding(.horizontal, 14)
-                .frame(height: 50)
+                .padding(.horizontal, 16)
+                .frame(height: 44)
                 .frame(maxWidth: .infinity)
-                .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
-                        .stroke(KXColor.livingAccent.opacity(0.28), lineWidth: 1)
-                )
+                .background(KXColor.livingAccent, in: Capsule())
+                .shadow(color: KXColor.livingAccent.opacity(0.20), radius: 8, y: 3)
             }
             .buttonStyle(.fullArea)
-            .contentShape(Rectangle())
+            .contentShape(Capsule())
             .accessibilityIdentifier("guide.ai.entry")
             .accessibilityLabel(guideText(language, "问问 Machi AI", "Machi AI に聞く", "Ask Machi AI"))
 
-            // 场景化快捷问题:点击同样进入聊天页开始提问。
+            // 场景化快捷问题:点击进入对话页并预填问题。tonal 胶囊,与主 CTA 同一色系。
             FlowLayout(spacing: 7) {
                 ForEach(starterQuestions, id: \.self) { question in
                     Button {
                         router.open(.guideAI(prompt: question), in: .guide)
                     } label: {
                         Text(question)
-                            .font(.caption.weight(.semibold))
+                            .font(.caption.weight(.medium))
                             .foregroundStyle(KXColor.livingAccent)
-                            .padding(.horizontal, 11)
+                            .padding(.horizontal, 12)
                             .padding(.vertical, 7)
-                            .background(KXColor.livingSurface.opacity(0.9), in: Capsule())
-                            .overlay(Capsule().stroke(KXColor.livingAccent.opacity(0.18), lineWidth: 0.8))
+                            .background(KXColor.livingAccentSoft, in: Capsule())
                     }
                     .buttonStyle(.fullArea)
                     .contentShape(Capsule())
@@ -1770,12 +1744,12 @@ private struct GuideAIHero: View {
         }
         .padding(KXSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(KXColor.livingSoft, in: RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous))
+        .background(KXColor.livingSoft, in: RoundedRectangle(cornerRadius: KXRadius.sheet, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous)
-                .stroke(KXColor.livingInk.opacity(0.06), lineWidth: 1)
+            RoundedRectangle(cornerRadius: KXRadius.sheet, style: .continuous)
+                .stroke(KXColor.livingInk.opacity(0.06), lineWidth: 0.8)
         )
-        .shadow(color: Color.black.opacity(0.06), radius: 14, y: 6)
+        .shadow(color: Color.black.opacity(0.05), radius: 14, y: 7)
     }
 }
 
