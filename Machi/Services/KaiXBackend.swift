@@ -131,8 +131,12 @@ enum KaiXBackend {
     /// `localStorage` under the same name so the concept stays
     /// symmetric across platforms; only the storage backend differs.
     static var token: String? {
-        get { KaiXTokenStore.read() }
+        get {
+            guard KaiXRuntimeFlags.allowBackendRequests else { return nil }
+            return KaiXTokenStore.read()
+        }
         set {
+            guard KaiXRuntimeFlags.allowBackendRequests else { return }
             if let value = newValue, !value.isEmpty {
                 KaiXTokenStore.write(value)
                 // 新登录成功 → 允许下一次会话失效再触发一次退游客流程。

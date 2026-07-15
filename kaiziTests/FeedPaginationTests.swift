@@ -59,6 +59,7 @@ struct FeedPaginationTests {
             target_comment_id: nil,
             target_listing_id: nil,
             target_conversation_id: nil,
+            title: nil,
             content: "喜欢了你的帖子",
             is_read: false,
             created_at: "2026-06-10T03:00:00+00:00",

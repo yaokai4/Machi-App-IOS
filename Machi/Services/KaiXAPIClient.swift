@@ -91,6 +91,10 @@ final class KaiXAPIClient {
         timeoutInterval: TimeInterval = 25,
         maxReplayAttempts: Int? = nil
     ) async throws -> Data {
+        guard KaiXRuntimeFlags.allowBackendRequests else {
+            throw URLError(.noPermissionsToReadFile)
+        }
+
         // Build the URL defensively. `request` is the hot path for every API
         // call; a malformed path/query must surface as a catchable error (which
         // callers already handle) rather than force-unwrap into a crash.

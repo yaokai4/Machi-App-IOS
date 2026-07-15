@@ -37,3 +37,4 @@ Carthage/Build/
 
 # Local isolated Git worktrees.
 .worktrees/
+.derivedData/

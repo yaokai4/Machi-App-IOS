@@ -1,6 +1,17 @@
 import Foundation
 
 enum KaiXRuntimeFlags {
+    /// Ordinary unit tests must never inherit a persisted production login and
+    /// reach the real backend. End-to-end smoke tests opt in explicitly.
+    static func backendRequestsAllowed(environment: [String: String]) -> Bool {
+        guard environment["XCTestConfigurationFilePath"] != nil else { return true }
+        return environment["KAIX_RUN_BACKEND_SMOKE_TESTS"] == "1"
+    }
+
+    static var allowBackendRequests: Bool {
+        backendRequestsAllowed(environment: ProcessInfo.processInfo.environment)
+    }
+
     static var allowLocalStoreFallback: Bool {
         #if DEBUG
         let env = ProcessInfo.processInfo.environment
