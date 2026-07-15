@@ -34,3 +34,6 @@ Carthage/Build/
 *.store
 *.store-shm
 *.store-wal
+
+# Local isolated Git worktrees.
+.worktrees/
