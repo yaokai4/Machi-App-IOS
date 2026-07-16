@@ -23,6 +23,10 @@ struct MyInvitesView: View {
     }
 
     @State private var state: LoadState = .loading
+    // I1-8 邀请币导流:余额够直接买 hero SKU 时,给「得了币」一个立刻能花的出口。
+    // 复用 WalletStore(refreshWallet 只打 walletMe)+ 现有精选商品取数口径。
+    @StateObject private var walletStore = WalletStore()
+    @State private var heroProduct: KaiXGuideProductDTO?
 
     var body: some View {
         ScrollView {
@@ -35,6 +39,7 @@ struct MyInvitesView: View {
                 case .loaded(let summary):
                     heroCard(summary)
                     statsRow(summary)
+                    spendNudge
                     howItWorksCard(summary)
                     recentSection(summary)
                 }
@@ -47,6 +52,7 @@ struct MyInvitesView: View {
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .task { if case .loading = state { await load() } }
+        .task { await loadSpendNudge() }
     }
 
     private var title: String {
@@ -158,6 +164,49 @@ struct MyInvitesView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 14)
         .kxGlassSurface(radius: KXRadius.md)
+    }
+
+    // MARK: - spend nudge (I1-8)
+
+    /// 只在「余额确实够买」时出现,不做空头承诺;hero SKU 取现有精选商品接口
+    /// 第一个可用币购的商品(is_featured + sort_order 置顶,与首页商城同口径)。
+    @ViewBuilder
+    private var spendNudge: some View {
+        if let product = heroProduct,
+           let points = product.walletPricePoints, points > 0,
+           walletStore.balancePoints >= points {
+            NavigationLink {
+                GuideProductDetailView(slug: product.slug)
+            } label: {
+                HStack(spacing: KXSpacing.md) {
+                    Image(systemName: "circle.hexagongrid.fill")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(.orange)
+                        .frame(width: 40, height: 40)
+                        .background(Circle().fill(Color.orange.opacity(0.12)))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(KXListingCopy.pickText(language,
+                            "你的 \(walletStore.balancePoints) 币可直接购买《\(product.title)》",
+                            "\(walletStore.balancePoints) コインで「\(product.title)」を購入できます",
+                            "Your \(walletStore.balancePoints) coins can buy \(product.title)"))
+                            .font(.footnote.weight(.bold))
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(KXListingCopy.pickText(language, "去看看", "見てみる", "Take a look"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(KXSpacing.lg)
+                .kxGlassSurface(radius: KXRadius.lg)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(KXPressableStyle(scale: 0.99))
+        }
     }
 
     // MARK: - how it works
@@ -368,5 +417,22 @@ struct MyInvitesView: View {
         } catch {
             state = .failed(error.kaixUserMessage)
         }
+    }
+
+    /// I1-8 导流行取数:先拿余额(没币直接省一次商品请求),再按首页商城的
+    /// 精选口径挑 hero SKU。任一步失败静默不显示,绝不挡住邀请主流程。
+    @MainActor
+    private func loadSpendNudge() async {
+        guard KaiXBackend.token?.isEmpty == false else { return }
+        await walletStore.refreshWallet()
+        guard walletStore.balancePoints > 0, heroProduct == nil else { return }
+        let resp = try? await KaiXAPIClient.shared.guideProducts(country: "jp", pageSize: 12)
+        let items = (resp?.items ?? []).filter {
+            $0.canBuyWithPoints == true && ($0.walletPricePoints ?? 0) > 0 && !$0.isComingSoon && !$0.isService
+        }
+        let featured = items
+            .filter { $0.isFeatured == true }
+            .sorted { ($0.sortOrder ?? Int.max) < ($1.sortOrder ?? Int.max) }
+        heroProduct = featured.first ?? items.first
     }
 }

@@ -234,7 +234,7 @@ struct ChatView: View {
         .onChange(of: scenePhase) { _, phase in
             viewModel.isForeground = (phase == .active)
             // Coming back to the foreground: pull once immediately instead of
-            // waiting up to 3s for the next poll tick. Never mid-send — the
+            // waiting up to 4s for the next poll tick. Never mid-send — the
             // wholesale refresh would clobber the optimistic `.sending` bubble
             // (and its failure path) before `send` reconciles it. Never while
             // this chat's tab is hidden (isChatVisible) — 隐藏 Tab 的刷新会顺手
@@ -345,7 +345,9 @@ struct ChatView: View {
     private func pollMessagesLoop() async {
         guard KaiXBackend.token != nil else { return }
         while !Task.isCancelled {
-            try? await Task.sleep(for: .seconds(3))
+            // I2-4 轮询分级:会话可见时 4s 一档(收件箱保持 8s);推送到达走
+            // kaiXConversationShouldRefresh 立即刷新,所以无需更激进的间隔。
+            try? await Task.sleep(for: .seconds(4))
             // Skip the network round-trip while backgrounded, while this chat's
             // tab isn't the one on screen (hidden tabs keep their views — and
             // their .task — alive), while the user is filtering (search/date),

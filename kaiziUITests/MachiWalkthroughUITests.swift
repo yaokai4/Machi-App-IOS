@@ -360,10 +360,17 @@ final class MachiWalkthroughUITests: XCTestCase {
 
         // Query by the stable, locale-independent identifiers (not the localized
         // "学校库"/"公司库" labels) so the test survives a language switch. The
-        // Guide home now leads with the two core-library cards; both are
-        // FullArea buttons, so their blank Spacer area must hit-test.
+        // library entries live in the guide grid below the fold (I1-1 首页重排),
+        // so scroll the lazy stack until they materialize; both are FullArea
+        // buttons, so their blank Spacer area must hit-test.
+        let aiHero = app.buttons["guide.ai.entry"].firstMatch
+        XCTAssertTrue(aiHero.waitForExistence(timeout: 25), "Guide home should load")
         let schools = app.buttons["guide.library.schools"]
-        XCTAssertTrue(schools.waitForExistence(timeout: 25), "Guide home core libraries should load")
+        for _ in 0..<8 where !schools.exists {
+            app.swipeUp()
+            pause(0.6)
+        }
+        XCTAssertTrue(schools.waitForExistence(timeout: 5), "Guide home library tiles should load")
         snap("hitarea_before")
 
         let companies = app.buttons["guide.library.companies"]
@@ -391,7 +398,12 @@ final class MachiWalkthroughUITests: XCTestCase {
         XCTAssertTrue(bar.waitForExistence(timeout: 25), "tab bar should exist on Guide")
         let restingMaxY = bar.frame.maxY
 
+        // 库搜索紧凑条沉底(I1-1):scroll the lazy stack until the field mounts.
         let composer = app.textFields["guide.search.field"]
+        for _ in 0..<10 where !composer.exists {
+            app.swipeUp()
+            pause(0.5)
+        }
         XCTAssertTrue(composer.waitForExistence(timeout: 5), "Guide search field should exist")
         composer.tap()
         let kb = app.keyboards.firstMatch

@@ -101,77 +101,155 @@ struct ProfileView: View {
         !tracksChrome || chrome.selectedTab == sourceTab
     }
 
-    /// Shown on the "我的" tab when browsing as a guest: a clear login /
-    /// register call-to-action instead of an empty placeholder profile.
+    /// I2-6 游客「我的」预览墙:不再是一堵纯登录硬墙,而是灰态的主页结构预览
+    /// —— 工作台可以直接进(PersonalWorkbenchView 对游客本就可浏览,动作时才
+    /// 弹登录),收藏 / 声望点击时才弹 GuestGate,把转化点从「进门」后移到
+    /// 「动手」。会员 / 钱包入口保留(App Review 承诺:付费面对游客始终可寻,
+    /// 不可删)。
     private var guestProfilePrompt: some View {
-        VStack(spacing: KXSpacing.lg) {
-            Spacer()
-            Image(systemName: "person.crop.circle.badge.plus")
-                .kxScaledFont(58, weight: .semibold)
-                .foregroundStyle(KXColor.accent)
-            Text(L("guestProfileTitle", language))
-                .font(.title3.weight(.bold))
-                .multilineTextAlignment(.center)
-            Text(L("guestProfileSubtitle", language))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 28)
-            Label {
-                Text(KXListingCopy.pickText(
-                    language,
-                    "登录后即可使用「我的工作台」管理 Todo、日历、申请、账单和证件期限。",
-                    "ログインすると「マイワークベンチ」でTodo・カレンダー・申請・支払い・証明書を管理できます。",
-                    "Log in to use My Workbench: tasks, calendar, applications, bills, and document expiries."
-                ))
-            } icon: {
-                Image(systemName: "square.grid.2x2.fill").foregroundStyle(KXColor.accent)
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.leading)
-            .padding(.horizontal, 32)
-            Button {
-                GuestGate.shared.requireLogin(L("guestLoginRequired", language))
-            } label: {
-                Text(L("loginOrRegister", language))
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(KXColor.onAccent)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 52)
-                    .background(KXColor.accent, in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 36)
-            .padding(.top, KXSpacing.xs)
-
-            // Browse the paid tiers without an account — the subscriptions and
-            // coin packs are visible here so they're always locatable (including
-            // for App Review, which browses as a guest); the Buy action prompts
-            // for sign-in. Do NOT gate these behind the Settings gear, which a
-            // guest can never reach.
-            VStack(spacing: KXSpacing.sm) {
-                NavigationLink {
-                    MembershipView(currentUser: currentUser)
-                } label: {
-                    guestPaidEntryLabel(icon: "checkmark.seal.fill", title: L("membershipTitle", language))
+        ScrollView {
+            VStack(spacing: KXSpacing.lg) {
+                VStack(spacing: KXSpacing.md) {
+                    Image(systemName: "person.crop.circle.badge.plus")
+                        .kxScaledFont(58, weight: .semibold)
+                        .foregroundStyle(KXColor.accent)
+                    Text(L("guestProfileTitle", language))
+                        .font(.title3.weight(.bold))
+                        .multilineTextAlignment(.center)
+                    Text(L("guestProfileSubtitle", language))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 28)
+                    Button {
+                        GuestGate.shared.requireLogin(L("guestLoginRequired", language))
+                    } label: {
+                        Text(L("loginOrRegister", language))
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(KXColor.onAccent)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 52)
+                            .background(KXColor.accent, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 36)
+                    .padding(.top, KXSpacing.xs)
                 }
-                NavigationLink {
-                    WalletView(currentUser: currentUser)
-                } label: {
-                    guestPaidEntryLabel(icon: "circle.hexagongrid.fill",
-                                        title: KXListingCopy.pickText(language, "Machi 币钱包", "Machi コインウォレット", "Machi Coins Wallet"))
-                }
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 36)
-            .padding(.top, KXSpacing.sm)
+                .padding(.top, KXSpacing.xl)
 
-            Spacer()
-            Spacer()
+                // 灰态结构预览:登录后主页有什么,先让人看见。
+                VStack(spacing: KXSpacing.sm) {
+                    guestPreviewRow(
+                        icon: "square.grid.2x2.fill",
+                        title: KXListingCopy.pickText(language, "我的工作台", "マイワークベンチ", "My Workbench"),
+                        subtitle: KXListingCopy.pickText(
+                            language,
+                            "Todo、日历、申请、账单和证件期限，可先随意看看",
+                            "Todo・カレンダー・申請・支払い・証明書の期限。まず見てみよう",
+                            "Tasks, calendar, applications, bills & expiries — browse freely"
+                        ),
+                        locked: false
+                    ) {
+                        router.open(.personalWorkbench)
+                    }
+                    guestPreviewRow(
+                        icon: "bookmark.fill",
+                        title: KXListingCopy.pickText(language, "我的收藏", "ブックマーク", "Bookmarks"),
+                        subtitle: KXListingCopy.pickText(
+                            language,
+                            "登录后同步收藏的帖子和房源",
+                            "ログインすると保存した投稿・物件を同期",
+                            "Log in to sync saved posts and listings"
+                        ),
+                        locked: true
+                    ) {
+                        GuestGate.shared.requireLogin(KXListingCopy.pickText(
+                            language,
+                            "登录后可以收藏帖子和房源，随时回看。",
+                            "ログインすると投稿や物件を保存して、いつでも見返せます。",
+                            "Log in to bookmark posts and listings and come back anytime."
+                        ))
+                    }
+                    guestPreviewRow(
+                        icon: "rosette",
+                        title: KXListingCopy.pickText(language, "我的声望", "マイ評価", "My reputation"),
+                        subtitle: KXListingCopy.pickText(
+                            language,
+                            "发帖和互助会累计声望等级",
+                            "投稿や助け合いで評価レベルが上がります",
+                            "Posting and helping others builds your reputation"
+                        ),
+                        locked: true
+                    ) {
+                        GuestGate.shared.requireLogin(KXListingCopy.pickText(
+                            language,
+                            "登录后开始积累你的声望等级。",
+                            "ログインして評価レベルを積み上げましょう。",
+                            "Log in to start building your reputation."
+                        ))
+                    }
+                }
+                .padding(.horizontal, 36)
+
+                // Browse the paid tiers without an account — the subscriptions and
+                // coin packs are visible here so they're always locatable (including
+                // for App Review, which browses as a guest); the Buy action prompts
+                // for sign-in. Do NOT gate these behind the Settings gear, which a
+                // guest can never reach.
+                VStack(spacing: KXSpacing.sm) {
+                    NavigationLink {
+                        MembershipView(currentUser: currentUser)
+                    } label: {
+                        guestPaidEntryLabel(icon: "checkmark.seal.fill", title: L("membershipTitle", language))
+                    }
+                    NavigationLink {
+                        WalletView(currentUser: currentUser)
+                    } label: {
+                        guestPaidEntryLabel(icon: "circle.hexagongrid.fill",
+                                            title: KXListingCopy.pickText(language, "Machi 币钱包", "Machi コインウォレット", "Machi Coins Wallet"))
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 36)
+            }
+            .padding(.bottom, chrome.bottomContentPadding + KXSpacing.xl)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.bottom, chrome.bottomContentPadding)
+    }
+
+    /// 灰态预览行:结构可见但视觉降一档(次级图标 + 降透明标题)。locked 的行
+    /// 尾部是锁,点击弹 GuestGate;可浏览的行(工作台)尾部是箭头,直接进。
+    private func guestPreviewRow(icon: String, title: String, subtitle: String, locked: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: KXSpacing.md) {
+                Image(systemName: icon)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 36, height: 36)
+                    .background(KXColor.softBackground, in: RoundedRectangle(cornerRadius: KXRadius.sm, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary.opacity(0.72))
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: KXSpacing.sm)
+                Image(systemName: locked ? "lock.fill" : "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.vertical, KXSpacing.sm + 2)
+            .padding(.horizontal, KXSpacing.md)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+            .background(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
+        }
+        .buttonStyle(.plain)
     }
 
     private func guestPaidEntryLabel(icon: String, title: String) -> some View {

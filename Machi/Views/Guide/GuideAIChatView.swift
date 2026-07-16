@@ -18,6 +18,8 @@ struct GuideAIChatView: View {
     /// 即被回收,行内 @State 归零后已评价的消息恢复成未评价样式,还能对同一条
     /// 消息连发相反评价,污染反馈数据。
     @State private var feedbackByMessage: [String: String] = [:]
+    /// C-4 faq 溯源 chip 的落点 sheet(FAQ 无独立路由)。
+    @State private var faqSource: KaiXGuideAISourceDTO?
 
     let currentUser: UserEntity
     /// 场景快捷问题带入的预填文本(来自 .guideAI(prompt:) 路由载荷)。
@@ -84,6 +86,9 @@ struct GuideAIChatView: View {
         }
         .sheet(isPresented: $showMembershipSheet) {
             NavigationStack { MembershipView(currentUser: currentUser) }
+        }
+        .sheet(item: $faqSource) { source in
+            GuideAIFAQSheet(language: language, source: source)
         }
     }
 
@@ -484,6 +489,11 @@ struct GuideAIChatView: View {
     }
 
     private func open(_ source: KaiXGuideAISourceDTO) {
+        // C-4:faq 项没有独立详情页,就地弹完整问答 sheet;其余走路由。
+        if source.kxFaqId != nil {
+            faqSource = source
+            return
+        }
         guard let route = source.kxRoute else { return }
         router.open(route, in: .guide)
     }
@@ -767,7 +777,14 @@ private struct GuideAISourcesView: View {
                                 Text(source.title ?? "")
                                     .font(.caption2.weight(.medium))
                                     .lineLimit(1)
-                                if source.kxRoute != nil {
+                                if let badge = source.kxPriceBadge(language) {
+                                    Text(badge)
+                                        .font(.caption2.weight(.bold))
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 1)
+                                        .background(KXColor.livingSurface, in: Capsule())
+                                }
+                                if source.kxNavigable {
                                     Image(systemName: "arrow.up.right")
                                         .font(.caption2.weight(.bold))
                                 }
@@ -778,13 +795,83 @@ private struct GuideAISourcesView: View {
                             .background(KXColor.livingAccentSoft, in: Capsule())
                         }
                         .buttonStyle(.plain)
-                        .disabled(source.kxRoute == nil)
+                        .disabled(!source.kxNavigable)
                     }
                 }
                 .padding(.vertical, 1)
             }
         }
         .padding(.top, KXSpacing.xxs)
+    }
+}
+
+// MARK: - FAQ source sheet (C-4)
+
+/// FAQ 溯源 chip 的落点:FAQ 无独立详情路由,就地展示完整问答。溯源卡只带
+/// 服务端截断的摘要(答案 80 字),这里用统一 Guide 搜索(scope=faq)按原问题
+/// 回捞全文并以 id 匹配;搜不到时退回摘要,绝不空白。
+private struct GuideAIFAQSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let language: AppLanguage
+    let source: KaiXGuideAISourceDTO
+
+    @State private var fullAnswer: String?
+    @State private var isLoading = true
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: KXSpacing.md) {
+                    Text(source.title ?? "")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(KXColor.livingInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if isLoading, fullAnswer == nil {
+                        HStack(spacing: KXSpacing.sm) {
+                            ProgressView()
+                            Text(guideText(language, "正在加载…", "読み込み中…", "Loading…"))
+                                .font(.footnote)
+                                .foregroundStyle(KXColor.livingMuted)
+                        }
+                    } else {
+                        Text(fullAnswer ?? source.subtitle ?? "")
+                            .font(.body)
+                            .foregroundStyle(KXColor.livingInk)
+                            .lineSpacing(4)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(KXSpacing.screen)
+            }
+            .background(KXColor.livingBackground.ignoresSafeArea())
+            .navigationTitle(guideText(language, "常见问题", "よくある質問", "FAQ"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(guideText(language, "完成", "完了", "Done")) { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .task { await loadFullAnswer() }
+    }
+
+    private func loadFullAnswer() async {
+        defer { isLoading = false }
+        guard let question = source.title?.nonEmpty else { return }
+        let serverLanguage: String = {
+            switch language {
+            case .ja: return "ja"
+            case .en: return "en"
+            default: return "zh-CN"
+            }
+        }()
+        guard let resp = try? await KaiXAPIClient.shared.guideSearch(
+                language: serverLanguage, keyword: question, scope: "faq"),
+              let faqs = resp.groups.faq, !faqs.isEmpty else { return }
+        let match = faqs.first { $0.id == source.kxFaqId } ?? faqs.first
+        if let answer = match?.answer.nonEmpty { fullAnswer = answer }
     }
 }
 
@@ -1001,6 +1088,29 @@ private extension KaiXGuideAISourceDTO {
             if let id = route.id?.nonEmpty { return .guideCompany(id: id) }
         default:
             return nil
+        }
+        return nil
+    }
+
+    /// C-4:faq 项无独立详情路由,带 id 时就地弹完整问答 sheet(替代此前
+    /// default → nil 造成的 chip 永久禁用)。
+    var kxFaqId: String? {
+        let kind = (route?.kind ?? type ?? "").lowercased()
+        guard kind.contains("faq") else { return nil }
+        return route?.id?.nonEmpty
+    }
+
+    /// True when tapping the chip leads somewhere (route push or FAQ sheet).
+    var kxNavigable: Bool { kxRoute != nil || kxFaqId != nil }
+
+    /// C-4 导购价签(仅 product 项):is_free 优先,其次 price_points;
+    /// 旧 payload 两键缺省 → nil,chip 保持原样。
+    func kxPriceBadge(_ language: AppLanguage) -> String? {
+        let kind = (type ?? route?.kind ?? "").lowercased()
+        guard kind.contains("product") else { return nil }
+        if is_free == true { return guideText(language, "免费", "無料", "Free") }
+        if let points = price_points, points > 0 {
+            return guideText(language, "\(points) 币", "\(points) コイン", "\(points) coins")
         }
         return nil
     }

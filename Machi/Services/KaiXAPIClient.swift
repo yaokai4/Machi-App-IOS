@@ -1152,6 +1152,27 @@ final class KaiXAPIClient {
         _ = try await request("DELETE", "/api/devices/push-token", body: Body(token: token))
     }
 
+    /// C-3 游客推送注册:无 bearer 时把 APNs token 归属到稳定客户端 id
+    /// (POST /api/push/register-guest,body {token, stable_client_id,
+    /// city_slug?})。城市已知时服务端把该设备纳入 city_digest 城市召回;
+    /// 登录后走 registerPushToken,服务端按 token 唯一重绑到账号(防双发)。
+    func registerGuestPushToken(_ token: String, stableClientId: String,
+                                citySlug: String? = nil, platform: String = "ios") async throws {
+        struct Body: Encodable {
+            let token: String
+            let stable_client_id: String
+            let city_slug: String?
+            let platform: String
+        }
+        let city = citySlug?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        _ = try await request("POST", "/api/push/register-guest", body: Body(
+            token: token,
+            stable_client_id: stableClientId,
+            city_slug: city.isEmpty ? nil : city,
+            platform: platform
+        ))
+    }
+
     /// Buyer↔seller contacts about my listings (role=received) or ones I
     /// sent (role=sent). Mirrors the Web workbench inquiries screen.
     /// `bucket` routes inquiries into the workbench IA buckets so a record

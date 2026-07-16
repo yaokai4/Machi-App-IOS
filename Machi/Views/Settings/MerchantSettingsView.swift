@@ -94,6 +94,23 @@ struct MerchantSettingsView: View {
                 .font(.footnote.weight(.medium))
                 .foregroundStyle(.secondary)
                 .lineSpacing(3)
+            // I1-11 预期管理:入驻审核当前为低频人工处理,提交前明示周期较长,
+            // 避免「申请了石沉大海」的负面预期。样式复用下方 message 提示条。
+            HStack(spacing: 6) {
+                Image(systemName: "hourglass")
+                    .font(.footnote.weight(.bold))
+                Text(KXListingCopy.pickText(language,
+                    "当前审核周期较长，提交后请耐心等待，结果会通过站内通知告知。",
+                    "現在、審査にお時間をいただいています。結果はアプリ内通知でお知らせします。",
+                    "Reviews are currently taking longer than usual. We'll notify you in-app once processed."))
+                    .font(.footnote.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .foregroundStyle(KXColor.heat)
+            .padding(.horizontal, KXSpacing.md)
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(KXColor.heat.opacity(0.09), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
             if let message {
                 HStack(spacing: 6) {
                     Image(systemName: messageIsPositive ? "checkmark.circle.fill" : "info.circle.fill")

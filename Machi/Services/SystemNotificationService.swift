@@ -75,10 +75,9 @@ final class SystemNotificationService: NSObject {
     }
 
     /// P-4 游客召回:游客在软引导 sheet 上点了「开启提醒」。弹一次系统权限
-    /// 弹窗(已决定过则跳过),授权成功就注册 APNs 把 device token 缓存好。
-    /// 游客侧到此为止 —— 服务端 push-token 端点要求登录态(web/server.py
-    /// api_register_push_token → require_user),token 的真正上传发生在首次
-    /// 登录后的 refreshRegistration()。Returns whether permission ended up
+    /// 弹窗(已决定过则跳过),授权成功就注册 APNs 并把 token 上传游客端点
+    /// (契约 C-3,详见 PushTokenService.registerForGuest)——城市已知时游客
+    /// 也能收到 city_digest 城市召回。Returns whether permission ended up
     /// granted.
     @discardableResult
     func requestGuestAuthorization() async -> Bool {

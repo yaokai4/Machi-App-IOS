@@ -268,6 +268,17 @@ struct GuideJLPTPlacementView: View {
         do {
             result = try await KaiXAPIClient.shared.jlptPlacementSubmit(answers: payload)
         } catch {
+            // 定级题游客可做(/placement/start 公开),但 /placement/submit 需要
+            // 登录(作答要记入 streak/错题本)。401 走现成 GuestGate,答案保留,
+            // 登录回来重新提交即可。
+            let code = (error as? KaiXAPIError)?.error.code
+            if code == "unauthorized" || code == "http_401" {
+                GuestGate.shared.requireLogin(guideText(language,
+                    "登录后即可保存作答并查看定级结果。",
+                    "ログインすると回答を保存して判定結果を確認できます。",
+                    "Sign in to save your answers and see your level."))
+                return
+            }
             // Keep the quiz (and the user's answers) visible; surface a retryable
             // inline error instead of masking everything with the full-screen
             // load-failed state, which would discard the completed quiz.

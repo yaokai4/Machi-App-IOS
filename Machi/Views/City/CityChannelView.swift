@@ -28,7 +28,15 @@ struct CityChannelView: View {
             Group {
                 switch viewModel.state {
                 case .idle, .loading:
-                    LoadingView()
+                    // I2-5 首载骨架:频道 feed 与首页同形,复用 KXFeedSkeleton
+                    // 保持卡片节奏(同 HomeTimelineView 的 loading 分支)。
+                    ScrollView {
+                        KXFeedSkeleton()
+                            .padding(.horizontal, KXSpacing.screen)
+                            .padding(.vertical, 7)
+                    }
+                    .scrollDisabled(true)
+                    .transition(.opacity)
                 case .empty:
                     ScrollView {
                         ChannelEmptyState(channel: viewModel.channel) {

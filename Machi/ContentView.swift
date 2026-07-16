@@ -826,9 +826,10 @@ struct ContentView: View {
     ///   • 系统权限已是 authorized(例如曾登录时授权过)就不弹卡片,直接
     ///     静默注册 APNs 把 token 缓存好;已 denied 则问了也没用,记跳过。
     ///   • 与 guestGate 登录 sheet 撞车时让路且不记「问过」,下次会话再试。
-    /// 服务端 push-token 端点要求登录态(web/server.py api_register_push_token
-    /// → require_user),游客 token 只缓存在本地,登录后由既有的
-    /// refreshRegistration() 自动补上传 —— 详见 PushTokenService.registerForGuest。
+    /// 游客 token 经 C-3 游客端点(POST /api/push/register-guest)归属到
+    /// stableClientId,城市已知时参与 city_digest 召回;登录后由既有的
+    /// refreshRegistration() 走登录版端点按 token 重绑(防双发)—— 详见
+    /// PushTokenService.registerForGuest。
     private func maybePromptGuestRecall() async {
         if !Self.didCountGuestSession {
             Self.didCountGuestSession = true

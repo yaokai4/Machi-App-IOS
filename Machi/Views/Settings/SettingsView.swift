@@ -11,6 +11,9 @@ struct SettingsView: View {
     @AppStorage("appLanguageCode") private var appLanguageCode = AppLanguage.system.rawValue
     @AppStorage("appAppearance") private var appAppearance = AppAppearance.light.rawValue
     @StateObject private var viewModel = ProfileViewModel()
+    // I1-6 币余额前置:钱包行 subtitle 直接显示余额。复用 WalletStore
+    // (refreshWallet 只打 walletMe,不碰 StoreKit);游客/加载失败静默回退原文案。
+    @StateObject private var walletStore = WalletStore()
     @State private var showLogoutConfirm = false
     @State private var isShowingFavorites = false
     @State private var didEnter = false
@@ -84,6 +87,10 @@ struct SettingsView: View {
         }
         .task {
             await viewModel.load(context: modelContext, user: currentUser, postStore: postStore)
+        }
+        .task {
+            guard !currentUser.isGuest, KaiXBackend.token?.isEmpty == false else { return }
+            await walletStore.refreshWallet()
         }
         .onAppear {
             withAnimation(.snappy(duration: 0.38)) {
@@ -199,6 +206,14 @@ struct SettingsView: View {
     }
 
     private var walletRowSubtitle: String {
+        // 余额到手就亮出来;拿不到(游客/网络失败)静默回退原文案。
+        if let balance = walletStore.wallet?.balancePoints {
+            switch language {
+            case .en: return "Balance \(balance) coins · top-up and history"
+            case .ja: return "残高 \(balance) コイン・チャージ・履歴"
+            default: return "余额 \(balance) 币 · 充值与记录"
+            }
+        }
         switch language {
         case .en: return "Machi Coins balance, top-up and history"
         case .ja: return "Machi ポイントの残高・チャージ・履歴"

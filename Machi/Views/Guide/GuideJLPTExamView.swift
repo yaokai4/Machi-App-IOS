@@ -737,6 +737,8 @@ struct JLPTExamUpsellCard: View {
         Group {
             if let product {
                 Button {
+                    // C-2 客户端漏斗:推荐卡点击。
+                    Task { await KaiXAPIClient.shared.funnelEvent("upsell_click", entityType: "guide_product", entityId: product.slug, props: ["placement": "exam_result"]) }
                     showDetail = true
                 } label: {
                     HStack(alignment: .top, spacing: KXSpacing.md) {
@@ -797,6 +799,11 @@ struct JLPTExamUpsellCard: View {
         let level = (result.level ?? "").lowercased()
         product = paid.first { !level.isEmpty && $0.slug.lowercased().contains(level) } ?? paid.first
         weakestLabel = weakestSection() ?? ""
+        // C-2 客户端漏斗:推荐卡真正渲染出 SKU 才算一次曝光(load 有 product==nil
+        // 防重,同一张结果卡只报一次)。
+        if let slug = product?.slug {
+            Task { await KaiXAPIClient.shared.funnelEvent("upsell_view", entityType: "guide_product", entityId: slug, props: ["placement": "exam_result"]) }
+        }
     }
 
     /// The section that lost the most points this session (label for copy).

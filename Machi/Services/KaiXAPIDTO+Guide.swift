@@ -195,6 +195,12 @@ struct KaiXGuideProductDTO: Codable, Equatable, Identifiable, Hashable {
     let entitlementType: String?
     let platformPolicy: String?
     let pointsContext: KaiXWalletPointsContextDTO?
+    // 契约 C-1:服务端键名精确为 deliverable_ready(数字商品文件未就绪 → false)。
+    // 旧 payload 缺省视为 true,购买 CTA 不受影响。
+    let deliverable_ready: Bool?
+
+    /// C-1 就绪判定的调用侧口径:缺省(旧后端)一律视为就绪。
+    var deliverableReady: Bool { deliverable_ready ?? true }
 }
 
 struct KaiXGuideProductAccess: Codable, Equatable, Hashable {
@@ -1837,6 +1843,10 @@ struct KaiXGuideAISourceDTO: Codable, Equatable, Hashable, Identifiable {
     let title: String?
     let subtitle: String?
     let route: KaiXGuideAIRouteDTO?
+    // 契约 C-4 导购字段(仅 product 项,服务端键名精确为 price_points / is_free)。
+    // 旧 payload 缺省 → 两者为 nil,chip 不显示价签。
+    let price_points: Int?
+    let is_free: Bool?
 
     var id: String {
         [type, title, route?.slug, route?.id].compactMap { $0 }.joined(separator: "|")

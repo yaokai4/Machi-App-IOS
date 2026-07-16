@@ -31,11 +31,20 @@ struct GuideHomeView: View {
     @ObservedObject private var regionStore = RegionStore.shared
     @StateObject private var viewModel = GuideViewModel()
     @State private var searchTask: Task<Void, Never>?
+    // 首访一次性引导卡(I1-2):UserDefaults 持久标记 + 每次进入首页时快照。
+    // 点 CTA/chip 只写标记不立刻收卡(否则 NavigationLink 推进途中卡被移除会
+    // 断导航),回到首页时 onAppear 重新快照后自然消失;点 ✕ 立即收起。
+    @AppStorage("hasSeenGuideIntroCard") private var hasSeenGuideIntroCard = false
+    @State private var introCardActive = false
 
     let currentUser: UserEntity
 
     private var country: String {
         (regionStore.current?.countryCode ?? currentUser.country).lowercased()
+    }
+
+    private var isSearchActive: Bool {
+        !viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
@@ -44,6 +53,7 @@ struct GuideHomeView: View {
             content
         }
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { introCardActive = !hasSeenGuideIntroCard }
         .task(id: country) {
             await KXPerf.measure("guide.loadInitial") {
                 await viewModel.load(country: country)
@@ -88,15 +98,43 @@ struct GuideHomeView: View {
                         GuideInlineStatus(message: message)
                     }
 
-                    // 「浏览资料库」区块头:品牌徽章 + 标题 + 搜索框,
-                    // 是学校库/公司库/分类网格/最新指南整个区域的入口。
-                    GuideLibraryHero(
+                    // 首页顺序(I1-1):AI hero 置顶 → JLPT 一等卡 → 商城板块 →
+                    // 指南宫格(学校/公司库并入)→ 库搜索紧凑条沉底。搜索时上方
+                    // 区块整体让位,但搜索条保持同一结构位(否则 TextField 身份
+                    // 变化会在首个字符后掉键盘),结果紧随其后。
+                    if !isSearchActive {
+                        if introCardActive {
+                            GuideIntroCard(
+                                onDismiss: {
+                                    hasSeenGuideIntroCard = true
+                                    withAnimation(.snappy(duration: 0.25)) { introCardActive = false }
+                                },
+                                onConsumed: { hasSeenGuideIntroCard = true }
+                            )
+                        }
+
+                        GuideAIHero()
+
+                        // JLPT 一等卡:付费漏斗的首屏入口(倒计时 + streak + 定级 CTA)。
+                        GuideJLPTHomeCard()
+
+                        // 商城板块(2026-07 商城开门):会员/商城双入口 + 精选商品卡。
+                        GuideStoreSection()
+
+                        // 指南宫格:六大指南 + 学校库/公司库(自一等双卡降级并入,入口不删)。
+                        GuideCategoryGrid(
+                            categories: GuideSupportCatalog.orderedCategories(from: home.categories),
+                            showsLibraryEntries: true
+                        )
+                    }
+
+                    GuideLibrarySearchBar(
                         searchText: $viewModel.searchText,
                         placeholder: home.hero.searchPlaceholder,
                         quickTags: home.hero.quickTags
                     )
 
-                    if !viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    if isSearchActive {
                         GuideSearchResultsSection(
                             isSearching: viewModel.isSearching,
                             articles: viewModel.searchResults,
@@ -106,22 +144,6 @@ struct GuideHomeView: View {
                             faq: viewModel.faqResults,
                             journeys: viewModel.journeyResults
                         )
-                    } else {
-                        // 首页按用户要求精简:浏览资料库(含 8 入口,恒显)+ Machi AI(主打)
-                        // + 学校库/公司库 + 六大指南入口。已移除「你现在想解决什么」(Journey)、
-                        // 「最新指南」、「热门资料与服务」、「个人工作台」入口 —— 不再堆内容流。
-                        GuideAIHero()
-
-                        // 高价值资料库:学校库 / 公司库。
-                        GuideLibraryDualEntry()
-
-                        // 商城板块(2026-07 商城开门):会员/商城双入口 + 精选商品卡。
-                        // 此前 GuideDualEntrySection 已实现但未挂载,商城只能从
-                        // 分类网格深入抵达 —— 变现入口不该藏在三级深。
-                        GuideStoreSection()
-
-                        // 六大指南入口:日本升学 / 日本就职 / 海外留学 / JLPT / 日本生活 / 资料与服务。
-                        GuideCategoryGrid(categories: GuideSupportCatalog.orderedCategories(from: home.categories))
                     }
                 }
                 .padding(.horizontal, KXSpacing.screen)
@@ -363,6 +385,7 @@ private struct GuideInlineStatus: View {
 
 struct GuideArticleDetailView: View {
     @Environment(\.appLanguage) private var language
+    @EnvironmentObject private var router: AppRouter
     @ObservedObject private var regionStore = RegionStore.shared
     @State private var response: KaiXGuideArticleDetailResponse?
     @State private var isLoading = true
@@ -407,6 +430,7 @@ struct GuideArticleDetailView: View {
                             // "Next step": route from this article into the matching
                             // action path so reading turns into doing.
                             GuideJourneyNextStepCard(categoryKey: article.categoryKey)
+                            askAIRow(article)
                         }
                         .padding(KXSpacing.screen)
                         .guideBottomInset()
@@ -562,6 +586,41 @@ struct GuideArticleDetailView: View {
         .padding(.horizontal, 9)
         .padding(.vertical, 5)
         .background(KXColor.softBackground, in: Capsule())
+    }
+
+    /// I1-4 文章 → AI 联动:读完还有疑问,带着文章标题进 Machi AI 继续问。
+    /// 文章详情只经路由推栈打开(无 sheet 形态),直接在当前栈推 AI 页。
+    private func askAIRow(_ article: KaiXGuideArticleDTO) -> some View {
+        Button {
+            router.open(.guideAI(prompt: guideText(language,
+                "我刚读了指南文章《\(article.title)》，还有一些不明白的地方想继续问。",
+                "ガイド記事「\(article.title)」を読みましたが、まだ分からないところがあるので教えてください。",
+                "I just read the guide \"\(article.title)\" and still have a few questions.")))
+        } label: {
+            HStack(spacing: KXSpacing.md) {
+                Image(systemName: "sparkles")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(KXColor.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(guideText(language, "读完还有疑问？", "読んでも疑問が残る？", "Still have questions?"))
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.primary)
+                    Text(guideText(language, "问 Machi AI，结合你的情况继续讲", "Machi AI があなたの状況に合わせて解説", "Ask Machi AI to go deeper for your situation"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .kxGlassSurface(radius: KXRadius.lg)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.fullArea)
+        .contentShape(Rectangle())
     }
 
     /// True once the article is past `verifiedAt + staleAfterDays`.
@@ -773,6 +832,10 @@ struct GuideServicesView: View {
     @State private var errorMessage: String?
     @State private var showMembershipSheet = false
     @State private var showWalletSheet = false
+    // I1-6 币余额前置:登录态在钱包按钮上直接显示余额,「有币不知道花」的
+    // 第一现场。复用 WalletStore(refreshWallet 只打 walletMe,不碰 StoreKit);
+    // 游客/加载失败静默回退原文案。
+    @StateObject private var walletStore = WalletStore()
 
     private var country: String { (regionStore.current?.countryCode ?? "jp").lowercased() }
     private var currentUser: UserEntity? {
@@ -862,6 +925,10 @@ struct GuideServicesView: View {
         .navigationTitle(guideText(language, "商城", "ストア", "Store"))
         .navigationBarTitleDisplayMode(.inline)
         .task(id: productType) { await load() }
+        .task {
+            guard KaiXBackend.token?.isEmpty == false else { return }
+            await walletStore.refreshWallet()
+        }
         .sheet(isPresented: $showWalletSheet) {
             NavigationStack { WalletView() }
         }
@@ -909,7 +976,7 @@ struct GuideServicesView: View {
             Button {
                 showWalletSheet = true
             } label: {
-                Label(guideText(language, "Machi 币钱包", "Machi コイン", "Machi Coins"), systemImage: "circle.hexagongrid.fill")
+                Label(walletButtonTitle, systemImage: "circle.hexagongrid.fill")
                     .font(.footnote.weight(.bold))
                     .frame(maxWidth: .infinity)
                     .frame(height: 38)
@@ -919,6 +986,14 @@ struct GuideServicesView: View {
             .buttonStyle(.fullArea)
             .contentShape(Rectangle())
         }
+    }
+
+    /// 余额拿到了就直接亮在按钮上;游客 / walletMe 失败时回退原文案。
+    private var walletButtonTitle: String {
+        if let balance = walletStore.wallet?.balancePoints {
+            return guideText(language, "Machi 币 · \(balance)", "Machi コイン · \(balance)", "Machi Coins · \(balance)")
+        }
+        return guideText(language, "Machi 币钱包", "Machi コイン", "Machi Coins")
     }
 
     /// 会员价值条 — a value frame ("this page saves you ¥N"), deliberately NOT
@@ -1125,6 +1200,9 @@ struct GuideProductDetailView: View {
     @State private var toastMessage: String?
     @State private var showTopupSheet = false
     @State private var showMembershipSheet = false
+    /// I1-4 购前咨询:sheet 内打开 Machi AI 并预填商品名(详情页也会以 sheet
+    /// 形态出现——模考推荐卡等——所以不能走 tab 路由推栈)。
+    @State private var showAIConsult = false
     /// StoreKit product for single-product IAP purchase, loaded when the
     /// server product carries an `appleProductId` (machi_guide_* convention).
     @State private var storeKitProduct: Product?
@@ -1164,6 +1242,7 @@ struct GuideProductDetailView: View {
                             previewPanel(preview, product: product)
                         }
                         productDescription(product)
+                        aiConsultRow(product)
                         // BE4: user reviews (star summary + distribution + list +
                         // write-review sheet for buyers/members). Uses slug — the
                         // review endpoints accept id-or-slug like the detail route.
@@ -1195,6 +1274,52 @@ struct GuideProductDetailView: View {
                 NavigationStack { MembershipView(currentUser: currentUser) }
             }
         }
+        .sheet(isPresented: $showAIConsult) {
+            if let currentUser, let product {
+                GuideAIChatView(currentUser: currentUser, initialPrompt: aiConsultPrompt(product))
+            }
+        }
+    }
+
+    /// I1-4 购前咨询入口:把「不确定适不适合我」的犹豫引到 Machi AI(预填商品名)。
+    @ViewBuilder
+    private func aiConsultRow(_ product: KaiXGuideProductDTO) -> some View {
+        if currentUser != nil {
+            Button {
+                showAIConsult = true
+            } label: {
+                HStack(spacing: KXSpacing.md) {
+                    Image(systemName: "sparkles")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(KXColor.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(guideText(language, "购买前想先问问？", "購入前に相談したい？", "Questions before you buy?"))
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(.primary)
+                        Text(guideText(language, "问 Machi AI 这份内容适不适合你", "この内容が自分に合うか Machi AI に聞く", "Ask Machi AI if this is right for you"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .kxGlassSurface(radius: KXRadius.lg)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.fullArea)
+            .contentShape(Rectangle())
+        }
+    }
+
+    private func aiConsultPrompt(_ product: KaiXGuideProductDTO) -> String {
+        guideText(language,
+            "我在看《\(product.title)》，帮我介绍一下它的内容和适合人群，我在考虑要不要入手。",
+            "「\(product.title)」を見ています。内容と対象者を教えてください。入手を検討中です。",
+            "I'm looking at \"\(product.title)\" — can you walk me through what it covers and who it's for? I'm deciding whether to get it.")
     }
 
     private func productHero(_ product: KaiXGuideProductDTO) -> some View {
@@ -1231,10 +1356,19 @@ struct GuideProductDetailView: View {
                     Text(price)
                         .font(.title3.weight(.bold))
                     Spacer(minLength: 0)
-                    // Hide the legacy "coming soon" chip once the product has a
-                    // live purchase path (IAP and/or coins) — showing a disabled
-                    // CTA next to working buy buttons reads as contradictory.
-                    if !hasDirectPurchasePath(product) {
+                    if productNotReady(product) {
+                        // C-1 deliverable_ready=false:交付物未就绪,所有付费购买
+                        // 路径统一收成一枚置灰 CTA(服务端同步拒绝 PRODUCT_NOT_READY)。
+                        Text(guideText(language, "内容准备中", "準備中", "Coming soon"))
+                            .font(.subheadline.weight(.bold))
+                            .frame(height: 40)
+                            .padding(.horizontal, 18)
+                            .background(Color.secondary.opacity(0.20), in: Capsule())
+                            .foregroundStyle(Color.secondary)
+                    } else if !hasDirectPurchasePath(product) {
+                        // Hide the legacy "coming soon" chip once the product has a
+                        // live purchase path (IAP and/or coins) — showing a disabled
+                        // CTA next to working buy buttons reads as contradictory.
                         Button {
                             Task { await productAction(product) }
                         } label: {
@@ -1253,7 +1387,7 @@ struct GuideProductDetailView: View {
                 // Single-product IAP: primary buy button with the StoreKit
                 // localized price (server verify → entitlement, see
                 // productIapAction). Coins purchase stays available below.
-                if let sk = storeKitProduct, product.access?.canAccess != true, !product.isService {
+                if let sk = storeKitProduct, product.access?.canAccess != true, !product.isService, !productNotReady(product) {
                     Button {
                         Task { await productIapAction(product) }
                     } label: {
@@ -1268,7 +1402,7 @@ struct GuideProductDetailView: View {
                     .contentShape(Rectangle())
                     .disabled(isSubmitting)
                 }
-                if product.canBuyWithPoints == true && product.access?.canAccess != true {
+                if product.canBuyWithPoints == true && product.access?.canAccess != true && !productNotReady(product) {
                     Button {
                         Task { await productPointsAction(product) }
                     } label: {
@@ -1311,6 +1445,12 @@ struct GuideProductDetailView: View {
         return storeKitProduct != nil || product.canBuyWithPoints == true
     }
 
+    /// C-1 deliverable_ready=false → 付费购买 CTA 置灰「内容准备中」。与服务端
+    /// 拒绝口径一致:免费领取与人工服务不受影响,已解锁的买家照常看内容。
+    private func productNotReady(_ product: KaiXGuideProductDTO) -> Bool {
+        !product.deliverableReady && !product.isService && !product.isFree && product.access?.canAccess != true
+    }
+
     /// Single-product Apple IAP purchase. Server verify is the source of
     /// truth: the transaction is finished ONLY after
     /// /api/payments/apple/guide-verify confirmed the entitlement; a verify
@@ -1351,6 +1491,8 @@ struct GuideProductDetailView: View {
                 )
                 await transaction.finish()
                 Task { await KaiXAPIClient.shared.funnelEvent("purchase_success", entityType: "guide_product", entityId: product.slug, props: ["method": "iap"]) }
+                // I2-7 付费成功是最强好评时刻(版本内一次的总闸在服务里)。
+                ReviewPromptService.shared.notePurchaseSuccess()
                 toastMessage = guideText(language, "购买成功。", "購入が完了しました。", "Purchase complete.")
                 await load()
             } catch {
@@ -1390,6 +1532,8 @@ struct GuideProductDetailView: View {
         do {
             let resp = try await KaiXAPIClient.shared.purchaseGuideProductWithWallet(product.slug)
             Task { await KaiXAPIClient.shared.funnelEvent("purchase_success", entityType: "guide_product", entityId: product.slug, props: ["method": "wallet"]) }
+            // I2-7 币购成功同 IAP:付费拿到内容的当口触发评分提示。
+            ReviewPromptService.shared.notePurchaseSuccess()
             toastMessage = resp.message ?? guideText(language, "购买成功。", "購入が完了しました。", "Purchase complete.")
             await load()
         } catch {
@@ -1498,7 +1642,7 @@ struct GuideProductDetailView: View {
                     Text(guideText(language, "购买或开通会员后可查看完整内容。", "購入または会員登録後に全文を閲覧できます。", "Purchase or activate membership to view the full content."))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
-                    if product.canBuyWithPoints == true {
+                    if product.canBuyWithPoints == true, !productNotReady(product) {
                         Button {
                             Task { await productPointsAction(product) }
                         } label: {
@@ -1665,12 +1809,10 @@ struct GuideSchoolFilterSheet: View {
     }
 }
 
-/// 「浏览资料库」区块头。AI hero 之后的第二屏:品牌徽章 + 标题 + 搜索框 + 快捷
-/// 标签,统领学校库/公司库/分类网格/最新指南整个资料库区域。
-/// No "今日" / Todo here — personal action tools live in 我的工作台.
-/// Search is driven by a debounced `.onChange` on the bound `searchText` in the
-/// host (`GuideHomeView`), so this view only needs to mutate the binding.
-private struct GuideLibraryHero: View {
+/// 库搜索紧凑条(I1-1):自「浏览资料库」大 hero 压缩而来,沉底作为资料库
+/// 检索入口。搜索功能不动 —— 仍由 host(`GuideHomeView`)对绑定的
+/// `searchText` 做 debounce `.onChange`,这里只改绑定值。
+private struct GuideLibrarySearchBar: View {
     @Environment(\.appLanguage) private var language
     @Binding var searchText: String
     let placeholder: String
@@ -1683,29 +1825,13 @@ private struct GuideLibraryHero: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 Image(systemName: "book.pages")
-                Text(guideText(language, "Machi Guide · 日本指南", "Machi Guide · 日本ガイド", "Machi Guide · Japan"))
+                Text(guideText(language, "搜资料库", "資料庫を検索", "Search the library"))
             }
             .font(.caption.weight(.bold))
             .foregroundStyle(KXColor.livingAccent)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(KXColor.livingAccentSoft, in: Capsule())
-
-            Text(guideText(language, "浏览资料库", "資料庫を見る", "Browse the library"))
-                .kxScaledFont(24, relativeTo: .title2, weight: .bold, design: .rounded)
-                .foregroundStyle(KXColor.livingInk)
-            Text(guideText(
-                language,
-                "查学校、公司、签证、申请、日语和在日生活方法。",
-                "学校・企業・ビザ・出願・日本語・生活情報をまとめて確認。",
-                "Find schools, companies, visas, applications, Japanese study, and life guides."
-            ))
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(KXColor.livingMuted)
-            .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: KXSpacing.sm) {
                 Image(systemName: "magnifyingglass")
@@ -1885,26 +2011,92 @@ private struct GuideSearchFAQCard: View {
 private struct GuideCategoryGrid: View {
     @Environment(\.appLanguage) private var language
     let categories: [KaiXGuideCategoryDTO]
+    /// I1-1:学校库/公司库自首页一等双卡降级并入宫格 —— 入口保留,权重下调。
+    var showsLibraryEntries = false
 
     var body: some View {
-        if !categories.isEmpty {
+        if !categories.isEmpty || showsLibraryEntries {
             Divider()
                 .padding(.top, KXSpacing.xs)
             GuideSectionHeader(
-                title: guideText(language, "六大指南", "6つのガイド", "Guide categories"),
-                subtitle: guideText(
-                    language,
-                    "按目标进入系统化指南，先看路径，再查资料和服务。",
-                    "目的別にガイドを確認し、流れ・資料・サービスへ進みます。",
-                    "Browse structured guides by goal, then open resources and services."
-                )
+                title: showsLibraryEntries
+                    ? guideText(language, "指南与资料库", "ガイド・資料庫", "Guides & libraries")
+                    : guideText(language, "六大指南", "6つのガイド", "Guide categories"),
+                subtitle: showsLibraryEntries
+                    ? guideText(
+                        language,
+                        "按目标进入系统化指南，学校库和公司库也在这里。",
+                        "目的別ガイドに加えて、学校・企業データベースもこちら。",
+                        "Structured guides by goal, plus the school and company libraries."
+                    )
+                    : guideText(
+                        language,
+                        "按目标进入系统化指南，先看路径，再查资料和服务。",
+                        "目的別にガイドを確認し、流れ・資料・サービスへ進みます。",
+                        "Browse structured guides by goal, then open resources and services."
+                    )
             )
             LazyVGrid(columns: [GridItem(.flexible(), spacing: KXSpacing.md), GridItem(.flexible(), spacing: KXSpacing.md)], spacing: KXSpacing.md) {
                 ForEach(categories) { category in
                     GuideCategoryCard(category: category)
                 }
+                if showsLibraryEntries {
+                    GuideLibraryGridTile(
+                        icon: "graduationcap.fill",
+                        tint: KXColor.rankSky,
+                        title: guideText(language, "日本学校库", "学校データベース", "School library"),
+                        subtitle: guideText(language, "大学、大学院、专门学校、语言学校", "大学・大学院・専門・語学", "Universities, grad, vocational, language"),
+                        route: .guideSchools,
+                        identifier: "guide.library.schools"
+                    )
+                    GuideLibraryGridTile(
+                        icon: "building.2.fill",
+                        tint: KXColor.rankTeal,
+                        title: guideText(language, "就职公司库", "就職企業データベース", "Company library"),
+                        subtitle: guideText(language, "外国人友好企业、签证支持与真实评价", "外国人歓迎・ビザ支援・口コミ", "Foreigner-friendly, visa support, reviews"),
+                        route: .guideCompanies,
+                        identifier: "guide.library.companies"
+                    )
+                }
             }
         }
+    }
+}
+
+/// 宫格里的学校库/公司库入口:与 GuideCategoryCard 同一视觉节奏(icon bubble +
+/// 标题 + 两行描述),稳定 accessibilityIdentifier 供 UI 测试按标识定位。
+private struct GuideLibraryGridTile: View {
+    @EnvironmentObject private var router: AppRouter
+    let icon: String
+    let tint: Color
+    let title: String
+    let subtitle: String
+    let route: KXRoute
+    let identifier: String
+
+    var body: some View {
+        Button {
+            router.open(route)
+        } label: {
+            VStack(alignment: .leading, spacing: 7) {
+                GuideIconBubble(icon: icon, color: tint, size: 40)
+                Text(title)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.primary)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, minHeight: 122, alignment: .topLeading)
+            .padding(KXSpacing.md)
+            .kxGlassSurface(radius: KXRadius.hero)
+        }
+        .buttonStyle(.fullArea)
+        .contentShape(Rectangle())
+        .accessibilityIdentifier(identifier)
     }
 }
 
@@ -2027,81 +2219,226 @@ private struct GuideAIHero: View {
     }
 }
 
-/// 核心资料库:学校库(蓝) + 公司库(青绿)。两张高对比大卡,放在六大指南之前,
-/// 是资料库区块里最醒目的高价值入口(比普通指南卡更突出)。
-private struct GuideLibraryDualEntry: View {
+/// JLPT 一等卡(I1-1)— 首页付费漏斗的第一入口:距下一场考试倒计时 +
+/// 打卡 streak + 「30 秒定级」主 CTA。倒计时走公开 exam-dates 端点,
+/// streak 仅登录态拉取;任一失败静默降级为纯入口卡,绝不阻塞首页。
+private struct GuideJLPTHomeCard: View {
     @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
+    @State private var countdown: KaiXJLPTCountdown?
+    @State private var streak: KaiXJLPTStreak?
+    @State private var didLoad = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: KXSpacing.md) {
-            GuideSectionHeader(
-                title: guideText(language, "核心资料库", "コア資料庫", "Core libraries"),
-                subtitle: guideText(
-                    language,
-                    "查学校和适合外国人就职的公司，先从这两个库开始。",
-                    "学校と外国人向け企業。まずこの2つから。",
-                    "Start with schools and foreigner-friendly employers."
-                )
-            )
-            HStack(spacing: KXSpacing.md) {
-                card(
-                    title: guideText(language, "日本学校库", "学校データベース", "School library"),
-                    subtitle: guideText(language, "大学、大学院、专门学校、语言学校", "大学・大学院・専門・語学", "Universities, grad, vocational, language"),
-                    icon: "graduationcap.fill",
-                    colors: [KXColor.rankSky, KXColor.rankSky.opacity(0.78)],
-                    identifier: "guide.library.schools"
-                ) { router.open(.guideSchools) }
-
-                card(
-                    title: guideText(language, "就职公司库", "就職企業データベース", "Company library"),
-                    subtitle: guideText(language, "外国人友好企业、签证支持与真实评价", "外国人歓迎・ビザ支援・口コミ", "Foreigner-friendly, visa support, reviews"),
-                    icon: "building.2.fill",
-                    colors: [KXColor.rankTeal, KXColor.rankTeal.opacity(0.78)],
-                    identifier: "guide.library.companies"
-                ) { router.open(.guideCompanies) }
+            HStack(alignment: .center) {
+                JLPTEyebrow(text: "Machi Guide · JLPT")
+                Spacer(minLength: 0)
+                if let streak, (streak.currentStreak ?? 0) > 0 {
+                    JLPTStreakBadge(streak: streak, compact: true)
+                }
             }
+
+            Button {
+                router.open(.guideCategory(categoryKey: "jlpt"))
+            } label: {
+                HStack(spacing: KXSpacing.md) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(guideText(language, "JLPT 备考专区", "JLPT 対策センター", "JLPT prep center"))
+                            .kxScaledFont(22, relativeTo: .title3, weight: .bold, design: .rounded)
+                            .foregroundStyle(KXColor.livingInk)
+                        Text(guideText(language, "定级 · 练习 · 模考 · 错题本", "レベル判定・演習・模試・間違いノート", "Placement, practice, mock exams, review"))
+                            .font(.footnote)
+                            .foregroundStyle(KXColor.livingMuted)
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(KXColor.livingMuted)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.fullArea)
+            .accessibilityIdentifier("guide.jlpt.card")
+
+            if let countdown {
+                JLPTCountdownBar(countdown: countdown)
+            }
+
+            NavigationLink {
+                GuideJLPTPlacementView()
+            } label: {
+                HStack(spacing: KXSpacing.sm) {
+                    Image(systemName: "gauge.with.dots.needle.50percent")
+                        .font(.subheadline.weight(.bold))
+                    Text(guideText(language, "30 秒测水平，领备考等级", "30秒でレベル判定", "Find your level in 30 seconds"))
+                        .font(.subheadline.weight(.bold))
+                    Spacer(minLength: 0)
+                    Image(systemName: "arrow.right")
+                        .font(.subheadline.weight(.bold))
+                }
+                .foregroundStyle(KXColor.onAccent)
+                .padding(.vertical, 14)
+                .padding(.horizontal, KXSpacing.lg)
+                .background(KXColor.livingAccent, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+                .shadow(color: KXColor.livingAccent.opacity(0.24), radius: 10, y: 4)
+            }
+            .buttonStyle(KXPressableStyle(scale: 0.97))
+            .accessibilityIdentifier("guide.jlpt.placement")
+        }
+        .padding(KXSpacing.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(KXColor.livingSoft, in: RoundedRectangle(cornerRadius: KXRadius.sheet, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: KXRadius.sheet, style: .continuous)
+                .stroke(KXColor.livingInk.opacity(0.06), lineWidth: 0.8)
+        )
+        .shadow(color: Color.black.opacity(0.05), radius: 14, y: 7)
+        .task { await load() }
+    }
+
+    private func load() async {
+        guard !didLoad else { return }
+        didLoad = true
+        if let resp = try? await KaiXAPIClient.shared.jlptExamDates() {
+            countdown = resp.countdown
+        }
+        // streak 是登录态资源(游客 401),不请求即不闪错。
+        guard KaiXBackend.token?.isEmpty == false else { return }
+        if let resp = try? await KaiXAPIClient.shared.jlptStreak() {
+            streak = KaiXJLPTStreak(
+                currentStreak: resp.currentStreak,
+                longestStreak: resp.longestStreak,
+                todayDone: resp.todayDone,
+                totalDays: resp.totalDays,
+                last7days: resp.last7days
+            )
+        }
+    }
+}
+
+/// 首访一次性引导卡(I1-2)。不做多步 tour —— 一张卡:按 onboarding persona
+/// 预填 3 个 Machi AI 快捷问题 + 主 CTA「30 秒定级」。点 CTA/chip 视为已消费
+/// (onConsumed 只写 UserDefaults 标记,卡片留到下次进首页再消失,避免推进
+/// NavigationLink 时卡片被移除断导航);✕ 立即收起。游客可直接进定级,提交时
+/// 由 GuideJLPTPlacementView 的 GuestGate 兜底。
+private struct GuideIntroCard: View {
+    @Environment(\.appLanguage) private var language
+    @EnvironmentObject private var router: AppRouter
+    @AppStorage("onboardingPersona") private var onboardingPersona = ""
+    let onDismiss: () -> Void
+    let onConsumed: () -> Void
+
+    /// persona(arrival_stage)→ 3 个示范问题:让新用户 5 秒内看到「和我有关」。
+    private var personaQuestions: [String] {
+        switch onboardingPersona {
+        case "pre_arrival":
+            return [
+                guideText(language, "留学签证 COE 怎么办理？", "在留資格認定証明書（COE）の取り方は？", "How do I get a COE for my student visa?"),
+                guideText(language, "来日本前要准备哪些材料？", "渡日前に何を準備すべき？", "What should I prepare before coming to Japan?"),
+                guideText(language, "语言学校怎么选？", "語学学校の選び方は？", "How do I choose a language school?")
+            ]
+        case "just_arrived":
+            return [
+                guideText(language, "刚到日本要办哪些手续？", "来日直後の手続きは？", "What paperwork do I need right after arriving?"),
+                guideText(language, "怎么开银行账户和办手机卡？", "銀行口座と携帯の契約方法は？", "How do I open a bank account and get a SIM?"),
+                guideText(language, "在留卡地址变更怎么办？", "在留カードの住所変更は？", "How do I update the address on my residence card?")
+            ]
+        case "first_year":
+            return [
+                guideText(language, "资格外活动许可怎么申请？", "資格外活動許可の申請方法は？", "How do I apply for a part-time work permit?"),
+                guideText(language, "JLPT 什么时候报名和考试？", "JLPT の申込と試験日は？", "When are JLPT registration and exam dates?"),
+                guideText(language, "留学签证怎么续？", "留学ビザの更新方法は？", "How do I renew my student visa?")
+            ]
+        case "long_term":
+            return [
+                guideText(language, "日企面试怎么准备？", "日本企業の面接対策は？", "How do I prep for interviews at Japanese firms?"),
+                guideText(language, "永住申请需要什么条件？", "永住申請の条件は？", "What are the requirements for permanent residency?"),
+                guideText(language, "怎么换工作签证？", "就労ビザへの変更方法は？", "How do I switch to a work visa?")
+            ]
+        default:
+            return [
+                guideText(language, "留学签证怎么续？", "留学ビザの更新方法は？", "How do I renew my student visa?"),
+                guideText(language, "JLPT 考什么、怎么备考？", "JLPT の内容と対策は？", "What's on the JLPT and how do I prep?"),
+                guideText(language, "东京哪里租房便宜？", "東京で家賃が安いエリアは？", "Where is rent cheaper in Tokyo?")
+            ]
         }
     }
 
-    private func card(title: String, subtitle: String, icon: String, colors: [Color], identifier: String, action: @escaping () -> Void) -> some View {
-        // Ink derived from the gradient's lead tint: white on the deep light-mode
-        // hues, near-black on the brightened dark-mode ones (raw .white washes
-        // out on the bright dark-mode sky/teal).
-        let ink = KXColor.onTint(colors.first ?? KXColor.accent)
-        return Button(action: action) {
-            VStack(alignment: .leading, spacing: 9) {
-                Image(systemName: icon)
-                    .kxScaledFont(25, weight: .bold)
-                    .foregroundStyle(ink)
-                Text(title)
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(ink)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(subtitle)
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(ink.opacity(0.92))
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
-                HStack(spacing: KXSpacing.xs) {
-                    Text(guideText(language, "进入", "開く", "Open"))
-                    Image(systemName: "arrow.right")
+    var body: some View {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
+            HStack(alignment: .top, spacing: KXSpacing.sm) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(guideText(language, "第一次来？两步就上手", "はじめてですか？2ステップで開始", "New here? Start in two steps"))
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(KXColor.livingInk)
+                    Text(guideText(language, "先测日语水平，或直接问 Machi AI。", "まずレベル判定、または Machi AI に質問。", "Check your Japanese level, or just ask Machi AI."))
+                        .font(.footnote)
+                        .foregroundStyle(KXColor.livingMuted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .font(.caption.weight(.bold))
-                .foregroundStyle(ink)
+                Spacer(minLength: 0)
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(KXColor.livingMuted)
+                        .frame(width: 28, height: 28)
+                        .background(KXColor.livingSurface, in: Circle())
+                }
+                .buttonStyle(.fullArea)
+                .contentShape(Circle())
+                .accessibilityIdentifier("guide.intro.dismiss")
+                .accessibilityLabel(guideText(language, "关闭", "閉じる", "Close"))
             }
-            .frame(maxWidth: .infinity, minHeight: 172, alignment: .topLeading)
-            .padding(KXSpacing.lg)
-            .background(
-                LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing),
-                in: RoundedRectangle(cornerRadius: KXRadius.hero, style: .continuous)
-            )
-            .shadow(color: (colors.first ?? .clear).opacity(0.3), radius: 12, y: 6)
+
+            NavigationLink {
+                GuideJLPTPlacementView()
+            } label: {
+                HStack(spacing: KXSpacing.sm) {
+                    Image(systemName: "gauge.with.dots.needle.50percent")
+                        .font(.subheadline.weight(.bold))
+                    Text(guideText(language, "30 秒测水平，拿到备考计划", "30秒でレベル判定して計画を作る", "Find your level in 30 seconds"))
+                        .font(.subheadline.weight(.bold))
+                    Spacer(minLength: 0)
+                    Image(systemName: "arrow.right")
+                        .font(.subheadline.weight(.bold))
+                }
+                .foregroundStyle(KXColor.onAccent)
+                .padding(.vertical, 14)
+                .padding(.horizontal, KXSpacing.lg)
+                .background(KXColor.livingAccent, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+                .shadow(color: KXColor.livingAccent.opacity(0.24), radius: 10, y: 4)
+            }
+            .buttonStyle(KXPressableStyle(scale: 0.97))
+            .simultaneousGesture(TapGesture().onEnded { onConsumed() })
+            .accessibilityIdentifier("guide.intro.placement")
+
+            FlowLayout(spacing: 7) {
+                ForEach(personaQuestions, id: \.self) { question in
+                    Button {
+                        onConsumed()
+                        router.open(.guideAI(prompt: question), in: .guide)
+                    } label: {
+                        Text(question)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(KXColor.livingAccent)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(KXColor.livingAccentSoft, in: Capsule())
+                    }
+                    .buttonStyle(.fullArea)
+                    .contentShape(Capsule())
+                }
+            }
         }
-        .buttonStyle(.fullArea)
-        .contentShape(Rectangle())
-        .accessibilityIdentifier(identifier)
+        .padding(KXSpacing.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(KXColor.livingSoft, in: RoundedRectangle(cornerRadius: KXRadius.sheet, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: KXRadius.sheet, style: .continuous)
+                .stroke(KXColor.livingAccent.opacity(0.22), lineWidth: 0.9)
+        )
+        .shadow(color: Color.black.opacity(0.05), radius: 14, y: 7)
     }
 }
 
@@ -2310,10 +2647,20 @@ private struct GuideStoreSection: View {
     private func load() async {
         guard products.isEmpty else { return }
         let resp = try? await KaiXAPIClient.shared.guideProducts(country: "jp", pageSize: 12)
-        let items = resp?.items ?? []
-        let paid = items.filter { !$0.isFree && !$0.isComingSoon && !$0.isService }
-        let free = items.filter { $0.isFree && !$0.isComingSoon && !$0.isService }
-        products = Array((paid + free).prefix(3))
+        let items = (resp?.items ?? []).filter { !$0.isComingSoon && !$0.isService }
+        // I1-1:is_featured + sort_order 置顶 hero SKU;非精选保持原「付费优先、
+        // 免费引流其次」的次序兜底(后台没勾精选时板块不塌)。
+        let featured = items
+            .filter { $0.isFeatured == true }
+            .sorted { ($0.sortOrder ?? Int.max) < ($1.sortOrder ?? Int.max) }
+        let rest = items.filter { $0.isFeatured != true }
+        let paid = rest.filter { !$0.isFree }
+        let free = rest.filter { $0.isFree }
+        products = Array((featured + paid + free).prefix(3))
+        // C-2 客户端漏斗:首页商城板块实际渲染出商品才算一次曝光。
+        if let hero = products.first {
+            Task { await KaiXAPIClient.shared.funnelEvent("store_hero_view", entityType: "guide_store", entityId: hero.slug, props: ["placement": "guide_home"]) }
+        }
     }
 }
 

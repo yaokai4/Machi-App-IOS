@@ -101,6 +101,14 @@ final class ReviewPromptService: ObservableObject {
     func noteConsultationReply() {
         promptIfAllowed()
     }
+
+    /// A paid purchase (single-product IAP or Machi-Coins buy) just succeeded —
+    /// the user got the thing they wanted badly enough to pay for, the
+    /// strongest delight moment we have. Version cap in promptIfAllowed keeps
+    /// this from ever stacking with the other triggers.
+    func notePurchaseSuccess() {
+        promptIfAllowed()
+    }
 }
 
 private struct ReviewPromptModifier: ViewModifier {

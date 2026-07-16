@@ -212,8 +212,19 @@ struct MessagesView: View {
     private var contactsContent: some View {
         switch contactsState {
         case .loading, .idle:
-            LoadingView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // 联系人也是「头像 + 两行」的行,首载复用会话骨架而不是裸 spinner。
+            ScrollView {
+                LazyVStack(spacing: KXSpacing.sm) {
+                    ForEach(0..<5, id: \.self) { _ in
+                        ConversationSkeletonRow()
+                            .kxGlassSurface(radius: KXRadius.lg)
+                    }
+                }
+                .padding(.horizontal, KXSpacing.screen)
+                .padding(.top, KXSpacing.md)
+            }
+            .scrollDisabled(true)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         case .empty:
             contactsEmptyContent
         case .error(let message):
@@ -429,7 +440,9 @@ private enum MessageInboxMode: String, CaseIterable, Identifiable {
 
 /// Conversation-row skeleton (avatar + two text lines) shown while the inbox
 /// loads its first page — mirrors DiscoverView's HotBoardSkeletonRow style.
-private struct ConversationSkeletonRow: View {
+/// Internal on purpose: the same "avatar + two lines" shape也是通知列表和
+/// 联系人列表的首载骨架(I2-5)。
+struct ConversationSkeletonRow: View {
     var body: some View {
         HStack(spacing: 11) {
             Circle().fill(KXColor.softBackground).frame(width: 48, height: 48)

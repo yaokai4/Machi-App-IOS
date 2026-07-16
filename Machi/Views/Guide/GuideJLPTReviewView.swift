@@ -8,6 +8,7 @@ import SwiftUI
 /// Compliance: original / licensed questions, not official past papers.
 struct GuideJLPTReviewView: View {
     @Environment(\.appLanguage) private var language
+    @EnvironmentObject private var router: AppRouter
 
     var initialLevel: JLPTLevel? = nil
 
@@ -90,6 +91,22 @@ struct GuideJLPTReviewView: View {
                     correctIndex: q.answerIndex,
                     explanation: q.explanation
                 )
+                // I1-4:重做揭晓后仍不懂,带着题干去 Machi AI 追问。
+                if answered[q.id] != nil {
+                    Button {
+                        router.open(.guideAI(prompt: aiFollowUpPrompt(q)))
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "sparkles")
+                            Text(guideText(language, "继续问 Machi AI", "続けて Machi AI に質問", "Keep asking Machi AI"))
+                        }
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(KXColor.livingAccent)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, KXSpacing.xs)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
 
             JLPTComplianceNote()
@@ -115,5 +132,14 @@ struct GuideJLPTReviewView: View {
     private func record(_ q: KaiXJLPTQuestionDTO, selected: Int) async {
         _ = try? await KaiXAPIClient.shared.jlptAttempt(
             questionId: q.id, selectedIndex: selected, sessionId: sessionId, sourceKind: "review")
+    }
+
+    /// I1-4 预填提示词:题干截前 80 字(与练习页同口径)。
+    private func aiFollowUpPrompt(_ q: KaiXJLPTQuestionDTO) -> String {
+        let stem = String(q.stem.replacingOccurrences(of: "\n", with: " ").prefix(80))
+        return guideText(language,
+            "我在 JLPT \(q.level) 错题本里重做这道题：「\(stem)」，请帮我讲讲相关知识点，帮我彻底弄懂。",
+            "JLPT \(q.level) の間違いノートでこの問題を解き直しています：「\(stem)」。関連する知識点を教えて、しっかり理解させてください。",
+            "I'm redoing this question from my JLPT \(q.level) review book: \"\(stem)\". Please explain the underlying point so I really get it.")
     }
 }

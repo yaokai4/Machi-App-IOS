@@ -57,8 +57,20 @@ struct NotificationsView: View {
     private var content: some View {
         switch viewModel.state {
         case .loading, .idle:
-            LoadingView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // I2-5 首载骨架:通知行也是「头像 + 两行」,复用会话骨架行保持
+            // 列表节奏,替代整屏 spinner(hydrate 命中缓存时根本走不到这里)。
+            ScrollView {
+                LazyVStack(spacing: KXSpacing.sm) {
+                    ForEach(0..<6, id: \.self) { _ in
+                        ConversationSkeletonRow()
+                            .kxGlassSurface(radius: KXRadius.lg)
+                    }
+                }
+                .padding(.horizontal, KXSpacing.screen)
+                .padding(.top, KXSpacing.md)
+            }
+            .scrollDisabled(true)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         case .empty:
             emptyContent
         case .error(let message):

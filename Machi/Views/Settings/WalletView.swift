@@ -317,7 +317,25 @@ struct WalletView: View {
 
     private var ledgerSection: some View {
         VStack(alignment: .leading, spacing: KXSpacing.sm) {
-            Text(wl("最近记录", "Recent activity", "最近の記録")).font(.headline)
+            HStack {
+                Text(wl("最近记录", "Recent activity", "最近の記録")).font(.headline)
+                Spacer(minLength: KXSpacing.sm)
+                // I2-8 完整流水入口:walletLedger 分页接口早已就绪,这里补上
+                // 最后一米。没有记录时不给一个必然为空的页面。
+                if !store.recentEntries.isEmpty {
+                    NavigationLink {
+                        WalletLedgerView()
+                    } label: {
+                        HStack(spacing: 3) {
+                            Text(wl("查看全部", "View all", "すべて見る"))
+                            Image(systemName: "chevron.right")
+                        }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(KXColor.accent)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
             if store.recentEntries.isEmpty {
                 Text(wl("暂无记录。", "No activity yet.", "記録はありません。")).font(.caption).foregroundStyle(.secondary)
             } else {
@@ -341,15 +359,7 @@ struct WalletView: View {
     }
 
     private func ledgerLabel(_ entryType: String) -> String {
-        switch entryType {
-        case "topup": return wl("充值", "Top-up", "チャージ")
-        case "bonus": return wl("充值赠送", "Bonus", "ボーナス")
-        case "spend": return wl("购买资料", "Purchase", "購入")
-        case "refund_credit": return wl("退款返还", "Refund", "返金")
-        case "admin_adjustment": return wl("客服调整", "Adjustment", "調整")
-        case "membership_bonus": return wl("会员赠币", "Member bonus", "会員ボーナス")
-        default: return entryType
-        }
+        kxWalletLedgerLabel(entryType, language: language)
     }
 
     private func wl(_ zh: String, _ en: String, _ ja: String) -> String {
@@ -357,6 +367,169 @@ struct WalletView: View {
         case .en: return en
         case .ja: return ja
         default: return zh
+        }
+    }
+}
+
+/// 流水类型 → 三语文案,与 Web ledger 页同一套口径(i18n ledger_type_*)。
+/// WalletView 的最近记录与 WalletLedgerView 的完整流水共用,单一事实源。
+private func kxWalletLedgerLabel(_ entryType: String, language: AppLanguage) -> String {
+    func wl(_ zh: String, _ en: String, _ ja: String) -> String {
+        switch language {
+        case .en: return en
+        case .ja: return ja
+        default: return zh
+        }
+    }
+    switch entryType {
+    case "topup": return wl("充值", "Top-up", "チャージ")
+    case "bonus": return wl("充值赠送", "Bonus", "ボーナス")
+    case "spend": return wl("购买资料", "Purchase", "購入")
+    case "refund_credit": return wl("退款返还", "Refund", "返金")
+    case "admin_adjustment": return wl("客服调整", "Adjustment", "調整")
+    case "membership_bonus": return wl("会员赠币", "Member bonus", "会員ボーナス")
+    // 邀请奖励到账不再显示英文原串。
+    case "referral_bonus": return wl("邀请奖励", "Referral bonus", "招待ボーナス")
+    case "refund_debit": return wl("退款扣回", "Refund deduction", "返金による差し引き")
+    case "chargeback_debit": return wl("拒付扣回", "Chargeback deduction", "チャージバックによる差し引き")
+    case "reversal": return wl("交易冲正", "Reversal", "取引の取り消し")
+    default: return entryType
+    }
+}
+
+/// I2-8 完整流水页:挂接零调用的 KaiXAPIClient.walletLedger 分页接口。
+/// 行样式复用钱包页「最近记录」的行(类型 + 时间 / 正负色 delta + 结余),
+/// 滚到底自动加载下一页;首页失败给重试,追加页失败静默保留已有内容。
+struct WalletLedgerView: View {
+    @Environment(\.appLanguage) private var language
+
+    @State private var entries: [KaiXWalletLedgerEntryDTO] = []
+    @State private var page = 1
+    @State private var hasMore = false
+    @State private var isLoading = false
+    @State private var loadFailed = false
+
+    private static let pageSize = 20
+
+    var body: some View {
+        Group {
+            if entries.isEmpty {
+                if isLoading {
+                    LoadingView()
+                } else if loadFailed {
+                    ErrorStateView(message: KXListingCopy.pickText(language, "流水加载失败，请重试。", "履歴を読み込めませんでした。再試行してください。", "Couldn't load your activity — try again.")) {
+                        Task { await loadFirstPage() }
+                    }
+                } else {
+                    EmptyStateView(
+                        title: KXListingCopy.pickText(language, "暂无记录", "記録はありません", "No activity yet"),
+                        subtitle: KXListingCopy.pickText(language, "充值和消费记录会显示在这里。", "チャージや購入の履歴がここに表示されます。", "Top-ups and purchases will show up here."),
+                        systemImage: "list.bullet.rectangle"
+                    )
+                }
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(entries) { entry in
+                            ledgerRow(entry)
+                                .task {
+                                    guard entry.id == entries.last?.id else { return }
+                                    await loadMoreIfNeeded()
+                                }
+                            Divider().opacity(0.4)
+                        }
+                        if isLoading {
+                            KXInlineLoader()
+                                .padding(.vertical, KXSpacing.md)
+                        }
+                    }
+                    .padding(14)
+                    .background(RoundedRectangle(cornerRadius: KXRadius.md).fill(KXColor.cardBackground))
+                    .overlay(RoundedRectangle(cornerRadius: KXRadius.md).stroke(KXColor.separator, lineWidth: 0.8))
+                    .padding(.horizontal, KXSpacing.screen)
+                    .padding(.vertical, KXSpacing.screen)
+                    .kxReadableWidth()
+                }
+                .refreshable { await loadFirstPage() }
+            }
+        }
+        .kxPageBackground()
+        .navigationTitle(KXListingCopy.pickText(language, "全部记录", "すべての記録", "All activity"))
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            guard entries.isEmpty else { return }
+            await loadFirstPage()
+        }
+    }
+
+    private func ledgerRow(_ entry: KaiXWalletLedgerEntryDTO) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(kxWalletLedgerLabel(entry.entryType, language: language))
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                if let when = displayDate(entry.createdAt) {
+                    Text(when)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: KXSpacing.sm)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(entry.displayDelta ?? "\(entry.pointsDelta)")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(entry.pointsDelta >= 0 ? .green : .secondary)
+                Text(KXListingCopy.pickText(language, "结余 \(entry.balanceAfter)", "残高 \(entry.balanceAfter)", "Balance \(entry.balanceAfter)"))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 8)
+    }
+
+    /// 服务端 createdAt 是 ISO 串;解析失败(或缺失)就不显示时间行。
+    private func displayDate(_ raw: String?) -> String? {
+        guard let raw, !raw.isEmpty else { return nil }
+        let parser = ISO8601DateFormatter()
+        parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let date = parser.date(from: raw) ?? {
+            parser.formatOptions = [.withInternetDateTime]
+            return parser.date(from: raw)
+        }()
+        guard let date else { return nil }
+        return DateFormatterUtils.relativeText(from: date, language: language)
+    }
+
+    private func loadFirstPage() async {
+        guard !isLoading else { return }
+        isLoading = true
+        loadFailed = false
+        defer { isLoading = false }
+        do {
+            let resp = try await KaiXAPIClient.shared.walletLedger(page: 1, pageSize: Self.pageSize)
+            entries = resp.entries
+            page = 1
+            hasMore = resp.hasMore ?? (resp.entries.count >= Self.pageSize)
+        } catch {
+            // 已有内容时保留列表(下拉刷新失败不清屏),空态才亮错误页。
+            if entries.isEmpty { loadFailed = true }
+        }
+    }
+
+    private func loadMoreIfNeeded() async {
+        guard hasMore, !isLoading else { return }
+        isLoading = true
+        defer { isLoading = false }
+        let nextPage = page + 1
+        do {
+            let resp = try await KaiXAPIClient.shared.walletLedger(page: nextPage, pageSize: Self.pageSize)
+            // 按 id 去重后追加:分页期间新流水到账会让旧页内容后移一位。
+            let known = Set(entries.map(\.id))
+            entries.append(contentsOf: resp.entries.filter { !known.contains($0.id) })
+            page = nextPage
+            hasMore = (resp.hasMore ?? (resp.entries.count >= Self.pageSize)) && !resp.entries.isEmpty
+        } catch {
+            // 追加页失败静默保留已有内容;下拉刷新可整体重载。
         }
     }
 }

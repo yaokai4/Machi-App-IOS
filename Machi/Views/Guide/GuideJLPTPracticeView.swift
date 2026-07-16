@@ -142,6 +142,21 @@ struct GuideJLPTPracticeView: View {
                             : guideText(language, "完成本组", "このセットを終える", "Finish set"),
                         trailingArrow: true,
                         action: advance)
+                    // I1-4:揭晓后仍没懂,带着题干去 Machi AI 追问(全量免费入口,
+                    // 与会员限定的卡内「AI 讲解」互补)。
+                    Button {
+                        router.open(.guideAI(prompt: aiFollowUpPrompt(q)))
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "sparkles")
+                            Text(guideText(language, "继续问 Machi AI", "続けて Machi AI に質問", "Keep asking Machi AI"))
+                        }
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(KXColor.livingAccent)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, KXSpacing.xs)
+                    }
+                    .buttonStyle(.plain)
                 }
 
                 JLPTComplianceNote()
@@ -243,6 +258,15 @@ struct GuideJLPTPracticeView: View {
     private func advance() {
         cursor += 1
         resetQuestionState()
+    }
+
+    /// I1-4 预填提示词:题干截前 80 字保住上下文,不至于把整段阅读题灌进输入框。
+    private func aiFollowUpPrompt(_ q: KaiXJLPTQuestionDTO) -> String {
+        let stem = String(q.stem.replacingOccurrences(of: "\n", with: " ").prefix(80))
+        return guideText(language,
+            "我在 JLPT \(level.rawValue) 练习中遇到这道题：「\(stem)」，请帮我讲讲相关知识点和常见考法。",
+            "JLPT \(level.rawValue) の演習でこの問題が出ました：「\(stem)」。関連する知識点とよくある出題パターンを教えてください。",
+            "In my JLPT \(level.rawValue) practice I hit this question: \"\(stem)\". Please explain the underlying point and how it's usually tested.")
     }
 
     private func explain(_ q: KaiXJLPTQuestionDTO) async {

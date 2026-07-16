@@ -437,8 +437,8 @@ struct MerchantDirectoryView: View {
                         ErrorStateView(message: errorMessage) { Task { await load() } }
                     } else if items.isEmpty {
                         EmptyStateView(
-                            title: KXListingCopy.pickText(language, "暂无认证商家", "認証済み店舗はまだありません", "No verified merchants yet"),
-                            subtitle: KXListingCopy.pickText(language, "商家可以在「工作台 → 商家服务后台」提交认证申请，审核通过后展示在这里。", "店舗は「ワークベンチ → 店舗サービス管理」から認証申請できます。審査後ここに表示されます。", "Merchants can apply in Workbench → Merchant service console. Approved profiles appear here."),
+                            title: KXListingCopy.pickText(language, "认证商家即将上线", "認証済み店舗は近日公開", "Verified merchants coming soon"),
+                            subtitle: KXListingCopy.pickText(language, "这座城市的认证商家正在逐步开放，敬请期待。", "この都市の認証済み店舗は順次公開予定です。もうしばらくお待ちください。", "Verified merchants for this city are rolling out gradually — check back soon."),
                             systemImage: "storefront"
                         )
                         .frame(maxWidth: .infinity, minHeight: 240)

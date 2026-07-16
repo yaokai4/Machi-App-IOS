@@ -14,6 +14,10 @@ struct GuideJLPTZoneView: View {
     @State private var zone: KaiXGuideJLPTZoneResponse?
     @State private var isLoading = true
     @State private var loadFailed = false
+    // 「我的学习」(I1-5):/api/guide/jlpt/stats + 模考历史。登录态才拉,
+    // 失败/无数据静默隐藏小节 —— 进度可见是学习提醒推送的落点。
+    @State private var stats: KaiXJLPTStatsResponse?
+    @State private var examHistory: [KaiXJLPTExamHistoryItem] = []
 
     private var serverLanguage: String {
         switch language {
@@ -68,6 +72,11 @@ struct GuideJLPTZoneView: View {
 
             // BE6 核心入口:定级 / 自测 / 我的单词 / 模拟考试 + 错题本 / 考试日历.
             practiceSection(z.jlptCore)
+
+            // 我的学习 (I1-5) — 分科正确率 + 模考历史;游客态与零数据隐藏.
+            if let stats, (stats.total ?? 0) > 0 || !examHistory.isEmpty {
+                myStudySection(stats)
+            }
 
             if let plan = z.studyPlan, let title = plan.title {
                 studyPlanCTA(title: title, subtitle: plan.subtitle)
@@ -289,6 +298,92 @@ struct GuideJLPTZoneView: View {
         .overlay(Capsule().stroke(JLPTStyle.accentRim, lineWidth: 0.9))
     }
 
+    // MARK: 我的学习 (I1-5) — 总正确率 ring + 分科 bar + 模考历史
+
+    @ViewBuilder
+    private func myStudySection(_ stats: KaiXJLPTStatsResponse) -> some View {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
+            JLPTSectionHeader(title: guideText(language, "我的学习", "学習記録", "My study"))
+            VStack(alignment: .leading, spacing: KXSpacing.lg) {
+                if (stats.total ?? 0) > 0 {
+                    HStack(spacing: KXSpacing.lg) {
+                        JLPTScoreRing(
+                            score: Int(((stats.accuracy ?? 0) * 100).rounded()),
+                            fraction: stats.accuracy ?? 0,
+                            passed: (stats.accuracy ?? 0) >= 0.6,
+                            size: 96
+                        )
+                        VStack(alignment: .leading, spacing: KXSpacing.xs) {
+                            Text(guideText(language, "总正确率", "総合正答率", "Overall accuracy"))
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(KXColor.livingMuted)
+                            Text(guideText(language,
+                                           "已做 \(stats.total ?? 0) 题 · 对 \(stats.correct ?? 0) 题",
+                                           "解答 \(stats.total ?? 0) 問 · 正解 \(stats.correct ?? 0) 問",
+                                           "\(stats.total ?? 0) answered · \(stats.correct ?? 0) correct"))
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(KXColor.livingInk)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                }
+
+                if let sections = stats.sections, sections.contains(where: { ($0.total ?? 0) > 0 }) {
+                    VStack(spacing: 10) {
+                        ForEach(sections) { s in
+                            JLPTAccuracyBar(
+                                label: s.label ?? JLPTSection(rawValue: s.section)?.label(language) ?? s.section,
+                                accuracy: s.accuracy ?? 0,
+                                total: s.total ?? 0,
+                                correct: s.correct ?? 0
+                            )
+                        }
+                    }
+                }
+
+                if !examHistory.isEmpty {
+                    VStack(alignment: .leading, spacing: KXSpacing.sm) {
+                        Text(guideText(language, "最近模考", "最近の模試", "Recent mock exams"))
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(KXColor.livingMuted)
+                        ForEach(Array(examHistory.prefix(3))) { item in
+                            examHistoryRow(item)
+                        }
+                    }
+                }
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .jlptSurface(radius: KXRadius.hero)
+        }
+    }
+
+    private func examHistoryRow(_ item: KaiXJLPTExamHistoryItem) -> some View {
+        HStack(spacing: KXSpacing.md) {
+            Text(item.level ?? "—")
+                .font(.caption.weight(.black))
+                .foregroundStyle(KXColor.livingAccent)
+                .frame(width: 40, height: 28)
+                .background(KXColor.livingAccentSoft, in: RoundedRectangle(cornerRadius: KXRadius.xs, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.title ?? guideText(language, "模拟考试", "模擬試験", "Mock exam"))
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(KXColor.livingInk)
+                    .lineLimit(1)
+                if let submitted = item.submittedAt, submitted.count >= 10 {
+                    Text(String(submitted.prefix(10)))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 0)
+            Text("\(item.score ?? 0)")
+                .font(.subheadline.weight(.heavy).monospacedDigit())
+                .foregroundStyle((item.passed ?? false) ? KXColor.livingAccent : KXColor.livingWarm)
+        }
+    }
+
     // MARK: 学习计划 CTA — 青渐变横幅
 
     private func studyPlanCTA(title: String, subtitle: String?) -> some View {
@@ -403,5 +498,18 @@ struct GuideJLPTZoneView: View {
             loadFailed = true
         }
         isLoading = false
+        await loadMyStudy()
+    }
+
+    /// stats / exam-history 都是登录态端点(游客 401):不请求即不闪错;
+    /// 任一失败保持 nil/空,小节静默隐藏,绝不影响专区主内容。
+    private func loadMyStudy() async {
+        guard KaiXBackend.token?.isEmpty == false else {
+            stats = nil
+            examHistory = []
+            return
+        }
+        stats = try? await KaiXAPIClient.shared.jlptStats()
+        examHistory = (try? await KaiXAPIClient.shared.jlptExamHistory())?.sessions ?? []
     }
 }

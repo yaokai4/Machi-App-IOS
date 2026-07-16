@@ -232,6 +232,10 @@ struct HomeTimelineView: View {
                 // load-more trigger (anchored to feedPosts.last) is unaffected.
                 HomeJourneyNextStepCard(currentUser: currentUser)
 
+                // I2-1 hero SKU 曝光卡:同一套「自加载、失败静默」模式,与旅程卡
+                // 并存(旅程卡指路、这张卡开店门);可关闭,7 天内不再出现。
+                HomeStoreHeroCard()
+
                 if feedPosts.isEmpty {
                     EmptyStateView(
                         title: KXListingCopy.pickText(language, "这里还没有热榜内容", "まだ急上昇コンテンツがありません", "No hot posts here yet"),

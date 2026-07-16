@@ -36,12 +36,12 @@ struct DiscoverView: View {
     // 派生数据缓存:这些 O(n) 的 filter/sort 只依赖 viewModel 数据 + 当前区域,
     // 与 postStore 无关 —— 但 DiscoverView 持有 @EnvironmentObject postStore,
     // 任意一次点赞/收藏都会让 body 整体重求值。缓存为 @State,只在 load 完成 /
-    // 区域切换时重建(rebuildDerivedContent),避免每次 body 重跑 13 次频道计数
-    // + 多轮排序。默认值保证首帧(load 前 / .empty 态)四大入口卡照常渲染。
+    // 区域切换时重建(rebuildDerivedContent),避免每次 body 重跑多轮过滤排序。
+    // 默认值保证首帧(load 前 / .empty 态)四大入口卡照常渲染。
     @State private var cachedPrimaryCategories: [DiscoverCategory] =
-        DiscoverView.primarySpecs.map { DiscoverCategory(spec: $0, count: 0) }
+        DiscoverView.primarySpecs.map { DiscoverCategory(spec: $0) }
     @State private var cachedAllCategories: [DiscoverCategory] =
-        DiscoverView.allCategorySpecs.map { DiscoverCategory(spec: $0, count: 0) }
+        DiscoverView.allCategorySpecs.map { DiscoverCategory(spec: $0) }
     @State private var cachedHappeningRadarPosts: [PostEntity] = []
     @State private var cachedRecommendedUsers: [UserEntity] = []
 
@@ -358,11 +358,11 @@ struct DiscoverView: View {
         cachedAllCategories
     }
 
+    // I2-2:频道不再携带帖子计数。原实现用本地 hotPosts(截断的推荐池)过滤
+    // 估算,冷启动城市几乎恒为 0 —— 一个装饰性数字反而在主动制造「没人」的
+    // 错误暗示;真实计数需要服务端端点,不值得为此增加后端面。
     private func resolveCategory(_ spec: DiscoverCategorySpec) -> DiscoverCategory {
-        let count = viewModel.hotPosts.filter { post in
-            post.matches(region: currentRegion) && spec.types.contains(post.contentType)
-        }.count
-        return DiscoverCategory(spec: spec, count: count)
+        DiscoverCategory(spec: spec)
     }
 
     // Tints collapsed to the 5-colour semantic palette (KXColor.category*):
@@ -465,7 +465,6 @@ private struct DiscoverCategorySpec: Identifiable, Hashable {
 
 private struct DiscoverCategory: Identifiable, Hashable {
     let spec: DiscoverCategorySpec
-    let count: Int
 
     var id: String { spec.id }
     func title(_ language: AppLanguage) -> String {
