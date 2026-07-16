@@ -45,6 +45,11 @@ final class SystemNotificationService: NSObject {
     private let center = UNUserNotificationCenter.current()
     private let deliveredKey = "machi.notifications.delivered.v1"
     private let deliveredCap = 400
+    /// Cold-start safety buffer. iOS can invoke the notification delegate
+    /// before ContentView has installed its NotificationCenter subscriber; in
+    /// that window a fire-and-forget post is lost. Keep one latest tap until the
+    /// root view consumes it after bootstrap.
+    private var pendingTapPayload: [AnyHashable: Any]?
 
     private override init() {
         super.init()
@@ -155,6 +160,11 @@ final class SystemNotificationService: NSObject {
         center.removeAllDeliveredNotifications()
     }
 
+    func consumePendingTapPayload() -> [AnyHashable: Any]? {
+        defer { pendingTapPayload = nil }
+        return pendingTapPayload
+    }
+
     // MARK: - delivered-id persistence (ordered, capped)
 
     private func deliveredIds() -> [String] {
@@ -211,8 +221,26 @@ final class SystemNotificationService: NSObject {
     }
 
     nonisolated private static func conversationId(from userInfo: [AnyHashable: Any]) -> String? {
-        if let value = userInfo["conversationId"] as? String, !value.isEmpty { return value }
-        if let value = userInfo["conversation_id"] as? String, !value.isEmpty { return value }
+        stringValue(in: userInfo, keys: ["conversationId", "conversation_id", "targetConversationId", "target_conversation_id"])
+    }
+
+    nonisolated private static func stringValue(
+        in userInfo: [AnyHashable: Any],
+        keys: [String]
+    ) -> String? {
+        for key in keys {
+            guard let raw = userInfo[key] else { continue }
+            let value: String
+            if let string = raw as? String {
+                value = string
+            } else if let number = raw as? NSNumber {
+                value = number.stringValue
+            } else {
+                continue
+            }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return trimmed }
+        }
         return nil
     }
 }
@@ -242,12 +270,21 @@ extension SystemNotificationService: UNUserNotificationCenterDelegate {
     ) async {
         let userInfo = response.notification.request.content.userInfo
         var payload: [String: Any] = [:]
-        if let type = userInfo["type"] as? String { payload["type"] = type }
-        if let actorId = userInfo["actorId"] as? String { payload["actorId"] = actorId }
-        if let postId = userInfo["postId"] as? String { payload["postId"] = postId }
-        if let commentId = userInfo["commentId"] as? String { payload["commentId"] = commentId }
-        if let listingId = userInfo["listingId"] as? String { payload["listingId"] = listingId }
-        if let conversationId = userInfo["conversationId"] as? String { payload["conversationId"] = conversationId }
+        if let type = Self.stringValue(in: userInfo, keys: ["type", "notificationType", "notification_type"]) {
+            payload["type"] = type
+        }
+        if let actorId = Self.stringValue(in: userInfo, keys: ["actorId", "actor_id"]) {
+            payload["actorId"] = actorId
+        }
+        if let postId = Self.stringValue(in: userInfo, keys: ["postId", "post_id", "targetPostId", "target_post_id"]) {
+            payload["postId"] = postId
+        }
+        if let commentId = Self.stringValue(in: userInfo, keys: ["commentId", "comment_id", "targetCommentId", "target_comment_id"]) {
+            payload["commentId"] = commentId
+        }
+        if let listingId = Self.stringValue(in: userInfo, keys: ["listingId", "listing_id", "targetListingId", "target_listing_id"]) {
+            payload["listingId"] = listingId
+        }
         if let conversationId = Self.conversationId(from: userInfo) {
             payload["conversationId"] = conversationId
             await MainActor.run {
@@ -256,6 +293,7 @@ extension SystemNotificationService: UNUserNotificationCenterDelegate {
         }
         let finalPayload = payload
         await MainActor.run {
+            self.pendingTapPayload = finalPayload
             NotificationCenter.default.post(
                 name: .kaiXSystemNotificationTapped,
                 object: nil,

@@ -267,3 +267,65 @@ struct AggregatedNotification: Identifiable {
         }
     }
 }
+
+/// One source of truth for every notification entry point (the in-app inbox
+/// and an iOS push banner). The server has several notification types that are
+/// intentionally rendered as `.system` by older clients, so routing must be
+/// driven by the concrete target ids first, not by a narrow type allow-list.
+/// This also keeps future server notification types useful without requiring a
+/// client release just to make an existing post/listing/conversation open.
+enum NotificationRouteResolver {
+    static func route(
+        type: NotificationType,
+        actorId: String?,
+        currentUserId: String?,
+        postId: String?,
+        commentId: String?,
+        listingId: String?,
+        conversationId: String?
+    ) -> KXRoute? {
+        if let conversationId = clean(conversationId) {
+            return .conversation(conversationId: conversationId)
+        }
+        if let listingId = clean(listingId) {
+            return .cityListingDetail(listingId: listingId)
+        }
+        if let postId = clean(postId) {
+            let commentId = clean(commentId)
+            switch type {
+            case .comment, .reply:
+                // With no pinpointed comment, opening the comments section is
+                // still more useful than silently doing nothing.
+                return .postDetailComment(postId: postId, commentId: commentId)
+            case .mention where commentId != nil:
+                return .postDetailComment(postId: postId, commentId: commentId)
+            default:
+                return .postDetail(postId: postId)
+            }
+        }
+        if type == .follow, let actorId = clean(actorId) {
+            return .profile(userId: actorId)
+        }
+        if type == .followDigest, let currentUserId = clean(currentUserId) {
+            return .profile(userId: currentUserId)
+        }
+        return nil
+    }
+
+    static func preferredTab(for route: KXRoute) -> AppTab {
+        switch route {
+        case .conversation:
+            .messages
+        case .cityListingDetail:
+            .search
+        default:
+            .home
+        }
+    }
+
+    private static func clean(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}

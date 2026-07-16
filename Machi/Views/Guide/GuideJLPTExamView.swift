@@ -684,6 +684,9 @@ struct JLPTExamResultContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: KXSpacing.lg) {
             scoreCard
+            // 语境内成交（转化最高的坑位）：交卷时刻按本次最弱分区推荐一件
+            // 付费资料，sheet 就地打开、不打断学习会话。
+            JLPTExamUpsellCard(result: result)
             ForEach(Array((result.questions ?? []).enumerated()), id: \.element.id) { idx, q in
                 JLPTQuestionCard(
                     question: q,
@@ -717,6 +720,95 @@ struct JLPTExamResultContent: View {
         .frame(maxWidth: .infinity)
         .padding(24)
         .jlptSurface(radius: KXRadius.sheet, elevated: true)
+    }
+}
+
+/// 弱项推荐卡：从 questions[].section + correct 客户端计算本次最弱分区，
+/// 优先推荐 slug 含本级别（如 "n2"）的 JLPT 付费 SKU，无匹配退回第一件；
+/// 一件付费 SKU 都没有则整卡不渲染。点击以 sheet 打开商品详情就地购买。
+struct JLPTExamUpsellCard: View {
+    @Environment(\.appLanguage) private var language
+    let result: KaiXJLPTExamResult
+    @State private var product: KaiXGuideProductDTO?
+    @State private var weakestLabel = ""
+    @State private var showDetail = false
+
+    var body: some View {
+        Group {
+            if let product {
+                Button {
+                    showDetail = true
+                } label: {
+                    HStack(alignment: .top, spacing: KXSpacing.md) {
+                        Image(systemName: "target")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(KXColor.accent)
+                            .padding(.top, 2)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(weakestLabel.isEmpty
+                                ? guideText(language, "针对性提升", "弱点を強化", "Level up your weak spots")
+                                : guideText(language, "「\(weakestLabel)」丢分较多", "「\(weakestLabel)」で失点が多め", "Most points lost in \(weakestLabel)"))
+                                .font(.footnote.weight(.bold))
+                                .foregroundStyle(KXColor.livingMuted)
+                            Text(product.title)
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(KXColor.livingInk)
+                                .fixedSize(horizontal: false, vertical: true)
+                            HStack(spacing: 8) {
+                                Text("¥\(product.price)")
+                                    .font(.footnote.weight(.bold))
+                                    .foregroundStyle(KXColor.accent)
+                                if let member = product.memberPrice, member > 0, member < product.price {
+                                    Text(guideText(language, "会员 ¥\(member)", "会員 ¥\(member)", "Members ¥\(member)"))
+                                        .font(.caption2.weight(.bold))
+                                        .padding(.horizontal, 7)
+                                        .padding(.vertical, 2)
+                                        .background(KXColor.accentSoft, in: Capsule())
+                                        .foregroundStyle(KXColor.accent)
+                                }
+                            }
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(KXColor.livingMuted)
+                            .padding(.top, 6)
+                    }
+                    .padding(16)
+                    .jlptSurface(radius: KXRadius.lg)
+                }
+                .buttonStyle(.fullArea)
+                .contentShape(Rectangle())
+            }
+        }
+        .task { await load() }
+        .sheet(isPresented: $showDetail) {
+            if let product {
+                NavigationStack { GuideProductDetailView(slug: product.slug) }
+            }
+        }
+    }
+
+    private func load() async {
+        guard product == nil else { return }
+        let resp = try? await KaiXAPIClient.shared.guideProducts(country: "jp", categoryKey: "jlpt", pageSize: 50)
+        let paid = (resp?.items ?? []).filter { !$0.isFree && !$0.isComingSoon && !$0.isService }
+        guard !paid.isEmpty else { return }
+        let level = (result.level ?? "").lowercased()
+        product = paid.first { !level.isEmpty && $0.slug.lowercased().contains(level) } ?? paid.first
+        weakestLabel = weakestSection() ?? ""
+    }
+
+    /// The section that lost the most points this session (label for copy).
+    private func weakestSection() -> String? {
+        var wrong: [String: (count: Int, label: String)] = [:]
+        for q in result.questions ?? [] {
+            let isCorrect = q.correct ?? (q.selectedIndex != nil && q.selectedIndex == q.answerIndex)
+            guard !isCorrect else { continue }
+            let cur = wrong[q.section] ?? (0, q.sectionLabel ?? q.section)
+            wrong[q.section] = (cur.count + 1, cur.label)
+        }
+        return wrong.max { $0.value.count < $1.value.count }?.value.label
     }
 }
 

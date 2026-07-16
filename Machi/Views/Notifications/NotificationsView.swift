@@ -122,16 +122,11 @@ struct NotificationsView: View {
                         onOpenTarget: {
                             if let route = route(for: item) {
                                 openNotification(item, route: route)
-                            } else if item.type.isPostBearing {
-                                // A post-bearing interaction (like/comment/…) whose
-                                // post is unreachable genuinely means it was deleted.
-                                router.routeErrorMessage = L("postDeletedHelp", language)
                             } else {
-                                // Target-less announcements (system / city digest /
-                                // follow digest) and any row missing its deep-link id:
-                                // just acknowledge, exactly like the push path, which
-                                // never errors. A "内容已删除" alert here is wrong and
-                                // alarming — this was the city_digest tap-error bug.
+                                // Target-less announcements and malformed legacy
+                                // rows are acknowledgements, not navigation errors.
+                                // Never show an alarming modal merely because a
+                                // server row has no longer-valid deep-link target.
                                 markReadInBackground(item)
                             }
                         }
@@ -213,57 +208,26 @@ struct NotificationsView: View {
     }
 
     private func route(for item: AggregatedNotification) -> KXRoute? {
-        // Every target id is validated non-empty here: an empty/whitespace id
-        // would build a route that KXRoute.normalized later rejects, surfacing a
-        // second "无法打开" error alert. Treating "" as absent funnels those rows
-        // into the graceful acknowledge fallback instead.
-        if (item.type == .message || item.type == .listingInquiry),
-           let conversationId = item.targetConversationId,
-           !conversationId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return .conversation(conversationId: conversationId)
-        }
-        // Saved-search + favorite (price drop / closed) rows all deep-link to
-        // the listing they carry.
-        if item.type == .savedSearch || item.type == .favoritePriceDrop || item.type == .favoriteClosed,
-           let listingId = item.targetListingId,
-           !listingId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return .cityListingDetail(listingId: listingId)
-        }
-        if let postId = item.targetPostId,
-           !postId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            switch item.type {
-            case .comment, .reply:
-                return .postDetailComment(postId: postId, commentId: item.targetCommentId)
-            case .mention:
-                // Focus the mentioning comment when the server pinpointed one; a
-                // post-body mention (no comment id) opens at the top of the post.
-                return item.targetCommentId == nil
-                    ? .postDetail(postId: postId)
-                    : .postDetailComment(postId: postId, commentId: item.targetCommentId)
-            default:
-                return .postDetail(postId: postId)
-            }
-        }
-        // A single follow opens the follower's profile.
-        if item.type == .follow, let actorId = item.actorIds.first,
-           !actorId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return .profile(userId: actorId)
-        }
-        // A batched follow digest has no single actor (the server stamps the
-        // recipient's own id as actor_id), so open the recipient's own profile —
-        // where the follower list lives. Keeps in-app and push routing in lockstep.
-        if item.type == .followDigest {
-            return .profile(userId: currentUser.id)
-        }
-        return nil
+        NotificationRouteResolver.route(
+            type: item.type,
+            actorId: item.actorIds.first,
+            currentUserId: currentUser.id,
+            postId: item.targetPostId,
+            commentId: item.targetCommentId,
+            listingId: item.targetListingId,
+            conversationId: item.targetConversationId
+        )
     }
 
     private func openNotification(_ item: AggregatedNotification, route: KXRoute) {
         // Navigate first — the tap must feel instant. Marking read is
         // fire-and-forget: awaiting it here held the navigation hostage for a
         // full network round-trip (1–3s of dead tap on a weak connection).
+        let tab = NotificationRouteResolver.preferredTab(for: route)
         dismiss()
-        router.open(route)
+        chrome.select(tab)
+        router.setActiveTab(tab)
+        router.open(route, in: tab)
         markReadInBackground(item)
     }
 
@@ -511,18 +475,6 @@ private enum NotificationFilter: String, CaseIterable, Identifiable {
         // filter, not just "All". (message / listing_inquiry are intentionally
         // All-only: they are DM-backed and belong to the Messages tab.)
         case .system: [.system, .savedSearch, .favoritePriceDrop, .favoriteClosed, .cityDigest].contains(type)
-        }
-    }
-}
-
-private extension NotificationType {
-    /// True for interactions that hang off a specific post. Only these should
-    /// surface a "post deleted" alert when their target can't be resolved — every
-    /// other type (system / digests / DM-backed) is acknowledged silently instead.
-    var isPostBearing: Bool {
-        switch self {
-        case .like, .repost, .comment, .reply, .mention, .bookmark: return true
-        default: return false
         }
     }
 }

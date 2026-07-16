@@ -99,6 +99,7 @@ struct MembershipView: View {
         }
         .task {
             store.start()
+            Task { await KaiXAPIClient.shared.funnelEvent("membership_view", entityType: "membership", entityId: "paywall") }
             if let response = try? await KaiXAPIClient.shared.membershipBenefits() {
                 remoteBenefits = response.benefits
             }

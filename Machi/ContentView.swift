@@ -210,6 +210,7 @@ struct ContentView: View {
             }
             sessionStore.setCurrentUser(appState.currentUser?.id)
             userStore.setCurrentUser(appState.currentUser)
+            replayBufferedSystemNotificationTapIfNeeded()
             // P-4 游客召回钩子。放在下面的通知轮询 guard 之前 —— 游客没有
             // token,那个 guard 对游客直接 return,永远走不到这里之后。
             if appState.currentUser?.isGuest == true {
@@ -473,6 +474,9 @@ struct ContentView: View {
     /// Route a tapped system banner. DM / inquiry banners land in the chat
     /// itself; everything else routes to the post (or just the home feed).
     private func handleSystemNotificationTap(_ note: Notification) {
+        // Clear the service-level cold-start buffer now that the live subscriber
+        // received this tap; otherwise bootstrap would replay it a second time.
+        _ = SystemNotificationService.shared.consumePendingTapPayload()
         guard appState.currentUser != nil else {
             // Cold start from a killed app: the tap fires before bootstrap
             // resolves the session. Keep the payload and replay it from the
@@ -483,62 +487,62 @@ struct ContentView: View {
         routeNotificationPayload(note.userInfo)
     }
 
+    private func replayBufferedSystemNotificationTapIfNeeded() {
+        guard let payload = SystemNotificationService.shared.consumePendingTapPayload() else { return }
+        guard appState.currentUser != nil else {
+            pendingNotificationPayload = payload
+            return
+        }
+        routeNotificationPayload(payload)
+    }
+
     private func routeNotificationPayload(_ userInfo: [AnyHashable: Any]?) {
-        let type = (userInfo?["type"] as? String).flatMap(NotificationType.init(rawValue:))
-        let actorId = userInfo?["actorId"] as? String
-        let conversationId = userInfo?["conversationId"] as? String
-        let postId = userInfo?["postId"] as? String
-        let listingId = userInfo?["listingId"] as? String
-        if let conversationId, !conversationId.isEmpty {
-            appChrome.select(.messages)
-            appRouter.setActiveTab(.messages)
-            appRouter.open(.conversation(conversationId: conversationId), in: .messages)
-            return
-        }
-        // Saved-search / favorite (price drop, closed) banners land on the
-        // listing itself (same destination as the machi://listing deep link).
-        if let listingId, !listingId.isEmpty {
-            appChrome.select(.search)
-            appRouter.setActiveTab(.search)
-            appRouter.open(.cityListingDetail(listingId: listingId), in: .search)
-            return
-        }
-        // A follow-digest's payload actorId is unreliable — the recipient's own
-        // id when delivered locally, "" over APNs — so route it to the current
-        // user's own profile (where the follower list lives), regardless of the
-        // payload, so local / APNs / in-app all agree (matches route(for:)).
-        if type == .followDigest {
-            appChrome.select(.home)
-            appRouter.setActiveTab(.home)
-            if let uid = appState.currentUser?.id, !uid.isEmpty {
-                appRouter.open(.profile(userId: uid), in: .home)
-            }
-            return
-        }
-        // A single follow banner opens the follower's profile.
-        if type == .follow, let actorId, !actorId.isEmpty {
-            appChrome.select(.home)
-            appRouter.setActiveTab(.home)
-            appRouter.open(.profile(userId: actorId), in: .home)
-            return
-        }
-        // City digest with no specific post routes to the discover/home tab.
-        if type == .cityDigest, postId == nil {
+        let type = notificationString(in: userInfo, keys: ["type", "notificationType", "notification_type"])
+            .flatMap(NotificationType.init(rawValue:)) ?? .system
+        let route = NotificationRouteResolver.route(
+            type: type,
+            actorId: notificationString(in: userInfo, keys: ["actorId", "actor_id"]),
+            currentUserId: appState.currentUser?.id,
+            postId: notificationString(in: userInfo, keys: ["postId", "post_id", "targetPostId", "target_post_id"]),
+            commentId: notificationString(in: userInfo, keys: ["commentId", "comment_id", "targetCommentId", "target_comment_id"]),
+            listingId: notificationString(in: userInfo, keys: ["listingId", "listing_id", "targetListingId", "target_listing_id"]),
+            conversationId: notificationString(in: userInfo, keys: ["conversationId", "conversation_id", "targetConversationId", "target_conversation_id"])
+        )
+
+        guard let route else {
+            // Target-less announcements (city digests, reminders and legacy
+            // system rows) are valid notifications. A tap acknowledges them and
+            // safely lands at Home instead of manufacturing an "unable to open"
+            // error from missing deep-link data.
             appChrome.select(.home)
             appRouter.setActiveTab(.home)
             return
         }
-        appChrome.select(.home)
-        appRouter.setActiveTab(.home)
-        if let postId, !postId.isEmpty {
-            // Comment / reply banners focus the specific comment, matching the
-            // in-app route(for:) behavior; everything else opens the post top.
-            if type == .comment || type == .reply {
-                appRouter.open(.postDetailComment(postId: postId, commentId: userInfo?["commentId"] as? String), in: .home)
+
+        let tab = NotificationRouteResolver.preferredTab(for: route)
+        appChrome.select(tab)
+        appRouter.setActiveTab(tab)
+        appRouter.open(route, in: tab)
+    }
+
+    private func notificationString(
+        in userInfo: [AnyHashable: Any]?,
+        keys: [String]
+    ) -> String? {
+        for key in keys {
+            guard let raw = userInfo?[key] else { continue }
+            let value: String
+            if let string = raw as? String {
+                value = string
+            } else if let number = raw as? NSNumber {
+                value = number.stringValue
             } else {
-                appRouter.open(.postDetail(postId: postId), in: .home)
+                continue
             }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return trimmed }
         }
+        return nil
     }
 
     /// 会话复核:每个 await 之后 token 可能已被 401/登出清空,或已切到另一账号

@@ -84,6 +84,22 @@ enum AppError: Equatable, LocalizedError {
 }
 
 extension Error {
+    /// A stale notification/deep link pointing at a removed resource is an
+    /// expected empty state, not an operational failure. Detail screens use
+    /// this to avoid presenting a red "Error" page for normal 404 lifecycle
+    /// events such as a deleted post or a closed listing.
+    var isKaiXResourceNotFound: Bool {
+        guard let apiError = self as? KaiXAPIError else {
+            if let repositoryError = self as? RepositoryError,
+               case .notFound = repositoryError { return true }
+            return false
+        }
+        return [
+            "not_found", "http_404", "post_not_found", "post_deleted",
+            "listing_not_found", "listing_deleted"
+        ].contains(apiError.error.code)
+    }
+
     /// User-facing message for an error. For server (`KaiXAPIError`) failures we
     /// first try to localize by the error *code* against the app's current
     /// language (high-frequency codes are hand-translated zh/ja/en), and only

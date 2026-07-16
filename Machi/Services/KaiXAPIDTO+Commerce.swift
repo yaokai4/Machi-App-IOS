@@ -440,6 +440,13 @@ struct KaiXWalletPurchaseResponse: Codable {
     let alreadyOwned: Bool?
 }
 
+/// POST /api/payments/apple/guide-verify — single-product IAP settlement.
+struct KaiXGuideIapVerifyResponse: Codable {
+    let status: String?
+    let orderNo: String?
+    let alreadyOwned: Bool?
+}
+
 struct KaiXWalletPointsContextDTO: Codable, Equatable, Hashable {
     let eligible: Bool?
     let requiredPoints: Int?

@@ -627,6 +627,46 @@ final class KaiXAPIClient {
         return try decode(data)
     }
 
+    /// Verify a StoreKit2 single-product (non-consumable) guide purchase
+    /// server-side and grant the entitlement. Idempotent on the transaction
+    /// id. NEVER hits the membership or wallet verify endpoints — each
+    /// product family has exactly one endpoint that can grant it.
+    @discardableResult
+    func verifyAppleGuidePurchase(productId: String,
+                                  transactionId: String,
+                                  originalTransactionId: String,
+                                  signedTransaction: String,
+                                  environment: String) async throws -> KaiXGuideIapVerifyResponse {
+        let body: [String: String] = [
+            "productId": productId,
+            "transactionId": transactionId,
+            "originalTransactionId": originalTransactionId,
+            "signedTransaction": signedTransaction,
+            "environment": environment,
+        ]
+        let data = try await request("POST", "/api/payments/apple/guide-verify", body: body)
+        return try decode(data)
+    }
+
+    private struct FunnelEventBody: Encodable {
+        let event: String
+        let entityType: String?
+        let entityId: String?
+        let props: [String: String]?
+    }
+
+    /// Fire-and-forget monetization funnel event (store_view / sku_view /
+    /// purchase_start / purchase_success / membership_view). Guest-safe,
+    /// never throws to the caller — analytics must not break UX.
+    func funnelEvent(_ event: String, entityType: String = "", entityId: String = "",
+                     props: [String: String] = [:]) async {
+        let body = FunnelEventBody(event: event,
+                                   entityType: entityType.isEmpty ? nil : entityType,
+                                   entityId: entityId.isEmpty ? nil : entityId,
+                                   props: props.isEmpty ? nil : props)
+        _ = try? await request("POST", "/api/funnel", body: body)
+    }
+
     /// Buy a guide product with Machi Points. Throws on insufficient balance
     /// (server returns 402) — callers should pre-check the product's
     /// pointsContext and route the user to top up.

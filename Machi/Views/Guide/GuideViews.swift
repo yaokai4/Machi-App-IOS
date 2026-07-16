@@ -1,3 +1,4 @@
+import StoreKit
 import SwiftUI
 import UIKit
 
@@ -113,6 +114,11 @@ struct GuideHomeView: View {
 
                         // 高价值资料库:学校库 / 公司库。
                         GuideLibraryDualEntry()
+
+                        // 商城板块(2026-07 商城开门):会员/商城双入口 + 精选商品卡。
+                        // 此前 GuideDualEntrySection 已实现但未挂载,商城只能从
+                        // 分类网格深入抵达 —— 变现入口不该藏在三级深。
+                        GuideStoreSection()
 
                         // 六大指南入口:日本升学 / 日本就职 / 海外留学 / JLPT / 日本生活 / 资料与服务。
                         GuideCategoryGrid(categories: GuideSupportCatalog.orderedCategories(from: home.categories))
@@ -758,13 +764,21 @@ private struct GuideScrollProgressKey: PreferenceKey {
 
 struct GuideServicesView: View {
     @Environment(\.appLanguage) private var language
+    @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var userStore: UserStore
     @ObservedObject private var regionStore = RegionStore.shared
     @State private var products: [KaiXGuideProductDTO] = []
     @State private var productType = ""
     @State private var isLoading = true
     @State private var errorMessage: String?
+    @State private var showMembershipSheet = false
+    @State private var showWalletSheet = false
 
     private var country: String { (regionStore.current?.countryCode ?? "jp").lowercased() }
+    private var currentUser: UserEntity? {
+        guard let id = userStore.currentUserId else { return nil }
+        return userStore.usersById[id]
+    }
     private var filters: [(String, String)] {
         [
             ("", guideText(language, "全部", "すべて", "All")),
@@ -776,6 +790,20 @@ struct GuideServicesView: View {
         ]
     }
 
+    /// Zero-friction lead-in SKUs shown first — a store whose first shelf is
+    /// free builds trust before it asks for money.
+    private var freeProducts: [KaiXGuideProductDTO] { products.filter { $0.isFree } }
+    private var paidProducts: [KaiXGuideProductDTO] { products.filter { !$0.isFree } }
+    /// Total member savings across the visible paid SKUs — concrete yen
+    /// beats "开通会员" copy (会员价值条 uses this number).
+    private var memberSavings: Int {
+        paidProducts.reduce(0) { total, p in
+            guard let member = p.memberPrice, member > 0, p.price > member else { return total }
+            return total + (p.price - member)
+        }
+    }
+    private var isMember: Bool { currentUser?.isVerifiedMember == true }
+
     var body: some View {
         ZStack {
             GuideBackground()
@@ -785,6 +813,7 @@ struct GuideServicesView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 14) {
                         servicesHeader
+                        myShelfRow
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: KXSpacing.sm) {
                                 ForEach(filters, id: \.0) { value, title in
@@ -804,9 +833,23 @@ struct GuideServicesView: View {
                         } else if products.isEmpty {
                             EmptyStateView(title: guideText(language, "暂无相关资料或服务", "関連資料・サービスはまだありません", "No related resources or services yet"), subtitle: guideText(language, "更多资料正在准备中。", "追加資料を準備中です。", "More resources are being prepared."), systemImage: "shippingbox")
                         } else {
-                            LazyVGrid(columns: [GridItem(.flexible())], spacing: 10) {
-                                ForEach(products) { product in
-                                    GuideProductCard(product: product)
+                            if !freeProducts.isEmpty {
+                                storeSectionTitle(guideText(language, "免费领取", "無料で受け取る", "Free to claim"), icon: "gift.fill")
+                                LazyVGrid(columns: [GridItem(.flexible())], spacing: 10) {
+                                    ForEach(freeProducts) { product in
+                                        GuideProductCard(product: product)
+                                    }
+                                }
+                            }
+                            if !paidProducts.isEmpty {
+                                if !isMember && memberSavings > 0 {
+                                    memberValueStrip
+                                }
+                                storeSectionTitle(guideText(language, "备考与申请资料", "対策・出願資料", "Prep & application resources"), icon: "books.vertical.fill")
+                                LazyVGrid(columns: [GridItem(.flexible())], spacing: 10) {
+                                    ForEach(paidProducts) { product in
+                                        GuideProductCard(product: product)
+                                    }
                                 }
                             }
                         }
@@ -819,6 +862,14 @@ struct GuideServicesView: View {
         .navigationTitle(guideText(language, "商城", "ストア", "Store"))
         .navigationBarTitleDisplayMode(.inline)
         .task(id: productType) { await load() }
+        .sheet(isPresented: $showWalletSheet) {
+            NavigationStack { WalletView() }
+        }
+        .sheet(isPresented: $showMembershipSheet) {
+            if let currentUser {
+                NavigationStack { MembershipView(currentUser: currentUser) }
+            }
+        }
     }
 
     private var servicesHeader: some View {
@@ -828,10 +879,10 @@ struct GuideServicesView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(guideText(language, "商城", "ストア", "Store"))
                         .font(.title2.weight(.bold))
-                    Text(guideText(language, "资料包、模板、清单、课程与人工辅导服务", "資料パック、テンプレート、チェックリスト、講座、個別サポート", "Resource packs, templates, checklists, courses, and coaching services"))
+                    Text(guideText(language, "JLPT 备考、留学申请、就职求职的资料与服务", "JLPT 対策・留学出願・就職活動の資料とサービス", "Resources and services for JLPT prep, applications, and careers"))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
-                    Text(guideText(language, "付费数字资料在 Apple IAP 接入前显示「即将开放」。服务类可先提交预约咨询。", "有料デジタル資料は Apple IAP 接続前は「まもなく公開」と表示されます。サービスは先に予約相談できます。", "Paid digital resources show as coming soon until Apple IAP is connected. Services can accept appointment inquiries first."))
+                    Text(guideText(language, "支持 Machi 币或 App 内购买；服务类可提交预约咨询。", "Machi コインまたはアプリ内購入に対応。サービスは予約相談できます。", "Pay with Machi Coins or in-app purchase; services accept appointment inquiries."))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -840,11 +891,78 @@ struct GuideServicesView: View {
         }
     }
 
+    /// Compact row: my purchased library + wallet balance/top-up.
+    private var myShelfRow: some View {
+        HStack(spacing: 10) {
+            Button {
+                router.open(.guideMyLibrary)
+            } label: {
+                Label(guideText(language, "我的资料库", "マイライブラリ", "My library"), systemImage: "books.vertical")
+                    .font(.footnote.weight(.bold))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 38)
+                    .background(KXColor.accentSoft, in: Capsule())
+                    .foregroundStyle(KXColor.accent)
+            }
+            .buttonStyle(.fullArea)
+            .contentShape(Rectangle())
+            Button {
+                showWalletSheet = true
+            } label: {
+                Label(guideText(language, "Machi 币钱包", "Machi コイン", "Machi Coins"), systemImage: "circle.hexagongrid.fill")
+                    .font(.footnote.weight(.bold))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 38)
+                    .background(Color.orange.opacity(0.14), in: Capsule())
+                    .foregroundStyle(.orange)
+            }
+            .buttonStyle(.fullArea)
+            .contentShape(Rectangle())
+        }
+    }
+
+    /// 会员价值条 — a value frame ("this page saves you ¥N"), deliberately NOT
+    /// a top-of-page subscription pitch: contextual savings copy converts,
+    /// cold paywalls on a young store read as a cash grab.
+    private var memberValueStrip: some View {
+        Button {
+            if currentUser != nil { showMembershipSheet = true }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.seal.fill")
+                    .foregroundStyle(KXColor.accent)
+                Text(guideText(language,
+                    "会员享会员价，本页合计可省 ¥\(memberSavings)",
+                    "会員価格でこのページ合計 ¥\(memberSavings) お得",
+                    "Members save ¥\(memberSavings) on this page"))
+                    .font(.footnote.weight(.bold))
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 40)
+            .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: 14))
+            .foregroundStyle(.primary)
+        }
+        .buttonStyle(.fullArea)
+        .contentShape(Rectangle())
+    }
+
+    private func storeSectionTitle(_ title: String, icon: String) -> some View {
+        Label(title, systemImage: icon)
+            .font(.subheadline.weight(.bold))
+            .foregroundStyle(.secondary)
+            .padding(.top, 2)
+    }
+
     private func load() async {
         guard country == "jp" else { return }
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
+        Task { await KaiXAPIClient.shared.funnelEvent("store_view", entityType: "guide_store", entityId: productType.isEmpty ? "all" : productType) }
         do {
             let response = try await KaiXAPIClient.shared.guideProducts(
                 country: country,
@@ -1007,6 +1125,9 @@ struct GuideProductDetailView: View {
     @State private var toastMessage: String?
     @State private var showTopupSheet = false
     @State private var showMembershipSheet = false
+    /// StoreKit product for single-product IAP purchase, loaded when the
+    /// server product carries an `appleProductId` (machi_guide_* convention).
+    @State private var storeKitProduct: Product?
 
     let slug: String
     private var country: String { (regionStore.current?.countryCode ?? "jp").lowercased() }
@@ -1110,19 +1231,42 @@ struct GuideProductDetailView: View {
                     Text(price)
                         .font(.title3.weight(.bold))
                     Spacer(minLength: 0)
+                    // Hide the legacy "coming soon" chip once the product has a
+                    // live purchase path (IAP and/or coins) — showing a disabled
+                    // CTA next to working buy buttons reads as contradictory.
+                    if !hasDirectPurchasePath(product) {
+                        Button {
+                            Task { await productAction(product) }
+                        } label: {
+                            Text(GuideCopy.productCTA(product, busy: isSubmitting, loggedIn: KaiXBackend.token != nil, language: language))
+                                .font(.subheadline.weight(.bold))
+                                .frame(height: 40)
+                                .padding(.horizontal, 18)
+                                .background(GuideCopy.productActionEnabled(product, busy: isSubmitting) ? KXColor.accent : Color.secondary.opacity(0.20), in: Capsule())
+                                .foregroundStyle(GuideCopy.productActionEnabled(product, busy: isSubmitting) ? Color.white : Color.secondary)
+                        }
+                        .buttonStyle(.fullArea)
+                        .contentShape(Rectangle())
+                        .disabled(!GuideCopy.productActionEnabled(product, busy: isSubmitting))
+                    }
+                }
+                // Single-product IAP: primary buy button with the StoreKit
+                // localized price (server verify → entitlement, see
+                // productIapAction). Coins purchase stays available below.
+                if let sk = storeKitProduct, product.access?.canAccess != true, !product.isService {
                     Button {
-                        Task { await productAction(product) }
+                        Task { await productIapAction(product) }
                     } label: {
-                        Text(GuideCopy.productCTA(product, busy: isSubmitting, loggedIn: KaiXBackend.token != nil, language: language))
+                        Text(guideText(language, "\(sk.displayPrice) 购买", "\(sk.displayPrice) で購入", "Buy for \(sk.displayPrice)"))
                             .font(.subheadline.weight(.bold))
-                            .frame(height: 40)
-                            .padding(.horizontal, 18)
-                            .background(GuideCopy.productActionEnabled(product, busy: isSubmitting) ? KXColor.accent : Color.secondary.opacity(0.20), in: Capsule())
-                            .foregroundStyle(GuideCopy.productActionEnabled(product, busy: isSubmitting) ? Color.white : Color.secondary)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                            .background(KXColor.accent, in: Capsule())
+                            .foregroundStyle(Color.white)
                     }
                     .buttonStyle(.fullArea)
-        .contentShape(Rectangle())
-                    .disabled(!GuideCopy.productActionEnabled(product, busy: isSubmitting))
+                    .contentShape(Rectangle())
+                    .disabled(isSubmitting)
                 }
                 if product.canBuyWithPoints == true && product.access?.canAccess != true {
                     Button {
@@ -1159,6 +1303,76 @@ struct GuideProductDetailView: View {
         return guideText(language, "用 \(pts) 币购买", "\(pts) コインで購入", "Buy with \(pts) coins")
     }
 
+    /// True when an unowned paid digital product has at least one live
+    /// purchase path (single-product IAP or Machi Coins) — the legacy
+    /// "coming soon" main CTA is hidden in that case.
+    private func hasDirectPurchasePath(_ product: KaiXGuideProductDTO) -> Bool {
+        guard !product.isService, !product.isFree, product.access?.canAccess != true else { return false }
+        return storeKitProduct != nil || product.canBuyWithPoints == true
+    }
+
+    /// Single-product Apple IAP purchase. Server verify is the source of
+    /// truth: the transaction is finished ONLY after
+    /// /api/payments/apple/guide-verify confirmed the entitlement; a verify
+    /// failure leaves it unfinished for IAPTransactionObserver to retry, and
+    /// the user is told NOT to buy again.
+    private func productIapAction(_ product: KaiXGuideProductDTO) async {
+        guard let sk = storeKitProduct, !isSubmitting else { return }
+        guard KaiXBackend.token != nil, let user = currentUser else {
+            toastMessage = guideText(language, "请登录后购买。", "ログインして購入してください。", "Please log in to purchase.")
+            return
+        }
+        isSubmitting = true
+        defer { isSubmitting = false }
+        Task { await KaiXAPIClient.shared.funnelEvent("purchase_start", entityType: "guide_product", entityId: product.slug, props: ["method": "iap"]) }
+        let result: Product.PurchaseResult
+        do {
+            var options: Set<Product.PurchaseOption> = []
+            if let token = MembershipStore.appAccountToken(for: user) { options.insert(.appAccountToken(token)) }
+            result = try await sk.purchase(options: options)
+        } catch {
+            toastMessage = error.kaixUserMessage
+            return
+        }
+        switch result {
+        case .success(let verification):
+            let transaction: StoreKit.Transaction
+            switch verification {
+            case .verified(let t), .unverified(let t, _):
+                transaction = t
+            }
+            do {
+                _ = try await KaiXAPIClient.shared.verifyAppleGuidePurchase(
+                    productId: transaction.productID,
+                    transactionId: String(transaction.id),
+                    originalTransactionId: String(transaction.originalID),
+                    signedTransaction: verification.jwsRepresentation,
+                    environment: transaction.environment.rawValue
+                )
+                await transaction.finish()
+                Task { await KaiXAPIClient.shared.funnelEvent("purchase_success", entityType: "guide_product", entityId: product.slug, props: ["method": "iap"]) }
+                toastMessage = guideText(language, "购买成功。", "購入が完了しました。", "Purchase complete.")
+                await load()
+            } catch {
+                // Paid but not yet credited — never say "failed, retry": the
+                // observer re-verifies the unfinished transaction automatically.
+                toastMessage = guideText(language,
+                    "已完成支付，正在确认订单，请勿重复购买。稍后会自动到账。",
+                    "支払いは完了しています。注文を確認中のため、再購入しないでください。まもなく自動で反映されます。",
+                    "Payment completed — confirming your order, please don't buy again. It will unlock automatically.")
+            }
+        case .pending:
+            toastMessage = guideText(language,
+                "购买等待批准中，批准后会自动到账。",
+                "購入は承認待ちです。承認後に自動で反映されます。",
+                "Purchase pending approval — it will unlock automatically once approved.")
+        case .userCancelled:
+            break
+        @unknown default:
+            break
+        }
+    }
+
     private func productPointsAction(_ product: KaiXGuideProductDTO) async {
         guard !isSubmitting else { return }
         if KaiXBackend.token == nil {
@@ -1172,8 +1386,10 @@ struct GuideProductDetailView: View {
         }
         isSubmitting = true
         defer { isSubmitting = false }
+        Task { await KaiXAPIClient.shared.funnelEvent("purchase_start", entityType: "guide_product", entityId: product.slug, props: ["method": "wallet"]) }
         do {
             let resp = try await KaiXAPIClient.shared.purchaseGuideProductWithWallet(product.slug)
+            Task { await KaiXAPIClient.shared.funnelEvent("purchase_success", entityType: "guide_product", entityId: product.slug, props: ["method": "wallet"]) }
             toastMessage = resp.message ?? guideText(language, "购买成功。", "購入が完了しました。", "Purchase complete.")
             await load()
         } catch {
@@ -1206,9 +1422,34 @@ struct GuideProductDetailView: View {
                 GuideMetaRow(title: guideText(language, "交付方式", "提供方法", "Delivery"), value: product.deliveryMethod)
             }
             GuideMetaRow(title: guideText(language, "内容类型", "コンテンツ種別", "Content type"), value: product.isService ? guideText(language, "人工服务", "人的サービス", "Human service") : guideText(language, "数字内容", "デジタル内容", "Digital content"))
+            // Pre-purchase notice: the refund policy is a paid-SKU disclosure
+            // requirement (server backfills a trilingual default; admin can
+            // override per SKU). Rendered before purchase, not after.
+            if let policy = product.refundPolicy, !policy.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Divider().opacity(0.25)
+                VStack(alignment: .leading, spacing: 6) {
+                    Label(guideText(language, "购前须知 · 退款政策", "購入前のご確認 · 返金ポリシー", "Before you buy · Refund policy"), systemImage: "info.circle")
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(.secondary)
+                    Text(localizedRefundPolicyLine(policy))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineSpacing(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
         .padding(18)
         .kxGlassSurface(radius: KXRadius.hero)
+    }
+
+    /// The server's default refund policy is one trilingual blob (zh / ja / en
+    /// on separate lines). Pick the viewer's language line when the blob has
+    /// that shape; otherwise show the operator's custom text as-is.
+    private func localizedRefundPolicyLine(_ policy: String) -> String {
+        let lines = policy.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        guard lines.count >= 3 else { return policy }
+        return guideText(language, lines[0], lines[1], lines[2])
     }
 
     // Web purchases / membership sync to iOS: when the signed-in account owns the
@@ -1314,6 +1555,17 @@ struct GuideProductDetailView: View {
         do {
             let response = try await KaiXAPIClient.shared.guideProduct(slug, country: country)
             product = response.product
+            Task { await KaiXAPIClient.shared.funnelEvent("sku_view", entityType: "guide_product", entityId: slug) }
+            // Load the StoreKit product for single-product IAP when the server
+            // product carries an IAP id and isn't owned yet. Failure is benign
+            // (no IAP button; coins purchase still works).
+            let iapId = [response.product.appleProductId, response.product.iosIapProductId]
+                .compactMap { $0 }.first { !$0.isEmpty } ?? ""
+            if !iapId.isEmpty, response.product.access?.canAccess != true {
+                storeKitProduct = try? await Product.products(for: [iapId]).first
+            } else {
+                storeKitProduct = nil
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -1696,33 +1948,55 @@ private struct GuideAIHero: View {
                 Spacer(minLength: 0)
             }
 
-            // 主 CTA:纤细胶囊按钮——点一下直接进入 Machi AI 对话页
-            //(onAccent 文字在浅/深色下都对比充足)。
+            // 主入口横向铺满内容区，消除无意义留白；浅色渐变与圆角矩形让它保持
+            // 轻盈，并和下方胶囊形快捷问题维持清楚的主次层级。
             Button {
                 router.open(.guideAI(prompt: nil), in: .guide)
             } label: {
-                HStack(spacing: 7) {
-                    MachiAIGlyph(lineWidth: 1.6)
-                        .foregroundStyle(KXColor.onAccent)
-                        .frame(width: 15, height: 15)
-                    Text(guideText(language, "问问 Machi AI", "Machi AI に聞く", "Ask Machi AI"))
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(KXColor.onAccent)
-                    Spacer(minLength: 0)
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(guideText(language, "进入 Machi AI", "Machi AI を開く", "Open Machi AI"))
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(KXColor.livingAccent)
+
+                        Text(guideText(language, "开始新对话", "新しい会話を始める", "Start a new chat"))
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(KXColor.livingMuted)
+                    }
+
+                    Spacer(minLength: 8)
+
                     Image(systemName: "arrow.right")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(KXColor.onAccent.opacity(0.8))
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(KXColor.onTint(KXColor.livingAccent))
+                        .frame(width: 34, height: 34)
+                        .background(KXColor.livingAccent, in: Circle())
+                        .accessibilityHidden(true)
                 }
-                .padding(.horizontal, 16)
-                .frame(height: 44)
-                .frame(maxWidth: .infinity)
-                .background(KXColor.livingAccent, in: Capsule())
-                .shadow(color: KXColor.livingAccent.opacity(0.20), radius: 8, y: 3)
+                .padding(.leading, 16)
+                .padding(.trailing, 10)
+                .frame(maxWidth: .infinity, minHeight: 58)
+                .background(
+                    LinearGradient(
+                        colors: [
+                            KXColor.livingAccent.opacity(0.07),
+                            KXColor.livingAccent.opacity(0.13),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    in: RoundedRectangle(cornerRadius: 17, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 17, style: .continuous)
+                        .stroke(KXColor.livingAccent.opacity(0.22), lineWidth: 0.9)
+                )
+                .shadow(color: KXColor.livingAccent.opacity(0.09), radius: 9, y: 4)
             }
             .buttonStyle(.fullArea)
-            .contentShape(Capsule())
+            .contentShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
             .accessibilityIdentifier("guide.ai.entry")
-            .accessibilityLabel(guideText(language, "问问 Machi AI", "Machi AI に聞く", "Ask Machi AI"))
+            .accessibilityLabel(guideText(language, "进入 Machi AI", "Machi AI を開く", "Open Machi AI"))
 
             // 场景化快捷问题:点击进入对话页并预填问题。tonal 胶囊,与主 CTA 同一色系。
             FlowLayout(spacing: 7) {
@@ -2014,6 +2288,35 @@ struct GuideProductsSection: View {
 /// The two permanent doors of the Guide tab: everything entitled by the
 /// membership lives behind Member area, while templates and human help live behind
 /// 资料与服务. Side-by-side tiles so the split is legible at a glance.
+/// Guide 首页的商城板块:会员/商城双入口卡 + 最多 3 张精选商品卡
+/// (付费优先、其次免费引流款)。自加载、拿不到数据时静默退化为纯入口卡。
+private struct GuideStoreSection: View {
+    @State private var products: [KaiXGuideProductDTO] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            GuideDualEntrySection()
+            if !products.isEmpty {
+                VStack(spacing: 10) {
+                    ForEach(products) { product in
+                        GuideProductCard(product: product)
+                    }
+                }
+            }
+        }
+        .task { await load() }
+    }
+
+    private func load() async {
+        guard products.isEmpty else { return }
+        let resp = try? await KaiXAPIClient.shared.guideProducts(country: "jp", pageSize: 12)
+        let items = resp?.items ?? []
+        let paid = items.filter { !$0.isFree && !$0.isComingSoon && !$0.isService }
+        let free = items.filter { $0.isFree && !$0.isComingSoon && !$0.isService }
+        products = Array((paid + free).prefix(3))
+    }
+}
+
 private struct GuideDualEntrySection: View {
     @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter

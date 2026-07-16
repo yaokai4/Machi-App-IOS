@@ -1370,7 +1370,15 @@ struct CityListingDetailView: View {
             isLoading = false
             await loadRecommendations(for: loaded)
         } catch {
-            errorMessage = error.kaixUserMessage
+            if error.isKaiXResourceNotFound {
+                // Removed/closed targets are common for saved-search, favorite
+                // and booking notifications. Show the existing neutral "not
+                // found" state instead of a generic Error + Retry screen.
+                listing = nil
+                errorMessage = nil
+            } else {
+                errorMessage = error.kaixUserMessage
+            }
             isLoading = false
         }
     }

@@ -1,52 +1,11 @@
 {
   "identifier" : "B2F1C0A4-2E10-4D33-9A77-MACHIVERIFIED1",
   "nonRenewingSubscriptions" : [
-    {
-      "displayPrice" : "18.00",
-      "duration" : "P1M",
-      "familyShareable" : false,
-      "internalID" : "21490001",
-      "localizations" : [
-        {
-          "description" : "Machi 认证会员月度有效期，蓝色认证标识与高信任内容发布权限。",
-          "displayName" : "Machi 认证会员 · 月度",
-          "locale" : "zh_CN"
-        },
-        {
-          "description" : "Machi Verified monthly access — a blue badge and high-trust posting.",
-          "displayName" : "Machi Verified Monthly",
-          "locale" : "en_US"
-        }
-      ],
-      "productID" : "machi_yuedu_18",
-      "referenceName" : "Machi月度会员",
-      "type" : "NonRenewingSubscription"
-    },
-    {
-      "displayPrice" : "198.00",
-      "duration" : "P1Y",
-      "familyShareable" : false,
-      "internalID" : "21490002",
-      "localizations" : [
-        {
-          "description" : "Machi 认证会员年度有效期，蓝色认证标识与高信任内容发布权限。",
-          "displayName" : "Machi 认证会员 · 年度",
-          "locale" : "zh_CN"
-        },
-        {
-          "description" : "Machi Verified annual access — a blue badge and high-trust posting.",
-          "displayName" : "Machi Verified Annual",
-          "locale" : "en_US"
-        }
-      ],
-      "productID" : "machi_1niandu_198",
-      "referenceName" : "Machi年度会员",
-      "type" : "NonRenewingSubscription"
-    }
+
   ],
   "products" : [
     {
-      "displayPrice" : "6.00",
+      "displayPrice" : "600.00",
       "familyShareable" : false,
       "internalID" : "21490101",
       "localizations" : [
@@ -66,7 +25,7 @@
       "type" : "Consumable"
     },
     {
-      "displayPrice" : "18.00",
+      "displayPrice" : "1800.00",
       "familyShareable" : false,
       "internalID" : "21490102",
       "localizations" : [
@@ -78,7 +37,7 @@
       "type" : "Consumable"
     },
     {
-      "displayPrice" : "28.00",
+      "displayPrice" : "3000.00",
       "familyShareable" : false,
       "internalID" : "21490103",
       "localizations" : [
@@ -90,7 +49,7 @@
       "type" : "Consumable"
     },
     {
-      "displayPrice" : "68.00",
+      "displayPrice" : "6800.00",
       "familyShareable" : false,
       "internalID" : "21490104",
       "localizations" : [
@@ -102,7 +61,7 @@
       "type" : "Consumable"
     },
     {
-      "displayPrice" : "98.00",
+      "displayPrice" : "9800.00",
       "familyShareable" : false,
       "internalID" : "21490105",
       "localizations" : [
@@ -114,7 +73,7 @@
       "type" : "Consumable"
     },
     {
-      "displayPrice" : "128.00",
+      "displayPrice" : "12800.00",
       "familyShareable" : false,
       "internalID" : "21490106",
       "localizations" : [
@@ -126,7 +85,7 @@
       "type" : "Consumable"
     },
     {
-      "displayPrice" : "198.00",
+      "displayPrice" : "19800.00",
       "familyShareable" : false,
       "internalID" : "21490107",
       "localizations" : [
@@ -138,7 +97,7 @@
       "type" : "Consumable"
     },
     {
-      "displayPrice" : "298.00",
+      "displayPrice" : "32800.00",
       "familyShareable" : false,
       "internalID" : "21490108",
       "localizations" : [
@@ -150,7 +109,7 @@
       "type" : "Consumable"
     },
     {
-      "displayPrice" : "598.00",
+      "displayPrice" : "64800.00",
       "familyShareable" : false,
       "internalID" : "21490109",
       "localizations" : [
@@ -160,6 +119,42 @@
       "productID" : "machi_points_64800",
       "referenceName" : "Machi点数64800",
       "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "980.00",
+      "familyShareable" : false,
+      "internalID" : "21490201",
+      "localizations" : [
+        { "description" : "JLPT N1 过去问趋势分析与原创练习资料。购买后在「我的资料库」查看。", "displayName" : "JLPT N1 趋势练习", "locale" : "zh_CN" },
+        { "description" : "JLPT N1 past-exam trend analysis and original practice pack.", "displayName" : "JLPT N1 Trend Practice", "locale" : "en_US" }
+      ],
+      "productID" : "machi_guide_jlpt_n1_980",
+      "referenceName" : "Guide商品JLPTN1",
+      "type" : "NonConsumable"
+    },
+    {
+      "displayPrice" : "980.00",
+      "familyShareable" : false,
+      "internalID" : "21490202",
+      "localizations" : [
+        { "description" : "JLPT N2 过去问趋势分析与原创练习资料。购买后在「我的资料库」查看。", "displayName" : "JLPT N2 趋势练习", "locale" : "zh_CN" },
+        { "description" : "JLPT N2 past-exam trend analysis and original practice pack.", "displayName" : "JLPT N2 Trend Practice", "locale" : "en_US" }
+      ],
+      "productID" : "machi_guide_jlpt_n2_980",
+      "referenceName" : "Guide商品JLPTN2",
+      "type" : "NonConsumable"
+    },
+    {
+      "displayPrice" : "980.00",
+      "familyShareable" : false,
+      "internalID" : "21490203",
+      "localizations" : [
+        { "description" : "JLPT N3 过去问趋势分析与原创练习资料。购买后在「我的资料库」查看。", "displayName" : "JLPT N3 趋势练习", "locale" : "zh_CN" },
+        { "description" : "JLPT N3 past-exam trend analysis and original practice pack.", "displayName" : "JLPT N3 Trend Practice", "locale" : "en_US" }
+      ],
+      "productID" : "machi_guide_jlpt_n3_980",
+      "referenceName" : "Guide商品JLPTN3",
+      "type" : "NonConsumable"
     }
   ],
   "settings" : {
@@ -168,10 +163,86 @@
     "_failTransactionsEnabled" : false,
     "_lastSynchronizedDate" : 0,
     "_locale" : "zh_CN",
-    "_storefront" : "CHN",
+    "_storefront" : "JPN",
     "_storeKitErrors" : []
   },
-  "subscriptionGroups" : [],
+  "subscriptionGroups" : [
+    {
+      "id" : "21490300",
+      "localizations" : [
+
+      ],
+      "name" : "Machi Verified",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "600.00",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "21490001",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Machi 认证会员（按月自动续费），蓝色认证标识与高信任内容发布权限。",
+              "displayName" : "Machi 认证会员 · 月度",
+              "locale" : "zh_CN"
+            },
+            {
+              "description" : "Machi Verified monthly auto-renewable subscription — blue badge and high-trust posting.",
+              "displayName" : "Machi Verified Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "machi_yuedu_18",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Machi月度会员",
+          "subscriptionGroupID" : "21490300",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "4800.00",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "21490002",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Machi 认证会员（按年自动续费），蓝色认证标识与高信任内容发布权限。",
+              "displayName" : "Machi 认证会员 · 年度",
+              "locale" : "zh_CN"
+            },
+            {
+              "description" : "Machi Verified annual auto-renewable subscription — blue badge and high-trust posting.",
+              "displayName" : "Machi Verified Annual",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "machi_1niandu_198",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Machi年度会员",
+          "subscriptionGroupID" : "21490300",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        }
+      ]
+    }
+  ],
   "version" : {
     "major" : 3,
     "minor" : 0

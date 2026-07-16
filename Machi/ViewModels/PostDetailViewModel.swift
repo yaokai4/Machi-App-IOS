@@ -102,6 +102,11 @@ final class PostDetailViewModel: ObservableObject {
                 commentStore?.setLoadingState(commentState, postId: canonicalPostId)
             }
         } catch {
+            if error.isKaiXResourceNotFound {
+                post = nil
+                state = .empty
+                return
+            }
             if hasVisiblePost {
                 transientPostError = error.kaixUserMessage
                 state = .loaded

@@ -11,6 +11,8 @@ struct GuideAIChatView: View {
     @StateObject private var viewModel: GuideAIViewModel
     @FocusState private var inputFocused: Bool
     @State private var showHistory = false
+    /// 配额升级入口直达会员购买页（此前跳会员资料库，转化路径多一跳）。
+    @State private var showMembershipSheet = false
     @State private var containerWidth: CGFloat = UIScreen.main.bounds.width
     /// messageId → 已提交的评价。必须放在父视图:行视图在 LazyVStack 里滚出屏
     /// 即被回收,行内 @State 归零后已评价的消息恢复成未评价样式,还能对同一条
@@ -79,6 +81,9 @@ struct GuideAIChatView: View {
                 }
             )
             .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showMembershipSheet) {
+            NavigationStack { MembershipView(currentUser: currentUser) }
         }
     }
 
@@ -160,7 +165,7 @@ struct GuideAIChatView: View {
                             language: language,
                             isMember: viewModel.membershipActive,
                             message: viewModel.quotaMessage,
-                            onUpgrade: { router.open(.guideMemberResources, in: .guide) }
+                            onUpgrade: { showMembershipSheet = true }
                         )
                         .padding(.top, KXSpacing.xs)
                     }
@@ -281,7 +286,7 @@ struct GuideAIChatView: View {
                         .foregroundStyle(KXColor.livingMuted)
                     if low {
                         Button {
-                            router.open(.guideMemberResources, in: .guide)
+                            showMembershipSheet = true
                         } label: {
                             Text(guideText(language, "升级会员", "会員登録", "Upgrade"))
                                 .font(.caption2.weight(.bold))

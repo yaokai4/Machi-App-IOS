@@ -14,9 +14,14 @@ import StoreKit
 /// paid purchase can never be silently dropped.
 ///
 /// Routing: `machi_points_*` consumables settle against the wallet top-up
-/// endpoint; everything else is a membership product and settles against
-/// `/api/payments/apple/verify`. Both endpoints are idempotent per
-/// transaction id, so re-verifying is always safe.
+/// endpoint; `machi_guide_*` non-consumables settle against the guide
+/// purchase endpoint (`/api/payments/apple/guide-verify`); everything else
+/// is a membership product and settles against `/api/payments/apple/verify`.
+/// All endpoints are idempotent per transaction id, so re-verifying is
+/// always safe. NAMING CONVENTION: every single-product guide IAP id MUST
+/// start with `machi_guide_` — an id outside both prefixes lands on the
+/// membership endpoint, is rejected (`product_not_membership`) and the
+/// transaction stays unfinished forever.
 @MainActor
 final class IAPTransactionObserver {
     static let shared = IAPTransactionObserver()
@@ -77,6 +82,14 @@ final class IAPTransactionObserver {
                     signedTransaction: verification.jwsRepresentation,
                     environment: transaction.environment.rawValue
                 )
+            } else if Self.isGuideProduct(transaction.productID) {
+                _ = try await KaiXAPIClient.shared.verifyAppleGuidePurchase(
+                    productId: transaction.productID,
+                    transactionId: String(transaction.id),
+                    originalTransactionId: String(transaction.originalID),
+                    signedTransaction: verification.jwsRepresentation,
+                    environment: transaction.environment.rawValue
+                )
             } else {
                 _ = try await KaiXAPIClient.shared.verifyAppleTransaction(
                     productId: transaction.productID,
@@ -112,6 +125,12 @@ final class IAPTransactionObserver {
             // isn't silently stuck pending. No JWS/token in the notification.
             NotificationCenter.default.post(name: .kaixIAPVerificationPending, object: nil)
         }
+    }
+
+    /// Single-product guide IAP ids share the `machi_guide_` prefix (enforced
+    /// as a naming convention server-side in GUIDE_HERO_IAP_PRODUCTS).
+    nonisolated static func isGuideProduct(_ productID: String) -> Bool {
+        productID.hasPrefix("machi_guide_")
     }
 
     nonisolated private func unwrap(_ verification: VerificationResult<Transaction>) -> Transaction {
