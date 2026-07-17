@@ -423,6 +423,9 @@ struct GuideJLPTExamSessionView: View {
         remaining = max(0, Int(deadline.timeIntervalSinceNow.rounded(.up)))
         if remaining <= 0, !submitting {
             timedOut = true
+            // 答题卡是 modal sheet:自动交卷会把结果页 push 到它下面,不收起的话
+            // 用户对着一张倒计时已消失的失效答题卡,成绩藏在背后。
+            showAnswerSheet = false
             Task { await submit() }
         }
     }
@@ -901,6 +904,33 @@ struct JLPTScaledScorePanel: View {
 
     private var passRef: Bool { scaled.passedWrittenReference ?? false }
 
+    /// JLPT 的两道门:总分达参考线 + 每科过基准点。总分够了却栽在某科基准点上
+    /// 是真实且常见的落榜方式 —— 此时必须说清是「科目」而不是「总分」不够,
+    /// 否则分数明明 ≥ 参考线却写「未达参考线」,考生会以为出分算错了。
+    private var verdictTitle: String {
+        let line = scaled.passLineWritten ?? 0
+        if passRef {
+            return guideText(language,
+                             "达到笔试参考线 \(line)",
+                             "筆記参考ライン \(line) 到達",
+                             "Reached written reference line \(line)")
+        }
+        let failed = (scaled.scales ?? []).filter { !($0.passed ?? false) }
+        let totalReached = (scaled.writtenTotal ?? 0) >= line
+        if totalReached, !failed.isEmpty {
+            let zh = failed.map { $0.label ?? "" }.joined(separator: "・")
+            let en = failed.map { $0.label ?? "" }.joined(separator: " / ")
+            return guideText(language,
+                             "总分达线，但「\(zh)」未过基准点",
+                             "合計は到達、ただし「\(zh)」が基準点未満",
+                             "Total reached, but \(en) is below its section minimum")
+        }
+        return guideText(language,
+                         "未达笔试参考线 \(line)",
+                         "筆記参考ライン \(line) 未達",
+                         "Below written reference line \(line)")
+    }
+
     var body: some View {
         VStack(spacing: 14) {
             JLPTEyebrow(text: guideText(language, "JLPT 标准出分 · 笔试参考", "JLPT 準拠スコア・筆記参考", "JLPT-style written score"))
@@ -915,18 +945,7 @@ struct JLPTScaledScorePanel: View {
                     .foregroundStyle(KXColor.livingMuted)
             }
 
-            JLPTPassPill(
-                passed: passRef,
-                title: passRef
-                    ? guideText(language,
-                                "达到笔试参考线 \(scaled.passLineWritten ?? 0)",
-                                "筆記参考ライン \(scaled.passLineWritten ?? 0) 到達",
-                                "Reached written reference line \(scaled.passLineWritten ?? 0)")
-                    : guideText(language,
-                                "未达笔试参考线 \(scaled.passLineWritten ?? 0)",
-                                "筆記参考ライン \(scaled.passLineWritten ?? 0) 未達",
-                                "Below written reference line \(scaled.passLineWritten ?? 0)")
-            )
+            JLPTPassPill(passed: passRef, title: verdictTitle)
 
             if let correct, let total, total > 0 {
                 Text(guideText(language, "答对 \(correct)/\(total)", "正解 \(correct)/\(total)", "\(correct)/\(total) correct"))

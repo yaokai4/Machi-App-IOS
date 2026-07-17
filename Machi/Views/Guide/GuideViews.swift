@@ -2408,7 +2408,11 @@ private struct GuideDualEntrySection: View {
                     icon: "crown.fill",
                     tint: KXColor.accent,
                     title: guideText(language, "会员专区", "会員エリア", "Member area"),
-                    subtitle: guideText(language, "清单模板资料\n会员权益内容", "チェックリスト・テンプレート\n会員特典コンテンツ", "Checklists and templates\nMember content")
+                    // 副标题只讲会员真正的核心权益(AI 额度 + 每月赠币),不再以
+                    // 「清单模板」打头 —— 静态资料已被 Machi AI 覆盖,拿它当卖点
+                    // 既不实在也卖不动(服务端 default_membership_benefits 同样把
+                    // ai_member_quota 排在第一位)。
+                    subtitle: guideText(language, "AI 额度与每月赠币\n会员权益与专属内容", "AI 枠と毎月のコイン\n会員特典コンテンツ", "AI quota and monthly coins\nMember perks and content")
                 ) {
                     router.open(.guideMemberResources)
                 }
