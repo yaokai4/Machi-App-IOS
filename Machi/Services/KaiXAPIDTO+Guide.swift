@@ -2210,6 +2210,35 @@ struct KaiXJLPTExam: Codable, Equatable, Hashable, Identifiable {
     let durationSeconds: Int?
     let passScore: Int?
     let isMemberOnly: Bool?
+    /// 'percent'(默认) 或 'jlpt_scaled'(全真卷:提交后按官方计分结构出缩放分)。
+    let scoreMode: String?
+}
+
+/// JLPT 缩放分的单科条目(言語知識/読解,或 N4·N5 的合并科)。
+struct KaiXJLPTScaledScale: Codable, Equatable, Hashable {
+    let key: String?
+    let label: String?
+    let raw: Int?
+    let rawMax: Int?
+    let scaled: Int?
+    let scaledMax: Int?
+    let sectionMin: Int?
+    let passed: Bool?
+}
+
+/// score_mode='jlpt_scaled' 的全真卷在 /exam/submit、/exam/session/{id}、
+/// /exam/history 里附带的整块缩放结果(笔试参考,不含聴解)。
+struct KaiXJLPTScaledResult: Codable, Equatable, Hashable {
+    let mode: String?
+    let level: String?
+    let writtenTotal: Int?
+    let writtenMax: Int?
+    let passLineWritten: Int?
+    let passedWrittenReference: Bool?
+    let scales: [KaiXJLPTScaledScale]?
+    let officialPassTotal: Int?
+    let officialTotalMax: Int?
+    let note: String?
 }
 
 struct KaiXJLPTExamsResponse: Codable, Equatable {
@@ -2264,9 +2293,12 @@ struct KaiXJLPTExamStartResponse: Codable, Equatable {
     /// authority on resume; the client re-anchors its deadline to this.
     let remainingSeconds: Int?
 
+    /// 'percent' 或 'jlpt_scaled' — 客户端据此在开考页预告 180 分制出分。
+    let scoreMode: String?
+
     enum CodingKeys: String, CodingKey {
         case status, sessionId, examId, level, title, durationSeconds, passScore,
-             total, questions, disclaimer, resumed, answers, remainingSeconds
+             total, questions, disclaimer, resumed, answers, remainingSeconds, scoreMode
     }
     private enum SnakeKeys: String, CodingKey {
         case remainingSeconds = "remaining_seconds"
@@ -2286,6 +2318,7 @@ struct KaiXJLPTExamStartResponse: Codable, Equatable {
         disclaimer = try c.decodeIfPresent(String.self, forKey: .disclaimer)
         resumed = try c.decodeIfPresent(Bool.self, forKey: .resumed)
         answers = try c.decodeIfPresent([KaiXJLPTExamResumeAnswer].self, forKey: .answers)
+        scoreMode = try c.decodeIfPresent(String.self, forKey: .scoreMode)
         let snake = try decoder.container(keyedBy: SnakeKeys.self)
         remainingSeconds = try c.decodeIfPresent(Int.self, forKey: .remainingSeconds)
             ?? snake.decodeIfPresent(Int.self, forKey: .remainingSeconds)
@@ -2309,6 +2342,8 @@ struct KaiXJLPTExamResult: Codable, Equatable {
     let score: Int?
     let passed: Bool?
     let passScore: Int?
+    let scoreMode: String?
+    let scaled: KaiXJLPTScaledResult?
     let durationSeconds: Int?
     let questions: [KaiXJLPTQuestionDTO]?
     let disclaimer: String?
@@ -2324,6 +2359,8 @@ struct KaiXJLPTExamHistoryItem: Codable, Equatable, Hashable, Identifiable {
     let correct: Int?
     let score: Int?
     let passed: Bool?
+    let scoreMode: String?
+    let scaled: KaiXJLPTScaledResult?
     let durationSeconds: Int?
     let startedAt: String?
     let submittedAt: String?

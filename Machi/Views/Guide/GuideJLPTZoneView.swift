@@ -217,8 +217,8 @@ struct GuideJLPTZoneView: View {
 
                 NavigationLink { GuideJLPTExamView() } label: {
                     entryCard(icon: "checklist",
-                              title: guideText(language, "模拟考试", "模擬試験", "Mock exams"),
-                              subtitle: guideText(language, "限时组卷 + 成绩", "時間制限＋成績", "Timed + scored"),
+                              title: guideText(language, "全真模考", "本番形式模試", "Full mock exams"),
+                              subtitle: guideText(language, "整卷限时 · JLPT 标准出分", "本番構成・JLPT 準拠採点", "Full papers · JLPT-style scoring"),
                               primary: false,
                               enabled: core?.hasExams ?? true)
                 }
@@ -378,9 +378,10 @@ struct GuideJLPTZoneView: View {
                 }
             }
             Spacer(minLength: 0)
-            Text("\(item.score ?? 0)")
+            // 全真卷显示缩放笔试分(按参考线判色);普通卷维持 0-100 百分比。
+            Text("\(item.scaled?.writtenTotal ?? item.score ?? 0)")
                 .font(.subheadline.weight(.heavy).monospacedDigit())
-                .foregroundStyle((item.passed ?? false) ? KXColor.livingAccent : KXColor.livingWarm)
+                .foregroundStyle((item.scaled?.passedWrittenReference ?? item.passed ?? false) ? KXColor.livingAccent : KXColor.livingWarm)
         }
     }
 

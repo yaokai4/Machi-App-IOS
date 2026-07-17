@@ -31,11 +31,6 @@ struct GuideHomeView: View {
     @ObservedObject private var regionStore = RegionStore.shared
     @StateObject private var viewModel = GuideViewModel()
     @State private var searchTask: Task<Void, Never>?
-    // 首访一次性引导卡(I1-2):UserDefaults 持久标记 + 每次进入首页时快照。
-    // 点 CTA/chip 只写标记不立刻收卡(否则 NavigationLink 推进途中卡被移除会
-    // 断导航),回到首页时 onAppear 重新快照后自然消失;点 ✕ 立即收起。
-    @AppStorage("hasSeenGuideIntroCard") private var hasSeenGuideIntroCard = false
-    @State private var introCardActive = false
 
     let currentUser: UserEntity
 
@@ -53,7 +48,6 @@ struct GuideHomeView: View {
             content
         }
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { introCardActive = !hasSeenGuideIntroCard }
         .task(id: country) {
             await KXPerf.measure("guide.loadInitial") {
                 await viewModel.load(country: country)
@@ -98,34 +92,13 @@ struct GuideHomeView: View {
                         GuideInlineStatus(message: message)
                     }
 
-                    // 首页顺序(I1-1):AI hero 置顶 → JLPT 一等卡 → 商城板块 →
-                    // 指南宫格(学校/公司库并入)→ 库搜索紧凑条沉底。搜索时上方
-                    // 区块整体让位,但搜索条保持同一结构位(否则 TextField 身份
-                    // 变化会在首个字符后掉键盘),结果紧随其后。
+                    // 首页顺序(2026-07 去重复入口):AI hero 置顶 → 库搜索次位
+                    // 常驻 → JLPT 一等卡(唯一定级 CTA)→ 会员/商城双入口 →
+                    // 六大指南宫格 → 学校/公司数据库分区。搜索时上下区块让位,
+                    // 但搜索条保持同一结构位(否则 TextField 身份变化会在首个
+                    // 字符后掉键盘),结果紧随其后。
                     if !isSearchActive {
-                        if introCardActive {
-                            GuideIntroCard(
-                                onDismiss: {
-                                    hasSeenGuideIntroCard = true
-                                    withAnimation(.snappy(duration: 0.25)) { introCardActive = false }
-                                },
-                                onConsumed: { hasSeenGuideIntroCard = true }
-                            )
-                        }
-
                         GuideAIHero()
-
-                        // JLPT 一等卡:付费漏斗的首屏入口(倒计时 + streak + 定级 CTA)。
-                        GuideJLPTHomeCard()
-
-                        // 商城板块(2026-07 商城开门):会员/商城双入口 + 精选商品卡。
-                        GuideStoreSection()
-
-                        // 指南宫格:六大指南 + 学校库/公司库(自一等双卡降级并入,入口不删)。
-                        GuideCategoryGrid(
-                            categories: GuideSupportCatalog.orderedCategories(from: home.categories),
-                            showsLibraryEntries: true
-                        )
                     }
 
                     GuideLibrarySearchBar(
@@ -144,6 +117,20 @@ struct GuideHomeView: View {
                             faq: viewModel.faqResults,
                             journeys: viewModel.journeyResults
                         )
+                    } else {
+                        // JLPT 一等卡:首页唯一的「30 秒定级」入口(倒计时 + streak)。
+                        GuideJLPTHomeCard()
+
+                        // 会员/商城双入口:精选商品卡不再上首页,商品进商城内浏览。
+                        GuideDualEntrySection()
+
+                        // 六大指南宫格(学校/公司库已拆出为独立数据库分区)。
+                        GuideCategoryGrid(
+                            categories: GuideSupportCatalog.orderedCategories(from: home.categories)
+                        )
+
+                        // 数据库分区:学校库/公司库与内容型指南分开呈现。
+                        GuideLibraryDirectorySection()
                     }
                 }
                 .padding(.horizontal, KXSpacing.screen)
@@ -843,20 +830,24 @@ struct GuideServicesView: View {
         return userStore.usersById[id]
     }
     private var filters: [(String, String)] {
+        // 服务类筛选前置,与「人工服务置顶」的货架顺序一致。
         [
             ("", guideText(language, "全部", "すべて", "All")),
+            ("resume_review", guideText(language, "履历修改", "履歴書添削", "Resume review")),
+            ("consultation", guideText(language, "咨询", "相談", "Consultation")),
             ("pdf_material", guideText(language, "PDF 资料", "PDF 資料", "PDF resources")),
             ("template", guideText(language, "模板", "テンプレート", "Templates")),
             ("checklist", guideText(language, "清单", "チェックリスト", "Checklists")),
-            ("resume_review", guideText(language, "履历修改", "履歴書添削", "Resume review")),
-            ("consultation", guideText(language, "咨询", "相談", "Consultation")),
         ]
     }
 
-    /// Zero-friction lead-in SKUs shown first — a store whose first shelf is
+    /// 人工服务置顶(2026-07 收敛):履历修改/咨询等一对一服务是 AI 替代不了的
+    /// 核心供给;静态资料/清单降权沉底 —— AI 已能覆盖大部分静态信息需求。
+    private var serviceProducts: [KaiXGuideProductDTO] { products.filter { $0.isService } }
+    /// Zero-friction lead-in SKUs — a store whose first digital shelf is
     /// free builds trust before it asks for money.
-    private var freeProducts: [KaiXGuideProductDTO] { products.filter { $0.isFree } }
-    private var paidProducts: [KaiXGuideProductDTO] { products.filter { !$0.isFree } }
+    private var freeProducts: [KaiXGuideProductDTO] { products.filter { $0.isFree && !$0.isService } }
+    private var paidProducts: [KaiXGuideProductDTO] { products.filter { !$0.isFree && !$0.isService } }
     /// Total member savings across the visible paid SKUs — concrete yen
     /// beats "开通会员" copy (会员价值条 uses this number).
     private var memberSavings: Int {
@@ -896,6 +887,15 @@ struct GuideServicesView: View {
                         } else if products.isEmpty {
                             EmptyStateView(title: guideText(language, "暂无相关资料或服务", "関連資料・サービスはまだありません", "No related resources or services yet"), subtitle: guideText(language, "更多资料正在准备中。", "追加資料を準備中です。", "More resources are being prepared."), systemImage: "shippingbox")
                         } else {
+                            // 人工服务置顶:AI 替代不了的一对一供给是商城的主角。
+                            if !serviceProducts.isEmpty {
+                                storeSectionTitle(guideText(language, "人工服务 · 一对一", "サポートサービス・1対1", "Services · 1-on-1"), icon: "person.2.fill")
+                                LazyVGrid(columns: [GridItem(.flexible())], spacing: 10) {
+                                    ForEach(serviceProducts) { product in
+                                        GuideProductCard(product: product)
+                                    }
+                                }
+                            }
                             if !freeProducts.isEmpty {
                                 storeSectionTitle(guideText(language, "免费领取", "無料で受け取る", "Free to claim"), icon: "gift.fill")
                                 LazyVGrid(columns: [GridItem(.flexible())], spacing: 10) {
@@ -908,7 +908,7 @@ struct GuideServicesView: View {
                                 if !isMember && memberSavings > 0 {
                                     memberValueStrip
                                 }
-                                storeSectionTitle(guideText(language, "备考与申请资料", "対策・出願資料", "Prep & application resources"), icon: "books.vertical.fill")
+                                storeSectionTitle(guideText(language, "资料与模板", "資料・テンプレート", "Resources & templates"), icon: "books.vertical.fill")
                                 LazyVGrid(columns: [GridItem(.flexible())], spacing: 10) {
                                     ForEach(paidProducts) { product in
                                         GuideProductCard(product: product)
@@ -2011,61 +2011,67 @@ private struct GuideSearchFAQCard: View {
 private struct GuideCategoryGrid: View {
     @Environment(\.appLanguage) private var language
     let categories: [KaiXGuideCategoryDTO]
-    /// I1-1:学校库/公司库自首页一等双卡降级并入宫格 —— 入口保留,权重下调。
-    var showsLibraryEntries = false
 
     var body: some View {
-        if !categories.isEmpty || showsLibraryEntries {
+        if !categories.isEmpty {
             Divider()
                 .padding(.top, KXSpacing.xs)
             GuideSectionHeader(
-                title: showsLibraryEntries
-                    ? guideText(language, "指南与资料库", "ガイド・資料庫", "Guides & libraries")
-                    : guideText(language, "六大指南", "6つのガイド", "Guide categories"),
-                subtitle: showsLibraryEntries
-                    ? guideText(
-                        language,
-                        "按目标进入系统化指南，学校库和公司库也在这里。",
-                        "目的別ガイドに加えて、学校・企業データベースもこちら。",
-                        "Structured guides by goal, plus the school and company libraries."
-                    )
-                    : guideText(
-                        language,
-                        "按目标进入系统化指南，先看路径，再查资料和服务。",
-                        "目的別にガイドを確認し、流れ・資料・サービスへ進みます。",
-                        "Browse structured guides by goal, then open resources and services."
-                    )
+                title: guideText(language, "六大指南", "6つのガイド", "Guide categories"),
+                subtitle: guideText(
+                    language,
+                    "按目标进入系统化指南，先看路径，再查资料和服务。",
+                    "目的別にガイドを確認し、流れ・資料・サービスへ進みます。",
+                    "Browse structured guides by goal, then open resources and services."
+                )
             )
             LazyVGrid(columns: [GridItem(.flexible(), spacing: KXSpacing.md), GridItem(.flexible(), spacing: KXSpacing.md)], spacing: KXSpacing.md) {
                 ForEach(categories) { category in
                     GuideCategoryCard(category: category)
-                }
-                if showsLibraryEntries {
-                    GuideLibraryGridTile(
-                        icon: "graduationcap.fill",
-                        tint: KXColor.rankSky,
-                        title: guideText(language, "日本学校库", "学校データベース", "School library"),
-                        subtitle: guideText(language, "大学、大学院、专门学校、语言学校", "大学・大学院・専門・語学", "Universities, grad, vocational, language"),
-                        route: .guideSchools,
-                        identifier: "guide.library.schools"
-                    )
-                    GuideLibraryGridTile(
-                        icon: "building.2.fill",
-                        tint: KXColor.rankTeal,
-                        title: guideText(language, "就职公司库", "就職企業データベース", "Company library"),
-                        subtitle: guideText(language, "外国人友好企业、签证支持与真实评价", "外国人歓迎・ビザ支援・口コミ", "Foreigner-friendly, visa support, reviews"),
-                        route: .guideCompanies,
-                        identifier: "guide.library.companies"
-                    )
                 }
             }
         }
     }
 }
 
-/// 宫格里的学校库/公司库入口:与 GuideCategoryCard 同一视觉节奏(icon bubble +
-/// 标题 + 两行描述),稳定 accessibilityIdentifier 供 UI 测试按标识定位。
-private struct GuideLibraryGridTile: View {
+/// 数据库分区:学校库/公司库与六大内容型指南分开呈现 —— 指南是「读的内容」,
+/// 库是「查的数据」。整行大卡强调可检索属性,保留稳定 accessibilityIdentifier
+/// 供 UI 测试定位。
+private struct GuideLibraryDirectorySection: View {
+    @Environment(\.appLanguage) private var language
+
+    var body: some View {
+        Divider()
+            .padding(.top, KXSpacing.xs)
+        GuideSectionHeader(
+            title: guideText(language, "数据库", "データベース", "Databases"),
+            subtitle: guideText(
+                language,
+                "可筛选、可检索的日本学校库与就职公司库。",
+                "絞り込み・検索できる学校と就職企業のデータベース。",
+                "Filterable, searchable school and company databases."
+            )
+        )
+        GuideLibraryDirectoryRow(
+            icon: "graduationcap.fill",
+            tint: KXColor.rankSky,
+            title: guideText(language, "日本学校库", "学校データベース", "School library"),
+            subtitle: guideText(language, "大学 · 大学院 · 专门学校 · 语言学校", "大学・大学院・専門学校・語学学校", "Universities, grad, vocational, language schools"),
+            route: .guideSchools,
+            identifier: "guide.library.schools"
+        )
+        GuideLibraryDirectoryRow(
+            icon: "building.2.fill",
+            tint: KXColor.rankTeal,
+            title: guideText(language, "就职公司库", "就職企業データベース", "Company library"),
+            subtitle: guideText(language, "外国人友好企业 · 签证支持 · 真实评价", "外国人歓迎・ビザ支援・実体験レビュー", "Foreigner-friendly, visa support, real reviews"),
+            route: .guideCompanies,
+            identifier: "guide.library.companies"
+        )
+    }
+}
+
+private struct GuideLibraryDirectoryRow: View {
     @EnvironmentObject private var router: AppRouter
     let icon: String
     let tint: Color
@@ -2078,21 +2084,27 @@ private struct GuideLibraryGridTile: View {
         Button {
             router.open(route)
         } label: {
-            VStack(alignment: .leading, spacing: 7) {
-                GuideIconBubble(icon: icon, color: tint, size: 40)
-                Text(title)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.primary)
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                Spacer(minLength: 0)
+            HStack(spacing: KXSpacing.md) {
+                GuideIconBubble(icon: icon, color: tint, size: 44)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.primary)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
-            .frame(maxWidth: .infinity, minHeight: 122, alignment: .topLeading)
-            .padding(KXSpacing.md)
-            .kxGlassSurface(radius: KXRadius.hero)
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .kxGlassSurface(radius: KXRadius.card)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.fullArea)
         .contentShape(Rectangle())
@@ -2247,7 +2259,7 @@ private struct GuideJLPTHomeCard: View {
                         Text(guideText(language, "JLPT 备考专区", "JLPT 対策センター", "JLPT prep center"))
                             .kxScaledFont(22, relativeTo: .title3, weight: .bold, design: .rounded)
                             .foregroundStyle(KXColor.livingInk)
-                        Text(guideText(language, "定级 · 练习 · 模考 · 错题本", "レベル判定・演習・模試・間違いノート", "Placement, practice, mock exams, review"))
+                        Text(guideText(language, "定级 · 全真模考 · 练习 · 错题本", "レベル判定・本番形式模試・演習・間違いノート", "Placement, full mock exams, practice, review"))
                             .font(.footnote)
                             .foregroundStyle(KXColor.livingMuted)
                     }
@@ -2317,176 +2329,6 @@ private struct GuideJLPTHomeCard: View {
     }
 }
 
-/// 首访一次性引导卡(I1-2)。不做多步 tour —— 一张卡:按 onboarding persona
-/// 预填 3 个 Machi AI 快捷问题 + 主 CTA「30 秒定级」。点 CTA/chip 视为已消费
-/// (onConsumed 只写 UserDefaults 标记,卡片留到下次进首页再消失,避免推进
-/// NavigationLink 时卡片被移除断导航);✕ 立即收起。游客可直接进定级,提交时
-/// 由 GuideJLPTPlacementView 的 GuestGate 兜底。
-private struct GuideIntroCard: View {
-    @Environment(\.appLanguage) private var language
-    @EnvironmentObject private var router: AppRouter
-    @AppStorage("onboardingPersona") private var onboardingPersona = ""
-    let onDismiss: () -> Void
-    let onConsumed: () -> Void
-
-    /// persona(arrival_stage)→ 3 个示范问题:让新用户 5 秒内看到「和我有关」。
-    private var personaQuestions: [String] {
-        switch onboardingPersona {
-        case "pre_arrival":
-            return [
-                guideText(language, "留学签证 COE 怎么办理？", "在留資格認定証明書（COE）の取り方は？", "How do I get a COE for my student visa?"),
-                guideText(language, "来日本前要准备哪些材料？", "渡日前に何を準備すべき？", "What should I prepare before coming to Japan?"),
-                guideText(language, "语言学校怎么选？", "語学学校の選び方は？", "How do I choose a language school?")
-            ]
-        case "just_arrived":
-            return [
-                guideText(language, "刚到日本要办哪些手续？", "来日直後の手続きは？", "What paperwork do I need right after arriving?"),
-                guideText(language, "怎么开银行账户和办手机卡？", "銀行口座と携帯の契約方法は？", "How do I open a bank account and get a SIM?"),
-                guideText(language, "在留卡地址变更怎么办？", "在留カードの住所変更は？", "How do I update the address on my residence card?")
-            ]
-        case "first_year":
-            return [
-                guideText(language, "资格外活动许可怎么申请？", "資格外活動許可の申請方法は？", "How do I apply for a part-time work permit?"),
-                guideText(language, "JLPT 什么时候报名和考试？", "JLPT の申込と試験日は？", "When are JLPT registration and exam dates?"),
-                guideText(language, "留学签证怎么续？", "留学ビザの更新方法は？", "How do I renew my student visa?")
-            ]
-        case "long_term":
-            return [
-                guideText(language, "日企面试怎么准备？", "日本企業の面接対策は？", "How do I prep for interviews at Japanese firms?"),
-                guideText(language, "永住申请需要什么条件？", "永住申請の条件は？", "What are the requirements for permanent residency?"),
-                guideText(language, "怎么换工作签证？", "就労ビザへの変更方法は？", "How do I switch to a work visa?")
-            ]
-        default:
-            return [
-                guideText(language, "留学签证怎么续？", "留学ビザの更新方法は？", "How do I renew my student visa?"),
-                guideText(language, "JLPT 考什么、怎么备考？", "JLPT の内容と対策は？", "What's on the JLPT and how do I prep?"),
-                guideText(language, "东京哪里租房便宜？", "東京で家賃が安いエリアは？", "Where is rent cheaper in Tokyo?")
-            ]
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: KXSpacing.md) {
-            HStack(alignment: .top, spacing: KXSpacing.sm) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(guideText(language, "第一次来？两步就上手", "はじめてですか？2ステップで開始", "New here? Start in two steps"))
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(KXColor.livingInk)
-                    Text(guideText(language, "先测日语水平，或直接问 Machi AI。", "まずレベル判定、または Machi AI に質問。", "Check your Japanese level, or just ask Machi AI."))
-                        .font(.footnote)
-                        .foregroundStyle(KXColor.livingMuted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 0)
-                Button(action: onDismiss) {
-                    Image(systemName: "xmark")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(KXColor.livingMuted)
-                        .frame(width: 28, height: 28)
-                        .background(KXColor.livingSurface, in: Circle())
-                }
-                .buttonStyle(.fullArea)
-                .contentShape(Circle())
-                .accessibilityIdentifier("guide.intro.dismiss")
-                .accessibilityLabel(guideText(language, "关闭", "閉じる", "Close"))
-            }
-
-            NavigationLink {
-                GuideJLPTPlacementView()
-            } label: {
-                HStack(spacing: KXSpacing.sm) {
-                    Image(systemName: "gauge.with.dots.needle.50percent")
-                        .font(.subheadline.weight(.bold))
-                    Text(guideText(language, "30 秒测水平，拿到备考计划", "30秒でレベル判定して計画を作る", "Find your level in 30 seconds"))
-                        .font(.subheadline.weight(.bold))
-                    Spacer(minLength: 0)
-                    Image(systemName: "arrow.right")
-                        .font(.subheadline.weight(.bold))
-                }
-                .foregroundStyle(KXColor.onAccent)
-                .padding(.vertical, 14)
-                .padding(.horizontal, KXSpacing.lg)
-                .background(KXColor.livingAccent, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
-                .shadow(color: KXColor.livingAccent.opacity(0.24), radius: 10, y: 4)
-            }
-            .buttonStyle(KXPressableStyle(scale: 0.97))
-            .simultaneousGesture(TapGesture().onEnded { onConsumed() })
-            .accessibilityIdentifier("guide.intro.placement")
-
-            FlowLayout(spacing: 7) {
-                ForEach(personaQuestions, id: \.self) { question in
-                    Button {
-                        onConsumed()
-                        router.open(.guideAI(prompt: question), in: .guide)
-                    } label: {
-                        Text(question)
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(KXColor.livingAccent)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(KXColor.livingAccentSoft, in: Capsule())
-                    }
-                    .buttonStyle(.fullArea)
-                    .contentShape(Capsule())
-                }
-            }
-        }
-        .padding(KXSpacing.lg)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(KXColor.livingSoft, in: RoundedRectangle(cornerRadius: KXRadius.sheet, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: KXRadius.sheet, style: .continuous)
-                .stroke(KXColor.livingAccent.opacity(0.22), lineWidth: 0.9)
-        )
-        .shadow(color: Color.black.opacity(0.05), radius: 14, y: 7)
-    }
-}
-
-/// The ONLY personal-action entry allowed on the Guide home: a single light CTA
-/// to 我的工作台. Guide stays a reference library; Todo / 日历 / 管理 live in 我的.
-private struct GuidePersonalWorkbenchCTA: View {
-    @Environment(\.appLanguage) private var language
-    @EnvironmentObject private var router: AppRouter
-
-    var body: some View {
-        Button {
-            router.open(.personalWorkbench)
-        } label: {
-            HStack(spacing: KXSpacing.md) {
-                Image(systemName: "square.grid.2x2.fill")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(KXColor.accent)
-                    .frame(width: 44, height: 44)
-                    .background(KXColor.accentSoft, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(guideText(language, "需要管理 Todo、日历和申请？", "Todo・カレンダー・申請を管理？", "Manage todos, calendar & applications?"))
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(guideText(language, "个人计划在「我的工作台」中管理", "個人の予定は「マイワークベンチ」で管理", "Your personal plans live in My Workbench"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 0)
-                HStack(spacing: 3) {
-                    Text(guideText(language, "去工作台", "開く", "Open"))
-                    Image(systemName: "arrow.right")
-                }
-                .font(.caption.weight(.bold))
-                .foregroundStyle(KXColor.accent)
-            }
-            .padding(14)
-            .frame(maxWidth: .infinity)
-            .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous).stroke(KXColor.separator.opacity(0.7), lineWidth: 0.8))
-        }
-        .buttonStyle(.fullArea)
-        .contentShape(Rectangle())
-        .accessibilityIdentifier("guide.workbench.cta")
-    }
-}
-
 private enum GuideSupportCatalog {
     private static let keys = [
         "study_japan",
@@ -2503,43 +2345,6 @@ private enum GuideSupportCatalog {
     }
 }
 
-private struct GuideGoalsSection: View {
-    @Environment(\.appLanguage) private var language
-    @EnvironmentObject private var router: AppRouter
-    let goals: String
-    let entries: [KaiXGuideGoalEntryDTO]
-
-    var body: some View {
-        if !entries.isEmpty {
-            GuideSectionHeader(title: goals, subtitle: guideText(language, "按你的目标快速进入", "目的別にすばやく移動", "Jump in by goal"))
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: KXSpacing.sm) {
-                    ForEach(entries) { entry in
-                        Button {
-                            router.open(.guideCategory(categoryKey: entry.categoryKey))
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "arrow.right.circle.fill")
-                                    .foregroundStyle(KXColor.accent)
-                                Text(entry.title)
-                                    .lineLimit(1)
-                            }
-                            .font(.caption.weight(.semibold))
-                            .padding(.horizontal, KXSpacing.md)
-                            .frame(height: 38)
-                            .background(KXColor.cardBackground, in: Capsule())
-                            .overlay(Capsule().stroke(KXColor.separator, lineWidth: 0.8))
-                        }
-                        .buttonStyle(.fullArea)
-        .contentShape(Rectangle())
-                    }
-                }
-                .padding(.vertical, KXSpacing.xxs)
-            }
-        }
-    }
-}
-
 struct GuideArticleSection: View {
     let title: String
     let subtitle: String?
@@ -2552,41 +2357,6 @@ struct GuideArticleSection: View {
             ForEach(articles) { article in
                 GuideArticleCard(article: article, compact: compact)
             }
-        }
-    }
-}
-
-private struct GuideZoneSection: View {
-    @State private var articles: [KaiXGuideArticleDTO] = []
-    @State private var didLoad = false
-
-    let country: String
-    let title: String
-    let subtitle: String
-    let categoryKey: String
-
-    var body: some View {
-        Group {
-            if !didLoad || !articles.isEmpty {
-                GuideSectionHeader(title: title, subtitle: subtitle)
-                if didLoad {
-                    ForEach(articles) { article in
-                        GuideArticleCard(article: article, compact: true)
-                    }
-                } else {
-                    LoadingView()
-                }
-            }
-        }
-        .task(id: country + categoryKey) {
-            guard country == "jp" else { return }
-            do {
-                let response = try await KaiXAPIClient.shared.guideArticles(country: country, categoryKey: categoryKey, pageSize: 3)
-                articles = response.items
-            } catch {
-                articles = []
-            }
-            didLoad = true
         }
     }
 }
@@ -2623,47 +2393,9 @@ struct GuideProductsSection: View {
 }
 
 /// The two permanent doors of the Guide tab: everything entitled by the
-/// membership lives behind Member area, while templates and human help live behind
-/// 资料与服务. Side-by-side tiles so the split is legible at a glance.
-/// Guide 首页的商城板块:会员/商城双入口卡 + 最多 3 张精选商品卡
-/// (付费优先、其次免费引流款)。自加载、拿不到数据时静默退化为纯入口卡。
-private struct GuideStoreSection: View {
-    @State private var products: [KaiXGuideProductDTO] = []
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            GuideDualEntrySection()
-            if !products.isEmpty {
-                VStack(spacing: 10) {
-                    ForEach(products) { product in
-                        GuideProductCard(product: product)
-                    }
-                }
-            }
-        }
-        .task { await load() }
-    }
-
-    private func load() async {
-        guard products.isEmpty else { return }
-        let resp = try? await KaiXAPIClient.shared.guideProducts(country: "jp", pageSize: 12)
-        let items = (resp?.items ?? []).filter { !$0.isComingSoon && !$0.isService }
-        // I1-1:is_featured + sort_order 置顶 hero SKU;非精选保持原「付费优先、
-        // 免费引流其次」的次序兜底(后台没勾精选时板块不塌)。
-        let featured = items
-            .filter { $0.isFeatured == true }
-            .sorted { ($0.sortOrder ?? Int.max) < ($1.sortOrder ?? Int.max) }
-        let rest = items.filter { $0.isFeatured != true }
-        let paid = rest.filter { !$0.isFree }
-        let free = rest.filter { $0.isFree }
-        products = Array((featured + paid + free).prefix(3))
-        // C-2 客户端漏斗:首页商城板块实际渲染出商品才算一次曝光。
-        if let hero = products.first {
-            Task { await KaiXAPIClient.shared.funnelEvent("store_hero_view", entityType: "guide_store", entityId: hero.slug, props: ["placement": "guide_home"]) }
-        }
-    }
-}
-
+/// membership lives behind Member area, while packs and human help live behind
+/// 商城. Side-by-side tiles so the split is legible at a glance. 精选商品卡不再
+/// 上首页(2026-07 去重复入口):商品统一在商城内浏览,首页只保留两扇门。
 private struct GuideDualEntrySection: View {
     @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
@@ -2684,7 +2416,7 @@ private struct GuideDualEntrySection: View {
                     icon: "bag.fill",
                     tint: .orange,
                     title: guideText(language, "商城", "ストア", "Store"),
-                    subtitle: guideText(language, "资料包与人工服务\n按需购买预约", "資料パック・人的サービス\n必要に応じて購入/予約", "Resource packs and services\nBuy or book as needed")
+                    subtitle: guideText(language, "履历修改等人工服务\n资料模板按需购买", "履歴書添削など1対1サービス\n資料・テンプレートも購入可", "1-on-1 services like resume review\nResources and templates on demand")
                 ) {
                     router.open(.guideServices)
                 }
@@ -2719,106 +2451,6 @@ private struct GuideDualEntrySection: View {
         }
         .buttonStyle(.fullArea)
         .contentShape(Rectangle())
-    }
-}
-
-private struct GuideSchoolsSection: View {
-    @Environment(\.appLanguage) private var language
-    @EnvironmentObject private var router: AppRouter
-    let schools: [KaiXGuideSchoolDTO]
-    let disclaimer: String?
-
-    var body: some View {
-        if !schools.isEmpty {
-            HStack {
-                GuideSectionHeader(title: guideText(language, "日本学校库", "日本の学校データベース", "Japan School Library"), subtitle: guideText(language, "大学、大学院、专门学校、语言学校", "大学、大学院、専門学校、語学学校", "Universities, graduate schools, vocational schools, language schools"))
-                Spacer()
-                Button(guideText(language, "查看全部", "すべて見る", "View all")) {
-                    router.open(.guideSchools)
-                }
-                .font(.caption.weight(.bold))
-                .foregroundStyle(KXColor.accent)
-            }
-            ForEach(schools.prefix(4)) { school in
-                GuideSchoolCard(school: school)
-            }
-            if let disclaimer, !disclaimer.isEmpty {
-                Text(disclaimer)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-}
-
-private struct GuideCompaniesSection: View {
-    @Environment(\.appLanguage) private var language
-    @EnvironmentObject private var router: AppRouter
-    let companies: [KaiXGuideCompanyDTO]
-    let disclaimer: String?
-
-    var body: some View {
-        if !companies.isEmpty {
-            HStack {
-                GuideSectionHeader(title: guideText(language, "外国人就职公司库", "外国人向け就職企業データベース", "Foreigner-Friendly Company Library"), subtitle: guideText(language, "官方招聘页、签证支持与真实评价", "公式採用ページ、ビザ支援、実体験レビュー", "Official career pages, visa support, and real reviews"))
-                Spacer()
-                Button(guideText(language, "查看全部", "すべて見る", "View all")) {
-                    router.open(.guideCompanies)
-                }
-                .font(.caption.weight(.bold))
-                .foregroundStyle(KXColor.accent)
-            }
-            ForEach(companies.prefix(4)) { company in
-                GuideCompanyCard(company: company)
-            }
-            Button {
-                router.open(.guideInterviewReviews)
-            } label: {
-                Label(guideText(language, "查看真实评论", "リアルレビューを見る", "View real reviews"), systemImage: "bubble.left.and.bubble.right.fill")
-                    .font(.subheadline.weight(.bold))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 42)
-                    .background(KXColor.accentSoft, in: Capsule())
-                    .foregroundStyle(KXColor.accent)
-            }
-            .buttonStyle(.fullArea)
-        .contentShape(Rectangle())
-            if let disclaimer, !disclaimer.isEmpty {
-                Text(disclaimer)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-}
-
-private struct GuideFAQSection: View {
-    @Environment(\.appLanguage) private var language
-    let faq: [KaiXGuideFaqDTO]
-
-    var body: some View {
-        if !faq.isEmpty {
-            GuideSectionHeader(title: guideText(language, "常见问题", "よくある質問", "FAQ"), subtitle: nil)
-            VStack(spacing: 9) {
-                ForEach(faq) { item in
-                    DisclosureGroup {
-                        Text(item.answer)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .lineSpacing(3)
-                            .padding(.top, 6)
-                    } label: {
-                        Text(item.question)
-                            .font(.subheadline.weight(.semibold))
-                    }
-                    .padding(14)
-                    .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous).stroke(KXColor.separator, lineWidth: 0.8))
-                }
-            }
-        }
     }
 }
 

@@ -125,7 +125,12 @@ struct GuideJLPTExamView: View {
                         if (exam.durationSeconds ?? 0) > 0 {
                             examMetaChip(icon: "clock", text: minuteText(exam.durationSeconds ?? 0))
                         }
-                        examMetaChip(icon: "checkmark.seal", text: guideText(language, "合格 \(exam.passScore ?? 60)", "合格 \(exam.passScore ?? 60)", "≥\(exam.passScore ?? 60)"))
+                        if exam.scoreMode == "jlpt_scaled" {
+                            // 全真卷:JLPT 官方计分结构出缩放分,不适用 0-100 合格线。
+                            examMetaChip(icon: "chart.bar.fill", text: guideText(language, "JLPT 标准出分", "JLPT 準拠採点", "JLPT-style scoring"))
+                        } else {
+                            examMetaChip(icon: "checkmark.seal", text: guideText(language, "合格 \(exam.passScore ?? 60)", "合格 \(exam.passScore ?? 60)", "≥\(exam.passScore ?? 60)"))
+                        }
                     }
                 }
                 Spacer(minLength: 0)
@@ -159,21 +164,29 @@ struct GuideJLPTExamView: View {
     }
 
     private func historyRow(_ item: KaiXJLPTExamHistoryItem) -> some View {
-        NavigationLink {
+        // 全真卷显示缩放总分(0-120,按笔试参考线判色);普通卷维持 0-100 百分比。
+        let displayScore = item.scaled?.writtenTotal ?? item.score ?? 0
+        let displayPassed = item.scaled?.passedWrittenReference ?? item.passed ?? false
+        return NavigationLink {
             GuideJLPTExamReviewView(sessionId: item.sessionId, title: item.title ?? "")
         } label: {
             HStack(spacing: KXSpacing.md) {
                 // Score chip — passing = accent tile, failing = warm tile.
-                Text("\(item.score ?? 0)")
+                Text("\(displayScore)")
                     .kxScaledFont(17, weight: .black, design: .rounded)
-                    .foregroundStyle((item.passed ?? false) ? KXColor.livingAccent : KXColor.livingWarm)
+                    .foregroundStyle(displayPassed ? KXColor.livingAccent : KXColor.livingWarm)
                     .frame(width: 44, height: 44)
-                    .background(((item.passed ?? false) ? KXColor.livingAccent : KXColor.livingWarm).opacity(0.12), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+                    .background((displayPassed ? KXColor.livingAccent : KXColor.livingWarm).opacity(0.12), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.title ?? item.level ?? "")
                         .font(.subheadline.weight(.bold)).foregroundStyle(KXColor.livingInk)
-                    Text(guideText(language, "\(item.correct ?? 0)/\(item.total ?? 0) 正确", "\(item.correct ?? 0)/\(item.total ?? 0) 正解", "\(item.correct ?? 0)/\(item.total ?? 0) correct"))
-                        .font(.caption2.weight(.medium)).foregroundStyle(KXColor.livingMuted)
+                    if let scaled = item.scaled {
+                        Text(guideText(language, "笔试 \(scaled.writtenTotal ?? 0)/\(scaled.writtenMax ?? 120) · 答对 \(item.correct ?? 0)/\(item.total ?? 0)", "筆記 \(scaled.writtenTotal ?? 0)/\(scaled.writtenMax ?? 120)・正解 \(item.correct ?? 0)/\(item.total ?? 0)", "Written \(scaled.writtenTotal ?? 0)/\(scaled.writtenMax ?? 120) · \(item.correct ?? 0)/\(item.total ?? 0) correct"))
+                            .font(.caption2.weight(.medium)).foregroundStyle(KXColor.livingMuted)
+                    } else {
+                        Text(guideText(language, "\(item.correct ?? 0)/\(item.total ?? 0) 正确", "\(item.correct ?? 0)/\(item.total ?? 0) 正解", "\(item.correct ?? 0)/\(item.total ?? 0) correct"))
+                            .font(.caption2.weight(.medium)).foregroundStyle(KXColor.livingMuted)
+                    }
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
@@ -259,6 +272,8 @@ struct GuideJLPTExamSessionView: View {
     @State private var unsyncedAtSubmit = 0
     @State private var showLeaveConfirm = false
     @State private var showUnsyncedConfirm = false
+    /// 答题卡:整卷(40+ 题)没有跳题面板无法回看检查;点格子直接跳到该题。
+    @State private var showAnswerSheet = false
     /// B15-D 中断恢复:服务端在 start 返回了未完成的旧会话时,把已答题灌回本地
     /// 并提示用户。只在首次 onAppear 执行,避免返回本页时覆盖更新的本地作答。
     @State private var didRestoreResumed = false
@@ -367,6 +382,23 @@ struct GuideJLPTExamSessionView: View {
         } message: {
             Text(guideText(language, "网络不稳定，这些题的答案还没有传到服务器，直接交卷会按未答判分。", "通信が不安定なため一部の回答が未送信です。このまま提出すると未回答として採点されます。", "Some answers haven't reached the server yet; submitting now grades them as unanswered."))
         }
+        .sheet(isPresented: $showAnswerSheet) {
+            JLPTAnswerSheetView(
+                questions: questions,
+                answers: answers,
+                current: cursor,
+                onJump: { idx in
+                    cursor = idx
+                    showAnswerSheet = false
+                },
+                onSubmit: {
+                    showAnswerSheet = false
+                    Task { await submit() }
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
     }
 
     /// B15-D:start 返回 resumed 时把服务端已保存的作答灌回本地状态,并把光标
@@ -408,6 +440,27 @@ struct GuideJLPTExamSessionView: View {
                 Text("\(cursor + 1)/\(questions.count)")
                     .font(.caption.weight(.bold).monospacedDigit())
                     .foregroundStyle(KXColor.livingMuted)
+                // 全真卷按科目顺序组卷:当前科目常驻可见,考生随时知道自己在
+                // 「文字·語彙 / 文法 / 読解」的哪一段。
+                if let sectionLabel = q.sectionLabel, !sectionLabel.isEmpty {
+                    Text(sectionLabel)
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(KXColor.livingAccent)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(KXColor.livingAccentSoft, in: Capsule())
+                        .lineLimit(1)
+                }
+                Button {
+                    showAnswerSheet = true
+                } label: {
+                    Image(systemName: "square.grid.3x3.fill")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(KXColor.livingAccent)
+                        .frame(width: 28, height: 28)
+                        .background(KXColor.livingAccentSoft, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(guideText(language, "答题卡", "解答一覧", "Answer sheet"))
                 if isTimed {
                     let urgent = remaining <= 60
                     Label(clockText, systemImage: "clock.fill")
@@ -595,6 +648,114 @@ struct GuideJLPTExamSessionView: View {
     }
 }
 
+/// 答题卡:整卷跳题面板。按科目分组展示题号格,已答=实心、当前=描边、未答=
+/// 浅底;底部常驻交卷按钮(带未答数),模拟真实考试的「检查—交卷」动线。
+private struct JLPTAnswerSheetView: View {
+    @Environment(\.appLanguage) private var language
+    let questions: [KaiXJLPTQuestionDTO]
+    let answers: [String: Int]
+    let current: Int
+    let onJump: (Int) -> Void
+    let onSubmit: () -> Void
+
+    private var unansweredCount: Int {
+        questions.filter { answers[$0.id] == nil }.count
+    }
+
+    /// 按 sectionLabel 连续分段(卷面本就按科目排序)。
+    private var sections: [(label: String, range: Range<Int>)] {
+        var out: [(String, Range<Int>)] = []
+        var start = 0
+        for (i, q) in questions.enumerated() {
+            let label = q.sectionLabel ?? ""
+            if i == 0 { continue }
+            let prev = questions[i - 1].sectionLabel ?? ""
+            if label != prev {
+                out.append((prev, start..<i))
+                start = i
+            }
+        }
+        if !questions.isEmpty {
+            out.append((questions.last?.sectionLabel ?? "", start..<questions.count))
+        }
+        return out
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: KXSpacing.lg) {
+                    HStack {
+                        Text(guideText(language, "答题卡", "解答一覧", "Answer sheet"))
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(KXColor.livingInk)
+                        Spacer(minLength: 0)
+                        Text(guideText(language, "未答 \(unansweredCount)", "未回答 \(unansweredCount)", "\(unansweredCount) unanswered"))
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(unansweredCount > 0 ? KXColor.livingWarm : KXColor.livingMuted)
+                    }
+                    ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
+                        VStack(alignment: .leading, spacing: 8) {
+                            if !section.label.isEmpty {
+                                Text(section.label)
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(KXColor.livingAccent)
+                            }
+                            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 8), spacing: 8) {
+                                ForEach(Array(section.range), id: \.self) { idx in
+                                    cell(idx)
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(KXSpacing.lg)
+            }
+            Divider()
+            Button(action: onSubmit) {
+                Text(unansweredCount > 0
+                    ? guideText(language, "交卷（还有 \(unansweredCount) 题未答）", "提出（未回答 \(unansweredCount) 問）", "Submit (\(unansweredCount) unanswered)")
+                    : guideText(language, "交卷看成绩", "提出して採点", "Submit for score"))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(KXColor.onAccent)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(KXColor.livingAccent, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+            }
+            .buttonStyle(KXPressableStyle(scale: 0.98))
+            .padding(KXSpacing.lg)
+        }
+        .background(KXColor.livingBackground.ignoresSafeArea())
+    }
+
+    private func cell(_ idx: Int) -> some View {
+        let q = questions[idx]
+        let answered = answers[q.id] != nil
+        let isCurrent = idx == current
+        return Button {
+            onJump(idx)
+        } label: {
+            Text("\(idx + 1)")
+                .font(.footnote.weight(.bold).monospacedDigit())
+                .foregroundStyle(answered ? KXColor.onAccent : KXColor.livingInk)
+                .frame(maxWidth: .infinity)
+                .frame(height: 36)
+                .background(
+                    answered ? KXColor.livingAccent : KXColor.livingSoft,
+                    in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+                )
+                .overlay {
+                    if isCurrent {
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .stroke(KXColor.livingInk.opacity(0.55), lineWidth: 2)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(guideText(language, "第 \(idx + 1) 题", "第 \(idx + 1) 問", "Question \(idx + 1)") + (answered ? guideText(language, "，已作答", "、回答済み", ", answered") : guideText(language, "，未作答", "、未回答", ", unanswered")))
+    }
+}
+
 /// 拦截系统 pop 手势:KXSwipeBackEnabler 把 interactivePopGestureRecognizer 的
 /// delegate 全局改成「栈深 > 1 即放行」,所以考试中要挡误滑只能直接禁用手势本身;
 /// 离场(交卷推结果页 / 确认退出)时恢复,不影响其他页面。
@@ -683,7 +844,13 @@ struct JLPTExamResultContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: KXSpacing.lg) {
-            scoreCard
+            // 全真卷(score_mode='jlpt_scaled')按官方计分结构出缩放分;
+            // 普通练习卷维持 0-100 百分比环。
+            if let scaled = result.scaled {
+                JLPTScaledScorePanel(scaled: scaled, correct: result.correct, total: result.total)
+            } else {
+                scoreCard
+            }
             // 语境内成交（转化最高的坑位）：交卷时刻按本次最弱分区推荐一件
             // 付费资料，sheet 就地打开、不打断学习会话。
             JLPTExamUpsellCard(result: result)
@@ -720,6 +887,122 @@ struct JLPTExamResultContent: View {
         .frame(maxWidth: .infinity)
         .padding(24)
         .jlptSurface(radius: KXRadius.sheet, elevated: true)
+    }
+}
+
+/// JLPT 标准出分面板(全真卷)：笔试缩放总分(0-120) + 各科分条(0-60 或合并
+/// 0-120,带基准点刻度) + 参考合格判定。不含聴解,note 免责必须展示 ——
+/// 绝不暗示与官方成绩等价。
+struct JLPTScaledScorePanel: View {
+    @Environment(\.appLanguage) private var language
+    let scaled: KaiXJLPTScaledResult
+    var correct: Int? = nil
+    var total: Int? = nil
+
+    private var passRef: Bool { scaled.passedWrittenReference ?? false }
+
+    var body: some View {
+        VStack(spacing: 14) {
+            JLPTEyebrow(text: guideText(language, "JLPT 标准出分 · 笔试参考", "JLPT 準拠スコア・筆記参考", "JLPT-style written score"))
+
+            HStack(alignment: .lastTextBaseline, spacing: 5) {
+                Text("\(scaled.writtenTotal ?? 0)")
+                    .kxScaledFont(52, relativeTo: .largeTitle, weight: .black, design: .rounded)
+                    .foregroundStyle(passRef ? KXColor.livingAccent : KXColor.livingWarm)
+                    .contentTransition(.numericText())
+                Text("/ \(scaled.writtenMax ?? 120)")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(KXColor.livingMuted)
+            }
+
+            JLPTPassPill(
+                passed: passRef,
+                title: passRef
+                    ? guideText(language,
+                                "达到笔试参考线 \(scaled.passLineWritten ?? 0)",
+                                "筆記参考ライン \(scaled.passLineWritten ?? 0) 到達",
+                                "Reached written reference line \(scaled.passLineWritten ?? 0)")
+                    : guideText(language,
+                                "未达笔试参考线 \(scaled.passLineWritten ?? 0)",
+                                "筆記参考ライン \(scaled.passLineWritten ?? 0) 未達",
+                                "Below written reference line \(scaled.passLineWritten ?? 0)")
+            )
+
+            if let correct, let total, total > 0 {
+                Text(guideText(language, "答对 \(correct)/\(total)", "正解 \(correct)/\(total)", "\(correct)/\(total) correct"))
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(KXColor.livingMuted)
+            }
+
+            VStack(spacing: 12) {
+                ForEach(scaled.scales ?? [], id: \.key) { scale in
+                    scaleRow(scale)
+                }
+            }
+            .padding(.top, 2)
+
+            if let note = scaled.note, !note.isEmpty {
+                Text(note)
+                    .font(.caption2)
+                    .foregroundStyle(KXColor.livingMuted)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(24)
+        .jlptSurface(radius: KXRadius.sheet, elevated: true)
+    }
+
+    private func scaleRow(_ scale: KaiXJLPTScaledScale) -> some View {
+        let scaledScore = scale.scaled ?? 0
+        let scaledMax = max(1, scale.scaledMax ?? 60)
+        let sectionMin = scale.sectionMin ?? 0
+        let passed = scale.passed ?? false
+        let tint = passed ? KXColor.livingAccent : KXColor.livingWarm
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(scale.label ?? scale.key ?? "")
+                    .font(.footnote.weight(.bold))
+                    .foregroundStyle(KXColor.livingInk)
+                Spacer(minLength: 8)
+                Text("\(scaledScore)")
+                    .font(.subheadline.weight(.black).monospacedDigit())
+                    .foregroundStyle(tint)
+                + Text(" / \(scaledMax)")
+                    .font(.caption2.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(KXColor.livingMuted)
+            }
+            // 分数条 + 基准点刻度:一眼看出「过没过 19/60(或 38/120)」。
+            GeometryReader { geo in
+                let w = geo.size.width
+                ZStack(alignment: .leading) {
+                    Capsule().fill(KXColor.livingSoft)
+                    Capsule()
+                        .fill(tint)
+                        .frame(width: max(6, w * CGFloat(scaledScore) / CGFloat(scaledMax)))
+                    if sectionMin > 0 {
+                        Rectangle()
+                            .fill(KXColor.livingInk.opacity(0.35))
+                            .frame(width: 2)
+                            .offset(x: w * CGFloat(sectionMin) / CGFloat(scaledMax) - 1)
+                    }
+                }
+            }
+            .frame(height: 10)
+            .clipShape(Capsule())
+            HStack {
+                if let raw = scale.raw, let rawMax = scale.rawMax {
+                    Text(guideText(language, "答对 \(raw)/\(rawMax)", "正解 \(raw)/\(rawMax)", "\(raw)/\(rawMax) correct"))
+                }
+                Spacer(minLength: 0)
+                if sectionMin > 0 {
+                    Text(guideText(language, "基准点 \(sectionMin)", "基準点 \(sectionMin)", "Section min \(sectionMin)"))
+                }
+            }
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(KXColor.livingMuted)
+        }
     }
 }
 
