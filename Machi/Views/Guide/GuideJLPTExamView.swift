@@ -23,6 +23,9 @@ struct GuideJLPTExamView: View {
     @State private var upgradeMessage: String?
     /// 非会员类的开考失败(题目缺失/网络/服务端错误)——走中性弹窗,不带会员 CTA。
     @State private var startErrorMessage: String?
+    /// Machi 币不足开考——弹窗带「去充值」直达钱包。
+    @State private var coinInsufficient = false
+    @State private var showWalletSheet = false
 
     // active session pushed via navigation
     @State private var activeStart: KaiXJLPTExamStartResponse?
@@ -82,6 +85,16 @@ struct GuideJLPTExamView: View {
             Button(guideText(language, "好", "OK", "OK"), role: .cancel) {}
         } message: {
             Text(startErrorMessage ?? "")
+        }
+        .alert(guideText(language, "Machi 币不足", "Machi コイン不足", "Not enough coins"),
+               isPresented: $coinInsufficient) {
+            Button(guideText(language, "去充值", "チャージする", "Top up")) { showWalletSheet = true }
+            Button(guideText(language, "以后再说", "あとで", "Later"), role: .cancel) {}
+        } message: {
+            Text(guideText(language, "开考需要 Machi 币，余额不足。充值后即可参加全真模考。", "受験には Machi コインが必要です。チャージ後に受験できます。", "Full mock exams cost Machi Coins. Top up to take one."))
+        }
+        .sheet(isPresented: $showWalletSheet) {
+            NavigationStack { WalletView() }
         }
     }
 
@@ -147,6 +160,9 @@ struct GuideJLPTExamView: View {
                         } else {
                             examMetaChip(icon: "checkmark.seal", text: guideText(language, "合格 \(exam.passScore ?? 60)", "合格 \(exam.passScore ?? 60)", "≥\(exam.passScore ?? 60)"))
                         }
+                        if let cost = exam.coinCost, cost > 0 {
+                            coinChip(cost: cost, member: exam.coinCostMember)
+                        }
                     }
                 }
                 Spacer(minLength: 0)
@@ -177,6 +193,21 @@ struct GuideJLPTExamView: View {
         .foregroundStyle(KXColor.livingMuted)
         .padding(.horizontal, 7).padding(.vertical, 3)
         .background(KXColor.livingSoft, in: Capsule())
+    }
+
+    /// Machi 币价 chip:开考消耗,琥珀色区别于中性 meta chip;附会员价。
+    private func coinChip(cost: Int, member: Int?) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: "circle.hexagongrid.fill").kxScaledFont(9, weight: .bold)
+            Text("\(cost)").font(.caption2.weight(.bold))
+            if let member, member < cost {
+                Text(guideText(language, "· 会员 \(member)", "· 会員 \(member)", "· Member \(member)"))
+                    .font(.caption2.weight(.semibold))
+            }
+        }
+        .foregroundStyle(.orange)
+        .padding(.horizontal, 7).padding(.vertical, 3)
+        .background(Color.orange.opacity(0.14), in: Capsule())
     }
 
     private func historyRow(_ item: KaiXJLPTExamHistoryItem) -> some View {
@@ -250,6 +281,8 @@ struct GuideJLPTExamView: View {
             // 通用失败走中性弹窗,否则把无关错误伪装成会员墙、误导用户去买会员。
             if err.error.code == "MEMBER_REQUIRED" || err.error.code.contains("QUOTA") {
                 upgradeMessage = err.error.message
+            } else if err.error.code == "EXAM_INSUFFICIENT_COINS" {
+                coinInsufficient = true
             } else if err.error.code == "no_questions" {
                 startErrorMessage = guideText(language, "该模考暂无可用题目。", "この模試には利用可能な問題がありません。", "This exam has no questions yet.")
             } else {
@@ -691,6 +724,8 @@ struct GuideJLPTPaperFlowView: View {
     @State private var activeStart: KaiXJLPTExamStartResponse?
     @State private var starting = false
     @State private var startError: String?
+    @State private var coinInsufficient = false
+    @State private var showWalletSheet = false
 
     private var sections: [KaiXJLPTExam] { detail?.sections ?? [] }
 
@@ -735,6 +770,16 @@ struct GuideJLPTPaperFlowView: View {
                isPresented: Binding(get: { startError != nil }, set: { if !$0 { startError = nil } })) {
             Button(guideText(language, "好", "OK", "OK"), role: .cancel) {}
         } message: { Text(startError ?? "") }
+        .alert(guideText(language, "Machi 币不足", "Machi コイン不足", "Not enough coins"),
+               isPresented: $coinInsufficient) {
+            Button(guideText(language, "去充值", "チャージする", "Top up")) { showWalletSheet = true }
+            Button(guideText(language, "以后再说", "あとで", "Later"), role: .cancel) {}
+        } message: {
+            Text(guideText(language, "开考需要 Machi 币，余额不足。充值后即可参加全真模考。", "受験には Machi コインが必要です。チャージ後に受験できます。", "Full mock exams cost Machi Coins. Top up to take one."))
+        }
+        .sheet(isPresented: $showWalletSheet) {
+            NavigationStack { WalletView() }
+        }
     }
 
     private var intro: some View {
@@ -844,7 +889,11 @@ struct GuideJLPTPaperFlowView: View {
             idx = i
             phase = .section
         } catch let err as KaiXAPIError {
-            startError = err.error.message
+            if err.error.code == "EXAM_INSUFFICIENT_COINS" {
+                coinInsufficient = true
+            } else {
+                startError = err.error.message
+            }
         } catch {
             startError = guideText(language, "无法开始科目，请稍后再试。", "科目を開始できません。", "Couldn't start the section.")
         }
