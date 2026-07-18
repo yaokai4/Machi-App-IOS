@@ -27,6 +27,9 @@ struct GuideJLPTExamView: View {
     // active session pushed via navigation
     @State private var activeStart: KaiXJLPTExamStartResponse?
     @State private var pushSession = false
+    // 分科整卷:点父卷进入分段流转。
+    @State private var activePaperId: String?
+    @State private var pushPaper = false
 
     init(initialLevel: JLPTLevel? = nil) {
         self.initialLevel = initialLevel
@@ -57,6 +60,11 @@ struct GuideJLPTExamView: View {
         .navigationDestination(isPresented: $pushSession) {
             if let start = activeStart {
                 GuideJLPTExamSessionView(start: start)
+            }
+        }
+        .navigationDestination(isPresented: $pushPaper) {
+            if let pid = activePaperId {
+                GuideJLPTPaperFlowView(paperId: pid)
             }
         }
         .task { await load() }
@@ -108,7 +116,12 @@ struct GuideJLPTExamView: View {
 
     private func examRow(_ exam: KaiXJLPTExam) -> some View {
         Button {
-            Task { await start(exam) }
+            if exam.isPaper ?? false {
+                activePaperId = exam.id
+                pushPaper = true
+            } else {
+                Task { await start(exam) }
+            }
         } label: {
             HStack(spacing: KXSpacing.md) {
                 JLPTLevelBadge(level: exam.level ?? "", size: 48)
@@ -121,12 +134,15 @@ struct GuideJLPTExamView: View {
                         }
                     }
                     HStack(spacing: 6) {
+                        if (exam.isPaper ?? false), let sc = exam.sectionCount, sc > 0 {
+                            examMetaChip(icon: "square.stack.3d.up.fill", text: guideText(language, "分科 \(sc) 科", "分野別 \(sc) 科", "\(sc) sections"))
+                        }
                         examMetaChip(icon: "list.number", text: "\(exam.questionCount ?? 0)")
                         if (exam.durationSeconds ?? 0) > 0 {
                             examMetaChip(icon: "clock", text: minuteText(exam.durationSeconds ?? 0))
                         }
-                        if exam.scoreMode == "jlpt_scaled" {
-                            // 全真卷:JLPT 官方计分结构出缩放分,不适用 0-100 合格线。
+                        if (exam.isPaper ?? false) || exam.scoreMode == "jlpt_scaled" {
+                            // 全真卷/分科卷:JLPT 官方计分结构出缩放分,不适用 0-100 合格线。
                             examMetaChip(icon: "chart.bar.fill", text: guideText(language, "JLPT 标准出分", "JLPT 準拠採点", "JLPT-style scoring"))
                         } else {
                             examMetaChip(icon: "checkmark.seal", text: guideText(language, "合格 \(exam.passScore ?? 60)", "合格 \(exam.passScore ?? 60)", "≥\(exam.passScore ?? 60)"))
@@ -253,6 +269,9 @@ struct GuideJLPTExamSessionView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     let start: KaiXJLPTExamStartResponse
+    /// 分科整卷模式:交卷后不推结果页,而是回调让父卷流转推进到下一科/合并成绩。
+    /// 单卷模式(默认 nil)保持原行为——推 GuideJLPTExamResultView。
+    var onSectionSubmitted: ((KaiXJLPTExamResult) -> Void)? = nil
 
     @State private var cursor = 0
     @State private var answers: [String: Int] = [:]   // questionId -> selected
@@ -641,13 +660,313 @@ struct GuideJLPTExamSessionView: View {
             unsyncedAtSubmit = unsavedAnswers.count
             let r = try await KaiXAPIClient.shared.jlptExamSubmit(sessionId: sid)
             result = r
-            pushResult = true
+            // 分科模式:交卷后回调让父卷推进(不推单卷结果页);单卷模式推结果页。
+            if let onSectionSubmitted {
+                onSectionSubmitted(r)
+            } else {
+                pushResult = true
+            }
         } catch {
             // Leave the session open and surface the failure so a timed-out
             // auto-submit doesn't look like a frozen exam with no way forward.
             submitFailed = true
         }
         submitting = false
+    }
+}
+
+/// 分科整卷流转:父卷 → 各科目一览(intro)→ 逐段独立计时(复用 SessionView,
+/// 含听力播放器)→ 中间休息屏 → 合并成绩。真实 JLPT 的两段独立计时结构。
+struct GuideJLPTPaperFlowView: View {
+    @Environment(\.appLanguage) private var language
+    @Environment(\.dismiss) private var dismiss
+    let paperId: String
+
+    @State private var detail: KaiXJLPTPaperDetail?
+    @State private var isLoading = true
+    @State private var loadFailed = false
+    private enum Phase { case intro, section, betweenBreak, result }
+    @State private var phase: Phase = .intro
+    @State private var idx = 0
+    @State private var activeStart: KaiXJLPTExamStartResponse?
+    @State private var starting = false
+    @State private var startError: String?
+
+    private var sections: [KaiXJLPTExam] { detail?.sections ?? [] }
+
+    private func minutes(_ seconds: Int) -> String {
+        guideText(language, "\(seconds / 60) 分钟", "\(seconds / 60) 分", "\(seconds / 60) min")
+    }
+
+    var body: some View {
+        Group {
+            if phase == .section, let start = activeStart {
+                // 逐段答题直接复用单卷 SessionView;交卷回调推进,不推单卷结果页。
+                GuideJLPTExamSessionView(start: start, onSectionSubmitted: { _ in advance() })
+            } else if phase == .result {
+                GuideJLPTPaperResultView(paperId: paperId, onExit: { dismiss() })
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: KXSpacing.lg) {
+                        if isLoading {
+                            JLPTStateView(title: guideText(language, "正在加载…", "読み込み中…", "Loading…"), isLoading: true)
+                                .frame(minHeight: 320)
+                        } else if loadFailed || detail == nil {
+                            JLPTStateView(systemImage: "wifi.slash",
+                                          title: guideText(language, "加载失败", "読み込みに失敗しました", "Couldn't load"),
+                                          actionTitle: guideText(language, "重试", "再試行", "Retry"),
+                                          action: { Task { await load() } })
+                                .frame(minHeight: 320)
+                        } else if phase == .intro {
+                            intro
+                        } else {
+                            betweenBreak
+                        }
+                    }
+                    .padding(KXSpacing.lg)
+                }
+                .background(KXColor.livingBackground.ignoresSafeArea())
+            }
+        }
+        .navigationTitle(detail?.paper.title ?? guideText(language, "全真模考", "本番形式模試", "Full mock exam"))
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await load() }
+        .alert(guideText(language, "无法开始科目", "科目を開始できません", "Couldn't start section"),
+               isPresented: Binding(get: { startError != nil }, set: { if !$0 { startError = nil } })) {
+            Button(guideText(language, "好", "OK", "OK"), role: .cancel) {}
+        } message: { Text(startError ?? "") }
+    }
+
+    private var intro: some View {
+        VStack(alignment: .leading, spacing: KXSpacing.lg) {
+            VStack(alignment: .leading, spacing: 6) {
+                JLPTEyebrow(text: "JLPT · \(detail?.paper.level ?? "")")
+                Text(detail?.paper.title ?? "")
+                    .kxScaledFont(22, relativeTo: .title3, weight: .bold, design: .rounded)
+                    .foregroundStyle(KXColor.livingInk)
+                Text(guideText(language,
+                               "按官方结构分两段独立计时：言語知識・読解 → 聴解，交卷合并出分。",
+                               "本番構成で2部制：言語知識・読解 → 聴解。合算して採点。",
+                               "Two independently-timed sections like the real exam, scored together."))
+                    .font(.footnote).foregroundStyle(KXColor.livingMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            VStack(spacing: 10) {
+                ForEach(Array(sections.enumerated()), id: \.element.id) { i, s in
+                    HStack(spacing: KXSpacing.md) {
+                        Text("\(i + 1)")
+                            .font(.subheadline.weight(.black))
+                            .foregroundStyle(KXColor.livingAccent)
+                            .frame(width: 34, height: 34)
+                            .background(KXColor.livingAccentSoft, in: RoundedRectangle(cornerRadius: KXRadius.sm, style: .continuous))
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(s.title ?? s.sectionLabel ?? "")
+                                .font(.subheadline.weight(.bold)).foregroundStyle(KXColor.livingInk)
+                            Text("\(s.questionCount ?? 0) \(guideText(language, "题", "問", "Q")) · \(minutes(s.durationSeconds ?? 0))"
+                                 + ((s.section == "listening") ? " · " + guideText(language, "含听力音频", "音声あり", "with audio") : ""))
+                                .font(.caption2.weight(.medium)).foregroundStyle(KXColor.livingMuted)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity)
+                    .jlptSurface(radius: KXRadius.lg)
+                }
+            }
+            startButton(title: guideText(language, "开始考试", "受験を開始", "Start the exam")) {
+                Task { await startSection(0) }
+            }
+            JLPTComplianceNote(text: detail?.disclaimer)
+        }
+    }
+
+    private var betweenBreak: some View {
+        let cur = sections.indices.contains(idx) ? sections[idx] : nil
+        return VStack(alignment: .leading, spacing: KXSpacing.lg) {
+            JLPTEyebrow(text: detail?.paper.title ?? "")
+            VStack(spacing: 12) {
+                Text(guideText(language, "第 \(idx + 1) / \(sections.count) 科", "\(idx + 1) / \(sections.count) 科目", "Section \(idx + 1) / \(sections.count)"))
+                    .font(.caption.weight(.bold)).foregroundStyle(KXColor.livingAccent)
+                Text(cur?.title ?? "")
+                    .kxScaledFont(20, relativeTo: .title3, weight: .bold, design: .rounded)
+                    .foregroundStyle(KXColor.livingInk)
+                Text(cur?.section == "listening"
+                     ? guideText(language, "聴解：音频只能顺次播放，请准备好耳机。", "聴解：音声は順に再生。イヤホンをご準備ください。", "Listening: audio plays in sequence — headphones recommended.")
+                     : "\(cur?.questionCount ?? 0) \(guideText(language, "题", "問", "Q")) · \(minutes(cur?.durationSeconds ?? 0))")
+                    .font(.footnote.weight(.medium)).foregroundStyle(KXColor.livingMuted)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                startButton(title: guideText(language, "开始本科目", "この科目を開始", "Start this section")) {
+                    Task { await startSection(idx) }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(24)
+            .jlptSurface(radius: KXRadius.sheet, elevated: true)
+            JLPTComplianceNote(text: detail?.disclaimer)
+        }
+    }
+
+    private func startButton(title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: KXSpacing.sm) {
+                if starting { ProgressView().controlSize(.small).tint(KXColor.onTint(KXColor.livingAccent)) }
+                Image(systemName: "graduationcap.fill")
+                Text(title).font(.subheadline.weight(.bold))
+            }
+            .foregroundStyle(KXColor.onTint(KXColor.livingAccent))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(KXColor.livingAccent, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+            .shadow(color: KXColor.livingAccent.opacity(0.24), radius: 10, y: 4)
+        }
+        .buttonStyle(KXPressableStyle(scale: 0.98))
+        .disabled(starting)
+    }
+
+    private func advance() {
+        if idx + 1 < sections.count {
+            idx += 1
+            activeStart = nil
+            phase = .betweenBreak
+        } else {
+            phase = .result
+        }
+    }
+
+    private func startSection(_ i: Int) async {
+        guard !starting, sections.indices.contains(i) else { return }
+        starting = true
+        defer { starting = false }
+        do {
+            let resp = try await KaiXAPIClient.shared.jlptExamStart(examId: sections[i].id)
+            activeStart = resp
+            idx = i
+            phase = .section
+        } catch let err as KaiXAPIError {
+            startError = err.error.message
+        } catch {
+            startError = guideText(language, "无法开始科目，请稍后再试。", "科目を開始できません。", "Couldn't start the section.")
+        }
+    }
+
+    private func load() async {
+        guard detail == nil else { return }
+        isLoading = true
+        loadFailed = false
+        do {
+            detail = try await KaiXAPIClient.shared.jlptPaper(paperId: paperId)
+        } catch {
+            loadFailed = true
+        }
+        isLoading = false
+    }
+}
+
+/// 分科整卷合并成绩:笔试缩放分(JLPTScaledScorePanel)+ 聴解百分比 + 各科回看。
+struct GuideJLPTPaperResultView: View {
+    @Environment(\.appLanguage) private var language
+    let paperId: String
+    var onExit: () -> Void
+
+    @State private var result: KaiXJLPTPaperResult?
+    @State private var isLoading = true
+    @State private var loadFailed = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: KXSpacing.lg) {
+                if isLoading {
+                    JLPTStateView(title: guideText(language, "正在合并成绩…", "採点を集計中…", "Tallying results…"), isLoading: true)
+                        .frame(minHeight: 320)
+                } else if loadFailed || result == nil {
+                    JLPTStateView(systemImage: "wifi.slash",
+                                  title: guideText(language, "加载失败", "読み込みに失敗しました", "Couldn't load"),
+                                  actionTitle: guideText(language, "重试", "再試行", "Retry"),
+                                  action: { Task { await load() } })
+                } else if let r = result {
+                    let passed = r.scaled?.passedWrittenReference ?? false
+                    JLPTEyebrow(text: "JLPT · \(r.level ?? "") · " + guideText(language, "成绩", "結果", "Result"))
+                    Text(passed
+                         ? guideText(language, "达到笔试参考线！", "筆記参考ライン到達！", "Reached the written reference line!")
+                         : guideText(language, "再接再厉", "次回に向けて", "Keep going"))
+                        .kxScaledFont(24, relativeTo: .title2, weight: .heavy, design: .rounded)
+                        .foregroundStyle(KXColor.livingInk)
+
+                    if let scaled = r.scaled {
+                        JLPTScaledScorePanel(scaled: scaled)
+                    }
+                    if let l = r.listening {
+                        VStack(alignment: .leading, spacing: 6) {
+                            JLPTEyebrow(text: guideText(language, "聴解（参考）", "聴解（参考）", "Listening (reference)"))
+                            Text(guideText(language, "答对 \(l.correct ?? 0)/\(l.total ?? 0) · 得分 \(l.score ?? 0)", "正解 \(l.correct ?? 0)/\(l.total ?? 0) · \(l.score ?? 0)点", "\(l.correct ?? 0)/\(l.total ?? 0) correct · \(l.score ?? 0)"))
+                                .font(.subheadline.weight(.bold)).foregroundStyle(KXColor.livingInk)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(16)
+                        .jlptSurface(radius: KXRadius.lg)
+                    }
+                    ForEach(r.sections ?? []) { s in
+                        if s.done ?? false, let sid = s.sessionId {
+                            NavigationLink {
+                                GuideJLPTExamReviewView(sessionId: sid, title: s.title ?? s.sectionLabel ?? "")
+                            } label: {
+                                sectionRow(s)
+                            }
+                            .buttonStyle(KXPressableStyle(scale: 0.98))
+                        } else {
+                            sectionRow(s)
+                        }
+                    }
+                    Button(action: onExit) {
+                        Label(guideText(language, "返回模考列表", "一覧へ戻る", "Back to exams"), systemImage: "arrow.uturn.backward")
+                            .font(.subheadline.weight(.bold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 46)
+                            .background(KXColor.livingAccentSoft, in: Capsule())
+                            .foregroundStyle(KXColor.livingAccent)
+                    }
+                    .buttonStyle(.plain)
+                    JLPTComplianceNote(text: r.disclaimer)
+                }
+            }
+            .padding(KXSpacing.lg)
+        }
+        .background(KXColor.livingBackground.ignoresSafeArea())
+        .navigationTitle(guideText(language, "考试结果", "試験結果", "Result"))
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await load() }
+    }
+
+    private func sectionRow(_ s: KaiXJLPTPaperResultSection) -> some View {
+        HStack(spacing: KXSpacing.md) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(s.title ?? s.sectionLabel ?? "")
+                    .font(.subheadline.weight(.bold)).foregroundStyle(KXColor.livingInk)
+                Text((s.done ?? false)
+                     ? guideText(language, "答对 \(s.correct ?? 0)/\(s.total ?? 0)", "正解 \(s.correct ?? 0)/\(s.total ?? 0)", "\(s.correct ?? 0)/\(s.total ?? 0) correct")
+                     : guideText(language, "未完成", "未完了", "Not done"))
+                    .font(.caption2.weight(.medium)).foregroundStyle(KXColor.livingMuted)
+            }
+            Spacer(minLength: 0)
+            if (s.done ?? false), s.sessionId != nil {
+                Image(systemName: "chevron.right").font(.caption2.weight(.bold)).foregroundStyle(KXColor.livingMuted)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity)
+        .jlptSurface(radius: KXRadius.lg)
+    }
+
+    private func load() async {
+        isLoading = true
+        loadFailed = false
+        do {
+            result = try await KaiXAPIClient.shared.jlptPaperResult(paperId: paperId)
+        } catch {
+            loadFailed = true
+        }
+        isLoading = false
     }
 }
 

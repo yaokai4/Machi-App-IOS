@@ -1,4 +1,174 @@
+import AVFoundation
+import Combine
 import SwiftUI
+
+// MARK: - JLPT 听力音频播放器 ------------------------------------------------
+
+/// AVPlayer 驱动的听力播放器控制器。周期性时间观察驱动进度;换 url 即重建。
+@MainActor
+final class JLPTAudioPlayerModel: ObservableObject {
+    @Published var playing = false
+    @Published var current: Double = 0
+    @Published var duration: Double = 0
+    @Published var failed = false
+
+    private var player: AVPlayer?
+    private var timeObserver: Any?
+    private var endObserver: NSObjectProtocol?
+    private var statusObservation: NSKeyValueObservation?
+
+    func load(_ url: URL) {
+        teardown()
+        // 听力要外放:即便手机静音开关拨到静音也应出声(考试场景)。
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+        try? AVAudioSession.sharedInstance().setActive(true)
+        let item = AVPlayerItem(url: url)
+        let p = AVPlayer(playerItem: item)
+        player = p
+        statusObservation = item.observe(\.status) { [weak self] it, _ in
+            Task { @MainActor in
+                if it.status == .failed { self?.failed = true }
+                else if it.status == .readyToPlay {
+                    let d = it.duration.seconds
+                    if d.isFinite, d > 0 { self?.duration = d }
+                }
+            }
+        }
+        timeObserver = p.addPeriodicTimeObserver(
+            forInterval: CMTime(seconds: 0.2, preferredTimescale: 600), queue: .main
+        ) { [weak self] time in
+            Task { @MainActor in
+                guard let self else { return }
+                self.current = time.seconds.isFinite ? time.seconds : 0
+                if self.duration == 0, let d = self.player?.currentItem?.duration.seconds,
+                   d.isFinite, d > 0 { self.duration = d }
+            }
+        }
+        endObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.playing = false; self?.player?.seek(to: .zero) }
+        }
+    }
+
+    func toggle() {
+        guard let p = player else { return }
+        if playing { p.pause(); playing = false }
+        else { p.play(); playing = true }
+    }
+
+    func replay() {
+        guard let p = player else { return }
+        p.seek(to: .zero); p.play(); playing = true
+    }
+
+    func seek(toFraction f: Double) {
+        guard let p = player, duration > 0 else { return }
+        let t = CMTime(seconds: max(0, min(1, f)) * duration, preferredTimescale: 600)
+        p.seek(to: t)
+        current = t.seconds
+    }
+
+    func teardown() {
+        if let o = timeObserver { player?.removeTimeObserver(o); timeObserver = nil }
+        if let o = endObserver { NotificationCenter.default.removeObserver(o); endObserver = nil }
+        statusObservation = nil
+        player?.pause()
+        player = nil
+        playing = false
+    }
+
+    deinit {
+        if let o = timeObserver { player?.removeTimeObserver(o) }
+        if let o = endObserver { NotificationCenter.default.removeObserver(o) }
+    }
+}
+
+struct JLPTAudioPlayer: View {
+    @Environment(\.appLanguage) private var language
+    let url: URL
+    @StateObject private var model = JLPTAudioPlayerModel()
+    @State private var scrubbing = false
+    @State private var scrubFraction: Double = 0
+
+    private static func clock(_ s: Double) -> String {
+        let v = (s.isFinite && s > 0) ? Int(s) : 0
+        return String(format: "%d:%02d", v / 60, v % 60)
+    }
+
+    private var fraction: Double {
+        if scrubbing { return scrubFraction }
+        return model.duration > 0 ? min(1, model.current / model.duration) : 0
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "headphones")
+                Text(guideText(language, "听力音频", "リスニング音声", "Listening audio"))
+            }
+            .font(.caption.weight(.bold))
+            .foregroundStyle(KXColor.livingAccent)
+
+            if model.failed {
+                Text(guideText(language, "音频加载失败，请检查网络后重试。", "音声を読み込めませんでした。", "Couldn't load the audio."))
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(KXColor.livingMuted)
+            } else {
+                HStack(spacing: KXSpacing.md) {
+                    Button(action: model.toggle) {
+                        Image(systemName: model.playing ? "pause.fill" : "play.fill")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(KXColor.onTint(KXColor.livingAccent))
+                            .frame(width: 46, height: 46)
+                            .background(KXColor.livingAccent, in: Circle())
+                            .shadow(color: KXColor.livingAccent.opacity(0.24), radius: 8, y: 3)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(model.playing ? guideText(language, "暂停", "一時停止", "Pause") : guideText(language, "播放", "再生", "Play"))
+
+                    VStack(spacing: 3) {
+                        Slider(
+                            value: Binding(
+                                get: { fraction },
+                                set: { scrubFraction = $0 }
+                            ),
+                            in: 0...1,
+                            onEditingChanged: { editing in
+                                scrubbing = editing
+                                if !editing { model.seek(toFraction: scrubFraction) }
+                            }
+                        )
+                        .tint(KXColor.livingAccent)
+                        HStack {
+                            Text(Self.clock(scrubbing ? scrubFraction * model.duration : model.current))
+                            Spacer()
+                            Text(Self.clock(model.duration))
+                        }
+                        .font(.caption2.weight(.bold).monospacedDigit())
+                        .foregroundStyle(KXColor.livingMuted)
+                    }
+
+                    Button(action: model.replay) {
+                        Image(systemName: "gobackward")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(KXColor.livingAccent)
+                            .frame(width: 38, height: 38)
+                            .overlay(Circle().stroke(KXColor.livingAccent.opacity(0.3), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(guideText(language, "重播", "もう一度", "Replay"))
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(KXColor.livingAccentSoft.opacity(0.5), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous).stroke(KXColor.livingAccent.opacity(0.25), lineWidth: 0.8))
+        .task(id: url) { model.load(url) }
+        .onDisappear { model.teardown() }
+    }
+}
 
 // MARK: - JLPT 备考核心 (iOS-3) — shared building blocks
 //
@@ -576,11 +746,41 @@ struct JLPTQuestionCard: View {
     var explaining: Bool = false
     var explanationText: String? = nil
 
+    /// 听力题:答题时默认不显示脚本(听力就是要「听」);已判分/回看时或手动展开
+    /// 后才显示原文，便于对照学习。
+    @State private var showScript = false
+
+    private var audioURL: URL? {
+        guard let raw = question.audioUrl, !raw.isEmpty else { return nil }
+        if raw.hasPrefix("/") {
+            return URL(string: raw, relativeTo: KaiXBackend.baseURL)?.absoluteURL
+        }
+        return URL(string: raw)
+    }
+    private var scriptVisible: Bool { audioURL == nil || revealed || showScript }
+
     var body: some View {
         VStack(alignment: .leading, spacing: KXSpacing.lg) {
             header
 
-            if let passage = question.passage, !passage.isEmpty {
+            if let url = audioURL {
+                JLPTAudioPlayer(url: url)
+            }
+
+            if let passage = question.passage, !passage.isEmpty, audioURL != nil, !scriptVisible {
+                Button {
+                    withAnimation(.snappy(duration: 0.2)) { showScript = true }
+                } label: {
+                    Label(guideText(language, "显示听力原文", "スクリプトを表示", "Show transcript"), systemImage: "chevron.down")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(KXColor.livingMuted)
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .overlay(Capsule().stroke(KXColor.livingInk.opacity(0.12), lineWidth: 0.8))
+                }
+                .buttonStyle(.plain)
+            }
+
+            if let passage = question.passage, !passage.isEmpty, scriptVisible {
                 Text(passage)
                     .font(.footnote)
                     .foregroundStyle(KXColor.livingInk)

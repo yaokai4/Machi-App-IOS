@@ -1975,6 +1975,9 @@ struct KaiXJLPTQuestionDTO: Codable, Equatable, Hashable, Identifiable {
     let stem: String
     let passage: String?
     let audioMediaId: String?
+    /// 听力题音频的可播放 URL(服务端 LEFT JOIN media 解析;非听力为空)。相对
+    /// /media/... 由 kaixMediaURL 拼后端 base。
+    let audioUrl: String?
     let choices: [String]
     let difficulty: Int?
     let isMemberOnly: Bool?
@@ -2206,12 +2209,66 @@ struct KaiXJLPTExam: Codable, Equatable, Hashable, Identifiable {
     let title: String?
     let kind: String?
     let section: String?
+    let sectionLabel: String?
     let questionCount: Int?
     let durationSeconds: Int?
     let passScore: Int?
     let isMemberOnly: Bool?
     /// 'percent'(默认) 或 'jlpt_scaled'(全真卷:提交后按官方计分结构出缩放分)。
     let scoreMode: String?
+    /// 分科整卷:父卷/子科目标记与聚合。
+    let parentExamId: String?
+    let isPaper: Bool?
+    let isSection: Bool?
+    let sortOrder: Int?
+    /// 父卷(isPaper)聚合的子科目数(list_exams 计算)。
+    let sectionCount: Int?
+}
+
+/// 分科整卷详情:父卷 + 有序子科目(客户端按顺序逐段推进)。
+struct KaiXJLPTPaperDetail: Codable, Equatable {
+    let status: String?
+    let paper: KaiXJLPTExam
+    let sections: [KaiXJLPTExam]?
+    let disclaimer: String?
+}
+
+/// 分科整卷合并成绩里的单科条目。
+struct KaiXJLPTPaperResultSection: Codable, Equatable, Hashable, Identifiable {
+    let examId: String
+    let section: String?
+    let sectionLabel: String?
+    let title: String?
+    let done: Bool?
+    let sessionId: String?
+    let total: Int?
+    let correct: Int?
+    let score: Int?
+    let passed: Bool?
+    let durationSeconds: Int?
+    let scaled: KaiXJLPTScaledResult?
+    var id: String { examId }
+}
+
+/// 聴解(参考)百分比段。
+struct KaiXJLPTPaperListening: Codable, Equatable, Hashable {
+    let score: Int?
+    let correct: Int?
+    let total: Int?
+    let passed: Bool?
+}
+
+/// 分科整卷合并成绩:笔试缩放分 + 聴解百分比。
+struct KaiXJLPTPaperResult: Codable, Equatable {
+    let status: String?
+    let paperId: String?
+    let level: String?
+    let title: String?
+    let complete: Bool?
+    let sections: [KaiXJLPTPaperResultSection]?
+    let scaled: KaiXJLPTScaledResult?
+    let listening: KaiXJLPTPaperListening?
+    let disclaimer: String?
 }
 
 /// JLPT 缩放分的单科条目(言語知識/読解,或 N4·N5 的合并科)。

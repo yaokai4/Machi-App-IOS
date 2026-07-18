@@ -1000,4 +1000,18 @@ extension KaiXAPIClient {
         let data = try await request("GET", "/api/guide/jlpt/exam/session/\(id.encodedPathSegment)")
         return try decode(data)
     }
+
+    /// 分科整卷详情(有序子科目)。逐段仍走 jlptExamStart/Answer/Submit。
+    func jlptPaper(paperId: String) async throws -> KaiXJLPTPaperDetail {
+        let id = try requirePathIdentifier(paperId)
+        let data = try await request("GET", "/api/guide/jlpt/paper/\(id.encodedPathSegment)")
+        return try decode(data)
+    }
+
+    /// 分科整卷合并成绩(笔试缩放分 + 聴解百分比)。
+    func jlptPaperResult(paperId: String) async throws -> KaiXJLPTPaperResult {
+        let id = try requirePathIdentifier(paperId)
+        let data = try await request("GET", "/api/guide/jlpt/paper/\(id.encodedPathSegment)/result")
+        return try decode(data)
+    }
 }
