@@ -38,3 +38,6 @@ Carthage/Build/
 # Local isolated Git worktrees.
 .worktrees/
 .derivedData/
+
+# 内部工程计划文档只进私有 web 仓库，不进公开仓库
+docs/superpowers/

@@ -2,6 +2,15 @@ import Combine
 import SwiftUI
 import UIKit
 
+private func jlptResumeAnswerMap(_ answers: [KaiXJLPTExamResumeAnswer]) -> [String: Int] {
+    answers.reduce(into: [:]) { result, answer in
+        guard let questionId = answer.questionId,
+              let selectedIndex = answer.selectedIndex,
+              selectedIndex >= 0 else { return }
+        result[questionId] = selectedIndex
+    }
+}
+
 /// 模拟考试 — exam list → timed session (answer each question, per-question saved
 /// server-side) → submit → scored breakdown with answers revealed. Also lists
 /// past sessions for 回看. Member-only exams surface an upgrade prompt.
@@ -26,9 +35,11 @@ struct GuideJLPTExamView: View {
     /// Machi 币不足开考——弹窗带「去充值」直达钱包。
     @State private var coinInsufficient = false
     @State private var showWalletSheet = false
+    @State private var pendingStartIntent: JLPTExamStartIntent?
 
     // active session pushed via navigation
     @State private var activeStart: KaiXJLPTExamStartResponse?
+    @State private var activeStartReceipt: JLPTExamStartReceipt?
     @State private var pushSession = false
     // 分科整卷:点父卷进入分段流转。
     @State private var activePaperId: String?
@@ -61,8 +72,8 @@ struct GuideJLPTExamView: View {
         .navigationTitle(guideText(language, "模拟考试", "模擬試験", "Mock exams"))
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(isPresented: $pushSession) {
-            if let start = activeStart {
-                GuideJLPTExamSessionView(start: start)
+            if let start = activeStart, let receipt = activeStartReceipt {
+                GuideJLPTExamSessionView(start: start, startReceipt: receipt)
             }
         }
         .navigationDestination(isPresented: $pushPaper) {
@@ -95,6 +106,21 @@ struct GuideJLPTExamView: View {
         }
         .sheet(isPresented: $showWalletSheet) {
             NavigationStack { WalletView() }
+        }
+        .sheet(item: $pendingStartIntent) { intent in
+            JLPTExamStartConfirmationView(
+                intent: intent,
+                isStarting: starting != nil,
+                onConfirm: { Task { await confirmStart(intent) } },
+                onWallet: {
+                    pendingStartIntent = nil
+                    showWalletSheet = true
+                },
+                onMembership: {
+                    pendingStartIntent = nil
+                    router.open(.guideMemberResources, in: .guide)
+                }
+            )
         }
     }
 
@@ -133,7 +159,7 @@ struct GuideJLPTExamView: View {
                 activePaperId = exam.id
                 pushPaper = true
             } else {
-                Task { await start(exam) }
+                Task { await prepareStart(exam) }
             }
         } label: {
             HStack(spacing: KXSpacing.md) {
@@ -268,22 +294,22 @@ struct GuideJLPTExamView: View {
         isLoading = false
     }
 
-    private func start(_ exam: KaiXJLPTExam) async {
+    private func prepareStart(_ exam: KaiXJLPTExam) async {
         guard starting == nil else { return }
         starting = exam.id
         defer { starting = nil }
         do {
-            let resp = try await KaiXAPIClient.shared.jlptExamStart(examId: exam.id)
-            activeStart = resp
-            pushSession = true
+            let preflight = try await KaiXAPIClient.shared.jlptExamPreflight(examId: exam.id)
+            pendingStartIntent = JLPTExamStartIntent(preflight: preflight)
         } catch let err as KaiXAPIError {
             // 只有会员/配额类错误才弹「会员专享」+「查看会员」;题目缺失/网络等
             // 通用失败走中性弹窗,否则把无关错误伪装成会员墙、误导用户去买会员。
-            if err.error.code == "MEMBER_REQUIRED" || err.error.code.contains("QUOTA") {
+            let code = err.error.code.lowercased()
+            if code == "member_required" || code.contains("quota") {
                 upgradeMessage = err.error.message
-            } else if err.error.code == "EXAM_INSUFFICIENT_COINS" {
+            } else if code == "exam_insufficient_coins" || code == "insufficient_coins" {
                 coinInsufficient = true
-            } else if err.error.code == "no_questions" {
+            } else if code == "no_questions" {
                 startErrorMessage = guideText(language, "该模考暂无可用题目。", "この模試には利用可能な問題がありません。", "This exam has no questions yet.")
             } else {
                 startErrorMessage = err.error.message
@@ -292,19 +318,245 @@ struct GuideJLPTExamView: View {
             startErrorMessage = guideText(language, "无法开始考试，请稍后再试。", "試験を開始できません。", "Couldn't start the exam.")
         }
     }
+
+    private func confirmStart(_ intent: JLPTExamStartIntent) async {
+        guard starting == nil else { return }
+        starting = intent.examId
+        defer { starting = nil }
+        do {
+            let response = try await KaiXAPIClient.shared.jlptExamStart(
+                examId: intent.examId,
+                confirmedChargeCoins: intent.confirmedChargeCoins,
+                idempotencyKey: intent.idempotencyKey
+            )
+            pendingStartIntent = nil
+            activeStart = response
+            activeStartReceipt = JLPTExamStartReceipt(intent: intent)
+            pushSession = true
+        } catch let error as KaiXAPIError {
+            switch JLPTExamRecoveryPolicy.action(for: error) {
+            case .refreshPrice:
+                do {
+                    let refreshed = try await KaiXAPIClient.shared.jlptExamPreflight(
+                        examId: intent.examId
+                    )
+                    pendingStartIntent = intent.refreshing(with: refreshed)
+                    startErrorMessage = guideText(language, "价格已更新，请按新价格重新确认。", "価格が更新されました。新しい価格をご確認ください。", "The price changed. Review and confirm the updated charge.")
+                } catch {
+                    startErrorMessage = guideText(language, "无法刷新价格，请稍后重试。", "価格を更新できません。後でもう一度お試しください。", "Couldn't refresh the price. Try again later.")
+                }
+            case .openWallet:
+                pendingStartIntent = nil
+                coinInsufficient = true
+            case .openMembership:
+                pendingStartIntent = nil
+                upgradeMessage = error.error.message
+            default:
+                startErrorMessage = error.error.message
+            }
+        } catch {
+            startErrorMessage = guideText(language, "无法开始考试，请稍后再试。", "試験を開始できません。", "Couldn't start the exam.")
+        }
+    }
 }
 
-/// A live, optionally-timed exam session. Each answer is saved server-side as the
-/// user progresses; submitting grades and pushes to the result review.
+/// Authoritative server price/access confirmation shared by standalone exams
+/// and full-paper sections. The app never starts or charges from list metadata.
+private struct JLPTExamStartConfirmationView: View {
+    @Environment(\.appLanguage) private var language
+    @Environment(\.dismiss) private var dismiss
+
+    let intent: JLPTExamStartIntent
+    let isStarting: Bool
+    let onConfirm: () -> Void
+    let onWallet: () -> Void
+    let onMembership: () -> Void
+
+    private var preflight: KaiXJLPTExamPreflight { intent.preflight }
+    private var needsWallet: Bool { !preflight.canStart && preflight.shortfall > 0 }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: KXSpacing.lg) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        JLPTEyebrow(text: guideText(language, "开考确认", "受験確認", "Start confirmation"))
+                        Text(JLPTExamCopy.startConfirmation(preflight: preflight, language: language))
+                            .kxScaledFont(20, relativeTo: .title3, weight: .bold, design: .rounded)
+                            .foregroundStyle(KXColor.livingInk)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    VStack(spacing: 0) {
+                        confirmationRow(
+                            title: guideText(language, "本次扣除", "今回の消費", "Charge now"),
+                            value: preflight.requiredCoins == 0
+                                ? guideText(language, "免费 / 已解锁", "無料 / 解除済み", "Free / unlocked")
+                                : "\(preflight.requiredCoins) Machi Coins"
+                        )
+                        Divider().padding(.leading, KXSpacing.md)
+                        confirmationRow(
+                            title: guideText(language, "当前余额", "現在の残高", "Current balance"),
+                            value: "\(preflight.balance)"
+                        )
+                        Divider().padding(.leading, KXSpacing.md)
+                        confirmationRow(
+                            title: guideText(language, "会员价", "会員価格", "Member price"),
+                            value: "\(preflight.memberCoinCost)"
+                        )
+                        if preflight.shortfall > 0 {
+                            Divider().padding(.leading, KXSpacing.md)
+                            confirmationRow(
+                                title: guideText(language, "还差", "不足", "Shortfall"),
+                                value: "\(preflight.shortfall)",
+                                valueColor: KXColor.livingWarm
+                            )
+                        }
+                    }
+                    .jlptSurface(radius: KXRadius.lg)
+
+                    if preflight.oneTimePaperPayment {
+                        Label(
+                            guideText(language, "本次为整卷一次性扣款；后续科目不会重复扣款。", "全科目分を一度だけ消費し、後続科目では再度消費しません。", "This is a one-time charge for the full paper; later sections are not charged again."),
+                            systemImage: "checkmark.shield.fill"
+                        )
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(KXColor.livingAccent)
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(guideText(language, "退款与异常处理", "返金・エラー対応", "Refunds and failed starts"))
+                            .font(.footnote.weight(.bold))
+                            .foregroundStyle(KXColor.livingInk)
+                        Text(JLPTExamCopy.refundPolicy(language: language))
+                            .font(.footnote)
+                            .foregroundStyle(KXColor.livingMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if !preflight.disclaimer.isEmpty {
+                        JLPTComplianceNote(text: preflight.disclaimer)
+                    }
+
+                    Button {
+                        if preflight.canStart { onConfirm() }
+                        else if needsWallet { onWallet() }
+                        else { onMembership() }
+                    } label: {
+                        HStack {
+                            if isStarting { ProgressView().controlSize(.small) }
+                            Text(preflight.canStart
+                                ? guideText(language, "确认并开始", "確認して開始", "Confirm and start")
+                                : needsWallet
+                                    ? guideText(language, "去充值", "チャージする", "Top up")
+                                    : guideText(language, "查看会员方案", "会員プランを見る", "View membership"))
+                                .font(.subheadline.weight(.bold))
+                        }
+                        .foregroundStyle(KXColor.onTint(KXColor.livingAccent))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(KXColor.livingAccent, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+                    }
+                    .buttonStyle(KXPressableStyle(scale: 0.98))
+                    .disabled(isStarting)
+                }
+                .padding(KXSpacing.lg)
+            }
+            .background(KXColor.livingBackground.ignoresSafeArea())
+            .navigationTitle(guideText(language, "开考确认", "受験確認", "Start confirmation"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(guideText(language, "取消", "キャンセル", "Cancel")) { dismiss() }
+                        .disabled(isStarting)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .interactiveDismissDisabled(isStarting)
+    }
+
+    private func confirmationRow(
+        title: String,
+        value: String,
+        valueColor: Color = KXColor.livingInk
+    ) -> some View {
+        HStack {
+            Text(title).font(.footnote.weight(.semibold)).foregroundStyle(KXColor.livingMuted)
+            Spacer()
+            Text(value).font(.footnote.weight(.bold)).foregroundStyle(valueColor)
+        }
+        .padding(KXSpacing.md)
+    }
+}
+
+enum JLPTExamSessionContentState: Equatable {
+    case empty
+    case result
+    case timeUp
+    case answering
+    case submitting
+
+    static func resolve(
+        questionCount: Int,
+        cursor: Int,
+        timedOut: Bool,
+        submitting: Bool,
+        hasResult: Bool
+    ) -> Self {
+        if hasResult { return .result }
+        if questionCount <= 0 { return .empty }
+        if submitting { return .submitting }
+        if timedOut { return .timeUp }
+        if cursor < questionCount { return .answering }
+        return .submitting
+    }
+}
+
+struct JLPTExamSessionPresentationState: Equatable {
+    var leaveConfirmationPresented = false
+    var unsyncedConfirmationPresented = false
+    var answerSheetPresented = false
+
+    mutating func beginSubmitting() {
+        leaveConfirmationPresented = false
+        unsyncedConfirmationPresented = false
+        answerSheetPresented = false
+    }
+}
+
+enum JLPTExamSessionInteractionPolicy {
+    static func shouldGuardExit(
+        questionCount: Int,
+        answerCount: Int,
+        submitting: Bool,
+        hasResult: Bool
+    ) -> Bool {
+        guard !hasResult, questionCount > 0 else { return false }
+        return submitting || answerCount > 0
+    }
+
+    static func canExit(submitting: Bool) -> Bool {
+        !submitting
+    }
+}
+
+/// A live, optionally-timed exam session. Every tap is first persisted in the
+/// local outbox, then saved server-side in revision order. Submit sends the full
+/// ordered answer snapshot and replaces the session with its result.
 struct GuideJLPTExamSessionView: View {
     @Environment(\.appLanguage) private var language
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
     let start: KaiXJLPTExamStartResponse
-    /// 分科整卷模式:交卷后不推结果页,而是回调让父卷流转推进到下一科/合并成绩。
-    /// 单卷模式(默认 nil)保持原行为——推 GuideJLPTExamResultView。
+    let startReceipt: JLPTExamStartReceipt
+    /// 分科整卷模式:交卷后回调让父卷流转推进到下一科/合并成绩。
+    /// 单卷模式(默认 nil)则在当前页面用结果内容替换答题内容。
     var onSectionSubmitted: ((KaiXJLPTExamResult) -> Void)? = nil
+    var onRecovery: ((JLPTExamRecoveryAction) -> Void)? = nil
+
+    @StateObject private var answerSaver: JLPTExamAnswerSaveCoordinator
 
     @State private var cursor = 0
     @State private var answers: [String: Int] = [:]   // questionId -> selected
@@ -315,56 +567,86 @@ struct GuideJLPTExamSessionView: View {
     @State private var timedOut = false
     @State private var submitting = false
     @State private var submitFailed = false
+    @State private var submitErrorMessage: String?
     @State private var result: KaiXJLPTExamResult?
-    @State private var pushResult = false
-    /// Question ids whose live per-answer save failed — re-flushed before submit
-    /// so a dropped save isn't graded as unanswered.
-    @State private var unsavedAnswers: Set<String> = []
-    /// 交卷时仍未同步到服务端的题数——结果页据此提示这些题按未答判分。
+    /// 交卷边界仍在本地 outbox 的题数。仅当服务端明确返回截止且拒收快照时，
+    /// 结果页才据此提示这些答案可能未计入；不能提前声称已保存或必定按未答判分。
     @State private var unsyncedAtSubmit = 0
-    @State private var showLeaveConfirm = false
-    @State private var showUnsyncedConfirm = false
-    /// 答题卡:整卷(40+ 题)没有跳题面板无法回看检查;点格子直接跳到该题。
-    @State private var showAnswerSheet = false
+    /// 退出确认、未同步确认和答题卡都是覆盖在会话之上的遗留交互层；
+    /// 进入提交态时必须在同一个 MainActor 转换中一起关闭。
+    @State private var presentation = JLPTExamSessionPresentationState()
     /// B15-D 中断恢复:服务端在 start 返回了未完成的旧会话时,把已答题灌回本地
     /// 并提示用户。只在首次 onAppear 执行,避免返回本页时覆盖更新的本地作答。
     @State private var didRestoreResumed = false
     @State private var showResumedNotice = false
 
+    init(
+        start: KaiXJLPTExamStartResponse,
+        startReceipt: JLPTExamStartReceipt,
+        onSectionSubmitted: ((KaiXJLPTExamResult) -> Void)? = nil,
+        onRecovery: ((JLPTExamRecoveryAction) -> Void)? = nil
+    ) {
+        self.start = start
+        self.startReceipt = startReceipt
+        self.onSectionSubmitted = onSectionSubmitted
+        self.onRecovery = onRecovery
+        let sessionId = start.sessionId ?? "invalid-session"
+        let serverAnswers = jlptResumeAnswerMap(start.answers ?? [])
+        let coordinator = JLPTExamAnswerSaveCoordinator(
+            sessionId: sessionId,
+            serverAnswers: serverAnswers,
+            answerRevision: start.answerRevision ?? 0
+        ) { request in
+            try await KaiXAPIClient.shared.jlptExamAnswer(request)
+        }
+        _answerSaver = StateObject(wrappedValue: coordinator)
+        _answers = State(initialValue: coordinator.currentAnswers)
+        if let questions = start.questions, !questions.isEmpty {
+            _cursor = State(initialValue:
+                questions.firstIndex(where: { coordinator.currentAnswers[$0.id] == nil })
+                    ?? (questions.count - 1)
+            )
+        }
+    }
+
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     private var questions: [KaiXJLPTQuestionDTO] { start.questions ?? [] }
     private var isTimed: Bool { (start.durationSeconds ?? 0) > 0 }
+    private var listeningPolicy: JLPTListeningRuntimePolicy {
+        JLPTListeningRuntimePolicy.resolve(
+            serverPolicy: start.listeningPolicy,
+            context: isTimed ? .liveTimedExam : .nonExam
+        )
+    }
+    private var unsavedAnswers: Set<String> { answerSaver.unsavedQuestionIDs }
+    private var contentState: JLPTExamSessionContentState {
+        .resolve(
+            questionCount: questions.count,
+            cursor: cursor,
+            timedOut: timedOut,
+            submitting: submitting,
+            hasResult: result != nil
+        )
+    }
     /// 已作答且未出分时,一次误滑/误点返回会静默丢弃整场考试(无续考入口),
     /// 所以此时必须拦截返回并弹确认。
     private var shouldGuardExit: Bool {
-        result == nil && !answers.isEmpty && !questions.isEmpty
+        JLPTExamSessionInteractionPolicy.shouldGuardExit(
+            questionCount: questions.count,
+            answerCount: answers.count,
+            submitting: submitting,
+            hasResult: result != nil
+        )
     }
 
     var body: some View {
-        ScrollView {
-            if questions.isEmpty {
-                JLPTStateView(systemImage: "tray", title: guideText(language, "本卷暂无题目", "問題がありません", "No questions"))
-            } else if timedOut && result == nil {
-                // Time's up: show a reachable submit/retry state instead of
-                // leaving the user stranded on whatever question they were on
-                // with a frozen 0:00 clock and the only Submit button hidden on
-                // the last page.
-                timeUpState
-            } else if cursor < questions.count {
-                sessionBody
-            } else {
-                JLPTStateView(title: guideText(language, "正在交卷…", "採点中…", "Submitting…"), isLoading: true)
-            }
-        }
+        sessionContent
         .background(KXColor.livingBackground.ignoresSafeArea())
-        .navigationTitle(start.title ?? guideText(language, "模拟考试", "模擬試験", "Mock exam"))
+        .navigationTitle(contentState == .result
+                         ? guideText(language, "考试结果", "試験結果", "Result")
+                         : start.title ?? guideText(language, "模拟考试", "模擬試験", "Mock exam"))
         .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(isPresented: $pushResult) {
-            if let r = result {
-                GuideJLPTExamResultView(result: r, unsyncedCount: unsyncedAtSubmit)
-            }
-        }
         .onAppear {
             restoreResumedSessionIfNeeded()
             if isTimed, deadline == nil {
@@ -390,66 +672,87 @@ struct GuideJLPTExamSessionView: View {
         .toolbar {
             if shouldGuardExit {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { showLeaveConfirm = true } label: {
+                    Button {
+                        guard JLPTExamSessionInteractionPolicy.canExit(submitting: submitting) else { return }
+                        presentation.leaveConfirmationPresented = true
+                    } label: {
                         Image(systemName: "chevron.left")
                             .font(.body.weight(.semibold))
                     }
                     .accessibilityLabel(guideText(language, "返回", "戻る", "Back"))
+                    .disabled(submitting)
                 }
             }
         }
         .confirmationDialog(
             guideText(language, "退出考试？", "試験を終了しますか？", "Leave the exam?"),
-            isPresented: $showLeaveConfirm,
+            isPresented: $presentation.leaveConfirmationPresented,
             titleVisibility: .visible
         ) {
             Button(guideText(language, "退出（可稍后继续）", "終了（あとで再開できます）", "Leave (you can resume)"), role: .destructive) {
+                guard JLPTExamSessionInteractionPolicy.canExit(submitting: submitting) else { return }
                 dismiss()
             }
             Button(guideText(language, "继续作答", "回答を続ける", "Keep going"), role: .cancel) {}
         } message: {
-            // B15-D 起服务端支持续考:已答题保留在服务端,重新进入同一模考即恢复。
-            Text(isTimed
-                ? guideText(language,
-                            "已作答的题目已保存，但计时不会暂停；在时间用尽前重新进入本模考即可继续。",
-                            "回答済みの内容は保存されますが、タイマーは止まりません。制限時間内に再入室すれば続きから受験できます。",
-                            "Your answers are saved, but the clock keeps running — re-enter this exam before time runs out to continue.")
-                : guideText(language,
-                            "已作答的题目已保存，重新进入本模考即可继续。",
-                            "回答済みの内容は保存されています。再入室すれば続きから受験できます。",
-                            "Your answers are saved — re-enter this exam to continue."))
+            Text(JLPTExamCopy.exitMessage(
+                isTimed: isTimed,
+                pendingAnswerCount: unsavedAnswers.count,
+                language: language
+            ))
         }
-        .confirmationDialog(
-            guideText(language, "还有 \(unsavedAnswers.count) 题答案未同步", "\(unsavedAnswers.count) 問の回答が未同期です", "\(unsavedAnswers.count) answers not synced"),
-            isPresented: $showUnsyncedConfirm,
-            titleVisibility: .visible
-        ) {
-            Button(guideText(language, "重试同步并交卷", "再同期して提出", "Retry sync & submit")) {
-                Task { await submit() }
-            }
-            Button(guideText(language, "仍然交卷（未同步按未答计）", "このまま提出（未同期は未回答扱い）", "Submit anyway (unsynced = unanswered)"), role: .destructive) {
-                Task { await submit(force: true) }
-            }
-            Button(guideText(language, "取消", "キャンセル", "Cancel"), role: .cancel) {}
-        } message: {
-            Text(guideText(language, "网络不稳定，这些题的答案还没有传到服务器，直接交卷会按未答判分。", "通信が不安定なため一部の回答が未送信です。このまま提出すると未回答として採点されます。", "Some answers haven't reached the server yet; submitting now grades them as unanswered."))
-        }
-        .sheet(isPresented: $showAnswerSheet) {
+        .sheet(isPresented: $presentation.answerSheetPresented) {
             JLPTAnswerSheetView(
                 questions: questions,
                 answers: answers,
                 current: cursor,
                 onJump: { idx in
+                    guard !submitting else { return }
                     cursor = idx
-                    showAnswerSheet = false
+                    presentation.answerSheetPresented = false
                 },
                 onSubmit: {
-                    showAnswerSheet = false
-                    Task { await submit() }
+                    submit()
                 }
             )
+            .disabled(submitting)
+            .allowsHitTesting(!submitting)
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
+        }
+    }
+
+    @ViewBuilder
+    private var sessionContent: some View {
+        switch contentState {
+        case .result:
+            if let result {
+                GuideJLPTExamResultView(
+                    result: result,
+                    unsyncedCount: unsyncedAtSubmit,
+                    onExit: { dismiss() }
+                )
+            }
+        case .empty:
+            ScrollView {
+                JLPTStateView(systemImage: "tray", title: guideText(language, "本卷暂无题目", "問題がありません", "No questions"))
+            }
+        case .timeUp:
+            ScrollView {
+                // Time's up: show a reachable submit/retry state instead of
+                // leaving the user stranded on whatever question they were on
+                // with a frozen 0:00 clock and the only Submit button hidden on
+                // the last page.
+                timeUpState
+            }
+        case .answering:
+            ScrollView {
+                sessionBody
+            }
+        case .submitting:
+            ScrollView {
+                JLPTStateView(title: guideText(language, "正在交卷…", "採点中…", "Submitting…"), isLoading: true)
+            }
         }
     }
 
@@ -458,27 +761,22 @@ struct GuideJLPTExamSessionView: View {
     private func restoreResumedSessionIfNeeded() {
         guard !didRestoreResumed else { return }
         didRestoreResumed = true
-        guard start.resumed ?? false else { return }
-        for a in start.answers ?? [] {
-            guard let qid = a.questionId, let sel = a.selectedIndex, sel >= 0 else { continue }
-            if answers[qid] == nil { answers[qid] = sel }
-        }
+        answers = answerSaver.currentAnswers
+        guard (start.resumed ?? false) || !answers.isEmpty else { return }
         if !questions.isEmpty {
             cursor = questions.firstIndex(where: { answers[$0.id] == nil }) ?? (questions.count - 1)
         }
         showResumedNotice = true
     }
 
-    /// 以 deadline 为锚重算剩余时间;归零时自动交卷(超时场景跳过未同步确认)。
+    /// 以 deadline 为锚重算剩余时间；归零时立即提交完整快照。服务端零宽限，
+    /// 是否接收快照只由 deadlineExpired / snapshotAccepted 结果决定。
     private func syncClock() {
         guard isTimed, !timedOut, result == nil, let deadline else { return }
         remaining = max(0, Int(deadline.timeIntervalSinceNow.rounded(.up)))
         if remaining <= 0, !submitting {
             timedOut = true
-            // 答题卡是 modal sheet:自动交卷会把结果页 push 到它下面,不收起的话
-            // 用户对着一张倒计时已消失的失效答题卡,成绩藏在背后。
-            showAnswerSheet = false
-            Task { await submit() }
+            submit()
         }
     }
 
@@ -506,7 +804,7 @@ struct GuideJLPTExamSessionView: View {
                         .lineLimit(1)
                 }
                 Button {
-                    showAnswerSheet = true
+                    presentation.answerSheetPresented = true
                 } label: {
                     Image(systemName: "square.grid.3x3.fill")
                         .font(.caption.weight(.bold))
@@ -533,15 +831,21 @@ struct GuideJLPTExamSessionView: View {
                 selectedIndex: Binding(
                     get: { answers[q.id] },
                     set: { newValue in
-                        guard let v = newValue else { return }
+                        guard let v = newValue, !submitting else { return }
+                        guard answerSaver.enqueue(questionId: q.id, selectedIndex: v) else { return }
                         answers[q.id] = v
-                        Task { await save(q, selected: v) }
                     }
                 ),
                 revealed: false,
                 correctIndex: nil,
-                explanation: nil
+                explanation: nil,
+                listeningPolicy: listeningPolicy,
+                playbackIdentity: JLPTListeningPlaybackIdentity(
+                    sessionId: start.sessionId ?? "",
+                    questionId: q.id
+                )
             )
+            .disabled(submitting)
 
             HStack(spacing: 10) {
                 if cursor > 0 {
@@ -565,7 +869,7 @@ struct GuideJLPTExamSessionView: View {
                     .padding(.horizontal, 18).padding(.vertical, 11)
                     .background(KXColor.livingAccent, in: Capsule())
                 } else {
-                    Button(action: { Task { await submit() } }) {
+                    Button(action: { submit() }) {
                         HStack {
                             if submitting { ProgressView().controlSize(.small).tint(KXColor.onTint(KXColor.livingAccent)) }
                             Text(guideText(language, "交卷", "提出", "Submit")).font(.subheadline.weight(.bold))
@@ -580,7 +884,7 @@ struct GuideJLPTExamSessionView: View {
             }
 
             if submitFailed {
-                Text(guideText(language, "交卷失败,请检查网络后重试。", "提出に失敗しました。接続を確認して再試行してください。", "Submit failed — check your connection and try again."))
+                Text(submitErrorMessage ?? guideText(language, "交卷失败,请检查网络后重试。", "提出に失敗しました。接続を確認して再試行してください。", "Submit failed — check your connection and try again."))
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(.red)
                     .frame(maxWidth: .infinity, alignment: .center)
@@ -637,7 +941,7 @@ struct GuideJLPTExamSessionView: View {
                     ? guideText(language, "交卷失败,请检查网络后重试。", "提出に失敗しました。接続を確認して再試行してください。", "Submit failed — check your connection and try again.")
                     : guideText(language, "正在为你交卷…", "採点を準備しています…", "Preparing your results…"),
                 actionTitle: guideText(language, "重新交卷", "もう一度提出", "Submit again"),
-                action: { Task { await submit() } }
+                action: { submit() }
             )
         }
     }
@@ -647,72 +951,134 @@ struct GuideJLPTExamSessionView: View {
         return String(format: "%d:%02d", m, s)
     }
 
-    private func save(_ q: KaiXJLPTQuestionDTO, selected: Int) async {
-        guard let sid = start.sessionId else { return }
-        do {
-            try await KaiXAPIClient.shared.jlptExamAnswer(sessionId: sid, questionId: q.id, selectedIndex: selected)
-            unsavedAnswers.remove(q.id)
-        } catch {
-            // Remember the failed save so it can be re-flushed at submit time —
-            // otherwise a single dropped save (transient network) is graded as
-            // unanswered and the score is silently, unexplainably low.
-            unsavedAnswers.insert(q.id)
-        }
-    }
-
-    /// Best-effort re-send of any answers whose live save failed, using the
-    /// selections we still hold locally, so the server grades what the user
-    /// actually chose. Runs before submit. (The fully robust fix is a whole-
-    /// paper answers snapshot on submit — that needs a backend endpoint.)
-    private func flushUnsavedAnswers() async {
-        guard let sid = start.sessionId else { return }
-        for qid in Array(unsavedAnswers) {
-            guard let selected = answers[qid] else { unsavedAnswers.remove(qid); continue }
-            do {
-                try await KaiXAPIClient.shared.jlptExamAnswer(sessionId: sid, questionId: qid, selectedIndex: selected)
-                unsavedAnswers.remove(qid)
-            } catch {
-                // Keep it marked; submit still proceeds best-effort.
-            }
-        }
-    }
-
-    private func submit(force: Bool = false) async {
+    /// Synchronous MainActor entry: lock interaction and dismiss every legacy
+    /// presentation before any answer flush or grading await can yield.
+    private func submit() {
         guard let sid = start.sessionId, !submitting, result == nil else { return }
         submitting = true
+        presentation.beginSubmitting()
         submitFailed = false
-        await flushUnsavedAnswers()
-        // 重发后仍有未同步答案:非超时且未强制时先让用户决定(重试 / 仍然交卷),
-        // 否则用户明明选了答案却被静默按未答判分,成绩偏低且不可解释。
-        if !force, !timedOut, !unsavedAnswers.isEmpty {
-            submitting = false
-            showUnsyncedConfirm = true
-            return
-        }
+        submitErrorMessage = nil
+
+        Task { await finishSubmit(sessionId: sid) }
+    }
+
+    private func finishSubmit(sessionId sid: String) async {
+        let unsavedAfterFlush = await answerSaver.sealAndFlush()
         do {
-            unsyncedAtSubmit = unsavedAnswers.count
-            let r = try await KaiXAPIClient.shared.jlptExamSubmit(sessionId: sid)
+            unsyncedAtSubmit = unsavedAfterFlush.count
+            let baseRevision = answerSaver.authoritativeRevision
+            let submission = KaiXJLPTExamSubmitRequest(
+                sessionId: sid,
+                answersSnapshot: answerSaver.orderedSnapshot(questionIDs: questions.map(\.id)),
+                baseRevision: baseRevision,
+                revision: baseRevision + 1
+            )
+            let r = try await KaiXAPIClient.shared.jlptExamSubmit(submission)
             result = r
-            // 分科模式:交卷后回调让父卷推进(不推单卷结果页);单卷模式推结果页。
+            answerSaver.clearDraft()
+            // 分科模式:交卷后回调让父卷推进;单卷模式由 result 替换答题内容。
             if let onSectionSubmitted {
                 onSectionSubmitted(r)
-            } else {
-                pushResult = true
+            }
+        } catch let error as KaiXAPIError {
+            answerSaver.reopen()
+            let action = JLPTExamRecoveryPolicy.action(for: error)
+            switch action {
+            case .restoreAnswers:
+                await restoreAuthoritativeSession()
+            case .restorePaper:
+                onRecovery?(action)
+            case .openWallet:
+                submitErrorMessage = guideText(language, "余额不足，请充值后重试。", "残高が不足しています。チャージ後に再試行してください。", "Your coin balance is too low. Top up and try again.")
+                submitFailed = true
+            case .openMembership:
+                submitErrorMessage = guideText(language, "当前权限不足，请返回后查看会员方案。", "受験権限がありません。戻って会員プランをご確認ください。", "This exam requires membership access. Return to review the available plan.")
+                submitFailed = true
+            case .refreshPrice, .retry:
+                submitErrorMessage = error.error.message
+                submitFailed = true
             }
         } catch {
             // Leave the session open and surface the failure so a timed-out
             // auto-submit doesn't look like a frozen exam with no way forward.
+            answerSaver.reopen()
             submitFailed = true
+            submitErrorMessage = guideText(language, "交卷失败,请检查网络后重试。", "提出に失敗しました。接続を確認して再試行してください。", "Submit failed — check your connection and try again.")
         }
         submitting = false
     }
+
+    private func restoreAuthoritativeSession() async {
+        guard let sessionId = start.sessionId, !sessionId.isEmpty else {
+            markRecoveryIdentityFailure()
+            return
+        }
+        do {
+            let preflight = try await KaiXAPIClient.shared.jlptExamPreflight(
+                examId: startReceipt.examId
+            )
+            guard JLPTExamResumeIdentityPolicy.acceptsPreflight(
+                receipt: startReceipt,
+                expectedSessionId: sessionId,
+                resumeSessionId: preflight.resumeSessionId,
+                preflightExamId: preflight.examId,
+                requiredCoins: preflight.requiredCoins
+            ) else {
+                markRecoveryIdentityFailure()
+                return
+            }
+            let restored = try await KaiXAPIClient.shared.jlptExamStart(
+                examId: startReceipt.examId,
+                confirmedChargeCoins: startReceipt.confirmedChargeCoins,
+                idempotencyKey: startReceipt.idempotencyKey
+            )
+            guard JLPTExamResumeIdentityPolicy.acceptsResponse(
+                receipt: startReceipt,
+                expectedSessionId: sessionId,
+                expectedQuestionIDs: questions.map(\.id),
+                responseSessionId: restored.sessionId,
+                responseExamId: restored.examId,
+                resumed: restored.resumed,
+                responseQuestionIDs: restored.questions?.map(\.id)
+            ) else {
+                markRecoveryIdentityFailure()
+                return
+            }
+            let serverAnswers = jlptResumeAnswerMap(restored.answers ?? [])
+            answerSaver.mergeAuthoritative(
+                serverAnswers: serverAnswers,
+                answerRevision: restored.answerRevision ?? 0
+            )
+            answers = answerSaver.currentAnswers
+            cursor = questions.firstIndex(where: { answers[$0.id] == nil })
+                ?? max(0, questions.count - 1)
+            showResumedNotice = true
+            submitErrorMessage = guideText(language, "已按服务器进度恢复，请确认答案后重新交卷。", "サーバーの進捗から復元しました。回答を確認して再提出してください。", "Server progress was restored. Review your answers, then submit again.")
+            submitFailed = true
+        } catch {
+            submitErrorMessage = guideText(language, "无法恢复服务器进度，请返回后重新进入考试。", "サーバーの進捗を復元できません。戻って試験に入り直してください。", "Couldn't restore server progress. Leave and re-enter the exam.")
+            submitFailed = true
+        }
+    }
+
+    private func markRecoveryIdentityFailure() {
+        submitErrorMessage = guideText(
+            language,
+            "服务器返回的考试身份与当前会话不一致。为避免新建或重复扣费，本次未合并答案；请退出后重新进入原考试。",
+            "サーバーの試験情報が現在のセッションと一致しません。新規受験や二重課金を防ぐため回答は統合していません。終了して元の試験に入り直してください。",
+            "The server returned a different exam session. No answers were merged, preventing a new attempt or duplicate charge. Leave and re-enter the original exam."
+        )
+        submitFailed = true
+    }
 }
 
-/// 分科整卷流转:父卷 → 各科目一览(intro)→ 逐段独立计时(复用 SessionView,
-/// 含听力播放器)→ 中间休息屏 → 合并成绩。真实 JLPT 的两段独立计时结构。
+/// Parent-paper flow. The server-owned attempt decides the active section and
+/// supports both the N1/N2 two-section shape and the N3/N4/N5 three-section shape.
 struct GuideJLPTPaperFlowView: View {
     @Environment(\.appLanguage) private var language
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var router: AppRouter
     let paperId: String
 
     @State private var detail: KaiXJLPTPaperDetail?
@@ -722,12 +1088,17 @@ struct GuideJLPTPaperFlowView: View {
     @State private var phase: Phase = .intro
     @State private var idx = 0
     @State private var activeStart: KaiXJLPTExamStartResponse?
+    @State private var activeStartReceipt: JLPTExamStartReceipt?
+    @State private var paperAttempt: KaiXJLPTPaperAttempt?
+    @State private var attemptId = ""
+    @State private var pendingStartIntent: JLPTExamStartIntent?
     @State private var starting = false
     @State private var startError: String?
     @State private var coinInsufficient = false
     @State private var showWalletSheet = false
 
     private var sections: [KaiXJLPTExam] { detail?.sections ?? [] }
+    private var sectionIDs: [String] { sections.map(\.id) }
 
     private func minutes(_ seconds: Int) -> String {
         guideText(language, "\(seconds / 60) 分钟", "\(seconds / 60) 分", "\(seconds / 60) min")
@@ -735,11 +1106,19 @@ struct GuideJLPTPaperFlowView: View {
 
     var body: some View {
         Group {
-            if phase == .section, let start = activeStart {
-                // 逐段答题直接复用单卷 SessionView;交卷回调推进,不推单卷结果页。
-                GuideJLPTExamSessionView(start: start, onSectionSubmitted: { _ in advance() })
+            if phase == .section, let start = activeStart, let receipt = activeStartReceipt {
+                GuideJLPTExamSessionView(
+                    start: start,
+                    startReceipt: receipt,
+                    onSectionSubmitted: applySubmittedSection,
+                    onRecovery: applyRecovery
+                )
             } else if phase == .result {
-                GuideJLPTPaperResultView(paperId: paperId, onExit: { dismiss() })
+                GuideJLPTPaperResultView(
+                    paperId: paperId,
+                    attemptId: attemptId,
+                    onExit: { dismiss() }
+                )
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: KXSpacing.lg) {
@@ -780,6 +1159,21 @@ struct GuideJLPTPaperFlowView: View {
         .sheet(isPresented: $showWalletSheet) {
             NavigationStack { WalletView() }
         }
+        .sheet(item: $pendingStartIntent) { intent in
+            JLPTExamStartConfirmationView(
+                intent: intent,
+                isStarting: starting,
+                onConfirm: { Task { await confirmSectionStart(intent) } },
+                onWallet: {
+                    pendingStartIntent = nil
+                    showWalletSheet = true
+                },
+                onMembership: {
+                    pendingStartIntent = nil
+                    router.open(.guideMemberResources, in: .guide)
+                }
+            )
+        }
     }
 
     private var intro: some View {
@@ -789,15 +1183,12 @@ struct GuideJLPTPaperFlowView: View {
                 Text(detail?.paper.title ?? "")
                     .kxScaledFont(22, relativeTo: .title3, weight: .bold, design: .rounded)
                     .foregroundStyle(KXColor.livingInk)
-                Text(guideText(language,
-                               "按官方结构分两段独立计时：言語知識・読解 → 聴解，交卷合并出分。",
-                               "本番構成で2部制：言語知識・読解 → 聴解。合算して採点。",
-                               "Two independently-timed sections like the real exam, scored together."))
+                Text(JLPTExamCopy.paperStructure(sectionCount: sections.count, language: language))
                     .font(.footnote).foregroundStyle(KXColor.livingMuted)
                     .fixedSize(horizontal: false, vertical: true)
             }
             VStack(spacing: 10) {
-                ForEach(Array(sections.enumerated()), id: \.element.id) { i, s in
+                ForEach(Array(sections.enumerated()), id: \.element.id) { i, section in
                     HStack(spacing: KXSpacing.md) {
                         Text("\(i + 1)")
                             .font(.subheadline.weight(.black))
@@ -805,10 +1196,10 @@ struct GuideJLPTPaperFlowView: View {
                             .frame(width: 34, height: 34)
                             .background(KXColor.livingAccentSoft, in: RoundedRectangle(cornerRadius: KXRadius.sm, style: .continuous))
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(s.title ?? s.sectionLabel ?? "")
+                            Text(section.title ?? section.sectionLabel ?? "")
                                 .font(.subheadline.weight(.bold)).foregroundStyle(KXColor.livingInk)
-                            Text("\(s.questionCount ?? 0) \(guideText(language, "题", "問", "Q")) · \(minutes(s.durationSeconds ?? 0))"
-                                 + ((s.section == "listening") ? " · " + guideText(language, "含听力音频", "音声あり", "with audio") : ""))
+                            Text("\(section.questionCount ?? 0) \(guideText(language, "题", "問", "Q")) · \(minutes(section.durationSeconds ?? 0))"
+                                 + ((section.section == "listening") ? " · " + guideText(language, "含听力音频", "音声あり", "with audio") : ""))
                                 .font(.caption2.weight(.medium)).foregroundStyle(KXColor.livingMuted)
                         }
                         Spacer(minLength: 0)
@@ -818,31 +1209,34 @@ struct GuideJLPTPaperFlowView: View {
                     .jlptSurface(radius: KXRadius.lg)
                 }
             }
-            startButton(title: guideText(language, "开始考试", "受験を開始", "Start the exam")) {
-                Task { await startSection(0) }
+            startButton(title: attemptId.isEmpty
+                ? guideText(language, "检查价格并开始", "価格を確認して開始", "Check price and start")
+                : guideText(language, "恢复当前科目", "現在の科目を再開", "Resume current section")) {
+                Task { await prepareSectionStart(requestedExamId: detail?.paper.id ?? paperId) }
             }
             JLPTComplianceNote(text: detail?.disclaimer)
         }
     }
 
     private var betweenBreak: some View {
-        let cur = sections.indices.contains(idx) ? sections[idx] : nil
+        let current = sections.indices.contains(idx) ? sections[idx] : nil
         return VStack(alignment: .leading, spacing: KXSpacing.lg) {
             JLPTEyebrow(text: detail?.paper.title ?? "")
             VStack(spacing: 12) {
                 Text(guideText(language, "第 \(idx + 1) / \(sections.count) 科", "\(idx + 1) / \(sections.count) 科目", "Section \(idx + 1) / \(sections.count)"))
                     .font(.caption.weight(.bold)).foregroundStyle(KXColor.livingAccent)
-                Text(cur?.title ?? "")
+                Text(current?.title ?? "")
                     .kxScaledFont(20, relativeTo: .title3, weight: .bold, design: .rounded)
                     .foregroundStyle(KXColor.livingInk)
-                Text(cur?.section == "listening"
-                     ? guideText(language, "聴解：音频只能顺次播放，请准备好耳机。", "聴解：音声は順に再生。イヤホンをご準備ください。", "Listening: audio plays in sequence — headphones recommended.")
-                     : "\(cur?.questionCount ?? 0) \(guideText(language, "题", "問", "Q")) · \(minutes(cur?.durationSeconds ?? 0))")
+                Text(current?.section == "listening"
+                     ? JLPTExamCopy.listeningHint(language: language)
+                     : "\(current?.questionCount ?? 0) \(guideText(language, "题", "問", "Q")) · \(minutes(current?.durationSeconds ?? 0))")
                     .font(.footnote.weight(.medium)).foregroundStyle(KXColor.livingMuted)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                startButton(title: guideText(language, "开始本科目", "この科目を開始", "Start this section")) {
-                    Task { await startSection(idx) }
+                startButton(title: guideText(language, "检查并开始本科目", "確認してこの科目を開始", "Check and start this section")) {
+                    guard let current else { return }
+                    Task { await prepareSectionStart(requestedExamId: current.id) }
                 }
             }
             .frame(maxWidth: .infinity)
@@ -866,36 +1260,189 @@ struct GuideJLPTPaperFlowView: View {
             .shadow(color: KXColor.livingAccent.opacity(0.24), radius: 10, y: 4)
         }
         .buttonStyle(KXPressableStyle(scale: 0.98))
-        .disabled(starting)
+        .disabled(starting || sections.isEmpty)
     }
 
-    private func advance() {
-        if idx + 1 < sections.count {
-            idx += 1
-            activeStart = nil
-            phase = .betweenBreak
-        } else {
-            phase = .result
-        }
-    }
-
-    private func startSection(_ i: Int) async {
-        guard !starting, sections.indices.contains(i) else { return }
+    private func prepareSectionStart(
+        requestedExamId: String,
+        retaining idempotencyKey: String? = nil
+    ) async {
+        guard !starting else { return }
         starting = true
         defer { starting = false }
         do {
-            let resp = try await KaiXAPIClient.shared.jlptExamStart(examId: sections[i].id)
-            activeStart = resp
-            idx = i
+            let preflight = try await KaiXAPIClient.shared.jlptExamPreflight(examId: requestedExamId)
+            configureStartIntent(
+                from: preflight,
+                requestedExamId: requestedExamId,
+                idempotencyKey: idempotencyKey
+            )
+        } catch let error as KaiXAPIError {
+            handleStartError(error)
+        } catch {
+            startError = guideText(language, "无法读取当前科目与价格，请稍后再试。", "現在の科目と価格を取得できません。", "Couldn't load the current section and price.")
+        }
+    }
+
+    private func configureStartIntent(
+        from preflight: KaiXJLPTExamPreflight,
+        requestedExamId: String,
+        idempotencyKey: String?
+    ) {
+        let progress = preflight.paperAttempt
+        if let progress {
+            paperAttempt = progress
+            attemptId = progress.id
+            if progress.status.lowercased() == "completed" {
+                pendingStartIntent = nil
+                phase = .result
+                return
+            }
+        }
+        let resolvedIndex = JLPTPaperProgressResolver.index(
+            sectionExamIDs: sectionIDs,
+            currentSectionExamId: progress?.currentSectionExamId ?? preflight.currentSectionExamId,
+            currentSectionIndex: progress?.currentSectionIndex ?? 0
+        )
+        idx = resolvedIndex
+        let target = sections.indices.contains(resolvedIndex)
+            ? sections[resolvedIndex]
+            : sections.first(where: { $0.id == requestedExamId })
+        guard let target else {
+            startError = guideText(language, "服务器返回的当前科目不在本卷中。", "サーバーの現在科目がこの模試にありません。", "The server's current section is not part of this paper.")
+            return
+        }
+        if let idempotencyKey {
+            pendingStartIntent = JLPTExamStartIntent(
+                preflight: preflight,
+                examId: target.id,
+                idempotencyKey: idempotencyKey
+            )
+        } else {
+            pendingStartIntent = JLPTExamStartIntent(preflight: preflight, examId: target.id)
+        }
+    }
+
+    private func confirmSectionStart(_ intent: JLPTExamStartIntent) async {
+        guard !starting else { return }
+        starting = true
+        defer { starting = false }
+        do {
+            let response = try await KaiXAPIClient.shared.jlptExamStart(
+                examId: intent.examId,
+                confirmedChargeCoins: intent.confirmedChargeCoins,
+                idempotencyKey: intent.idempotencyKey
+            )
+            if let progress = response.paperAttempt {
+                paperAttempt = progress
+                attemptId = progress.id
+                idx = JLPTPaperProgressResolver.index(
+                    sectionExamIDs: sectionIDs,
+                    currentSectionExamId: progress.currentSectionExamId,
+                    currentSectionIndex: progress.currentSectionIndex
+                )
+            } else if let matched = sectionIDs.firstIndex(of: intent.examId) {
+                idx = matched
+            }
+            pendingStartIntent = nil
+            activeStart = response
+            activeStartReceipt = JLPTExamStartReceipt(intent: intent)
             phase = .section
-        } catch let err as KaiXAPIError {
-            if err.error.code == "EXAM_INSUFFICIENT_COINS" {
-                coinInsufficient = true
-            } else {
-                startError = err.error.message
+        } catch let error as KaiXAPIError {
+            let action = JLPTExamRecoveryPolicy.action(for: error)
+            switch action {
+            case .refreshPrice, .restorePaper:
+                do {
+                    let refreshed = try await KaiXAPIClient.shared.jlptExamPreflight(examId: intent.examId)
+                    configureStartIntent(
+                        from: refreshed,
+                        requestedExamId: intent.examId,
+                        idempotencyKey: intent.idempotencyKey
+                    )
+                    startError = guideText(language, "考试状态已更新，请重新确认当前科目与价格。", "試験状態が更新されました。現在の科目と価格をご確認ください。", "Exam state changed. Confirm the refreshed section and price.")
+                } catch {
+                    startError = guideText(language, "无法刷新考试状态，请稍后重试。", "試験状態を更新できません。", "Couldn't refresh the exam state.")
+                }
+            default:
+                handleStartError(error)
             }
         } catch {
             startError = guideText(language, "无法开始科目，请稍后再试。", "科目を開始できません。", "Couldn't start the section.")
+        }
+    }
+
+    private func handleStartError(_ error: KaiXAPIError) {
+        switch JLPTExamRecoveryPolicy.action(for: error) {
+        case .openWallet:
+            pendingStartIntent = nil
+            coinInsufficient = true
+        case .openMembership:
+            pendingStartIntent = nil
+            router.open(.guideMemberResources, in: .guide)
+        default:
+            startError = error.error.message
+        }
+    }
+
+    private func applySubmittedSection(_ result: KaiXJLPTExamResult) {
+        guard let progress = result.paperAttempt else {
+            activeStart = nil
+            activeStartReceipt = nil
+            phase = .betweenBreak
+            Task { await refreshProgress(after: result.examId ?? paperId) }
+            return
+        }
+        apply(progress: progress)
+    }
+
+    private func apply(progress: KaiXJLPTPaperAttempt) {
+        paperAttempt = progress
+        attemptId = progress.id
+        if progress.status.lowercased() == "completed" {
+            activeStart = nil
+            activeStartReceipt = nil
+            phase = .result
+            return
+        }
+        idx = JLPTPaperProgressResolver.index(
+            sectionExamIDs: sectionIDs,
+            currentSectionExamId: progress.currentSectionExamId,
+            currentSectionIndex: progress.currentSectionIndex
+        )
+        activeStart = nil
+        activeStartReceipt = nil
+        phase = .betweenBreak
+    }
+
+    private func applyRecovery(_ action: JLPTExamRecoveryAction) {
+        guard case let .restorePaper(currentSectionExamId, currentSectionIndex, recoveredAttemptId) = action else { return }
+        if let recoveredAttemptId { attemptId = recoveredAttemptId }
+        idx = JLPTPaperProgressResolver.index(
+            sectionExamIDs: sectionIDs,
+            currentSectionExamId: currentSectionExamId,
+            currentSectionIndex: currentSectionIndex
+        )
+        activeStart = nil
+        activeStartReceipt = nil
+        phase = .betweenBreak
+        Task { await refreshProgress(after: currentSectionExamId ?? paperId) }
+    }
+
+    private func refreshProgress(after requestedExamId: String) async {
+        do {
+            let preflight = try await KaiXAPIClient.shared.jlptExamPreflight(examId: requestedExamId)
+            if let progress = preflight.paperAttempt {
+                apply(progress: progress)
+            } else {
+                idx = JLPTPaperProgressResolver.index(
+                    sectionExamIDs: sectionIDs,
+                    currentSectionExamId: preflight.currentSectionExamId,
+                    currentSectionIndex: 0
+                )
+                phase = .betweenBreak
+            }
+        } catch {
+            startError = guideText(language, "无法恢复整卷进度，请重试。", "模試の進捗を復元できません。再試行してください。", "Couldn't restore paper progress. Try again.")
         }
     }
 
@@ -916,6 +1463,7 @@ struct GuideJLPTPaperFlowView: View {
 struct GuideJLPTPaperResultView: View {
     @Environment(\.appLanguage) private var language
     let paperId: String
+    let attemptId: String
     var onExit: () -> Void
 
     @State private var result: KaiXJLPTPaperResult?
@@ -934,26 +1482,39 @@ struct GuideJLPTPaperResultView: View {
                                   actionTitle: guideText(language, "重试", "再試行", "Retry"),
                                   action: { Task { await load() } })
                 } else if let r = result {
-                    let passed = r.scaled?.passedWrittenReference ?? false
-                    JLPTEyebrow(text: "JLPT · \(r.level ?? "") · " + guideText(language, "成绩", "結果", "Result"))
+                    let official = r.officialScore.flatMap {
+                        JLPTOfficialScorePresentation.make(score: $0, language: language)
+                    }
+                    let passed = official?.passedReference
+                        ?? r.scaled?.passedWrittenReference
+                        ?? false
+                    JLPTEyebrow(text: "JLPT · \(official?.level ?? r.level ?? "") · " + guideText(language, "成绩", "結果", "Result"))
                     Text(passed
-                         ? guideText(language, "达到笔试参考线！", "筆記参考ライン到達！", "Reached the written reference line!")
+                         ? (official == nil
+                            ? guideText(language, "达到笔试参考线！", "筆記参考ライン到達！", "Reached the written reference line!")
+                            : guideText(language, "达到全卷参考线！", "総合参考ライン到達！", "Reached the full-paper reference line!"))
                          : guideText(language, "再接再厉", "次回に向けて", "Keep going"))
                         .kxScaledFont(24, relativeTo: .title2, weight: .heavy, design: .rounded)
                         .foregroundStyle(KXColor.livingInk)
 
-                    if let scaled = r.scaled {
-                        JLPTScaledScorePanel(scaled: scaled)
-                    }
-                    if let l = r.listening {
-                        VStack(alignment: .leading, spacing: 6) {
-                            JLPTEyebrow(text: guideText(language, "聴解（参考）", "聴解（参考）", "Listening (reference)"))
-                            Text(guideText(language, "答对 \(l.correct ?? 0)/\(l.total ?? 0) · 得分 \(l.score ?? 0)", "正解 \(l.correct ?? 0)/\(l.total ?? 0) · \(l.score ?? 0)点", "\(l.correct ?? 0)/\(l.total ?? 0) correct · \(l.score ?? 0)"))
-                                .font(.subheadline.weight(.bold)).foregroundStyle(KXColor.livingInk)
+                    if let official {
+                        JLPTOfficialScorePanel(presentation: official)
+                    } else {
+                        // Compatibility only: older servers expose separate
+                        // written scaled + listening percentage blocks.
+                        if let scaled = r.scaled {
+                            JLPTScaledScorePanel(scaled: scaled)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(16)
-                        .jlptSurface(radius: KXRadius.lg)
+                        if let l = r.listening {
+                            VStack(alignment: .leading, spacing: 6) {
+                                JLPTEyebrow(text: guideText(language, "聴解（参考）", "聴解（参考）", "Listening (reference)"))
+                                Text(guideText(language, "答对 \(l.correct ?? 0)/\(l.total ?? 0) · 得分 \(l.score ?? 0)", "正解 \(l.correct ?? 0)/\(l.total ?? 0) · \(l.score ?? 0)点", "\(l.correct ?? 0)/\(l.total ?? 0) correct · \(l.score ?? 0)"))
+                                    .font(.subheadline.weight(.bold)).foregroundStyle(KXColor.livingInk)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(16)
+                            .jlptSurface(radius: KXRadius.lg)
+                        }
                     }
                     ForEach(r.sections ?? []) { s in
                         if s.done ?? false, let sid = s.sessionId {
@@ -1011,11 +1572,96 @@ struct GuideJLPTPaperResultView: View {
         isLoading = true
         loadFailed = false
         do {
-            result = try await KaiXAPIClient.shared.jlptPaperResult(paperId: paperId)
+            result = try await KaiXAPIClient.shared.jlptPaperResult(
+                paperId: paperId,
+                attemptId: attemptId
+            )
         } catch {
             loadFailed = true
         }
         isLoading = false
+    }
+}
+
+/// Localized full-paper score panel. Labels and the equating disclaimer come
+/// exclusively from the validated presentation model, never server copy.
+private struct JLPTOfficialScorePanel: View {
+    @Environment(\.appLanguage) private var language
+    let presentation: JLPTOfficialScorePresentation
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: KXSpacing.md) {
+            HStack(alignment: .lastTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    JLPTEyebrow(text: guideText(language, "全卷参考分", "総合参考スコア", "Full-paper reference score"))
+                    HStack(alignment: .lastTextBaseline, spacing: 4) {
+                        Text("\(presentation.total)")
+                            .kxScaledFont(30, relativeTo: .largeTitle, weight: .black, design: .rounded)
+                        Text("/ \(presentation.totalMax)")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(KXColor.livingMuted)
+                    }
+                    .foregroundStyle(KXColor.livingInk)
+                }
+                Spacer(minLength: KXSpacing.md)
+                Label(
+                    presentation.passedReference
+                        ? guideText(language, "参考合格", "参考合格", "Reference pass")
+                        : guideText(language, "未达参考线", "参考ライン未到達", "Below reference line"),
+                    systemImage: presentation.passedReference ? "checkmark.seal.fill" : "arrow.up.right.circle.fill"
+                )
+                .font(.caption.weight(.bold))
+                .foregroundStyle(presentation.passedReference ? KXColor.livingAccent : KXColor.livingWarm)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(guideText(
+                language,
+                "全卷参考分 \(presentation.total) 分，共 \(presentation.totalMax) 分，参考合格线 \(presentation.passLine) 分",
+                "総合参考スコア \(presentation.total) 点、\(presentation.totalMax) 点満点、参考合格ライン \(presentation.passLine) 点",
+                "Full-paper reference score \(presentation.total) out of \(presentation.totalMax), reference pass line \(presentation.passLine)"
+            ))
+
+            Divider().overlay(JLPTStyle.hairline)
+
+            ForEach(presentation.divisions) { division in
+                HStack(spacing: KXSpacing.md) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(division.label)
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(KXColor.livingInk)
+                        Text(guideText(
+                            language,
+                            "原始 \(division.raw)/\(division.rawMax) · 区分线 \(division.sectionMin)",
+                            "素点 \(division.raw)/\(division.rawMax)・区分基準 \(division.sectionMin)",
+                            "Raw \(division.raw)/\(division.rawMax) · minimum \(division.sectionMin)"
+                        ))
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(KXColor.livingMuted)
+                    }
+                    Spacer(minLength: 0)
+                    Text("\(division.scaled)/\(division.scaledMax)")
+                        .font(.headline.weight(.black).monospacedDigit())
+                        .foregroundStyle(division.passed ? KXColor.livingAccent : KXColor.livingWarm)
+                    Image(systemName: division.passed ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                        .foregroundStyle(division.passed ? KXColor.livingAccent : KXColor.livingWarm)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(guideText(
+                    language,
+                    "\(division.label)，参考分 \(division.scaled) 分，共 \(division.scaledMax) 分，区分线 \(division.sectionMin) 分",
+                    "\(division.label)、参考 \(division.scaled) 点、\(division.scaledMax) 点満点、区分基準 \(division.sectionMin) 点",
+                    "\(division.label), reference score \(division.scaled) out of \(division.scaledMax), section minimum \(division.sectionMin)"
+                ))
+            }
+
+            Text(presentation.referenceNote)
+                .font(.caption)
+                .foregroundStyle(KXColor.livingMuted)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel(presentation.referenceNote)
+        }
+        .padding(18)
+        .jlptSurface(radius: KXRadius.hero, elevated: true)
     }
 }
 
@@ -1129,7 +1775,7 @@ private struct JLPTAnswerSheetView: View {
 
 /// 拦截系统 pop 手势:KXSwipeBackEnabler 把 interactivePopGestureRecognizer 的
 /// delegate 全局改成「栈深 > 1 即放行」,所以考试中要挡误滑只能直接禁用手势本身;
-/// 离场(交卷推结果页 / 确认退出)时恢复,不影响其他页面。
+/// 离场(交卷显示结果 / 确认退出)时恢复,不影响其他页面。
 private struct KXExamPopGestureBlocker: UIViewControllerRepresentable {
     var blocked: Bool
 
@@ -1174,20 +1820,26 @@ private struct KXExamPopGestureBlocker: UIViewControllerRepresentable {
 struct GuideJLPTExamResultView: View {
     @Environment(\.appLanguage) private var language
     let result: KaiXJLPTExamResult
-    /// 交卷时未能同步到服务器的题数(best-effort 提交)——必须如实标注,
-    /// 否则弱网下成绩静默偏低,用户无从得知原因。
+    /// 交卷边界仍在本地 outbox 的题数；只有服务端明确拒绝截止后快照时才展示。
     var unsyncedCount: Int = 0
+    var onExit: () -> Void
+
+    private var submissionNotice: String {
+        JLPTExamCopy.submissionNotice(
+            deadlineExpired: result.deadlineExpired ?? false,
+            snapshotAccepted: result.snapshotAccepted ?? false,
+            pendingAnswerCount: unsyncedCount,
+            language: language
+        )
+    }
 
     var body: some View {
         ScrollView {
-            if unsyncedCount > 0 {
+            if !submissionNotice.isEmpty {
                 HStack(alignment: .top, spacing: KXSpacing.sm) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(KXColor.livingWarm)
-                    Text(guideText(language,
-                                   "有 \(unsyncedCount) 题的答案因网络原因未能上传，已按未答判分。",
-                                   "通信の問題で \(unsyncedCount) 問の回答が送信できず、未回答として採点されました。",
-                                   "\(unsyncedCount) answers couldn't be uploaded and were graded as unanswered."))
+                    Text(submissionNotice)
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(KXColor.livingInk)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1200,6 +1852,18 @@ struct GuideJLPTExamResultView: View {
                 .padding(.top, KXSpacing.lg)
             }
             JLPTExamResultContent(result: result)
+            Button(action: onExit) {
+                Label(guideText(language, "返回模考列表", "一覧へ戻る", "Back to exams"), systemImage: "arrow.uturn.backward")
+                    .font(.subheadline.weight(.bold))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 46)
+                    .background(KXColor.livingAccentSoft, in: Capsule())
+                    .foregroundStyle(KXColor.livingAccent)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("jlpt.exam.result.backToExams")
+            .padding(.horizontal, KXSpacing.lg)
+            .padding(.bottom, KXSpacing.lg)
         }
         .background(KXColor.livingBackground.ignoresSafeArea())
         .navigationTitle(guideText(language, "考试结果", "試験結果", "Result"))

@@ -135,7 +135,21 @@ extension KaiXCityListingDTO {
 }
 
 struct KaiXAPIError: Codable, Error, LocalizedError {
-    struct Body: Codable { let code: String; let message: String }
+    struct Body: Codable {
+        let code: String
+        let message: String
+        /// Machine-readable recovery context returned by the backend. Keeping
+        /// this value typed as recursive JSON prevents endpoint-specific fields
+        /// (current section, authoritative revision, required balance, etc.)
+        /// from being discarded by the shared HTTP layer.
+        let detail: [String: KXJSONValue]?
+
+        init(code: String, message: String, detail: [String: KXJSONValue]? = nil) {
+            self.code = code
+            self.message = message
+            self.detail = detail
+        }
+    }
     let error: Body
     var errorDescription: String? { error.message }
 }
@@ -690,4 +704,3 @@ struct KaiXListingInquiryReceiptDTO: Codable, Equatable {
         success_title ?? successTitle ?? "已提交"
     }
 }
-

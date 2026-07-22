@@ -11,14 +11,52 @@ final class JLPTAudioPlayerModel: ObservableObject {
     @Published var current: Double = 0
     @Published var duration: Double = 0
     @Published var failed = false
+    @Published var blocked = false
+    @Published var failurePresentation: JLPTListeningFailurePresentation?
 
     private var player: AVPlayer?
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
     private var statusObservation: NSKeyValueObservation?
+    private var timeControlObservation: NSKeyValueObservation?
+    private var policy: JLPTListeningRuntimePolicy = .practice
+    private var playbackIdentity: JLPTListeningPlaybackIdentity?
+    private var gate = JLPTListeningPlaybackGate(policy: .practice, persistedPlaysStarted: 0)
+    private var ended = false
+    private let credentialStore = JLPTListeningPlaybackCredentialStore()
 
-    func load(_ url: URL) {
+    func load(
+        _ url: URL,
+        policy: JLPTListeningRuntimePolicy,
+        playbackIdentity: JLPTListeningPlaybackIdentity?
+    ) {
         teardown()
+        self.policy = policy
+        self.playbackIdentity = playbackIdentity
+        current = 0
+        duration = 0
+        failed = false
+        failurePresentation = nil
+        ended = false
+        blocked = false
+        let persisted: Int
+        if policy.maxPlays > 0 {
+            // A timed exam without a valid session/question identity cannot
+            // satisfy relaunch persistence, so playback fails closed.
+            guard let playbackIdentity, playbackIdentity.isValid else {
+                gate = JLPTListeningPlaybackGate(
+                    policy: policy,
+                    persistedPlaysStarted: policy.maxPlays
+                )
+                blocked = true
+                return
+            }
+            persisted = credentialStore.playsStarted(for: playbackIdentity)
+        } else {
+            persisted = 0
+        }
+        gate = JLPTListeningPlaybackGate(policy: policy, persistedPlaysStarted: persisted)
+        blocked = policy.maxPlays > 0 && persisted >= policy.maxPlays
         // 听力要外放:即便手机静音开关拨到静音也应出声(考试场景)。
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
         try? AVAudioSession.sharedInstance().setActive(true)
@@ -26,20 +64,60 @@ final class JLPTAudioPlayerModel: ObservableObject {
         let p = AVPlayer(playerItem: item)
         player = p
         statusObservation = item.observe(\.status) { [weak self] it, _ in
-            Task { @MainActor in
-                if it.status == .failed { self?.failed = true }
-                else if it.status == .readyToPlay {
-                    let d = it.duration.seconds
-                    if d.isFinite, d > 0 { self?.duration = d }
+            let isFailed = it.status == .failed
+            let isReady = it.status == .readyToPlay
+            let itemDuration = it.duration.seconds
+            Task { @MainActor [weak self] in
+                if isFailed {
+                    guard let self else { return }
+                    self.gate.failPendingStart()
+                    let presentation = JLPTListeningFailurePresentation.resolve(
+                        policy: self.policy,
+                        didConsumePlay: self.gate.didConsumePlaybackInCurrentLoad
+                    )
+                    self.failurePresentation = presentation
+                    self.failed = true
+                    self.playing = false
+                    if !presentation.canRetry {
+                        self.blocked = true
+                    }
+                }
+                else if isReady {
+                    if itemDuration.isFinite, itemDuration > 0 {
+                        self?.duration = itemDuration
+                    }
+                }
+            }
+        }
+        timeControlObservation = p.observe(\.timeControlStatus) { [weak self] player, _ in
+            let timeControlStatus = player.timeControlStatus
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                switch timeControlStatus {
+                case .playing:
+                    self.playing = true
+                    if self.gate.confirmPlaybackStarted(),
+                       let identity = self.playbackIdentity,
+                       identity.isValid {
+                        self.credentialStore.recordSuccessfulStart(for: identity)
+                    }
+                    self.blocked = false
+                case .paused:
+                    self.playing = false
+                case .waitingToPlayAtSpecifiedRate:
+                    self.playing = false
+                @unknown default:
+                    self.playing = false
                 }
             }
         }
         timeObserver = p.addPeriodicTimeObserver(
             forInterval: CMTime(seconds: 0.2, preferredTimescale: 600), queue: .main
         ) { [weak self] time in
-            Task { @MainActor in
+            let seconds = time.seconds
+            Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.current = time.seconds.isFinite ? time.seconds : 0
+                self.current = seconds.isFinite ? seconds : 0
                 if self.duration == 0, let d = self.player?.currentItem?.duration.seconds,
                    d.isFinite, d > 0 { self.duration = d }
             }
@@ -47,23 +125,53 @@ final class JLPTAudioPlayerModel: ObservableObject {
         endObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.playing = false; self?.player?.seek(to: .zero) }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.playing = false
+                self.ended = true
+                self.gate.markEnded()
+                if self.policy.allowReplay {
+                    self.player?.seek(to: .zero)
+                    self.current = 0
+                } else if self.policy.maxPlays > 0,
+                          self.gate.playsStarted >= self.policy.maxPlays {
+                    self.blocked = true
+                }
+            }
         }
     }
 
     func toggle() {
         guard let p = player else { return }
-        if playing { p.pause(); playing = false }
-        else { p.play(); playing = true }
+        if playing {
+            guard policy.allowPause else { return }
+            p.pause()
+            playing = false
+            return
+        }
+        switch gate.requestPlay(currentSeconds: current, ended: ended) {
+        case .blocked:
+            blocked = true
+        case .resume, .startNew:
+            blocked = false
+            p.play()
+        }
     }
 
     func replay() {
         guard let p = player else { return }
-        p.seek(to: .zero); p.play(); playing = true
+        switch gate.requestReplay() {
+        case .blocked:
+            blocked = true
+        case .resume, .startNew:
+            blocked = false
+            ended = false
+            p.seek(to: .zero) { [weak p] _ in p?.play() }
+        }
     }
 
     func seek(toFraction f: Double) {
-        guard let p = player, duration > 0 else { return }
+        guard policy.allowSeek, let p = player, duration > 0 else { return }
         let t = CMTime(seconds: max(0, min(1, f)) * duration, preferredTimescale: 600)
         p.seek(to: t)
         current = t.seconds
@@ -73,6 +181,8 @@ final class JLPTAudioPlayerModel: ObservableObject {
         if let o = timeObserver { player?.removeTimeObserver(o); timeObserver = nil }
         if let o = endObserver { NotificationCenter.default.removeObserver(o); endObserver = nil }
         statusObservation = nil
+        timeControlObservation = nil
+        gate.failPendingStart()
         player?.pause()
         player = nil
         playing = false
@@ -87,6 +197,8 @@ final class JLPTAudioPlayerModel: ObservableObject {
 struct JLPTAudioPlayer: View {
     @Environment(\.appLanguage) private var language
     let url: URL
+    var policy: JLPTListeningRuntimePolicy = .practice
+    var playbackIdentity: JLPTListeningPlaybackIdentity? = nil
     @StateObject private var model = JLPTAudioPlayerModel()
     @State private var scrubbing = false
     @State private var scrubFraction: Double = 0
@@ -101,6 +213,14 @@ struct JLPTAudioPlayer: View {
         return model.duration > 0 ? min(1, model.current / model.duration) : 0
     }
 
+    private var taskID: String {
+        [
+            url.absoluteString,
+            policy.mode.rawValue,
+            playbackIdentity?.credentialKey ?? "practice"
+        ].joined(separator: "|")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
@@ -111,13 +231,23 @@ struct JLPTAudioPlayer: View {
             .foregroundStyle(KXColor.livingAccent)
 
             if model.failed {
-                Text(guideText(language, "音频加载失败，请检查网络后重试。", "音声を読み込めませんでした。", "Couldn't load the audio."))
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(KXColor.livingMuted)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(failureCopy)
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(KXColor.livingMuted)
+                    if model.failurePresentation?.canRetry == true {
+                        Button(guideText(language, "重试加载", "再読み込み", "Retry loading")) {
+                            model.load(url, policy: policy, playbackIdentity: playbackIdentity)
+                        }
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(KXColor.livingAccent)
+                        .accessibilityHint(retryAccessibilityHint)
+                    }
+                }
             } else {
                 HStack(spacing: KXSpacing.md) {
                     Button(action: model.toggle) {
-                        Image(systemName: model.playing ? "pause.fill" : "play.fill")
+                        Image(systemName: playButtonIcon)
                             .font(.title3.weight(.bold))
                             .foregroundStyle(KXColor.onTint(KXColor.livingAccent))
                             .frame(width: 46, height: 46)
@@ -125,21 +255,30 @@ struct JLPTAudioPlayer: View {
                             .shadow(color: KXColor.livingAccent.opacity(0.24), radius: 8, y: 3)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(model.playing ? guideText(language, "暂停", "一時停止", "Pause") : guideText(language, "播放", "再生", "Play"))
+                    .accessibilityLabel(playButtonAccessibilityLabel)
+                    .accessibilityHint(playButtonAccessibilityHint)
+                    .disabled((model.blocked && !model.playing) || (model.playing && !policy.allowPause))
+                    .opacity((model.blocked && !model.playing) || (model.playing && !policy.allowPause) ? 0.48 : 1)
 
                     VStack(spacing: 3) {
-                        Slider(
-                            value: Binding(
-                                get: { fraction },
-                                set: { scrubFraction = $0 }
-                            ),
-                            in: 0...1,
-                            onEditingChanged: { editing in
-                                scrubbing = editing
-                                if !editing { model.seek(toFraction: scrubFraction) }
-                            }
-                        )
-                        .tint(KXColor.livingAccent)
+                        if policy.allowSeek {
+                            Slider(
+                                value: Binding(
+                                    get: { fraction },
+                                    set: { scrubFraction = $0 }
+                                ),
+                                in: 0...1,
+                                onEditingChanged: { editing in
+                                    scrubbing = editing
+                                    if !editing { model.seek(toFraction: scrubFraction) }
+                                }
+                            )
+                            .tint(KXColor.livingAccent)
+                        } else {
+                            ProgressView(value: fraction)
+                                .tint(KXColor.livingAccent)
+                                .accessibilityLabel(guideText(language, "播放进度，不可拖动", "再生位置（変更不可）", "Playback progress, seeking unavailable"))
+                        }
                         HStack {
                             Text(Self.clock(scrubbing ? scrubFraction * model.duration : model.current))
                             Spacer()
@@ -149,15 +288,28 @@ struct JLPTAudioPlayer: View {
                         .foregroundStyle(KXColor.livingMuted)
                     }
 
-                    Button(action: model.replay) {
-                        Image(systemName: "gobackward")
-                            .font(.subheadline.weight(.bold))
-                            .foregroundStyle(KXColor.livingAccent)
-                            .frame(width: 38, height: 38)
-                            .overlay(Circle().stroke(KXColor.livingAccent.opacity(0.3), lineWidth: 1))
+                    if policy.allowReplay {
+                        Button(action: model.replay) {
+                            Image(systemName: "gobackward")
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(KXColor.livingAccent)
+                                .frame(width: 38, height: 38)
+                                .overlay(Circle().stroke(KXColor.livingAccent.opacity(0.3), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(guideText(language, "重播", "もう一度", "Replay"))
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(guideText(language, "重播", "もう一度", "Replay"))
+                }
+                if policy.mode == .strict {
+                    Text(model.blocked
+                         ? guideText(language, "本题仅可播放一次，已无法重播。", "この問題は1回のみ再生でき、再生し直せません。", "This question allows one play and cannot be replayed.")
+                         : strictRulesCopy)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(model.blocked ? KXColor.livingWarm : KXColor.livingMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel(model.blocked
+                                            ? guideText(language, "听力播放次数已用完", "聴解の再生回数を使い切りました", "Listening play limit used")
+                                            : strictRulesAccessibilityLabel)
                 }
             }
         }
@@ -165,8 +317,90 @@ struct JLPTAudioPlayer: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(KXColor.livingAccentSoft.opacity(0.5), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous).stroke(KXColor.livingAccent.opacity(0.25), lineWidth: 0.8))
-        .task(id: url) { model.load(url) }
+        .task(id: taskID) {
+            model.load(url, policy: policy, playbackIdentity: playbackIdentity)
+        }
         .onDisappear { model.teardown() }
+    }
+
+    private var failureCopy: String {
+        if model.failurePresentation?.didConsumePlay == true {
+            if model.failurePresentation?.canRetry == true {
+                return guideText(
+                    language,
+                    "音频播放中断，本次播放已计入；你可以重新加载。",
+                    "音声再生が中断され、この再生は回数に含まれました。再読み込みできます。",
+                    "Playback was interrupted and this play was counted. You can reload the audio."
+                )
+            }
+            return guideText(
+                language,
+                "音频播放中断，本次播放已计入；严格考试中不能重播。",
+                "音声再生が中断され、この再生は回数に含まれました。厳格試験では再生し直せません。",
+                "Playback was interrupted and this play was counted. Strict exam mode does not allow a replay."
+            )
+        }
+        return guideText(
+            language,
+            "音频加载失败，尚未计入播放次数。",
+            "音声を読み込めませんでした。再生回数には含まれていません。",
+            "The audio failed to load and did not consume your play."
+        )
+    }
+
+    private var playButtonIcon: String {
+        if model.playing { return policy.allowPause ? "pause.fill" : "waveform" }
+        return "play.fill"
+    }
+
+    private var playButtonAccessibilityLabel: String {
+        if model.playing {
+            return policy.allowPause
+                ? guideText(language, "暂停听力音频", "聴解音声を一時停止", "Pause listening audio")
+                : guideText(language, "听力音频正在播放，不能暂停", "聴解音声を再生中です。一時停止できません", "Listening audio is playing and cannot be paused")
+        }
+        return model.blocked
+            ? guideText(language, "本题音频已播放，不能重播", "この問題の音声は再生済みで、再生し直せません", "This question's audio has already been played and cannot be replayed")
+            : guideText(language, "播放听力音频", "聴解音声を再生", "Play listening audio")
+    }
+
+    private var playButtonAccessibilityHint: String {
+        if model.blocked {
+            return guideText(language, "一次播放限制已用完", "1回の再生制限を使い切りました", "The one-play limit has been used")
+        }
+        if !policy.allowPause {
+            return guideText(language, "播放开始后会连续播放，不能暂停", "再生開始後は連続再生され、一時停止できません", "Playback continues without pause after it starts")
+        }
+        return guideText(language, "播放后可以暂停并继续", "再生後は一時停止して再開できます", "After playback starts, you may pause and resume")
+    }
+
+    private var strictRulesCopy: String {
+        policy.allowPause
+            ? guideText(language, "仅可播放一次；可以暂停并继续，不能拖动或重播。考试中不显示原文。", "再生は1回のみです。一時停止と再開はできますが、位置変更・再再生はできません。試験中はスクリプトを表示しません。", "One play only. You may pause and resume, but cannot seek or replay. The transcript stays hidden during the exam.")
+            : guideText(language, "仅可连续播放一次；不能暂停、拖动或重播。考试中不显示原文。", "連続再生は1回のみです。一時停止・位置変更・再再生はできません。試験中はスクリプトを表示しません。", "One continuous play only. You cannot pause, seek, or replay. The transcript stays hidden during the exam.")
+    }
+
+    private var strictRulesAccessibilityLabel: String {
+        policy.allowPause
+            ? guideText(language, "听力规则：一次播放，可暂停继续，不可拖动重播，考试中隐藏原文", "聴解ルール：1回再生、一時停止と再開は可能、位置変更と再再生は不可、試験中は原文非表示", "Listening rules: one play, pause and resume allowed, no seeking or replay, transcript hidden during exam")
+            : guideText(language, "听力规则：一次连续播放，不可暂停、拖动或重播，考试中隐藏原文", "聴解ルール：1回の連続再生、一時停止・位置変更・再再生は不可、試験中は原文非表示", "Listening rules: one continuous play, no pausing, seeking, or replay, transcript hidden during exam")
+    }
+
+    private var retryAccessibilityHint: String {
+        if model.failurePresentation?.didConsumePlay == true {
+            return guideText(
+                language,
+                "练习模式允许重新加载",
+                "練習モードでは再読み込みできます",
+                "Practice mode allows the audio to be reloaded"
+            )
+        }
+        return guideText(
+            language,
+            "失败的加载不会占用播放次数",
+            "読み込み失敗では再生回数を消費しません",
+            "A failed load does not consume the play limit"
+        )
     }
 }
 
@@ -745,6 +979,10 @@ struct JLPTQuestionCard: View {
     var isMember: Bool = false
     var explaining: Bool = false
     var explanationText: String? = nil
+    /// Live timed exams pass the canonical strict policy and a durable
+    /// session/question identity. Practice, placement, and review keep defaults.
+    var listeningPolicy: JLPTListeningRuntimePolicy = .practice
+    var playbackIdentity: JLPTListeningPlaybackIdentity? = nil
 
     /// 听力题:答题时默认不显示脚本(听力就是要「听」);已判分/回看时或手动展开
     /// 后才显示原文，便于对照学习。
@@ -757,17 +995,29 @@ struct JLPTQuestionCard: View {
         }
         return URL(string: raw)
     }
-    private var scriptVisible: Bool { audioURL == nil || revealed || showScript }
+    private var scriptVisible: Bool {
+        audioURL == nil
+            || revealed
+            || (listeningPolicy.showTranscriptDuringAttempt && showScript)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: KXSpacing.lg) {
             header
 
             if let url = audioURL {
-                JLPTAudioPlayer(url: url)
+                JLPTAudioPlayer(
+                    url: url,
+                    policy: listeningPolicy,
+                    playbackIdentity: playbackIdentity
+                )
             }
 
-            if let passage = question.passage, !passage.isEmpty, audioURL != nil, !scriptVisible {
+            if let passage = question.passage,
+               !passage.isEmpty,
+               audioURL != nil,
+               !scriptVisible,
+               listeningPolicy.showTranscriptDuringAttempt {
                 Button {
                     withAnimation(.snappy(duration: 0.2)) { showScript = true }
                 } label: {

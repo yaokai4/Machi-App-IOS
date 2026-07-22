@@ -966,25 +966,53 @@ extension KaiXAPIClient {
         return try decode(data)
     }
 
-    /// Start an exam session. Member-only exams 403 (`MEMBER_REQUIRED`) for free
-    /// users; empty banks return 409 (`no_questions`).
-    func jlptExamStart(examId: String) async throws -> KaiXJLPTExamStartResponse {
-        struct Body: Encodable { let examId: String }
-        let data = try await request("POST", "/api/guide/jlpt/exam/start", body: Body(examId: examId))
+    /// Fetch the authoritative access/price snapshot before presenting a start
+    /// confirmation. Both standalone exams and parent papers use this endpoint.
+    func jlptExamPreflight(examId: String) async throws -> KaiXJLPTExamPreflight {
+        let data = try await request(
+            "GET",
+            "/api/guide/jlpt/exam/preflight",
+            queryItems: [URLQueryItem(name: "examId", value: examId)]
+        )
+        return try decode(data)
+    }
+
+    /// Start or resume an exam under the user's confirmed price. The stable key
+    /// makes a response-loss retry replay the same paid attempt instead of
+    /// creating or charging another one.
+    func jlptExamStart(
+        examId: String,
+        confirmedChargeCoins: Int,
+        idempotencyKey: String
+    ) async throws -> KaiXJLPTExamStartResponse {
+        struct Body: Encodable {
+            let examId: String
+            let confirmedChargeCoins: Int
+        }
+        guard !idempotencyKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw KaiXAPIError(error: .init(
+                code: "invalid_idempotency_key",
+                message: "A non-empty Idempotency-Key is required to start an exam."
+            ))
+        }
+        let data = try await request(
+            "POST",
+            "/api/guide/jlpt/exam/start",
+            body: Body(examId: examId, confirmedChargeCoins: confirmedChargeCoins),
+            idempotencyKey: idempotencyKey
+        )
         return try decode(data)
     }
 
     @discardableResult
-    func jlptExamAnswer(sessionId: String, questionId: String, selectedIndex: Int) async throws -> KaiXJLPTExamAnswerResponse {
-        struct Body: Encodable { let sessionId: String; let questionId: String; let selectedIndex: Int }
+    func jlptExamAnswer(_ answer: KaiXJLPTExamAnswerRequest) async throws -> KaiXJLPTExamAnswerResponse {
         let data = try await request("POST", "/api/guide/jlpt/exam/answer",
-                                     body: Body(sessionId: sessionId, questionId: questionId, selectedIndex: selectedIndex))
+                                     body: answer)
         return try decode(data)
     }
 
-    func jlptExamSubmit(sessionId: String) async throws -> KaiXJLPTExamResult {
-        struct Body: Encodable { let sessionId: String }
-        let data = try await request("POST", "/api/guide/jlpt/exam/submit", body: Body(sessionId: sessionId))
+    func jlptExamSubmit(_ submission: KaiXJLPTExamSubmitRequest) async throws -> KaiXJLPTExamResult {
+        let data = try await request("POST", "/api/guide/jlpt/exam/submit", body: submission)
         return try decode(data)
     }
 
@@ -1009,9 +1037,19 @@ extension KaiXAPIClient {
     }
 
     /// 分科整卷合并成绩(笔试缩放分 + 聴解百分比)。
-    func jlptPaperResult(paperId: String) async throws -> KaiXJLPTPaperResult {
+    func jlptPaperResult(paperId: String, attemptId: String) async throws -> KaiXJLPTPaperResult {
         let id = try requirePathIdentifier(paperId)
-        let data = try await request("GET", "/api/guide/jlpt/paper/\(id.encodedPathSegment)/result")
+        guard !attemptId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw KaiXAPIError(error: .init(
+                code: "missing_paper_attempt_id",
+                message: "A paper attempt id is required to load the result."
+            ))
+        }
+        let data = try await request(
+            "GET",
+            "/api/guide/jlpt/paper/\(id.encodedPathSegment)/result",
+            queryItems: [URLQueryItem(name: "attemptId", value: attemptId)]
+        )
         return try decode(data)
     }
 }

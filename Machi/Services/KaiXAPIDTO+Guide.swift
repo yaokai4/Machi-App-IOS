@@ -2236,6 +2236,130 @@ struct KaiXJLPTPaperDetail: Codable, Equatable {
     let disclaimer: String?
 }
 
+/// One section inside the server-owned parent-paper attempt.
+struct KaiXJLPTPaperAttemptSection: Codable, Equatable, Hashable, Identifiable {
+    let examId: String
+    let sortOrder: Int
+    let status: String
+    let sessionId: String
+    let startedAt: String
+    let completedAt: String
+    var id: String { examId }
+}
+
+/// Durable progress/payment snapshot for one full-paper attempt. The server is
+/// authoritative for the current section; clients must not infer it from a
+/// locally incremented index after relaunch or an out-of-order response.
+struct KaiXJLPTPaperAttempt: Codable, Equatable, Hashable, Identifiable {
+    let id: String
+    let paperExamId: String
+    let status: String
+    let currentSectionIndex: Int
+    let currentSectionExamId: String
+    let sectionCount: Int
+    let baseCoinCost: Int
+    let chargedCoinCost: Int
+    let pricingTier: String
+    let membershipSnapshot: Bool
+    let unlockSource: String
+    let paymentStatus: String
+    let walletLedgerEntryId: String
+    let startedAt: String
+    let completedAt: String
+    let sections: [KaiXJLPTPaperAttemptSection]
+}
+
+/// Server-owned listening controls attached to exam preflight/start payloads.
+/// Runtime exam behavior canonicalizes this shape again so a missing, unknown,
+/// or contradictory live-exam policy can never enable seek/replay/transcripts.
+struct KaiXJLPTListeningPolicy: Codable, Equatable, Hashable {
+    let mode: String
+    let allowPause: Bool
+    let allowSeek: Bool
+    let allowReplay: Bool
+    let maxPlays: Int
+    let showTranscriptDuringAttempt: Bool
+}
+
+/// Read-only price/access contract that must be confirmed before every start.
+/// `paperAttempt` is nil when the backend sends its documented empty object.
+struct KaiXJLPTExamPreflight: Decodable, Equatable {
+    let status: String
+    let examId: String
+    let paperExamId: String
+    let accessDecision: String
+    let canStart: Bool
+    let baseCoinCost: Int
+    let memberCoinCost: Int
+    let requiredCoins: Int
+    let pricingTier: String
+    let balance: Int
+    let shortfall: Int
+    let unlockSource: String
+    let oneTimePaperPayment: Bool
+    let currentSectionExamId: String
+    let resumeSessionId: String
+    let paperAttempt: KaiXJLPTPaperAttempt?
+    let priceSnapshotSource: String
+    let refundPolicyCode: String
+    let refundPolicyCopy: String
+    let confirmationCopyKey: String
+    let confirmationCopy: String
+    let listeningPolicy: KaiXJLPTListeningPolicy?
+    let serverTime: String
+    let disclaimer: String
+
+    private enum CodingKeys: String, CodingKey {
+        case status, examId, paperExamId, accessDecision, canStart, baseCoinCost,
+             memberCoinCost, requiredCoins, pricingTier, balance, shortfall,
+             unlockSource, oneTimePaperPayment, currentSectionExamId,
+             resumeSessionId, paperAttempt, priceSnapshotSource, refundPolicyCode,
+             refundPolicyCopy, confirmationCopyKey, confirmationCopy, serverTime,
+             disclaimer, listeningPolicy
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        status = try c.decode(String.self, forKey: .status)
+        examId = try c.decode(String.self, forKey: .examId)
+        paperExamId = try c.decode(String.self, forKey: .paperExamId)
+        accessDecision = try c.decode(String.self, forKey: .accessDecision)
+        canStart = try c.decode(Bool.self, forKey: .canStart)
+        baseCoinCost = try c.decode(Int.self, forKey: .baseCoinCost)
+        memberCoinCost = try c.decode(Int.self, forKey: .memberCoinCost)
+        requiredCoins = try c.decode(Int.self, forKey: .requiredCoins)
+        pricingTier = try c.decode(String.self, forKey: .pricingTier)
+        balance = try c.decode(Int.self, forKey: .balance)
+        shortfall = try c.decode(Int.self, forKey: .shortfall)
+        unlockSource = try c.decode(String.self, forKey: .unlockSource)
+        oneTimePaperPayment = try c.decode(Bool.self, forKey: .oneTimePaperPayment)
+        currentSectionExamId = try c.decode(String.self, forKey: .currentSectionExamId)
+        resumeSessionId = try c.decode(String.self, forKey: .resumeSessionId)
+        if !c.contains(.paperAttempt) {
+            paperAttempt = nil
+        } else if try c.decodeNil(forKey: .paperAttempt) {
+            paperAttempt = nil
+        } else if let rawAttempt = try? c.decode([String: KXJSONValue].self, forKey: .paperAttempt),
+                  rawAttempt.isEmpty {
+            // The backend deliberately uses `{}` when no parent-paper attempt
+            // exists. Only that documented empty object is treated as absent;
+            // a non-empty malformed attempt must fail closed instead of
+            // silently sending the user back to the first section.
+            paperAttempt = nil
+        } else {
+            paperAttempt = try c.decode(KaiXJLPTPaperAttempt.self, forKey: .paperAttempt)
+        }
+        priceSnapshotSource = try c.decode(String.self, forKey: .priceSnapshotSource)
+        refundPolicyCode = try c.decode(String.self, forKey: .refundPolicyCode)
+        refundPolicyCopy = try c.decode(String.self, forKey: .refundPolicyCopy)
+        confirmationCopyKey = try c.decode(String.self, forKey: .confirmationCopyKey)
+        confirmationCopy = try c.decode(String.self, forKey: .confirmationCopy)
+        listeningPolicy = try c.decodeIfPresent(KaiXJLPTListeningPolicy.self, forKey: .listeningPolicy)
+        serverTime = try c.decode(String.self, forKey: .serverTime)
+        disclaimer = try c.decode(String.self, forKey: .disclaimer)
+    }
+}
+
 /// 分科整卷合并成绩里的单科条目。
 struct KaiXJLPTPaperResultSection: Codable, Equatable, Hashable, Identifiable {
     let examId: String
@@ -2261,16 +2385,45 @@ struct KaiXJLPTPaperListening: Codable, Equatable, Hashable {
     let passed: Bool?
 }
 
+/// One exact JLPT score division in the full-paper 180-point reference result.
+struct KaiXJLPTOfficialScoreDivision: Codable, Equatable, Hashable, Identifiable {
+    let key: String
+    let label: String
+    let raw: Int
+    let rawMax: Int
+    let scaled: Int
+    let scaledMax: Int
+    let sectionMin: Int
+    let passed: Bool
+    var id: String { key }
+}
+
+/// Full-paper reference score including listening. Fields are deliberately
+/// nonoptional: a partial official block must not be presented as authoritative.
+struct KaiXJLPTOfficialPaperScore: Codable, Equatable, Hashable {
+    let mode: String
+    let level: String
+    let total: Int
+    let totalMax: Int
+    let passLine: Int
+    let passedReference: Bool
+    let divisions: [KaiXJLPTOfficialScoreDivision]
+    let note: String
+}
+
 /// 分科整卷合并成绩:笔试缩放分 + 聴解百分比。
 struct KaiXJLPTPaperResult: Codable, Equatable {
     let status: String?
     let paperId: String?
     let level: String?
     let title: String?
+    let paperAttemptId: String?
+    let paperAttemptStatus: String?
     let complete: Bool?
     let sections: [KaiXJLPTPaperResultSection]?
     let scaled: KaiXJLPTScaledResult?
     let listening: KaiXJLPTPaperListening?
+    let officialScore: KaiXJLPTOfficialPaperScore?
     let disclaimer: String?
 }
 
@@ -2311,16 +2464,19 @@ struct KaiXJLPTExamsResponse: Codable, Equatable {
 struct KaiXJLPTExamResumeAnswer: Codable, Equatable, Hashable {
     let questionId: String?
     let selectedIndex: Int?
+    let revision: Int?
 
-    enum CodingKeys: String, CodingKey { case questionId, selectedIndex }
+    enum CodingKeys: String, CodingKey { case questionId, selectedIndex, revision }
     private enum SnakeKeys: String, CodingKey {
         case questionId = "question_id"
         case selectedIndex = "selected_index"
+        case revision
     }
 
-    init(questionId: String?, selectedIndex: Int?) {
+    init(questionId: String?, selectedIndex: Int?, revision: Int? = nil) {
         self.questionId = questionId
         self.selectedIndex = selectedIndex
+        self.revision = revision
     }
 
     init(from decoder: Decoder) throws {
@@ -2330,6 +2486,8 @@ struct KaiXJLPTExamResumeAnswer: Codable, Equatable, Hashable {
             ?? snake.decodeIfPresent(String.self, forKey: .questionId)
         selectedIndex = try camel.decodeIfPresent(Int.self, forKey: .selectedIndex)
             ?? snake.decodeIfPresent(Int.self, forKey: .selectedIndex)
+        revision = try camel.decodeIfPresent(Int.self, forKey: .revision)
+            ?? snake.decodeIfPresent(Int.self, forKey: .revision)
     }
 }
 
@@ -2344,21 +2502,32 @@ struct KaiXJLPTExamStartResponse: Codable, Equatable {
     let total: Int?
     let questions: [KaiXJLPTQuestionDTO]?
     let disclaimer: String?
+    let listeningPolicy: KaiXJLPTListeningPolicy?
     // Resume overlay (B15-D) — present only when the server handed back an
     // existing in-progress session instead of a fresh one. All optional so an
     // older server (which omits them) keeps decoding fine.
     let resumed: Bool?
     let answers: [KaiXJLPTExamResumeAnswer]?
+    let answerRevision: Int?
     /// Server-computed seconds left on the clock — the server is the timing
     /// authority on resume; the client re-anchors its deadline to this.
     let remainingSeconds: Int?
+
+    /// Immutable payment and parent-paper progress overlays returned by start.
+    let coinCharged: Int?
+    let coinBalance: Int?
+    let paymentStatus: String?
+    let walletLedgerEntryId: String?
+    let paperAttempt: KaiXJLPTPaperAttempt?
 
     /// 'percent' 或 'jlpt_scaled' — 客户端据此在开考页预告 180 分制出分。
     let scoreMode: String?
 
     enum CodingKeys: String, CodingKey {
         case status, sessionId, examId, level, title, durationSeconds, passScore,
-             total, questions, disclaimer, resumed, answers, remainingSeconds, scoreMode
+             total, questions, disclaimer, resumed, answers, answerRevision,
+             remainingSeconds, coinCharged, coinBalance, paymentStatus,
+             walletLedgerEntryId, paperAttempt, scoreMode, listeningPolicy
     }
     private enum SnakeKeys: String, CodingKey {
         case remainingSeconds = "remaining_seconds"
@@ -2376,8 +2545,15 @@ struct KaiXJLPTExamStartResponse: Codable, Equatable {
         total = try c.decodeIfPresent(Int.self, forKey: .total)
         questions = try c.decodeIfPresent([KaiXJLPTQuestionDTO].self, forKey: .questions)
         disclaimer = try c.decodeIfPresent(String.self, forKey: .disclaimer)
+        listeningPolicy = try c.decodeIfPresent(KaiXJLPTListeningPolicy.self, forKey: .listeningPolicy)
         resumed = try c.decodeIfPresent(Bool.self, forKey: .resumed)
         answers = try c.decodeIfPresent([KaiXJLPTExamResumeAnswer].self, forKey: .answers)
+        answerRevision = try c.decodeIfPresent(Int.self, forKey: .answerRevision)
+        coinCharged = try c.decodeIfPresent(Int.self, forKey: .coinCharged)
+        coinBalance = try c.decodeIfPresent(Int.self, forKey: .coinBalance)
+        paymentStatus = try c.decodeIfPresent(String.self, forKey: .paymentStatus)
+        walletLedgerEntryId = try c.decodeIfPresent(String.self, forKey: .walletLedgerEntryId)
+        paperAttempt = try c.decodeIfPresent(KaiXJLPTPaperAttempt.self, forKey: .paperAttempt)
         scoreMode = try c.decodeIfPresent(String.self, forKey: .scoreMode)
         let snake = try decoder.container(keyedBy: SnakeKeys.self)
         remainingSeconds = try c.decodeIfPresent(Int.self, forKey: .remainingSeconds)
@@ -2385,10 +2561,34 @@ struct KaiXJLPTExamStartResponse: Codable, Equatable {
     }
 }
 
+struct KaiXJLPTExamAnswerRequest: Encodable, Equatable {
+    let sessionId: String
+    let questionId: String
+    let selectedIndex: Int
+    let baseRevision: Int
+    let revision: Int
+}
+
 struct KaiXJLPTExamAnswerResponse: Codable, Equatable {
     let status: String?
     let saved: Bool?
     let questionId: String?
+    let revision: Int?
+    let answerRevision: Int?
+    let idempotentReplay: Bool?
+    let legacyRevisionAssigned: Bool?
+}
+
+struct KaiXJLPTAnswerSnapshot: Codable, Equatable, Hashable {
+    let questionId: String
+    let selectedIndex: Int
+}
+
+struct KaiXJLPTExamSubmitRequest: Encodable, Equatable {
+    let sessionId: String
+    let answersSnapshot: [KaiXJLPTAnswerSnapshot]
+    let baseRevision: Int
+    let revision: Int
 }
 
 /// Result of `/exam/submit` and the shape returned by `/exam/session/{id}`.
@@ -2406,6 +2606,10 @@ struct KaiXJLPTExamResult: Codable, Equatable {
     let scaled: KaiXJLPTScaledResult?
     let durationSeconds: Int?
     let questions: [KaiXJLPTQuestionDTO]?
+    let answerRevision: Int?
+    let deadlineExpired: Bool?
+    let snapshotAccepted: Bool?
+    let paperAttempt: KaiXJLPTPaperAttempt?
     let disclaimer: String?
 }
 
