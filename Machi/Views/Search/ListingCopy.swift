@@ -2071,7 +2071,9 @@ enum KXListingCopy {
         return bad.contains(text.lowercased()) ? nil : text
     }
 
-    private static func normalized(_ value: String) -> String {
+    // 纯字符串归一化，不碰任何 UI 状态。工程默认 SWIFT_DEFAULT_ACTOR_ISOLATION=MainActor，
+    // 不显式标 nonisolated 的话，从 nonisolated 上下文（如 map 闭包）调用会报隔离告警。
+    nonisolated private static func normalized(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased().replacingOccurrences(of: " ", with: "_")
     }
 

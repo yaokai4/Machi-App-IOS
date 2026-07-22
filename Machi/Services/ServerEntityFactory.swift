@@ -262,7 +262,14 @@ enum ServerEntityFactory {
 /// page, so these are built ONCE and reused (previously each call allocated up
 /// to three fresh formatters). Configured once then only read, which is safe for
 /// the MainActor-bound hydration callers.
-enum KXDateParsing {
+// 纯日期解析，不触碰任何 UI 状态。工程默认 SWIFT_DEFAULT_ACTOR_ISOLATION=MainActor，
+// 若不显式标 nonisolated，从 nonisolated 上下文（如 EventDetailView 的 flatMap 闭包）
+// 调用会报「call to main actor-isolated static method in a synchronous nonisolated
+// context」告警。
+//
+// 三个 formatter 都是 Sendable 常量（本 SDK 下 DateFormatter / ISO8601DateFormatter
+// 已标 Sendable），在闭包里配置完即冻结、之后只读，可安全跨隔离域共享。
+nonisolated enum KXDateParsing {
     static let isoFractional: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
