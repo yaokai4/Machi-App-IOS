@@ -34,6 +34,8 @@ struct GuideJLPTExamView: View {
     @State private var startErrorMessage: String?
     /// Machi 币不足开考——弹窗带「去充值」直达钱包。
     @State private var coinInsufficient = false
+    /// 触发余额不足的原始错误，用来读出 requiredCoins/balance 并告诉用户还差多少。
+    @State private var coinInsufficientError: KaiXAPIError?
     @State private var showWalletSheet = false
     @State private var pendingStartIntent: JLPTExamStartIntent?
 
@@ -102,7 +104,7 @@ struct GuideJLPTExamView: View {
             Button(guideText(language, "去充值", "チャージする", "Top up")) { showWalletSheet = true }
             Button(guideText(language, "以后再说", "あとで", "Later"), role: .cancel) {}
         } message: {
-            Text(guideText(language, "开考需要 Machi 币，余额不足。充值后即可参加全真模考。", "受験には Machi コインが必要です。チャージ後に受験できます。", "Full mock exams cost Machi Coins. Top up to take one."))
+            Text(JLPTExamCopy.insufficientCoins(error: coinInsufficientError, language: language))
         }
         .sheet(isPresented: $showWalletSheet) {
             NavigationStack { WalletView() }
@@ -308,6 +310,7 @@ struct GuideJLPTExamView: View {
             if code == "member_required" || code.contains("quota") {
                 upgradeMessage = err.error.message
             } else if code == "exam_insufficient_coins" || code == "insufficient_coins" {
+                coinInsufficientError = err
                 coinInsufficient = true
             } else if code == "no_questions" {
                 startErrorMessage = guideText(language, "该模考暂无可用题目。", "この模試には利用可能な問題がありません。", "This exam has no questions yet.")
@@ -347,6 +350,7 @@ struct GuideJLPTExamView: View {
                 }
             case .openWallet:
                 pendingStartIntent = nil
+                coinInsufficientError = error
                 coinInsufficient = true
             case .openMembership:
                 pendingStartIntent = nil
@@ -987,10 +991,11 @@ struct GuideJLPTExamSessionView: View {
             switch action {
             case .restoreAnswers:
                 await restoreAuthoritativeSession()
-            case .restorePaper:
+            case .restorePaper, .showPaperResult:
+                // 整卷类恢复一律冒泡给父卷处理：子会话不知道整卷的阶段状态。
                 onRecovery?(action)
             case .openWallet:
-                submitErrorMessage = guideText(language, "余额不足，请充值后重试。", "残高が不足しています。チャージ後に再試行してください。", "Your coin balance is too low. Top up and try again.")
+                submitErrorMessage = JLPTExamCopy.insufficientCoins(error: error, language: language)
                 submitFailed = true
             case .openMembership:
                 submitErrorMessage = guideText(language, "当前权限不足，请返回后查看会员方案。", "受験権限がありません。戻って会員プランをご確認ください。", "This exam requires membership access. Return to review the available plan.")
@@ -1095,6 +1100,8 @@ struct GuideJLPTPaperFlowView: View {
     @State private var starting = false
     @State private var startError: String?
     @State private var coinInsufficient = false
+    /// 触发余额不足的原始错误，用来读出 requiredCoins/balance 并告诉用户还差多少。
+    @State private var coinInsufficientError: KaiXAPIError?
     @State private var showWalletSheet = false
 
     private var sections: [KaiXJLPTExam] { detail?.sections ?? [] }
@@ -1154,7 +1161,7 @@ struct GuideJLPTPaperFlowView: View {
             Button(guideText(language, "去充值", "チャージする", "Top up")) { showWalletSheet = true }
             Button(guideText(language, "以后再说", "あとで", "Later"), role: .cancel) {}
         } message: {
-            Text(guideText(language, "开考需要 Machi 币，余额不足。充值后即可参加全真模考。", "受験には Machi コインが必要です。チャージ後に受験できます。", "Full mock exams cost Machi Coins. Top up to take one."))
+            Text(JLPTExamCopy.insufficientCoins(error: coinInsufficientError, language: language))
         }
         .sheet(isPresented: $showWalletSheet) {
             NavigationStack { WalletView() }
@@ -1373,8 +1380,20 @@ struct GuideJLPTPaperFlowView: View {
 
     private func handleStartError(_ error: KaiXAPIError) {
         switch JLPTExamRecoveryPolicy.action(for: error) {
+        case let .showPaperResult(recoveredAttemptId):
+            // 整卷已交完：服务端已把 attempt 放在 detail 里，直接进成绩页。
+            // 只弹「已完成」会把用户留在 intro/休息页，无路可走。
+            pendingStartIntent = nil
+            if let recoveredAttemptId, !recoveredAttemptId.isEmpty {
+                attemptId = recoveredAttemptId
+            }
+            activeStart = nil
+            activeStartReceipt = nil
+            phase = .result
+            Task { await refreshProgress(after: paperId) }
         case .openWallet:
             pendingStartIntent = nil
+            coinInsufficientError = error
             coinInsufficient = true
         case .openMembership:
             pendingStartIntent = nil

@@ -29,6 +29,9 @@ struct JLPTExamSessionDraft: Codable, Equatable {
     var serverRevision: Int
     var answers: [String: Int]
     var pendingAnswers: [JLPTExamPendingAnswer]
+    /// 最后一次写入时间，仅用于回收。可选且默认 nil，因为旧版本存下的草稿没有
+    /// 这个字段——设成必填会让升级后所有既有草稿解码失败、正在考试的用户丢答案。
+    var updatedAt: Date? = nil
 
     func orderedSnapshot(questionIDs: [String]) -> [KaiXJLPTAnswerSnapshot] {
         questionIDs.compactMap { questionId in
@@ -97,8 +100,45 @@ final class JLPTExamSessionDraftStore {
 
     func save(_ draft: JLPTExamSessionDraft) {
         var drafts = allDrafts()
-        drafts[draft.sessionId] = draft
-        persist(drafts)
+        var stamped = draft
+        stamped.updatedAt = Date()
+        drafts[draft.sessionId] = stamped
+        persist(Self.pruned(drafts, keeping: draft.sessionId))
+    }
+
+    /// 回收：草稿只在交卷成功时才被 clearDraft 删掉，中途退出且再不回来的会话
+    /// 会永久驻留；而 allDrafts() 每次读写都全量编解码，开销是 O(全部历史草稿)
+    /// 且压在每一次点选答案的主线程上。这里按「过期 + 总量上限」双重收口，并且
+    /// 永远保留当前正在写的会话。没有 updatedAt 的旧草稿视为刚写入，给它们一个
+    /// 完整的过期周期，不会一升级就被清掉。
+    static func pruned(
+        _ drafts: [String: JLPTExamSessionDraft],
+        keeping protectedSessionId: String?,
+        now: Date = Date(),
+        maximumAge: TimeInterval = 7 * 24 * 60 * 60,
+        maximumCount: Int = 24
+    ) -> [String: JLPTExamSessionDraft] {
+        var kept = drafts.filter { key, draft in
+            if key == protectedSessionId { return true }
+            guard let updatedAt = draft.updatedAt else { return true }
+            return now.timeIntervalSince(updatedAt) <= maximumAge
+        }
+        guard kept.count > maximumCount else { return kept }
+        let ordered = kept.sorted { left, right in
+            let leftAt = left.value.updatedAt ?? .distantPast
+            let rightAt = right.value.updatedAt ?? .distantPast
+            if leftAt == rightAt { return left.key < right.key }
+            return leftAt > rightAt
+        }
+        var survivors: [String: JLPTExamSessionDraft] = [:]
+        if let protectedSessionId, let draft = kept[protectedSessionId] {
+            survivors[protectedSessionId] = draft
+        }
+        for (key, draft) in ordered where survivors.count < maximumCount {
+            survivors[key] = draft
+        }
+        kept = survivors
+        return kept
     }
 
     @discardableResult

@@ -120,7 +120,28 @@ final class JLPTListeningPlaybackCredentialStore {
         guard identity.isValid else { return }
         var counts = storedCounts()
         counts[identity.credentialKey] = max(0, counts[identity.credentialKey] ?? 0) + 1
-        defaults.set(counts, forKey: storageKey)
+        defaults.set(Self.pruned(counts, keeping: identity.credentialKey), forKey: storageKey)
+    }
+
+    /// 凭证按 `sessionId:questionId` 逐题累积且从不清理——一场 N3 听力 40 题就是
+    /// 40 个 key，长期使用无界增长。这里按会话粒度收口：只保留最近若干场考试的
+    /// 凭证，且当前会话永远保留（否则正在考的人会被判成「没播过」而重获次数）。
+    static func pruned(
+        _ counts: [String: Int],
+        keeping protectedKey: String,
+        maximumSessions: Int = 12
+    ) -> [String: Int] {
+        func sessionId(of key: String) -> String {
+            String(key.split(separator: ":", maxSplits: 1).first ?? "")
+        }
+        let protectedSession = sessionId(of: protectedKey)
+        // 字典无序，需要一个稳定的淘汰序：按 sessionId 排序后保留末尾若干个。
+        // sessionId 是服务端生成的，同一场考试的全部题目一起进退，不会半场被清。
+        let sessions = Set(counts.keys.map(sessionId)).sorted()
+        guard sessions.count > maximumSessions else { return counts }
+        var survivors = Set(sessions.suffix(maximumSessions))
+        survivors.insert(protectedSession)
+        return counts.filter { survivors.contains(sessionId(of: $0.key)) }
     }
 
     private func storedCounts() -> [String: Int] {

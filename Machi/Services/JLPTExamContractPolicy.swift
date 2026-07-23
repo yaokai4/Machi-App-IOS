@@ -110,6 +110,10 @@ enum JLPTExamRecoveryAction: Equatable {
         currentSectionIndex: Int?,
         paperAttemptId: String?
     )
+    /// 整卷本次 attempt 已经交完（服务端 409 paper_attempt_completed）。服务端
+    /// 在 detail.paperAttempt 里给了完整 attempt，直接带着 attemptId 去成绩页；
+    /// 只弹一句「已完成」会让用户卡在 intro/休息页，除了退出别无出路。
+    case showPaperResult(paperAttemptId: String?)
     case openWallet
     case openMembership
     case retry
@@ -131,6 +135,13 @@ enum JLPTExamRecoveryPolicy {
                 currentSectionIndex: int(error.error.detail?["currentSectionIndex"]),
                 paperAttemptId: string(error.error.detail?["paperAttemptId"])
             )
+        case "paper_attempt_completed":
+            // detail.paperAttempt 是一个对象，attemptId 在它里面。
+            var attemptId = string(error.error.detail?["paperAttemptId"])
+            if attemptId == nil, case .object(let attempt)? = error.error.detail?["paperAttempt"] {
+                attemptId = string(attempt["id"]) ?? string(attempt["attemptId"])
+            }
+            return .showPaperResult(paperAttemptId: attemptId)
         case "exam_insufficient_coins", "insufficient_coins":
             return .openWallet
         case "member_required", "membership_required":
@@ -173,6 +184,38 @@ enum JLPTPaperProgressResolver {
 }
 
 enum JLPTExamCopy {
+    /// 余额不足文案。服务端把 requiredCoins/balance 同时放在信封顶层与
+    /// `error.detail`；能读到就告诉用户**还差多少币**，读不到才退回通用文案。
+    /// 只弹「余额不足」而不说差额，用户无法判断该充多少，是付费产品的体验缺口。
+    static func insufficientCoins(
+        error: KaiXAPIError?,
+        language: AppLanguage
+    ) -> String {
+        let detail = error?.error.detail
+        let required = detail.flatMap { intValue($0["requiredCoins"]) }
+        let balance = detail.flatMap { intValue($0["balance"]) }
+        if let required, let balance, required > balance {
+            let shortfall = detail.flatMap { intValue($0["shortfallCoins"]) } ?? (required - balance)
+            return guideText(
+                language,
+                "本次开考需要 \(required) Machi 币，当前余额 \(balance) 币，还差 \(shortfall) 币。充值后即可参加全真模考。",
+                "受験には \(required) Machi コインが必要です。現在の残高は \(balance) コインで、あと \(shortfall) コイン不足しています。チャージ後に受験できます。",
+                "This attempt costs \(required) Machi Coins. Your balance is \(balance), so you need \(shortfall) more. Top up to take the full mock exam."
+            )
+        }
+        return guideText(
+            language,
+            "开考需要 Machi 币，余额不足。充值后即可参加全真模考。",
+            "受験には Machi コインが必要です。チャージ後に受験できます。",
+            "Full mock exams cost Machi Coins. Top up to take one."
+        )
+    }
+
+    private static func intValue(_ value: KXJSONValue?) -> Int? {
+        guard case .number(let number) = value, number.isFinite else { return nil }
+        return Int(number)
+    }
+
     static func startConfirmation(
         preflight: KaiXJLPTExamPreflight,
         language: AppLanguage
