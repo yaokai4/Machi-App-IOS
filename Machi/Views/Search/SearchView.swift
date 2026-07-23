@@ -1,3 +1,4 @@
+import Combine
 import SwiftData
 import SwiftUI
 
@@ -41,6 +42,12 @@ struct SearchScreen: View {
     @State private var savedSearchSaving = false
     @State private var savedSearchDone = false
     @State private var selectedResultTab: SearchResultTab = .posts
+    // 相关性结果里被硬截断的组「查看更多」展开态,换查询时清空。
+    @State private var expandedResultTabs: Set<SearchResultTab> = []
+    // 三大支柱(指南学校 / 公司 / 资料 + 商家目录)的搜索结果,做成独立于四个
+    // 核心 Tab 的分组卡。某类无命中(或无 q 参数端点)时整组跳过。
+    @StateObject private var pillars = SearchPillarLoader()
+    @State private var pillarTask: Task<Void, Never>?
     @FocusState private var isSearchFocused: Bool
 
     let currentUser: UserEntity
@@ -56,6 +63,19 @@ struct SearchScreen: View {
 
     private var trimmedQuery: String {
         viewModel.debouncedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Machi Guide 端点用的语言码(zh-CN / ja / en),与 Web 客户端一致。
+    private var guideLanguageCode: String {
+        switch language {
+        case .ja: return "ja"
+        case .en: return "en"
+        default: return "zh-CN"
+        }
+    }
+
+    private func t(_ zh: String, _ ja: String, _ en: String) -> String {
+        KXListingCopy.pickText(language, zh, ja, en)
     }
 
     private var userResults: [UserEntity] {
@@ -174,15 +194,19 @@ struct SearchScreen: View {
                 }
             }
         }
-        .onChange(of: viewModel.debouncedQuery) { _, _ in
+        .onChange(of: viewModel.debouncedQuery) { _, newValue in
             // Every settled query hits the server (/api/search) — the client
             // filters above only cover the ~30 preloaded hot items.
             savedSearchDone = false
             // 换新关键词回到"帖子"Tab:停在"信息"等 Tab 的用户对新查询会直接
             // 看到该类目的空态,误以为整个查询无结果。
             selectedResultTab = .posts
+            expandedResultTabs = []
             serverSearchTask?.cancel()
             serverSearchTask = Task { await viewModel.searchServer() }
+            // 三大支柱(指南 + 商家)与核心搜索并发,各自独立降级为空(跳过该组)。
+            pillarTask?.cancel()
+            pillarTask = Task { await pillars.search(newValue, language: guideLanguageCode) }
         }
         .onChange(of: isSearchFocused) { _, focused in
             chrome.setHidden(focused, reason: .input)
@@ -191,6 +215,7 @@ struct SearchScreen: View {
             chrome.setHidden(false, reason: .input)
             searchDebounceTask?.cancel()
             serverSearchTask?.cancel()
+            pillarTask?.cancel()
         }
     }
 
@@ -258,61 +283,73 @@ struct SearchScreen: View {
                     recentSearchSection
                     happeningNowSection
                     rankingSection(title: L("hotSearchRank", language), items: landingHotRankItems, limit: 8)
-                    topicSection(title: L("topics", language), topics: viewModel.topics.prefix(8).map { $0 })
-                    usersSection(title: L("recommendedFollow", language), users: userResults.prefix(6).map { $0 })
-                } else if hasResults {
-                    subscribeSearchButton
-                    KXSegmentedControl(
-                        SearchResultTab.allCases,
-                        selection: $selectedResultTab,
-                        itemMinWidth: 60,
-                        itemHeight: 40
-                    ) { tab in
-                        Text(tab.title(language))
-                    }
-                    .padding(.bottom, KXSpacing.xs)
-                    switch selectedResultTab {
-                    case .posts:
-                        rankingSection(title: L("posts", language), items: combinedPostItems, limit: 10)
-                        // "最新"是对 ~30 条预载热帖的客户端过滤,真实长尾查询几乎
-                        // 必空 —— 空时整块隐藏,不在有效结果下方挂"暂无内容"空态。
-                        if !viewModel.latestTrendingItems.isEmpty {
-                            rankingSection(title: L("newsRank", language), items: viewModel.latestTrendingItems, limit: 6)
-                        }
-                    case .topics:
-                        topicSection(title: L("topics", language), topics: Array(combinedTopics.prefix(8)))
-                    case .users:
-                        usersSection(title: L("users", language), users: Array(combinedUsers.prefix(8)))
-                    case .listings:
-                        if viewModel.searchedListings.isEmpty {
-                            KXEmptyState(title: L("listings", language), subtitle: L("noContent", language), systemImage: "tray")
-                                .frame(maxWidth: .infinity)
-                                .padding(.top, KXSpacing.xl)
-                        } else {
-                            listingsSection
-                        }
-                    }
-                } else if viewModel.serverSearchLoading {
-                    // First server round-trip for this query — don't flash
-                    // "no results" while it's still in flight.
-                    LoadingView()
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 28)
-                } else if let searchError = viewModel.searchErrorMessage {
-                    // 服务端搜索失败 ≠ 无结果:断网/超时要给出错误 + 重试,
-                    // 不能伪装成"未找到相关内容"让用户以为平台没有这条信息。
-                    ErrorStateView(message: searchError) {
-                        serverSearchTask?.cancel()
-                        serverSearchTask = Task { await viewModel.searchServer() }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 28)
+                    topicSection(title: L("topics", language), topics: viewModel.topics, limit: 8)
+                    usersSection(title: L("recommendedFollow", language), users: userResults, limit: 6)
                 } else {
-                    KXEmptyState(title: L("emptySearch", language), subtitle: viewModel.query, systemImage: "magnifyingglass")
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 28)
+                    // 订阅入口在最前,四个核心 Tab 之后接三大支柱(指南 + 商家)分组卡。
                     subscribeSearchButton
-                        .frame(maxWidth: .infinity)
+
+                    if hasResults {
+                        KXSegmentedControl(
+                            SearchResultTab.allCases,
+                            selection: $selectedResultTab,
+                            itemMinWidth: 60,
+                            itemHeight: 40
+                        ) { tab in
+                            Text(tab.title(language))
+                        }
+                        .padding(.bottom, KXSpacing.xs)
+                        switch selectedResultTab {
+                        case .posts:
+                            // 相关性列表:去掉 1/2/3 名次徽章(那是热搜榜的排行语义),
+                            // 超过 limit 时补「查看更多」就地展开已加载的长尾。
+                            rankingSection(title: L("posts", language), items: combinedPostItems, limit: 10, ranked: false, tab: .posts)
+                            // "最新"是对 ~30 条预载热帖的客户端过滤,真实长尾查询几乎
+                            // 必空 —— 空时整块隐藏,不在有效结果下方挂"暂无内容"空态。
+                            if !viewModel.latestTrendingItems.isEmpty {
+                                rankingSection(title: L("newsRank", language), items: viewModel.latestTrendingItems, limit: 6, ranked: false)
+                            }
+                        case .topics:
+                            topicSection(title: L("topics", language), topics: combinedTopics, limit: 8, tab: .topics)
+                        case .users:
+                            usersSection(title: L("users", language), users: combinedUsers, limit: 8, tab: .users)
+                        case .listings:
+                            if viewModel.searchedListings.isEmpty {
+                                KXEmptyState(title: L("listings", language), subtitle: L("noContent", language), systemImage: "tray")
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.top, KXSpacing.xl)
+                            } else {
+                                listingsSection
+                            }
+                        }
+                    }
+
+                    pillarResultsSection
+
+                    // 全空态(核心四类 + 三大支柱都无命中)才接管:加载中给 spinner,
+                    // 失败给错误 + 重试,否则真·无结果。有支柱命中时不显示,避免盖住卡片。
+                    if !hasResults && !pillars.hasAny {
+                        if viewModel.serverSearchLoading || pillars.loading {
+                            LoadingView()
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, 28)
+                        } else if let searchError = viewModel.searchErrorMessage {
+                            // 服务端搜索失败 ≠ 无结果:断网 / 超时要给出错误 + 重试,
+                            // 不能伪装成"未找到相关内容"让用户以为平台没有这条信息。
+                            ErrorStateView(message: searchError) {
+                                serverSearchTask?.cancel()
+                                serverSearchTask = Task { await viewModel.searchServer() }
+                                pillarTask?.cancel()
+                                pillarTask = Task { await pillars.search(viewModel.debouncedQuery, language: guideLanguageCode) }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 28)
+                        } else {
+                            KXEmptyState(title: L("emptySearch", language), subtitle: viewModel.query, systemImage: "magnifyingglass")
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, 28)
+                        }
+                    }
                 }
             }
             .padding(.horizontal, KXSpacing.screen)
@@ -402,39 +439,301 @@ struct SearchScreen: View {
     @ViewBuilder
     private var listingsSection: some View {
         if !viewModel.searchedListings.isEmpty {
+            let items = viewModel.searchedListings
+            let expanded = expandedResultTabs.contains(.listings)
+            let visible = Array(items.prefix(expanded ? items.count : 10))
             VStack(alignment: .leading, spacing: KXSpacing.sm) {
                 KXSectionHeader(title: L("listings", language))
-                ForEach(viewModel.searchedListings.prefix(10)) { item in
+                ForEach(visible) { item in
                     KXStructuredListingRow(listing: item) {
                         saveRecentSearch(viewModel.query)
                         router.open(.cityListingDetail(listingId: item.id))
+                    }
+                }
+                if items.count > 10 {
+                    expandRow(tab: .listings, total: items.count)
+                }
+            }
+        }
+    }
+
+    // MARK: - 三大支柱结果组(指南学校 / 公司 / 资料 + 商家目录)
+
+    /// 相关性结果下方的分组卡:每组前 3 条 + 「查看更多」跳对应库页。空组自动
+    /// 跳过。JLPT 无 q 参数搜索端点,故不单列 —— 指南资料(products)覆盖大部分
+    /// 备考材料,查看更多跳会员资料库。
+    @ViewBuilder
+    private var pillarResultsSection: some View {
+        if !trimmedQuery.isEmpty {
+            if !pillars.schools.isEmpty {
+                pillarCard(
+                    title: t("学校库", "学校データベース", "Schools"),
+                    systemImage: "graduationcap.fill",
+                    tint: .blue,
+                    moreRoute: .guideSchools
+                ) {
+                    let items = Array(pillars.schools.prefix(3))
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, school in
+                        pillarRow(
+                            icon: "graduationcap.fill",
+                            tint: .blue,
+                            title: localizedSchoolName(school),
+                            subtitle: schoolSubtitle(school),
+                            isLast: index == items.count - 1
+                        ) {
+                            saveRecentSearch(viewModel.query)
+                            router.open(.guideSchool(id: school.id))
+                        }
+                    }
+                }
+            }
+
+            if !pillars.companies.isEmpty {
+                pillarCard(
+                    title: t("公司库", "企業データベース", "Companies"),
+                    systemImage: "building.2.fill",
+                    tint: .indigo,
+                    moreRoute: .guideCompanies
+                ) {
+                    let items = Array(pillars.companies.prefix(3))
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, company in
+                        pillarRow(
+                            icon: "building.2.fill",
+                            tint: .indigo,
+                            title: localizedCompanyName(company),
+                            subtitle: companySubtitle(company),
+                            isLast: index == items.count - 1
+                        ) {
+                            saveRecentSearch(viewModel.query)
+                            router.open(.guideCompany(id: company.id))
+                        }
+                    }
+                }
+            }
+
+            if !pillars.products.isEmpty {
+                pillarCard(
+                    title: t("指南资料", "ガイド資料", "Guide resources"),
+                    systemImage: "doc.richtext.fill",
+                    tint: .purple,
+                    moreRoute: .guideMemberResources
+                ) {
+                    let items = Array(pillars.products.prefix(3))
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, product in
+                        pillarRow(
+                            icon: "doc.richtext.fill",
+                            tint: .purple,
+                            title: product.title,
+                            subtitle: product.subtitle.isEmpty ? product.priceLabel : product.subtitle,
+                            isLast: index == items.count - 1
+                        ) {
+                            saveRecentSearch(viewModel.query)
+                            router.open(.guideProduct(slug: product.slug.isEmpty ? product.id : product.slug))
+                        }
+                    }
+                }
+            }
+
+            if !pillars.articles.isEmpty {
+                pillarCard(
+                    title: t("指南文章", "ガイド記事", "Guide articles"),
+                    systemImage: "text.book.closed.fill",
+                    tint: .teal,
+                    moreRoute: nil
+                ) {
+                    let items = Array(pillars.articles.prefix(3))
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, article in
+                        pillarRow(
+                            icon: "text.book.closed.fill",
+                            tint: .teal,
+                            title: article.title,
+                            subtitle: article.summary,
+                            isLast: index == items.count - 1
+                        ) {
+                            saveRecentSearch(viewModel.query)
+                            router.open(.guideArticle(slug: article.slug.isEmpty ? article.id : article.slug))
+                        }
+                    }
+                }
+            }
+
+            if !pillars.merchants.isEmpty {
+                pillarCard(
+                    title: L("verifiedMerchant", language),
+                    systemImage: "storefront.fill",
+                    tint: .green,
+                    moreRoute: nil
+                ) {
+                    let items = Array(pillars.merchants.prefix(3))
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, business in
+                        pillarRow(
+                            icon: "storefront.fill",
+                            tint: .green,
+                            title: business.business_name ?? L("merchantFallbackName", language),
+                            subtitle: merchantSubtitle(business),
+                            isLast: index == items.count - 1
+                        ) {
+                            saveRecentSearch(viewModel.query)
+                            router.open(.businessProfile(businessId: business.id))
+                        }
                     }
                 }
             }
         }
     }
 
-    private func rankingSection(title: String, items: [TrendingItem], limit: Int) -> some View {
+    private func pillarCard<Content: View>(
+        title: String,
+        systemImage: String,
+        tint: Color,
+        moreRoute: KXRoute?,
+        @ViewBuilder rows: () -> Content
+    ) -> some View {
         VStack(alignment: .leading, spacing: KXSpacing.sm) {
+            HStack {
+                Label(title, systemImage: systemImage)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.primary)
+                Spacer()
+                if let moreRoute {
+                    Button {
+                        saveRecentSearch(viewModel.query)
+                        router.open(moreRoute)
+                    } label: {
+                        HStack(spacing: 3) {
+                            Text(L("seeAll", language))
+                            Image(systemName: "chevron.right")
+                        }
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(tint)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            VStack(spacing: 0) {
+                rows()
+            }
+            .kxGlassSurface(radius: KXRadius.lg, elevated: true)
+        }
+    }
+
+    private func pillarRow(
+        icon: String,
+        tint: Color,
+        title: String,
+        subtitle: String,
+        isLast: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        VStack(spacing: 0) {
+            Button(action: action) {
+                HStack(spacing: KXSpacing.md) {
+                    Image(systemName: icon)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(tint)
+                        .frame(width: 34, height: 34)
+                        .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: KXRadius.sm, style: .continuous))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        if !subtitle.isEmpty {
+                            Text(subtitle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    Spacer(minLength: 6)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, KXSpacing.md)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if !isLast {
+                Divider().padding(.leading, 58)
+            }
+        }
+    }
+
+    private func localizedSchoolName(_ school: KaiXGuideSchoolDTO) -> String {
+        switch language {
+        case .ja: return school.schoolNameJp.isEmpty ? school.schoolName : school.schoolNameJp
+        case .en: return school.schoolNameEn.isEmpty ? school.schoolName : school.schoolNameEn
+        default: return school.schoolName
+        }
+    }
+
+    private func schoolSubtitle(_ school: KaiXGuideSchoolDTO) -> String {
+        [school.prefecture, school.city, school.schoolType]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .prefix(2)
+            .joined(separator: " · ")
+    }
+
+    private func localizedCompanyName(_ company: KaiXGuideCompanyDTO) -> String {
+        switch language {
+        case .ja: return company.companyNameJp.isEmpty ? company.companyName : company.companyNameJp
+        case .en: return (company.companyNameEn ?? "").isEmpty ? company.companyName : (company.companyNameEn ?? company.companyName)
+        default: return company.companyName
+        }
+    }
+
+    private func companySubtitle(_ company: KaiXGuideCompanyDTO) -> String {
+        [company.industry, company.city]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
+    }
+
+    private func merchantSubtitle(_ business: KaiXBusinessPublicDTO) -> String {
+        if let type = business.business_type, !type.isEmpty { return type }
+        if let first = business.service_categories?.first, !first.isEmpty { return first }
+        return L("localMerchant", language)
+    }
+
+    /// `ranked` 决定行样式:热搜榜 → 带 1/2/3 名次徽章(排行语义);相关性结果
+    /// → 无徽章的列表行。传入 `tab` 时,超过 `limit` 的部分补「查看更多」就地展开。
+    private func rankingSection(title: String, items: [TrendingItem], limit: Int, ranked: Bool = true, tab: SearchResultTab? = nil) -> some View {
+        let expanded = tab.map { expandedResultTabs.contains($0) } ?? false
+        let effectiveLimit = expanded ? items.count : limit
+        let visibleItems = Array(items.prefix(effectiveLimit))
+        let dividerInset: CGFloat = ranked ? 58 : 62
+        return VStack(alignment: .leading, spacing: KXSpacing.sm) {
             KXSectionHeader(title: title)
 
             if items.isEmpty {
                 KXEmptyState(title: title, subtitle: L("noContent", language), systemImage: "tray")
             } else {
                 VStack(spacing: 0) {
-                    let visibleItems = Array(items.prefix(limit))
                     ForEach(Array(visibleItems.enumerated()), id: \.element.id) { index, item in
                         Button {
                             saveRecentSearch(viewModel.query)
                             open(item)
                         } label: {
-                            SearchRankingRow(rank: index + 1, item: item, language: language)
+                            if ranked {
+                                SearchRankingRow(rank: index + 1, item: item, language: language)
+                            } else {
+                                SearchResultRow(item: item, language: language)
+                            }
                         }
                         .buttonStyle(.plain)
 
                         if index < visibleItems.count - 1 {
-                            Divider().padding(.leading, 58)
+                            Divider().padding(.leading, dividerInset)
                         }
+                    }
+
+                    if let tab, items.count > limit {
+                        Divider().padding(.leading, dividerInset)
+                        expandRow(tab: tab, total: items.count)
                     }
                 }
                 .kxGlassSurface(radius: KXRadius.lg, elevated: true)
@@ -442,15 +741,40 @@ struct SearchScreen: View {
         }
     }
 
-    private func topicSection(title: String, topics: [TopicEntity]) -> some View {
-        VStack(alignment: .leading, spacing: KXSpacing.sm) {
+    /// 「查看更多 / 收起」——把已加载但被硬截断的长尾结果就地展开(无分页端点时
+    /// 这是诚实可达的最优解:只显示确实已在手的结果,不假装能翻页)。
+    private func expandRow(tab: SearchResultTab, total: Int) -> some View {
+        let isExpanded = expandedResultTabs.contains(tab)
+        return Button {
+            withAnimation(.snappy(duration: 0.2)) {
+                if isExpanded { expandedResultTabs.remove(tab) } else { expandedResultTabs.insert(tab) }
+            }
+        } label: {
+            HStack(spacing: KXSpacing.xs) {
+                Text(isExpanded ? t("收起", "折りたたむ", "Show less") : "\(L("seeAll", language)) · \(total)")
+                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+            }
+            .font(.caption.weight(.bold))
+            .foregroundStyle(KXColor.accent)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func topicSection(title: String, topics: [TopicEntity], limit: Int = .max, tab: SearchResultTab? = nil) -> some View {
+        let expanded = tab.map { expandedResultTabs.contains($0) } ?? false
+        let effectiveLimit = expanded ? topics.count : limit
+        let visibleTopics = Array(topics.prefix(effectiveLimit))
+        return VStack(alignment: .leading, spacing: KXSpacing.sm) {
             KXSectionHeader(title: title)
 
             if topics.isEmpty {
                 KXEmptyState(title: title, subtitle: L("noTopicPosts", language), systemImage: "number")
             } else {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: KXSpacing.sm) {
-                    ForEach(topics) { topic in
+                    ForEach(visibleTopics) { topic in
                         Button {
                             saveRecentSearch(viewModel.query.isEmpty ? "#\(topic.name)" : viewModel.query)
                             router.open(.topic(tag: topic.name))
@@ -471,18 +795,24 @@ struct SearchScreen: View {
                         .buttonStyle(.plain)
                     }
                 }
+                if let tab, topics.count > limit {
+                    expandRow(tab: tab, total: topics.count)
+                }
             }
         }
     }
 
-    private func usersSection(title: String, users: [UserEntity]) -> some View {
-        VStack(alignment: .leading, spacing: KXSpacing.sm) {
+    private func usersSection(title: String, users: [UserEntity], limit: Int = .max, tab: SearchResultTab? = nil) -> some View {
+        let expanded = tab.map { expandedResultTabs.contains($0) } ?? false
+        let effectiveLimit = expanded ? users.count : limit
+        let visibleUsers = Array(users.prefix(effectiveLimit))
+        return VStack(alignment: .leading, spacing: KXSpacing.sm) {
             KXSectionHeader(title: title)
 
             if users.isEmpty {
                 KXEmptyState(title: title, subtitle: L("noContent", language), systemImage: "person.2")
             } else {
-                ForEach(users) { user in
+                ForEach(visibleUsers) { user in
                     SearchUserRow(
                         user: user,
                         isFollowing: viewModel.followingIds.contains(user.id),
@@ -495,6 +825,9 @@ struct SearchScreen: View {
                             Task { await viewModel.toggleFollow(context: modelContext, currentUser: currentUser, target: user, userStore: userStore) }
                         }
                     )
+                }
+                if let tab, users.count > limit {
+                    expandRow(tab: tab, total: users.count)
                 }
             }
         }
@@ -934,6 +1267,110 @@ private struct RankingMetaLabel: View {
         }
         .font(.caption.weight(.semibold))
         .foregroundStyle(.secondary)
+    }
+}
+
+/// 相关性结果行:与 `SearchRankingRow` 同信息量,但用类型图标替代 1/2/3 名次
+/// 徽章 —— 搜索命中是相关性列表,不该套热搜榜的排行语义。
+private struct SearchResultRow: View {
+    let item: TrendingItem
+    let language: AppLanguage
+
+    var body: some View {
+        HStack(alignment: .center, spacing: KXSpacing.md) {
+            Image(systemName: item.type.rankingIcon)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(item.type.palette.first ?? KXColor.accent)
+                .frame(width: 38, height: 38)
+                .background((item.type.palette.first ?? KXColor.accent).opacity(0.12), in: RoundedRectangle(cornerRadius: KXRadius.sm, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.title)
+                    .searchTitleFallback(item: item, language: language)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                HStack(spacing: 6) {
+                    RankingMetaLabel(icon: item.type.rankingIcon, text: item.sourceName)
+                    if !item.subtitle.isEmpty {
+                        Text(item.subtitle)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary.opacity(0.86))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                }
+            }
+            .layoutPriority(1)
+
+            Spacer(minLength: 6)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, KXSpacing.md)
+        .padding(.vertical, 11)
+        .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+    }
+}
+
+/// 三大支柱(指南学校 / 公司 / 资料 / 文章 + 商家目录)的搜索加载器,独立于
+/// `SearchViewModel`。用 generation 票据做「最后发起者胜出」的竞态防护,与主
+/// 搜索一致。任一端点失败(try?)即降级为空组 —— 该组在 UI 上被跳过,不误导
+/// 用户以为平台没有该类内容。
+@MainActor
+final class SearchPillarLoader: ObservableObject {
+    @Published private(set) var schools: [KaiXGuideSchoolDTO] = []
+    @Published private(set) var companies: [KaiXGuideCompanyDTO] = []
+    @Published private(set) var products: [KaiXGuideProductDTO] = []
+    @Published private(set) var articles: [KaiXGuideArticleDTO] = []
+    @Published private(set) var merchants: [KaiXBusinessPublicDTO] = []
+    @Published private(set) var loading = false
+
+    private var generation = 0
+
+    var hasAny: Bool {
+        !schools.isEmpty || !companies.isEmpty || !products.isEmpty || !articles.isEmpty || !merchants.isEmpty
+    }
+
+    func search(_ query: String, language: String) async {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        generation += 1
+        let gen = generation
+        guard !q.isEmpty else {
+            reset()
+            loading = false
+            return
+        }
+        reset()
+        loading = true
+        defer {
+            if gen == generation { loading = false }
+        }
+        // 指南统一搜索(articles/schools/companies/products,分组)+ 商家目录并发。
+        async let guideFetch = try? KaiXAPIClient.shared.guideSearch(language: language, keyword: q)
+        async let merchantFetch = try? KaiXAPIClient.shared.businessesDirectory(query: q)
+        let guide = await guideFetch
+        let merchant = await merchantFetch
+        // Stale guard:用户在往返期间继续输入,只有最新一代请求可写状态。
+        guard gen == generation else { return }
+        if let groups = guide?.groups {
+            schools = groups.schools ?? []
+            companies = groups.companies ?? []
+            products = groups.products ?? []
+            articles = groups.articles ?? []
+        }
+        merchants = merchant?.items ?? []
+    }
+
+    private func reset() {
+        schools = []
+        companies = []
+        products = []
+        articles = []
+        merchants = []
     }
 }
 

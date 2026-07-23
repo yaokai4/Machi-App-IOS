@@ -20,6 +20,21 @@ struct GuideAIChatView: View {
     @State private var feedbackByMessage: [String: String] = [:]
     /// C-4 faq 溯源 chip 的落点 sheet(FAQ 无独立路由)。
     @State private var faqSource: KaiXGuideAISourceDTO?
+    /// 轻量浮层提示(「已复制」等),自动消失。
+    @State private var toastText: String?
+    @State private var toastTask: Task<Void, Never>?
+    /// 复制触感触发器。
+    @State private var copyTick = 0
+    /// 点踩原因选择的目标消息 id(非 nil 时弹 confirmationDialog)。
+    @State private var dislikeTargetId: String?
+    /// 「重新回答」后被折叠的旧答案中,用户手动展开的那些。放在父视图:
+    /// 行内 @State 会随 LazyVStack 回收丢失。
+    @State private var expandedOldAnswers: Set<String> = []
+    /// 底部哨兵可见性:流式期间「仅当用户本就在底部时轻跟随」的依据。
+    @State private var isNearBottom = true
+    /// 流式开始后用户是否手动滚动过。没有滚动 = 保持锚定在回答开头,
+    /// 绝不自动滚底;用户自己滚到底部后才轻跟随。
+    @State private var userScrolledSinceStreamStart = false
 
     let currentUser: UserEntity
     /// 场景快捷问题带入的预填文本(来自 .guideAI(prompt:) 路由载荷)。
@@ -41,6 +56,41 @@ struct GuideAIChatView: View {
                 Divider().overlay(KXColor.livingInk.opacity(0.06))
                 conversation
             }
+        }
+        // 轻量 toast(「已复制」等),悬浮在输入栏上方,不挡点按。
+        .overlay(alignment: .bottom) {
+            if let toast = toastText {
+                Text(toast)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(KXColor.livingBackground)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 9)
+                    .background(KXColor.livingInk.opacity(0.9), in: Capsule())
+                    .padding(.bottom, KXSpacing.md)
+                    .allowsHitTesting(false)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        // 全链路触感:复制成功 / 发送 / 答案到达 / 评价 / 配额用尽。
+        .sensoryFeedback(.success, trigger: copyTick)
+        .sensoryFeedback(.impact(weight: .light), trigger: viewModel.isSending) { _, sending in sending }
+        .sensoryFeedback(.impact(flexibility: .soft), trigger: viewModel.completedAnswerCount)
+        .sensoryFeedback(.selection, trigger: feedbackByMessage)
+        .sensoryFeedback(.warning, trigger: viewModel.quotaReached) { _, reached in reached }
+        // 点踩先问原因(不准确 / 过时 / 无关 / 其他),选择后才提交。
+        .confirmationDialog(
+            guideText(language, "这条回答哪里没帮到你？", "この回答のどこが良くなかったですか？", "What was wrong with this answer?"),
+            isPresented: Binding(
+                get: { dislikeTargetId != nil },
+                set: { if !$0 { dislikeTargetId = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(guideText(language, "不准确", "情報が不正確", "Inaccurate")) { submitDislike("inaccurate") }
+            Button(guideText(language, "信息过时", "情報が古い", "Outdated")) { submitDislike("outdated") }
+            Button(guideText(language, "与问题无关", "質問と関係ない", "Not relevant")) { submitDislike("irrelevant") }
+            Button(guideText(language, "其他原因", "その他", "Other")) { submitDislike("other") }
+            Button(guideText(language, "取消", "キャンセル", "Cancel"), role: .cancel) {}
         }
         .background(
             GeometryReader { geo in
@@ -75,10 +125,16 @@ struct GuideAIChatView: View {
                     viewModel.startNewConversation()
                 },
                 onDelete: { id in
-                    Task {
-                        try? await KaiXAPIClient.shared.deleteGuideAIConversation(id: id)
+                    // 删除失败要让用户知道(此前 try? 静默吞错,行不消失也无提示)。
+                    // 返回成功与否,由 sheet 就地弹 alert 提示——根视图的 toast 会被
+                    // 展开的 sheet 盖住,用户看不到。
+                    do {
+                        try await KaiXAPIClient.shared.deleteGuideAIConversation(id: id)
                         viewModel.refreshConversations()
                         if viewModel.conversationId == id { viewModel.startNewConversation() }
+                        return true
+                    } catch {
+                        return false
                     }
                 }
             )
@@ -139,6 +195,39 @@ struct GuideAIChatView: View {
 
     // MARK: - conversation body
 
+    /// 抽成独立方法:15+ 参数带多个闭包的初始化直接内联会让类型检查器超时,
+    /// 把 canRegenerate 提成局部 let 后编译器可分段求解。
+    @ViewBuilder
+    private func messageRow(_ message: GuideAIChatMessage) -> some View {
+        let canRegenerate = message.role == .assistant && !message.collapsed
+            && !viewModel.isSending && !viewModel.quotaReached
+        GuideAIMessageRow(
+            message: message,
+            language: language,
+            maxBubbleWidth: containerWidth,
+            feedback: feedbackByMessage[message.id],
+            isExpandedOldAnswer: expandedOldAnswers.contains(message.id),
+            isStreaming: viewModel.streamingMessageId == message.id,
+            canRegenerate: canRegenerate,
+            onCopy: { copy(message.content) },
+            onFeedback: { rating in
+                guard feedbackByMessage[message.id] == nil else { return }
+                if rating == "not_helpful" {
+                    // 点踩先问原因,选完才提交(见 confirmationDialog)。
+                    dislikeTargetId = message.id
+                } else {
+                    feedbackByMessage[message.id] = rating
+                    viewModel.submitFeedback(messageId: message.id, rating: rating)
+                }
+            },
+            onRegenerate: {
+                viewModel.regenerate(assistantMessageId: message.id, currentUser: currentUser)
+            },
+            onToggleOldAnswer: { toggleOldAnswer(message.id) },
+            onOpenSource: { source in open(source) }
+        )
+    }
+
     @ViewBuilder
     private var conversation: some View {
         ScrollViewReader { proxy in
@@ -148,21 +237,24 @@ struct GuideAIChatView: View {
                         emptyState
                     } else {
                         ForEach(viewModel.messages) { message in
-                            GuideAIMessageRow(
-                                message: message,
-                                language: language,
-                                maxBubbleWidth: containerWidth,
-                                feedback: feedbackByMessage[message.id],
-                                onCopy: { copy(message.content) },
-                                onFeedback: { rating in
-                                    guard feedbackByMessage[message.id] == nil else { return }
-                                    feedbackByMessage[message.id] = rating
-                                    viewModel.submitFeedback(messageId: message.id, rating: rating)
-                                },
-                                onOpenSource: { source in open(source) }
-                            )
-                            .id(message.id)
+                            messageRow(message)
+                                .id(message.id)
                         }
+                    }
+
+                    // done 事件带回的追问建议:把单轮问答接成多轮。
+                    if !viewModel.isSending, !viewModel.quotaReached,
+                       !viewModel.followupSuggestions.isEmpty {
+                        VStack(alignment: .leading, spacing: KXSpacing.sm) {
+                            Text(guideText(language, "继续追问", "続けて聞く", "Keep asking"))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(KXColor.livingMuted)
+                            FlowChips(items: viewModel.followupSuggestions) { chip in
+                                viewModel.sendSuggestion(chip, currentUser: currentUser)
+                            }
+                        }
+                        .padding(.top, KXSpacing.xxs)
+                        .transition(.opacity)
                     }
 
                     if viewModel.quotaReached {
@@ -175,15 +267,67 @@ struct GuideAIChatView: View {
                         .padding(.top, KXSpacing.xs)
                     }
 
-                    Color.clear.frame(height: 1).id(Self.bottomAnchor)
+                    Color.clear.frame(height: 1)
+                        .id(Self.bottomAnchor)
+                        // 底部哨兵:在视口内 = 用户就在底部(轻跟随的前提)。
+                        .onAppear { isNearBottom = true }
+                        .onDisappear { isNearBottom = false }
                 }
                 .padding(.horizontal, KXSpacing.screen)
                 .padding(.top, 14)
                 .padding(.bottom, KXSpacing.md)
             }
             .scrollDismissesKeyboard(.interactively)
-            .onChange(of: viewModel.messages.count) { _, _ in scrollToBottom(proxy, animated: true) }
-            .onChange(of: viewModel.isSending) { _, _ in scrollToBottom(proxy, animated: true) }
+            // 记录流式期间的手动滚动:只有用户自己滚过、且当前就在底部,
+            // delta 到达才轻跟随;否则严格保持锚定在回答开头。
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 12).onChanged { _ in
+                    if viewModel.isSending { userScrolledSinceStreamStart = true }
+                }
+            )
+            // 打开历史会话的加载指示(此前 isLoading 从未被视图消费,零反馈)。
+            .overlay(alignment: .top) {
+                if viewModel.isLoadingConversation {
+                    HStack(spacing: KXSpacing.sm) {
+                        ProgressView().controlSize(.small)
+                        Text(guideText(language, "正在打开会话…", "会話を読み込み中…", "Opening conversation…"))
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(KXColor.livingMuted)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(KXColor.livingSurface, in: Capsule())
+                    .overlay(Capsule().stroke(KXColor.livingInk.opacity(0.06), lineWidth: 0.8))
+                    .padding(.top, KXSpacing.sm)
+                    .transition(.opacity)
+                }
+            }
+            .animation(.snappy(duration: 0.2), value: viewModel.isLoadingConversation)
+            // 只在消息数增加时滚到底(发送 / 打开历史);替换与删除不触发。
+            .onChange(of: viewModel.messages.count) { oldCount, newCount in
+                if newCount > oldCount { scrollToBottom(proxy, animated: true) }
+            }
+            // 流式开始:一次性锚定到回答开头,长答案从头读起;此后绝不自动滚底。
+            .onChange(of: viewModel.streamingMessageId) { _, newValue in
+                guard let newValue else { return }
+                userScrolledSinceStreamStart = false
+                withAnimation(.easeOut(duration: 0.25)) {
+                    proxy.scrollTo(newValue, anchor: .top)
+                }
+            }
+            // delta 轻跟随:仅当用户流式开始后自己滚动过、且当前就在底部。
+            .onChange(of: viewModel.deltaTick) { _, _ in
+                if isNearBottom && userScrolledSinceStreamStart {
+                    proxy.scrollTo(Self.bottomAnchor, anchor: .bottom)
+                }
+            }
+            // 旧整段回退路径:答案"砰"地整段到达时锚定它的开头(而不是滚到底)。
+            .onChange(of: viewModel.legacyAnswerAnchorId) { _, newValue in
+                guard let newValue else { return }
+                withAnimation(.easeOut(duration: 0.25)) {
+                    proxy.scrollTo(newValue, anchor: .top)
+                }
+            }
             .onChange(of: viewModel.quotaReached) { _, reached in if reached { scrollToBottom(proxy, animated: true) } }
         }
     }
@@ -330,6 +474,49 @@ struct GuideAIChatView: View {
         VStack(spacing: KXSpacing.sm) {
             quotaPill
 
+            // 会员引导横幅(锁定能力等):中性样式,皇冠 + 直达开通,
+            // 不再挪用 ⚠️ 错误横幅和此处必然无效的「重试」按钮。
+            if let upsell = viewModel.upsellMessage, !upsell.isEmpty {
+                HStack(spacing: KXSpacing.sm) {
+                    Image(systemName: "crown.fill")
+                        .foregroundStyle(KXColor.livingAccent)
+                    Text(upsell)
+                        .font(.caption)
+                        .foregroundStyle(KXColor.livingInk)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    Button {
+                        viewModel.upsellMessage = nil
+                        showMembershipSheet = true
+                    } label: {
+                        Text(guideText(language, "开通会员", "会員になる", "Join"))
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(KXColor.onTint(KXColor.livingAccent))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(KXColor.livingAccent, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    Button {
+                        viewModel.upsellMessage = nil
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(KXColor.livingMuted)
+                            .frame(width: 24, height: 24)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(guideText(language, "关闭", "閉じる", "Dismiss"))
+                }
+                .padding(.horizontal, KXSpacing.md)
+                .padding(.vertical, KXSpacing.sm)
+                .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous).stroke(KXColor.livingAccentSoft, lineWidth: 1))
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+
             if let error = viewModel.errorMessage, !error.isEmpty {
                 HStack(spacing: KXSpacing.sm) {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -339,12 +526,27 @@ struct GuideAIChatView: View {
                         .foregroundStyle(KXColor.livingInk)
                         .lineLimit(2)
                     Spacer(minLength: 0)
-                    Button(guideText(language, "重试", "再試行", "Retry")) {
-                        viewModel.clearError()
-                        viewModel.retryLastFailed()
+                    if viewModel.canRetry {
+                        Button(guideText(language, "重试", "再試行", "Retry")) {
+                            viewModel.clearError()
+                            viewModel.retryLastFailed()
+                        }
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(KXColor.livingAccent)
+                    } else {
+                        // 无可重试动作时给「关闭」,不再渲染无操作的死按钮。
+                        Button {
+                            viewModel.clearError()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(KXColor.livingMuted)
+                                .frame(width: 24, height: 24)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(guideText(language, "关闭", "閉じる", "Dismiss"))
                     }
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(KXColor.livingAccent)
                 }
                 .padding(.horizontal, KXSpacing.md)
                 .padding(.vertical, KXSpacing.sm)
@@ -425,6 +627,7 @@ struct GuideAIChatView: View {
                 .frame(height: 1)
         }
         .animation(.snappy(duration: 0.2), value: viewModel.errorMessage)
+        .animation(.snappy(duration: 0.2), value: viewModel.upsellMessage)
     }
 
     private var canSend: Bool {
@@ -453,20 +656,36 @@ struct GuideAIChatView: View {
         }
     }
 
+    /// 发送中变为「停止生成」:随时可逃,不再被弱网当 40 秒人质。
+    @ViewBuilder
     private var sendButton: some View {
-        Button {
-            inputFocused = false
-            viewModel.sendCurrentInput(currentUser: currentUser)
-        } label: {
-            ZStack {
-                Circle()
-                    .fill(canSend ? KXColor.livingAccent : KXColor.livingMuted.opacity(0.3))
-                    .frame(width: 44, height: 44)
-                if viewModel.isSending {
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                        .tint(.white)
-                } else {
+        if viewModel.isSending {
+            Button {
+                viewModel.stopStreaming()
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(KXColor.livingAccent.opacity(0.14))
+                        .frame(width: 44, height: 44)
+                    Circle()
+                        .stroke(KXColor.livingAccent.opacity(0.5), lineWidth: 1.2)
+                        .frame(width: 44, height: 44)
+                    Image(systemName: "stop.fill")
+                        .kxScaledFont(15, weight: .semibold)
+                        .foregroundStyle(KXColor.livingAccent)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(guideText(language, "停止生成", "生成を停止", "Stop generating"))
+        } else {
+            Button {
+                inputFocused = false
+                viewModel.sendCurrentInput(currentUser: currentUser)
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(canSend ? KXColor.livingAccent : KXColor.livingMuted.opacity(0.3))
+                        .frame(width: 44, height: 44)
                     Image(systemName: "paperplane.fill")
                         .kxScaledFont(17, weight: .semibold)
                         // Ink follows the enabled accent fill (near-black on the
@@ -476,16 +695,54 @@ struct GuideAIChatView: View {
                         .offset(x: -1, y: 1)
                 }
             }
+            .buttonStyle(.plain)
+            .disabled(!canSend)
+            .accessibilityLabel(guideText(language, "发送", "送信", "Send"))
         }
-        .buttonStyle(.plain)
-        .disabled(!canSend)
-        .accessibilityLabel(guideText(language, "发送", "送信", "Send"))
     }
 
     // MARK: - actions
 
     private func copy(_ text: String) {
-        UIPasteboard.general.string = text
+        // 复制纯文本(去掉 ###/** 等原始 markdown 记号,保留列表结构)。
+        UIPasteboard.general.string = Self.plainCopyText(text)
+        copyTick += 1
+        showToast(guideText(language, "已复制", "コピーしました", "Copied"))
+    }
+
+    /// 把回答的 markdown 转为适合粘贴的纯文本。
+    private static func plainCopyText(_ markdown: String) -> String {
+        var text = markdown.replacingOccurrences(of: "**", with: "")
+        text = text.replacingOccurrences(of: #"(?m)^#{1,4}\s+"#, with: "", options: .regularExpression)
+        return text
+    }
+
+    private func showToast(_ text: String) {
+        toastTask?.cancel()
+        withAnimation(.snappy(duration: 0.2)) { toastText = text }
+        toastTask = Task {
+            try? await Task.sleep(nanoseconds: 1_600_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.25)) { toastText = nil }
+        }
+    }
+
+    private func submitDislike(_ reason: String) {
+        guard let id = dislikeTargetId else { return }
+        dislikeTargetId = nil
+        guard feedbackByMessage[id] == nil else { return }
+        feedbackByMessage[id] = "not_helpful"
+        viewModel.submitFeedback(messageId: id, rating: "not_helpful", reason: reason)
+    }
+
+    private func toggleOldAnswer(_ id: String) {
+        withAnimation(.snappy(duration: 0.22)) {
+            if expandedOldAnswers.contains(id) {
+                expandedOldAnswers.remove(id)
+            } else {
+                expandedOldAnswers.insert(id)
+            }
+        }
     }
 
     private func open(_ source: KaiXGuideAISourceDTO) {
@@ -529,8 +786,16 @@ private struct GuideAIMessageRow: View {
     let maxBubbleWidth: CGFloat
     /// 该消息已提交的评价,由父视图持有(行内 @State 会随 LazyVStack 回收丢失)。
     let feedback: String?
+    /// 「重新回答」后旧答案默认折叠,父视图持有展开态。
+    let isExpandedOldAnswer: Bool
+    /// 该条正在流式接收 delta:隐藏操作栏,避免对半截答案复制/评价/再生成。
+    let isStreaming: Bool
+    /// 可对该条发起「重新回答」(assistant / 非折叠 / 不在发送中 / 未超额)。
+    let canRegenerate: Bool
     let onCopy: () -> Void
     let onFeedback: (String) -> Void
+    let onRegenerate: () -> Void
+    let onToggleOldAnswer: () -> Void
     let onOpenSource: (KaiXGuideAISourceDTO) -> Void
 
     var body: some View {
@@ -567,11 +832,29 @@ private struct GuideAIMessageRow: View {
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(KXColor.livingMuted)
                 }
-                if message.isPending {
+                if message.isPending && message.content.isEmpty {
+                    // 首个 delta 到达前的等待:三点跳动。流式开始后 content 非空,
+                    // 直接渲染正文,delta 追加即打字机效果。
                     GuideAITypingDots()
                         .padding(.horizontal, 14)
                         .padding(.vertical, KXSpacing.md)
                         .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: KXRadius.card, style: .continuous))
+                } else if message.collapsed && !isExpandedOldAnswer {
+                    // 「重新回答」产生的旧答案:默认折叠成一行,点开才展开。
+                    Button(action: onToggleOldAnswer) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "clock.arrow.circlepath")
+                            Text(guideText(language, "旧回答 · 点开查看", "以前の回答 · タップで表示", "Previous answer · tap to view"))
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.down")
+                        }
+                        .font(.footnote)
+                        .foregroundStyle(KXColor.livingMuted)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(KXColor.livingSurface.opacity(0.6), in: RoundedRectangle(cornerRadius: KXRadius.card, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
                 } else {
                     MachiAIMarkdownText(text: message.content)
                         .textSelection(.enabled)
@@ -580,11 +863,32 @@ private struct GuideAIMessageRow: View {
                         .padding(.vertical, 11)
                         .background(KXColor.livingSurface, in: RoundedRectangle(cornerRadius: KXRadius.card, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: KXRadius.card, style: .continuous).stroke(KXColor.livingInk.opacity(0.05), lineWidth: 0.8))
+                        .opacity(message.collapsed ? 0.72 : 1)
+
+                    if message.stopped {
+                        Text(guideText(language, "已停止", "停止しました", "Stopped"))
+                            .font(.caption2)
+                            .foregroundStyle(KXColor.livingMuted)
+                            .padding(.leading, KXSpacing.xxs)
+                    }
 
                     if let sources = message.sources.nonEmpty {
                         GuideAISourcesView(language: language, sources: sources, onOpen: onOpenSource)
                     }
-                    actionRow
+                    // 流式进行中不出操作栏:半截答案不该被复制/评价/再生成。
+                    if !isStreaming {
+                        if message.collapsed {
+                            Button(action: onToggleOldAnswer) {
+                                Label(guideText(language, "收起", "折りたたむ", "Collapse"), systemImage: "chevron.up")
+                                    .font(.footnote)
+                                    .foregroundStyle(KXColor.livingMuted)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.leading, KXSpacing.xxs)
+                        } else {
+                            actionRow
+                        }
+                    }
                 }
             }
             .frame(maxWidth: maxBubbleWidth * 0.9, alignment: .leading)
@@ -598,21 +902,32 @@ private struct GuideAIMessageRow: View {
             }
             .accessibilityLabel(guideText(language, "复制", "コピー", "Copy"))
 
-            Button {
-                onFeedback("helpful")
-            } label: {
-                Image(systemName: feedback == "helpful" ? "hand.thumbsup.fill" : "hand.thumbsup")
-            }
-            .disabled(feedback != nil)   // 已评价即锁定,防止重复/矛盾提交
-            .accessibilityLabel(guideText(language, "有帮助", "役に立った", "Helpful"))
+            // 已停止 / 中断的回答只有本地 UUID(无服务端 messageId),对它提交
+            // 评价会把假 id 发给服务端,因此不出赞/踩(复制、重新回答仍可用)。
+            if !message.stopped {
+                Button {
+                    onFeedback("helpful")
+                } label: {
+                    Image(systemName: feedback == "helpful" ? "hand.thumbsup.fill" : "hand.thumbsup")
+                }
+                .disabled(feedback != nil)   // 已评价即锁定,防止重复/矛盾提交
+                .accessibilityLabel(guideText(language, "有帮助", "役に立った", "Helpful"))
 
-            Button {
-                onFeedback("not_helpful")
-            } label: {
-                Image(systemName: feedback == "not_helpful" ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                Button {
+                    onFeedback("not_helpful")
+                } label: {
+                    Image(systemName: feedback == "not_helpful" ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                }
+                .disabled(feedback != nil)
+                .accessibilityLabel(guideText(language, "没帮助", "役に立たなかった", "Not helpful"))
             }
-            .disabled(feedback != nil)
-            .accessibilityLabel(guideText(language, "没帮助", "役に立たなかった", "Not helpful"))
+
+            if canRegenerate {
+                Button(action: onRegenerate) {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .accessibilityLabel(guideText(language, "重新回答", "回答し直す", "Regenerate"))
+            }
         }
         .font(.footnote)
         .foregroundStyle(KXColor.livingMuted)
@@ -945,7 +1260,9 @@ private struct GuideAIHistorySheet: View {
     let conversations: [KaiXGuideAIConversationDTO]
     let onSelect: (String) -> Void
     let onNew: () -> Void
-    let onDelete: (String) -> Void
+    /// 返回删除是否成功;失败时就地弹 alert(根视图 toast 会被 sheet 盖住)。
+    let onDelete: (String) async -> Bool
+    @State private var showDeleteFailed = false
 
     var body: some View {
         NavigationStack {
@@ -980,7 +1297,9 @@ private struct GuideAIHistorySheet: View {
                                 }
                             }
                             .swipeActions(edge: .trailing) {
-                                Button(role: .destructive) { onDelete(conversation.id) } label: {
+                                Button(role: .destructive) {
+                                    Task { if await onDelete(conversation.id) == false { showDeleteFailed = true } }
+                                } label: {
                                     Label(guideText(language, "删除", "削除", "Delete"), systemImage: "trash")
                                 }
                             }
@@ -990,6 +1309,14 @@ private struct GuideAIHistorySheet: View {
             }
             .navigationTitle(guideText(language, "历史会话", "履歴", "History"))
             .navigationBarTitleDisplayMode(.inline)
+            .alert(
+                guideText(language, "删除失败", "削除できませんでした", "Couldn't delete"),
+                isPresented: $showDeleteFailed
+            ) {
+                Button(guideText(language, "好", "OK", "OK"), role: .cancel) {}
+            } message: {
+                Text(guideText(language, "请检查网络后重试。", "通信状況を確認して再度お試しください。", "Check your connection and try again."))
+            }
         }
     }
 }

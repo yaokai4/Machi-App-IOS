@@ -38,6 +38,14 @@ struct MainTabView: View {
                     // profile, stranding the user (they had to repeatedly hit Back).
                     if router.pathCount(for: tab) > 0 {
                         router.popToRoot(tab)
+                    } else {
+                        // 已在根页再点当前 tab:广播给该 tab 的根视图做
+                        // 「回顶 + 刷新」(首页 feed 接收;X/小红书标准手感)。
+                        NotificationCenter.default.post(
+                            name: .kaiXTabReselectedAtRoot,
+                            object: nil,
+                            userInfo: ["tab": tab.rawValue]
+                        )
                     }
                 } else {
                     loadedTabs.insert(tab)
@@ -396,6 +404,12 @@ struct KXDebugScreen: Identifiable {
 
 private let debugRegionCode = "jp.tokyo.tokyo"
 #endif
+
+extension Notification.Name {
+    /// 已在某 tab 的根页(导航栈为空,无页面可 pop)时再次点击该 tab。
+    /// userInfo: ["tab": AppTab.rawValue]。首页 feed 收到后回顶并触发刷新。
+    static let kaiXTabReselectedAtRoot = Notification.Name("KaiXTabReselectedAtRoot")
+}
 
 enum AppTab: String, CaseIterable, Identifiable, Hashable {
     case home

@@ -103,6 +103,40 @@ actor ImageCacheService {
         Task.detached(priority: .utility) { Self.clearDisk() }
     }
 
+    // MARK: - Prefetch (feed warm-up)
+
+    /// One upcoming image the feed expects to need soon（下一页首图预热用）。
+    /// `targetPixelSize` / `stableKey` must mirror the eventual on-screen
+    /// request so the warmed entry hits the exact same cache key.
+    struct PrefetchRequest: Sendable {
+        let url: URL
+        let targetPixelSize: CGFloat
+        let stableKey: String?
+
+        init(url: URL, targetPixelSize: CGFloat, stableKey: String? = nil) {
+            self.url = url
+            self.targetPixelSize = targetPixelSize
+            self.stableKey = stableKey
+        }
+    }
+
+    /// 静默预热：以 `.background` 优先级【串行】走正常 `image(for:)` 取图路径
+    /// （内存 → 磁盘 → 网络，in-flight 去重共享），上屏加载永远优先；弱网下
+    /// 预热排在队尾自然让路，不与可见磁贴争带宽。结果落进内存 + 磁盘两级
+    /// 缓存，键与 CachedMediaImageView 的正常请求完全一致。
+    nonisolated func prefetch(_ requests: [PrefetchRequest]) {
+        guard !requests.isEmpty else { return }
+        Task.detached(priority: .background) {
+            for request in requests {
+                _ = await ImageCacheService.shared.image(
+                    for: request.url,
+                    targetPixelSize: request.targetPixelSize,
+                    stableKey: request.stableKey
+                )
+            }
+        }
+    }
+
     private func scheduleDiskTrimIfNeeded() {
         guard !didScheduleDiskTrim else { return }
         didScheduleDiskTrim = true

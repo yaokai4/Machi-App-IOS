@@ -266,16 +266,16 @@ private struct NotificationCard: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: KXSpacing.md) {
-            // Avatar → opens the actor's profile.
+            // Avatar(聚合行为 facepile)→ opens the primary actor's profile.
             Button {
                 if let actorId = primaryActor?.id {
                     onOpenProfile(actorId)
                 }
             } label: {
-                avatar
+                avatarCluster
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(primaryActor?.displayName ?? "Machi")
+            .accessibilityLabel(facepileAccessibilityLabel)
 
             // The entire remaining row → opens the related content. The hit
             // shape is the full rectangle so taps land anywhere, not just on
@@ -343,28 +343,65 @@ private struct NotificationCard: View {
         .shadow(color: KXColor.glassShadow.opacity(isUnread ? 0.16 : 0.07), radius: isUnread ? 9 : 5, y: 3)
     }
 
-    private var avatar: some View {
-        ZStack(alignment: .bottomTrailing) {
-            AvatarView(user: primaryActor, size: KXAvatarSize.md)
-            // Floating type badge: a soft gradient pill at the avatar's corner
-            // with a colored shadow, instead of a flat solid circle.
-            Image(systemName: icon)
-                .kxScaledFont(9, weight: .black)
-                .foregroundStyle(KXColor.onTint(color))
-                .frame(width: 20, height: 20)
-                .background(
-                    Circle().fill(
-                        LinearGradient(
-                            colors: [color.opacity(0.92), color],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
+    /// 聚合通知的前 3 位触发者(actorIds 已按时间去重排序)。
+    private var facepileActors: [UserEntity] {
+        notification.actorIds.prefix(3).compactMap { actors[$0] }
+    }
+
+    private var pileDiameter: CGFloat { KXAvatarSize.md * 0.78 }
+
+    /// 单头像 → facepile:「A 等 5 人赞了」时叠 3 个头像,让热帖的高光时刻更有
+    /// 面子;单人通知维持原来的 md 头像。类型徽标(色相已收敛到三族)始终钉在
+    /// 右下角。
+    @ViewBuilder
+    private var avatarCluster: some View {
+        let pile = facepileActors
+        if pile.count > 1 {
+            ZStack(alignment: .bottomTrailing) {
+                HStack(spacing: -pileDiameter * 0.44) {
+                    ForEach(Array(pile.enumerated()), id: \.offset) { index, user in
+                        AvatarView(user: user, size: pileDiameter)
+                            .overlay(Circle().stroke(KXColor.elevatedBackground, lineWidth: 2))
+                            // 主触发者(index 0)在最上层、最左侧完整露出,其余向右
+                            // 叠进其后。
+                            .zIndex(Double(pile.count - index))
+                    }
+                }
+                typeBadge
+            }
+        } else {
+            ZStack(alignment: .bottomTrailing) {
+                AvatarView(user: primaryActor, size: KXAvatarSize.md)
+                typeBadge
+            }
+        }
+    }
+
+    // Floating type badge: a soft gradient pill at the avatar's corner with a
+    // colored shadow, instead of a flat solid circle.
+    private var typeBadge: some View {
+        Image(systemName: icon)
+            .kxScaledFont(9, weight: .black)
+            .foregroundStyle(KXColor.onTint(color))
+            .frame(width: 20, height: 20)
+            .background(
+                Circle().fill(
+                    LinearGradient(
+                        colors: [color.opacity(0.92), color],
+                        startPoint: .top,
+                        endPoint: .bottom
                     )
                 )
-                .overlay(Circle().stroke(KXColor.elevatedBackground, lineWidth: 2))
-                .shadow(color: color.opacity(0.32), radius: 2.5, y: 1)
-                .offset(x: 3, y: 3)
-        }
+            )
+            .overlay(Circle().stroke(KXColor.elevatedBackground, lineWidth: 2))
+            .shadow(color: color.opacity(0.32), radius: 2.5, y: 1)
+            .offset(x: 3, y: 3)
+    }
+
+    private var facepileAccessibilityLabel: String {
+        let name = primaryActor?.displayName ?? "Machi"
+        let extra = max(0, notification.actorIds.count - 1)
+        return actorSummary(name: name, extra: extra)
     }
 
     @ViewBuilder
@@ -436,23 +473,18 @@ private struct NotificationCard: View {
         }
     }
 
+    /// 通知图标色相从 15 种收敛到三族,让颜色编码「通知的性质」而非单纯区分:
+    ///   heat    → 赞赏 / 热度 / 好消息(赞、转发、收藏、降价)
+    ///   accent  → 有人在联系你 / 建立连接(评论、回复、@、关注、私信、咨询)
+    ///   中性     → 系统 / 发现摘要 / 已结束(系统公告、搜索订阅、同城摘要、已关闭)
     private var color: Color {
         switch notification.type {
-        case .like: .pink
-        case .repost: .green
-        case .comment: .blue
-        case .reply: .cyan
-        case .follow: .purple
-        case .mention: .indigo
-        case .bookmark: .orange
-        case .message: .teal
-        case .listingInquiry: .mint
-        case .savedSearch: .yellow
-        case .favoritePriceDrop: .green
-        case .favoriteClosed: .red
-        case .followDigest: .purple
-        case .cityDigest: .blue
-        case .system: .secondary
+        case .like, .repost, .bookmark, .favoritePriceDrop:
+            KXColor.heat
+        case .comment, .reply, .mention, .follow, .followDigest, .message, .listingInquiry:
+            KXColor.accent
+        case .savedSearch, .favoriteClosed, .cityDigest, .system:
+            KXColor.categoryNeutral
         }
     }
 }

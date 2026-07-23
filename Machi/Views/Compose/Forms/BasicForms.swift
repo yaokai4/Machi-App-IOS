@@ -44,12 +44,21 @@ struct AnonymousFormView: View {
 }
 
 struct PollFormView: View {
+    @Environment(\.appLanguage) private var language
     @ObservedObject var viewModel: ComposePostViewModel
 
     var body: some View {
         TypedFormSection(titleKey: "ct_poll", icon: "chart.bar") {
             TypedTextField("fld_question", text: viewModel.stringBinding(PostAttributeKeys.question), axis: .vertical, isRequired: true)
-            TypedTextField("fld_poll_options", text: viewModel.stringBinding(PostAttributeKeys.options), placeholder: "选项 A / 选项 B / 选项 C", axis: .vertical, isRequired: true)
+            // Placeholder 之前硬编码中文,ja/en 用户直接看到「选项 A…」——
+            // 与仓库其他内联文案一致改为 pickText 三语。
+            TypedTextField(
+                "fld_poll_options",
+                text: viewModel.stringBinding(PostAttributeKeys.options),
+                placeholder: KXListingCopy.pickText(language, "选项 A / 选项 B / 选项 C", "選択肢A / 選択肢B / 選択肢C", "Option A / Option B / Option C"),
+                axis: .vertical,
+                isRequired: true
+            )
             TypedTextField("fld_expires_at", text: viewModel.stringBinding(PostAttributeKeys.expiresAt))
         }
     }

@@ -3,6 +3,10 @@ import SwiftUI
 
 /// 创建活动 —— 人人都能办活动。封面 + 名称 + 时间 + 地点 + 说明,
 /// 其余(副标题/人数/价格展示/合作方链接)都是可选,一分钟就能发出来。
+///
+/// 编辑模式:传入 `editingEvent` 即预填全部字段、提交走 PATCH(部分更新,未改的
+/// 封面/地区字段不携带,服务端保留原值),成功后回调 `onUpdated` 并关闭。
+/// 由 EventDetailView 以 fullScreenCover 呈现,创建模式仍走路由 push,互不影响。
 struct CreateEventView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appLanguage) private var language
@@ -10,6 +14,13 @@ struct CreateEventView: View {
     @EnvironmentObject private var chrome: AppChromeState
 
     let currentUser: UserEntity
+    /// 非 nil = 编辑既有活动(预填 + PATCH);nil = 创建新活动。
+    let editingEvent: KaiXEventDTO?
+    /// 编辑保存成功后的回调(详情页用它原地刷新,不重新拉取)。
+    let onUpdated: ((KaiXEventDTO) -> Void)?
+    /// DatePicker 下限:创建时为「现在」;编辑往期开始时间的活动时放宽到原开始
+    /// 时间,否则 `in: Date()...` 会把预填值钳出范围、显示与提交值脱节。
+    private let earliestStart: Date
 
     @State private var title = ""
     @State private var subtitle = ""
@@ -37,6 +48,41 @@ struct CreateEventView: View {
 
     @State private var isSubmitting = false
     @State private var errorMessage: String?
+
+    init(currentUser: UserEntity, editingEvent: KaiXEventDTO? = nil, onUpdated: ((KaiXEventDTO) -> Void)? = nil) {
+        self.currentUser = currentUser
+        self.editingEvent = editingEvent
+        self.onUpdated = onUpdated
+        let now = Date()
+        guard let event = editingEvent else {
+            earliestStart = now
+            return
+        }
+        // 编辑模式:把服务端现值灌进表单初值。日期是 UTC 瞬时,DatePicker 按设备
+        // 时区显示同一瞬间的墙钟,不动它就原样提交,不产生时区漂移。
+        let starts = event.starts_at.flatMap(KXDateParsing.parse) ?? now.addingTimeInterval(3600 * 24)
+        earliestStart = min(starts, now)
+        _title = State(initialValue: event.title)
+        _subtitle = State(initialValue: event.subtitle ?? "")
+        _description = State(initialValue: event.description ?? "")
+        // canonical:旧别名 key(如 social)归一到现役 chip,选择器才有选中态;
+        // 表单会显式提交 category,所见即所存。
+        _category = State(initialValue: KXEventStyle.canonical(event.category ?? "party"))
+        _startsAt = State(initialValue: starts)
+        let ends = event.ends_at.flatMap { $0.isEmpty ? nil : KXDateParsing.parse($0) }
+        _hasEndTime = State(initialValue: ends != nil)
+        _endsAt = State(initialValue: ends ?? starts.addingTimeInterval(7200))
+        _venueName = State(initialValue: event.venue_name ?? "")
+        _address = State(initialValue: event.address ?? "")
+        let cap = event.capacity ?? 0
+        _hasCapacity = State(initialValue: cap > 0)
+        _capacity = State(initialValue: cap > 0 ? min(max(cap, 2), 500) : 20)
+        _requiresApproval = State(initialValue: event.requiresApproval)
+        _priceText = State(initialValue: event.price_text ?? "")
+        _externalURL = State(initialValue: event.external_url ?? "")
+    }
+
+    private var isEditing: Bool { editingEvent != nil }
 
     private var tint: Color { KXEventStyle.tint(category) }
 
@@ -82,18 +128,25 @@ struct CreateEventView: View {
     private var header: some View {
         HStack(spacing: KXSpacing.sm) {
             Button { dismiss() } label: {
-                Image(systemName: "chevron.left")
+                // 编辑模式是 fullScreenCover(向下关闭),用 xmark 而非返回箭头。
+                Image(systemName: isEditing ? "xmark" : "chevron.left")
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(.primary)
                     .frame(width: 42, height: 42)
                     .kxGlassCircle()
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(KXListingCopy.pickText(language, "返回", "戻る", "Back"))
+            .accessibilityLabel(isEditing
+                                ? KXListingCopy.pickText(language, "关闭", "閉じる", "Close")
+                                : KXListingCopy.pickText(language, "返回", "戻る", "Back"))
             VStack(alignment: .leading, spacing: 2) {
-                Text(KXListingCopy.pickText(language, "创建活动", "イベントを作成", "Create event"))
+                Text(isEditing
+                     ? KXListingCopy.pickText(language, "编辑活动", "イベントを編集", "Edit event")
+                     : KXListingCopy.pickText(language, "创建活动", "イベントを作成", "Create event"))
                     .font(.headline.weight(.bold))
-                Text(KXListingCopy.pickText(language, "发布后会生成专属活动页与链接", "公開すると専用ページとリンクが作られます", "Publishing creates a shareable event page"))
+                Text(isEditing
+                     ? KXListingCopy.pickText(language, "保存后对所有人立即生效", "保存するとすぐに反映されます", "Changes go live for everyone right away")
+                     : KXListingCopy.pickText(language, "发布后会生成专属活动页与链接", "公開すると専用ページとリンクが作られます", "Publishing creates a shareable event page"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
@@ -114,6 +167,19 @@ struct CreateEventView: View {
                     Image(uiImage: coverImage)
                         .resizable()
                         .scaledToFill()
+                } else if let existingCover = editingEvent?.coverFullURL {
+                    // 编辑模式且未重选:显示线上现有封面;不重新上传就不携带封面
+                    // 字段,服务端保留原图。
+                    CachedMediaImageView(url: existingCover, targetPixelSize: 1600)
+                    VStack(spacing: 8) {
+                        Image(systemName: "photo.badge.plus")
+                            .font(.system(size: 26, weight: .semibold))
+                        Text(KXListingCopy.pickText(language, "点击更换封面", "タップしてカバーを変更", "Tap to change cover"))
+                            .font(.caption.weight(.bold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(10)
+                    .background(Color.black.opacity(0.35), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
                 } else {
                     LinearGradient(colors: [tint.opacity(0.55), tint.opacity(0.25)], startPoint: .topLeading, endPoint: .bottomTrailing)
                     VStack(spacing: 8) {
@@ -204,7 +270,7 @@ struct CreateEventView: View {
             sectionLabel(KXListingCopy.pickText(language, "时间", "日時", "When"), required: true)
             DatePicker(
                 KXListingCopy.pickText(language, "开始", "開始", "Starts"),
-                selection: $startsAt, in: Date()...,
+                selection: $startsAt, in: earliestStart...,
                 displayedComponents: [.date, .hourAndMinute]
             )
             .font(.subheadline.weight(.semibold))
@@ -311,10 +377,12 @@ struct CreateEventView: View {
                 if isSubmitting {
                     KXSpinner(size: 17, lineWidth: 2)
                 } else {
-                    Image(systemName: "sparkles")
+                    Image(systemName: isEditing ? "checkmark" : "sparkles")
                         .font(.headline.weight(.bold))
                 }
-                Text(KXListingCopy.pickText(language, "发布活动", "イベントを公開", "Publish event"))
+                Text(isEditing
+                     ? KXListingCopy.pickText(language, "保存修改", "変更を保存", "Save changes")
+                     : KXListingCopy.pickText(language, "发布活动", "イベントを公開", "Publish event"))
                     .font(.headline.weight(.bold))
             }
             .foregroundStyle(canSubmit ? KXColor.onTint(tint) : Color.white)
@@ -404,6 +472,10 @@ struct CreateEventView: View {
 
     private func submit() async {
         guard canSubmit else { return }
+        if isEditing {
+            await submitEdit()
+            return
+        }
         isSubmitting = true
         errorMessage = nil
         do {
@@ -437,6 +509,42 @@ struct CreateEventView: View {
                 try? await Task.sleep(for: .milliseconds(280))
                 router.open(.eventDetail(idOrSlug: event.slug ?? event.id))
             }
+        } catch {
+            isSubmitting = false
+            errorMessage = error.kaixUserMessage
+        }
+    }
+
+    /// 编辑保存:PATCH 部分更新。地区(country/city/region)与表单里没有的字段
+    /// 一律不携带,服务端按原值保留;封面只在重新上传后才携带,防止清掉旧封面。
+    private func submitEdit() async {
+        guard let editingEvent else { return }
+        isSubmitting = true
+        errorMessage = nil
+        do {
+            var payload = KaiXAPIClient.UpdateEventPayload()
+            payload.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            payload.subtitle = subtitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            payload.description = description.trimmingCharacters(in: .whitespacesAndNewlines)
+            payload.category = category
+            payload.starts_at = KXDateParsing.iso.string(from: startsAt)
+            // 与创建同款兜底:绝不提交早于开始时间的结束时间;关掉开关则显式清空。
+            payload.ends_at = hasEndTime ? KXDateParsing.iso.string(from: max(endsAt, startsAt.addingTimeInterval(3600))) : ""
+            payload.venue_name = venueName.trimmingCharacters(in: .whitespacesAndNewlines)
+            payload.address = address.trimmingCharacters(in: .whitespacesAndNewlines)
+            payload.capacity = hasCapacity ? capacity : 0
+            payload.requires_approval = requiresApproval
+            payload.price_text = priceText.trimmingCharacters(in: .whitespacesAndNewlines)
+            payload.external_url = externalURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !coverUploadedURL.isEmpty {
+                payload.cover_url = coverUploadedURL
+                payload.cover_file_id = coverUploadedFileID
+            }
+            let updated = try await KaiXAPIClient.shared.updateEvent(editingEvent.slug ?? editingEvent.id, payload)
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            isSubmitting = false
+            dismiss()
+            onUpdated?(updated)
         } catch {
             isSubmitting = false
             errorMessage = error.kaixUserMessage

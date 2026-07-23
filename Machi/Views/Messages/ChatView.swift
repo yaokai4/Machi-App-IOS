@@ -914,6 +914,52 @@ struct KXMessageBubble: View {
     private var sendingLabel: String { language == .ja ? "送信中…" : language == .en ? "Sending…" : "发送中…" }
     private var readLabel: String { language == .ja ? "既読" : language == .en ? "Read" : "已读" }
 
+    /// 文本气泡里的 URL / 电话号码渲染成可点链接(NSDataDetector)。点按走
+    /// SwiftUI `Text` 的链接机制 → 环境 openURL(默认 UIApplication.shared.open,
+    /// 与 App 既有「系统浏览器打开外链」策略一致,见 EventDetailView /
+    /// RegionPickerView)。己方气泡链接用 onAccent、对方气泡用 accent,均加下划线,
+    /// 在纯文本里也一眼可辨。NSRange(UTF-16)→ String.Index → AttributedString
+    /// 的 Character 偏移换算,保证含 emoji / 多标量字符时区间不错位。
+    /// 复用同一个 detector,避免每次气泡 body 求值都新建(滚动热路径)。
+    /// NSDataDetector 的 matches(in:) 可安全重复调用。
+    private static let linkDetector: NSDataDetector? = {
+        let types: NSTextCheckingResult.CheckingType = [.link, .phoneNumber]
+        return try? NSDataDetector(types: types.rawValue)
+    }()
+
+    private func linkified(_ string: String) -> AttributedString {
+        var attributed = AttributedString(string)
+        guard let detector = Self.linkDetector else { return attributed }
+        let fullRange = NSRange(string.startIndex..<string.endIndex, in: string)
+        let linkColor = isMine ? KXColor.onAccent : KXColor.accent
+        for match in detector.matches(in: string, options: [], range: fullRange) {
+            guard let stringRange = Range(match.range, in: string) else { continue }
+            // 电话号码走 tel: 直拨(去掉空格 / 连字符),其余(URL)走 match.url。
+            let url: URL?
+            if let phone = match.phoneNumber {
+                url = URL(string: "tel:\(phone.filter { !$0.isWhitespace && $0 != "-" })")
+            } else {
+                url = match.url
+            }
+            guard let url else { continue }
+            let lower = attributed.index(
+                attributed.startIndex,
+                offsetByCharacters: string.distance(from: string.startIndex, to: stringRange.lowerBound)
+            )
+            let upper = attributed.index(
+                attributed.startIndex,
+                offsetByCharacters: string.distance(from: string.startIndex, to: stringRange.upperBound)
+            )
+            // 显式写出 SwiftUI scope 的类型,避开 Foundation/UIKit 同名属性
+            // (foregroundColor: UIColor / underlineStyle: NSUnderlineStyle)带来的
+            // 动态成员歧义。
+            attributed[lower..<upper].link = url
+            attributed[lower..<upper].foregroundColor = linkColor
+            attributed[lower..<upper].underlineStyle = Text.LineStyle.single
+        }
+        return attributed
+    }
+
     var body: some View {
         let contentType = message.resolvedType(mediaItems: mediaItems)
 
@@ -963,7 +1009,7 @@ struct KXMessageBubble: View {
                 }
 
                 if let visibleContent = message.visibleContent {
-                    Text(visibleContent)
+                    Text(linkified(visibleContent))
                         .font(.body)
                         .foregroundStyle(isMine ? KXColor.onAccent : .primary)
                         .padding(.horizontal, 13)
@@ -1017,6 +1063,15 @@ struct KXMessageBubble: View {
             if !isMine { Spacer(minLength: 52) }
         }
         .contextMenu {
+            // 复制:聊天最基础的肌肉记忆动作(复制地址 / 电话 / 口令 / 链接),
+            // 只对含可见文本的气泡出现。放在删除之上。
+            if let copyText = message.visibleContent {
+                Button {
+                    UIPasteboard.general.string = copyText
+                } label: {
+                    Label(KXListingCopy.pickText(language, "复制", "コピー", "Copy"), systemImage: "doc.on.doc")
+                }
+            }
             Button(role: .destructive, action: onDelete) {
                 Label(L("delete", language), systemImage: "trash")
             }

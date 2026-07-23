@@ -28,6 +28,11 @@ enum KaiXConfig {
     /// without also bumping it on the server will let users compose
     /// posts that the backend then refuses.
     static let maxPostCharacters = 2000
+    /// 首页 feed 触底预取哨兵：倒数第 N 张卡上屏即开始拉下一页
+    /// （pageSize=15 → 第 10 张触发），用户几乎不会撞到底部 spinner。
+    static let feedLoadMoreLookahead = 5
+    /// 「加载更多」落地后，静默预热新页前 N 帖的首图（低优先级，弱网让路）。
+    static let feedImagePrefetchCount = 5
 }
 
 enum KaiXBuild {

@@ -4,7 +4,16 @@ import SwiftData
 
 @MainActor
 final class HomeViewModel: ObservableObject {
-    @Published var mode: TimelineMode = .recommend
+    @Published var mode: TimelineMode = .recommend {
+        didSet {
+            guard oldValue != mode else { return }
+            // 每个 mode 的内存快照：切走时整包留存当前列表，切回同步回填
+            // （零骨架、保分页游标），随后视图触发的 loadInitial 在原列表上
+            // 静默刷新；磁盘 SWR 缓存只服务冷启动。
+            stashSnapshot(for: oldValue)
+            restoreSnapshot(for: mode)
+        }
+    }
     @Published var posts: [PostEntity] = []
     @Published var authors: [String: UserEntity] = [:]
     @Published var recommendedUsers: [UserEntity] = []
@@ -17,6 +26,23 @@ final class HomeViewModel: ObservableObject {
     // 瞬间消失)。视图以 toast 呈现并在展示后清回 nil;只有初始加载失败且
     // posts 为空时才允许进入 .error(见 loadPage 的 catch)。
     @Published var transientError: String?
+
+    /// 一次下拉刷新真正带来的增量。视图据此浮「为你更新了 N 条」轻横幅
+    /// (在顶部时)或「↑ 有新内容」胶囊(深处时,带新作者头像堆叠)。
+    struct FeedRefreshDelta: Equatable {
+        let id: UUID
+        /// 刷新后落在列表顶部的连续新帖数量。
+        let count: Int
+        /// 新帖的前 3 位作者(去重),给胶囊做头像堆叠。
+        let authors: [UserEntity]
+
+        static func == (lhs: FeedRefreshDelta, rhs: FeedRefreshDelta) -> Bool {
+            lhs.id == rhs.id
+        }
+    }
+
+    /// 最近一次 refresh 的增量;每次有新内容都是新 id,视图 onChange 消费。
+    @Published var refreshDelta: FeedRefreshDelta?
 
     private var currentPage = 0
     // Server-side cursor for the unified-backend feed. Mirrors the Web
@@ -42,6 +68,62 @@ final class HomeViewModel: ObservableObject {
     // against this so a shifted local window can never show a duplicate.
     private var loadedIds = Set<String>()
 
+    // ── mode 内存快照:推荐↔关注↔热门来回切 tab 即刻上屏、零骨架 ──────────
+    private struct ModeSnapshot {
+        var posts: [PostEntity]
+        var authors: [String: UserEntity]
+        var mediaByPostId: [String: [MediaEntity]]
+        var currentPage: Int
+        var remoteCursor: String?
+        var remoteHasMore: Bool
+        var canLoadMore: Bool
+    }
+    private var modeSnapshots: [TimelineMode: ModeSnapshot] = [:]
+    // 快照回填要同步重建 postStore.feedIds(转发/引用路径从 feedIds 重建可见
+    // 列表),但 mode.didSet 拿不到视图传参的 postStore —— 记住最近一次加载
+    // 用的实例。弱引用:环境对象生命周期远长于本 VM,不成环也不越权持有。
+    private weak var lastPostStore: PostStore?
+
+    private func stashSnapshot(for mode: TimelineMode) {
+        guard state == .loaded, !posts.isEmpty else { return }
+        modeSnapshots[mode] = ModeSnapshot(
+            posts: posts,
+            authors: authors,
+            mediaByPostId: mediaByPostId,
+            currentPage: currentPage,
+            remoteCursor: remoteCursor,
+            remoteHasMore: remoteHasMore,
+            canLoadMore: canLoadMore
+        )
+    }
+
+    private func restoreSnapshot(for mode: TimelineMode) {
+        if let snapshot = modeSnapshots[mode] {
+            posts = snapshot.posts
+            authors = snapshot.authors
+            mediaByPostId = snapshot.mediaByPostId
+            currentPage = snapshot.currentPage
+            remoteCursor = snapshot.remoteCursor
+            remoteHasMore = snapshot.remoteHasMore
+            canLoadMore = snapshot.canLoadMore
+            loadedIds = Set(snapshot.posts.map(\.id))
+            lastPostStore?.setFeed(snapshot.posts, append: false)
+            state = .loaded
+        } else {
+            // 无快照(首访/已被 clearExisting 作废):立即清屏进骨架,绝不让
+            // 旧 tab 的内容顶着新 tab 的标签渲染。
+            posts = []
+            authors = [:]
+            mediaByPostId = [:]
+            loadedIds = []
+            currentPage = 0
+            remoteCursor = nil
+            remoteHasMore = false
+            canLoadMore = true
+            state = .loading
+        }
+    }
+
     /// Drop deleted posts (and their local reposts) from this feed in response to
     /// `.kaiXPostRemoved`, so a delete from the detail page doesn't leave a ghost
     /// card that the `?? post` fallback would keep rendering.
@@ -50,6 +132,10 @@ final class HomeViewModel: ObservableObject {
         let idSet = Set(ids)
         posts.removeAll { idSet.contains($0.id) }
         loadedIds.subtract(idSet)
+        // 其它 mode 的快照同样剔除:否则切 tab 回填会复活已删除帖的幽灵卡。
+        for key in modeSnapshots.keys {
+            modeSnapshots[key]?.posts.removeAll { idSet.contains($0.id) }
+        }
     }
 
     // Re-entrancy guard: HomeTimelineView fires loadInitial from .task plus four
@@ -83,7 +169,10 @@ final class HomeViewModel: ObservableObject {
                 clearExisting: nextClearExisting
             )
             let modeChangedDuringLoad = requestedMode != mode
-            nextClearExisting = pendingInitialClearExisting || modeChangedDuringLoad
+            // mode 在加载中被切换时,didSet 已同步完成快照回填或清屏 —— 追加
+            // 的补载不再强制 clearExisting(那会把刚回填的快照又打回骨架),
+            // 只继承区域/语言切换等显式请求的清空。
+            nextClearExisting = pendingInitialClearExisting
             pendingInitialClearExisting = false
             guard pendingInitialReload || modeChangedDuringLoad else { break }
         }
@@ -113,6 +202,9 @@ final class HomeViewModel: ObservableObject {
             posts = []
             authors = [:]
             mediaByPostId = [:]
+            // 区域/语言级重载:其它 mode 的内存快照全是旧城市/旧语言的内容,
+            // 一并作废,防止切 tab 时被污染快照回填。
+            modeSnapshots.removeAll()
         }
         let didLoad = await loadPage(context: context, currentUser: currentUser, mode: requestedMode, postStore: postStore, reset: true)
         if !didLoad, !clearExisting, !posts.isEmpty {
@@ -134,7 +226,22 @@ final class HomeViewModel: ObservableObject {
     }
 
     func refresh(context: ModelContext, currentUser: UserEntity, postStore: PostStore) async {
+        let previousIds = loadedIds
         await loadInitial(context: context, currentUser: currentUser, postStore: postStore)
+        // 刷新前列表为空(冷启动/空态自愈)不算「更新了 N 条」。只统计落在
+        // 列表顶部的【连续】新帖 —— 一旦遇到旧帖就停,中段混入的新 id 只是
+        // 排序变化,不该计入"新内容"。
+        guard !previousIds.isEmpty else { return }
+        let freshPosts = Array(posts.prefix(while: { !previousIds.contains($0.id) }))
+        guard !freshPosts.isEmpty else { return }
+        var seenAuthorIds = Set<String>()
+        var freshAuthors: [UserEntity] = []
+        for post in freshPosts {
+            guard let author = authors[post.authorId], seenAuthorIds.insert(author.id).inserted else { continue }
+            freshAuthors.append(author)
+            if freshAuthors.count == 3 { break }
+        }
+        refreshDelta = FeedRefreshDelta(id: UUID(), count: freshPosts.count, authors: freshAuthors)
     }
 
     func toggleLike(context: ModelContext, post: PostEntity, currentUser: UserEntity, postStore: PostStore) async {
@@ -195,6 +302,8 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func loadPage(context: ModelContext, currentUser: UserEntity, mode requestedMode: TimelineMode, postStore: PostStore, reset: Bool) async -> Bool {
+        // mode.didSet 的快照回填需要它(见 lastPostStore 声明)。
+        lastPostStore = postStore
         // Same-city feed with no city chosen yet: don't hit the network — the
         // server's `local` mode 400s without a region, which would strand the
         // user on a network-error page instead of the "pick a city" prompt.
@@ -231,7 +340,9 @@ final class HomeViewModel: ObservableObject {
                         postStore.setFeed(posts, append: false)
                         state = .loaded
                     }
-                } else {
+                } else if requestedMode == mode {
+                    // loadAsync 的 await 期间 mode 可能已被切走(didSet 已回填
+                    // 快照或清屏),晚到的旧 pass 不覆写新 mode 的 state。
                     state = .loading
                 }
             }
@@ -337,6 +448,10 @@ final class HomeViewModel: ObservableObject {
                 )
             }
             state = posts.isEmpty ? .empty : .loaded
+            // 下一页落地后静默预热新帖首图:快滑时灰块占位大幅减少。
+            if !reset, !appended.isEmpty {
+                prefetchFirstImages(of: appended)
+            }
             // 推荐用户(/api/trending)只服务「关注」空态,与 feed 本身无关 ——
             // 它曾在 hydrate 关键路径上串行 await,冷启动无缓存时首屏骨架要
             // 白等一个与 feed 无关的 RTT,且每个 tab 的每次下拉刷新都多打一次
@@ -454,6 +569,28 @@ final class HomeViewModel: ObservableObject {
             city,
             regionCode
         ].joined(separator: "_")
+    }
+
+    /// 「加载更多」落地后静默预热新页前 N 帖的首图:以 .background 优先级串行
+    /// 走 ImageCacheService 正常取图路径,弱网时排队让路、绝不与上屏磁贴争带宽;
+    /// targetPixelSize / stableKey 与 MediaGridView 磁贴完全一致(单图 960 /
+    /// 多图 640),预热命中的就是滚动到时要用的同一缓存键。
+    private func prefetchFirstImages(of newPosts: [PostEntity]) {
+        var requests: [ImageCacheService.PrefetchRequest] = []
+        for post in newPosts {
+            if requests.count >= KaiXConfig.feedImagePrefetchCount { break }
+            guard let items = mediaByPostId[post.id], let first = items.first else { continue }
+            let pixelSize: CGFloat = items.count == 1 ? 960 : 640
+            if first.type == .video {
+                // 视频磁贴渲染的是海报图(displayURL → thumbnailURL)。
+                guard let url = first.displayURL else { continue }
+                requests.append(.init(url: url, targetPixelSize: pixelSize, stableKey: first.posterStableCacheKey))
+            } else {
+                guard let url = first.displayURL ?? first.mediumSourceURL ?? first.sourceURL else { continue }
+                requests.append(.init(url: url, targetPixelSize: pixelSize, stableKey: first.stableCacheKey))
+            }
+        }
+        ImageCacheService.shared.prefetch(requests)
     }
 
     private func balanceOfficialRuns(_ input: [PostEntity], previousTail: [PostEntity] = []) -> [PostEntity] {

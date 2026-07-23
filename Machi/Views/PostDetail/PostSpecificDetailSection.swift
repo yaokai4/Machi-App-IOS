@@ -323,7 +323,7 @@ struct PostSpecificDetailSection: View {
         case .meetup:
             return [
                 ("fld_meetup_type", attr(PostAttributeKeys.meetupType)),
-                ("fld_meetup_time", attr(PostAttributeKeys.meetupTime)),
+                ("fld_meetup_time", timeAttr(PostAttributeKeys.meetupTime)),
                 ("fld_location", attr(PostAttributeKeys.location, fallback: regionLabel)),
                 ("fld_people_limit", attr(PostAttributeKeys.peopleLimit)),
                 ("fld_budget", attr(PostAttributeKeys.budget)),
@@ -333,14 +333,14 @@ struct PostSpecificDetailSection: View {
         case .dining:
             return [
                 ("fld_restaurant_or_area", attr(PostAttributeKeys.restaurantOrArea, fallback: regionLabel)),
-                ("fld_meetup_time", attr(PostAttributeKeys.meetupTime)),
+                ("fld_meetup_time", timeAttr(PostAttributeKeys.meetupTime)),
                 ("fld_people_limit", attr(PostAttributeKeys.peopleLimit)),
                 ("fld_budget", attr(PostAttributeKeys.budget)),
             ].toSpecs()
 
         case .event:
             return [
-                ("fld_event_time", attr(PostAttributeKeys.eventTime)),
+                ("fld_event_time", timeAttr(PostAttributeKeys.eventTime)),
                 ("fld_location", attr(PostAttributeKeys.location, fallback: regionLabel)),
                 ("fld_fee", attr(PostAttributeKeys.fee)),
                 ("fld_capacity", attr(PostAttributeKeys.capacity)),
@@ -449,6 +449,37 @@ struct PostSpecificDetailSection: View {
             return "\(i)"
         }
         return fallback
+    }
+
+    /// 约局/活动时间：新版发帖器以 ISO8601 落库,格式化成 JST 本地化「年月日
+    /// 时分」；老帖是自由文本(用户手打),解析失败即原样返回,向后兼容。
+    private func timeAttr(_ key: String) -> String {
+        let raw = attr(key)
+        guard !raw.isEmpty else { return "" }
+        guard let date = Self.parseISO8601(raw) else { return raw }
+        let formatter = Self.jstFormatter(for: language)
+        return formatter.string(from: date)
+    }
+
+    private static func parseISO8601(_ s: String) -> Date? {
+        let withFraction = ISO8601DateFormatter()
+        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = withFraction.date(from: s) { return d }
+        let plain = ISO8601DateFormatter()
+        plain.formatOptions = [.withInternetDateTime]
+        return plain.date(from: s)
+    }
+
+    private static var jstFormatters: [String: DateFormatter] = [:]
+    private static func jstFormatter(for language: AppLanguage) -> DateFormatter {
+        let localeID = DateFormatterUtils.localeID(for: language)
+        if let cached = jstFormatters[localeID] { return cached }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: localeID)
+        f.timeZone = TimeZone(identifier: "Asia/Tokyo")
+        f.setLocalizedDateFormatFromTemplate("yMMMdEHm")
+        jstFormatters[localeID] = f
+        return f
     }
 }
 

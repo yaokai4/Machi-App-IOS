@@ -15,11 +15,17 @@ struct EventDetailView: View {
     @State private var event: KaiXEventDTO?
     @State private var isLoading = true
     @State private var isRegistering = false
+    /// 取消报名进行中:CTA 转圈 + 禁点,弱网下不再「点了没反应 → 连点」。
+    @State private var isCancelling = false
     @State private var errorMessage: String?
     @State private var actionMessage: String?
+    /// 操作结果弹窗的标题(具体动作名,如「报名失败」);nil 时回落到通用「提示」。
+    @State private var actionTitle: String?
     @State private var registrationOpen = false
     @State private var showCancelConfirm = false
     @State private var showDeleteConfirm = false
+    /// 主办者编辑:复用 CreateEventView 预填模式(fullScreenCover,不新增路由)。
+    @State private var editOpen = false
     /// 「添加到日历」:拉到 .ics 文本写临时文件后,用系统分享面板加进日历(免日历权限)。
     @State private var calendarShare: ShareableFile?
     @State private var isPreparingCalendar = false
@@ -74,6 +80,13 @@ struct EventDetailView: View {
         .sheet(item: $calendarShare) { share in
             ActivityView(activityItems: [share.url])
         }
+        .fullScreenCover(isPresented: $editOpen) {
+            if let event {
+                CreateEventView(currentUser: currentUser, editingEvent: event) { updated in
+                    self.event = updated
+                }
+            }
+        }
         .confirmationDialog(
             KXListingCopy.pickText(language, "取消报名?", "参加をキャンセルしますか?", "Cancel your registration?"),
             isPresented: $showCancelConfirm,
@@ -96,9 +109,9 @@ struct EventDetailView: View {
         } message: {
             Text(KXListingCopy.pickText(language, "已报名的人会看到活动已取消,此操作不可撤销。", "参加者にはキャンセルとして表示されます。取り消せません。", "Registered people will see it cancelled. This can't be undone."))
         }
-        .alert(KXListingCopy.pickText(language, "提示", "お知らせ", "Notice"), isPresented: Binding(
+        .alert(actionTitle ?? KXListingCopy.pickText(language, "提示", "お知らせ", "Notice"), isPresented: Binding(
             get: { actionMessage != nil },
-            set: { if !$0 { actionMessage = nil } }
+            set: { if !$0 { actionMessage = nil; actionTitle = nil } }
         )) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -135,6 +148,11 @@ struct EventDetailView: View {
                 if event.organizer_user_id == currentUser.id || currentUser.role == .admin {
                     Menu {
                         Button {
+                            editOpen = true
+                        } label: {
+                            Label(KXListingCopy.pickText(language, "编辑活动", "イベントを編集", "Edit event"), systemImage: "pencil")
+                        }
+                        Button {
                             router.open(.eventManage(idOrSlug: event.slug ?? event.id))
                         } label: {
                             Label(KXListingCopy.pickText(language, "管理报名", "参加者を管理", "Manage guests"), systemImage: "person.2.badge.gearshape")
@@ -143,6 +161,23 @@ struct EventDetailView: View {
                             showDeleteConfirm = true
                         } label: {
                             Label(KXListingCopy.pickText(language, "删除活动", "イベントを削除", "Delete event"), systemImage: "trash")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .frame(width: 42, height: 42)
+                            .background(.thinMaterial, in: Circle())
+                    }
+                    .accessibilityLabel(KXListingCopy.pickText(language, "更多", "その他", "More"))
+                } else if event.organizer_user_id?.isEmpty == false {
+                    // Apple 1.2:UGC 活动页对非主办者提供可发现的举报入口。服务端无
+                    // 活动级举报端点,复用用户举报通道并在 note 里带活动上下文。
+                    Menu {
+                        Button(role: .destructive) {
+                            reportEvent(event)
+                        } label: {
+                            Label(KXListingCopy.pickText(language, "举报活动", "イベントを通報", "Report event"), systemImage: "flag")
                         }
                     } label: {
                         Image(systemName: "ellipsis")
@@ -495,23 +530,31 @@ struct EventDetailView: View {
                     showCancelConfirm = true
                 } label: {
                     ctaLabel(
-                        KXListingCopy.pickText(language, "待审核 · 点此撤回申请", "承認待ち · タップで取消", "Pending approval · tap to cancel"),
-                        style: .secondary
+                        isCancelling
+                            ? KXListingCopy.pickText(language, "正在撤回…", "取消しています…", "Cancelling…")
+                            : KXListingCopy.pickText(language, "待审核 · 点此撤回申请", "承認待ち · タップで取消", "Pending approval · tap to cancel"),
+                        style: .secondary,
+                        showsSpinner: isCancelling
                     )
                 }
                 .buttonStyle(KXPressableStyle(scale: 0.97))
+                .disabled(isCancelling)
             } else if event.viewerGoing || event.viewerWaitlisted {
                 Button {
                     showCancelConfirm = true
                 } label: {
                     ctaLabel(
-                        event.viewerGoing
-                            ? KXListingCopy.pickText(language, "已报名 · 点此取消", "参加予定 · タップで取消", "Going · tap to cancel")
-                            : KXListingCopy.pickText(language, "候补中 · 点此取消", "キャンセル待ち · タップで取消", "Waitlisted · tap to cancel"),
-                        style: .secondary
+                        isCancelling
+                            ? KXListingCopy.pickText(language, "正在取消…", "取消しています…", "Cancelling…")
+                            : event.viewerGoing
+                                ? KXListingCopy.pickText(language, "已报名 · 点此取消", "参加予定 · タップで取消", "Going · tap to cancel")
+                                : KXListingCopy.pickText(language, "候补中 · 点此取消", "キャンセル待ち · タップで取消", "Waitlisted · tap to cancel"),
+                        style: .secondary,
+                        showsSpinner: isCancelling
                     )
                 }
                 .buttonStyle(KXPressableStyle(scale: 0.97))
+                .disabled(isCancelling)
             } else {
                 Button {
                     openRegistration(event)
@@ -545,16 +588,21 @@ struct EventDetailView: View {
 
     private enum CTAStyle { case disabled, neutral, secondary }
 
-    private func ctaLabel(_ text: String, style: CTAStyle) -> some View {
-        Text(text)
-            .font(.headline.weight(.bold))
-            .foregroundStyle(style == .secondary ? tint : .secondary)
-            .frame(maxWidth: .infinity)
-            .frame(height: 52)
-            .background(
-                style == .secondary ? tint.opacity(0.10) : Color.secondary.opacity(0.10),
-                in: Capsule()
-            )
+    private func ctaLabel(_ text: String, style: CTAStyle, showsSpinner: Bool = false) -> some View {
+        HStack(spacing: 8) {
+            if showsSpinner {
+                KXSpinner(size: 15, lineWidth: 2)
+            }
+            Text(text)
+                .font(.headline.weight(.bold))
+                .foregroundStyle(style == .secondary ? tint : .secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 52)
+        .background(
+            style == .secondary ? tint.opacity(0.10) : Color.secondary.opacity(0.10),
+            in: Capsule()
+        )
     }
 
     // MARK: - actions
@@ -575,15 +623,37 @@ struct EventDetailView: View {
             event = try await KaiXAPIClient.shared.registerForEvent(idOrSlug, answers: [:])
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         } catch {
+            actionTitle = KXListingCopy.pickText(language, "报名失败", "登録できませんでした", "Couldn't register")
             actionMessage = error.kaixUserMessage
         }
     }
 
     private func cancelRegistration() async {
+        guard !isCancelling else { return }
+        isCancelling = true
+        defer { isCancelling = false }
         do {
             event = try await KaiXAPIClient.shared.cancelEventRegistration(idOrSlug)
         } catch {
+            actionTitle = KXListingCopy.pickText(language, "取消报名失败", "キャンセルできませんでした", "Couldn't cancel")
             actionMessage = error.kaixUserMessage
+        }
+    }
+
+    /// 举报活动。服务端没有活动级举报端点,复用用户举报通道(举报主办者),
+    /// note 里带 event 上下文供后台定位。
+    private func reportEvent(_ event: KaiXEventDTO) {
+        guard GuestSession.requireSignedIn(currentUser, reason: KXListingCopy.pickText(language, "登录后可以举报。", "ログインすると通報できます。", "Sign in to report.")) else { return }
+        guard let organizerId = event.organizer_user_id, !organizerId.isEmpty else { return }
+        Task {
+            do {
+                try await KaiXAPIClient.shared.reportUser(organizerId, reason: "other", note: "event:\(event.id) slug:\(event.slug ?? "") title:\(event.title.prefix(80))")
+                actionTitle = KXListingCopy.pickText(language, "举报活动", "イベントを通報", "Report event")
+                actionMessage = L("reportRecorded", language)
+            } catch {
+                actionTitle = KXListingCopy.pickText(language, "举报失败", "通報できませんでした", "Couldn't report")
+                actionMessage = error.kaixUserMessage
+            }
         }
     }
 
@@ -596,6 +666,7 @@ struct EventDetailView: View {
         do {
             let ics = try await KaiXAPIClient.shared.eventICS(idOrSlug)
             guard !ics.isEmpty, let data = ics.data(using: .utf8) else {
+                actionTitle = KXListingCopy.pickText(language, "添加到日历", "カレンダーに追加", "Add to calendar")
                 actionMessage = KXListingCopy.pickText(language, "生成日历文件失败,请稍后再试", "カレンダーの作成に失敗しました", "Couldn't build the calendar file")
                 return
             }
@@ -607,6 +678,7 @@ struct EventDetailView: View {
             try data.write(to: url, options: .atomic)
             calendarShare = ShareableFile(url: url)
         } catch {
+            actionTitle = KXListingCopy.pickText(language, "添加到日历", "カレンダーに追加", "Add to calendar")
             actionMessage = error.kaixUserMessage
         }
     }
@@ -621,6 +693,7 @@ struct EventDetailView: View {
             NotificationCenter.default.post(name: .kaiXEventRemoved, object: nil, userInfo: ["id": removedId])
             dismiss()
         } catch {
+            actionTitle = KXListingCopy.pickText(language, "删除失败", "削除できませんでした", "Couldn't delete")
             actionMessage = error.kaixUserMessage
         }
     }

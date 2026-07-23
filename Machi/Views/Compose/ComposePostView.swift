@@ -15,6 +15,9 @@ struct ComposePostView: View {
     @State private var isShowingRegionPicker = false
     @State private var isShowingTypePicker = false
     @State private var showMembership = false
+    /// Auto-saved snapshot found on open (from a crashed / killed session).
+    /// Non-nil drives the "restore your draft?" prompt.
+    @State private var pendingAutoDraft: ComposeAutoDraft?
 
     let currentUser: UserEntity
 
@@ -96,7 +99,13 @@ struct ComposePostView: View {
             Button(L("keepEditing", language), role: .cancel) {}
         }
         .onChange(of: pickerItems) { _, newValue in
+            guard !newValue.isEmpty else { return }
+            // loadTransferable 把 iCloud 原件拷到本地这段可能长达几十秒
+            // (1GB 视频),在它开始前就置位 preparing——处理横幅立即出现,
+            // 选完大视频不再是一段「像点了没反应」的死窗。
+            viewModel.isImportingFromPicker = true
             Task {
+                defer { viewModel.isImportingFromPicker = false }
                 for item in newValue {
                     let videoContentType = item.supportedContentTypes.first { $0.conforms(to: .movie) }
                     if videoContentType != nil {
@@ -120,15 +129,54 @@ struct ComposePostView: View {
             if let initial = initialContentType, viewModel.contentType == .dynamic {
                 viewModel.setContentType(initial)
             }
+            // 先读快照再开启自动保存:开启后 2s 防抖会用当前(空)状态覆写。
+            // 快照已捏在 pendingAutoDraft 手里,提示晚点弹也不怕被覆写。
+            if let draft = viewModel.restorableAutoDraft(for: currentUser.id) {
+                pendingAutoDraft = draft
+            }
+            viewModel.startAutoDraft(for: currentUser.id)
         }
         .onChange(of: viewModel.content) { _, _ in
             syncComposeStore()
+            viewModel.noteAutoDraftChange()
         }
         .onChange(of: viewModel.mediaDrafts) { _, _ in
             syncComposeStore()
         }
         .onChange(of: viewModel.selectedTopics) { _, _ in
             syncComposeStore()
+            viewModel.noteAutoDraftChange()
+        }
+        .onChange(of: viewModel.contentType) { _, _ in
+            viewModel.noteAutoDraftChange()
+        }
+        .onChange(of: viewModel.attributes) { _, _ in
+            viewModel.noteAutoDraftChange()
+        }
+        .alert(
+            KXListingCopy.pickText(language, "恢复上次的草稿？", "前回の下書きを復元しますか？", "Restore your unsaved draft?"),
+            isPresented: Binding(
+                get: { pendingAutoDraft != nil },
+                set: { if !$0 { pendingAutoDraft = nil } }
+            )
+        ) {
+            Button(KXListingCopy.pickText(language, "恢复", "復元する", "Restore")) {
+                if let draft = pendingAutoDraft {
+                    viewModel.restoreAutoDraft(draft)
+                }
+                pendingAutoDraft = nil
+            }
+            Button(KXListingCopy.pickText(language, "不需要", "破棄する", "Discard"), role: .cancel) {
+                viewModel.clearAutoDraft()
+                pendingAutoDraft = nil
+            }
+        } message: {
+            Text(KXListingCopy.pickText(
+                language,
+                "上次编辑的内容已自动保存（不含图片/视频）。要继续写吗？",
+                "前回の入力内容が自動保存されています（写真・動画を除く）。続きから書きますか？",
+                "Your last edits were auto-saved (photos/videos not included). Continue writing?"
+            ))
         }
         .sheet(isPresented: $showMembership) {
             NavigationStack { MembershipView(currentUser: currentUser) }

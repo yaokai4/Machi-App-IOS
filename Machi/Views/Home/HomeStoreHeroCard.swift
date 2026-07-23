@@ -19,10 +19,12 @@ final class HomeStoreHeroViewModel: ObservableObject {
         let featured = items
             .filter { $0.isFeatured == true }
             .sorted { ($0.sortOrder ?? Int.max) < ($1.sortOrder ?? Int.max) }
-        let hero = featured.first ?? items.first { !$0.isFree } ?? items.first
-        product = hero
+        guard let hero = featured.first ?? items.first(where: { !$0.isFree }) ?? items.first else { return }
+        // withAnimation + 视图 .transition 配对:数据晚到时卡片动画插入,
+        // feed 不再被无动画地整列下顶。
+        withAnimation(.snappy(duration: 0.3)) { product = hero }
         // C-2 客户端漏斗:卡片真的拿到 SKU 渲染出来才算一次曝光。
-        if let hero, !hasLoggedView {
+        if !hasLoggedView {
             hasLoggedView = true
             Task {
                 await KaiXAPIClient.shared.funnelEvent(
@@ -40,6 +42,9 @@ struct HomeStoreHeroCard: View {
     @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
     @StateObject private var vm = HomeStoreHeroViewModel()
+    /// 运营位互斥:旅程卡在场时本卡让位(首屏同屏最多一张运营卡,旅程卡
+    /// 优先 —— 指路比开店门更贴用户当下)。由 HomeTimelineView 驱动。
+    var isSuppressed: Bool = false
     /// 关闭后的静默截止时间(epoch 秒)。存截止时间而非布尔,让「本周期不再
     /// 出现」到期自动恢复,不需要清理逻辑。
     @AppStorage("home.storeHero.dismissedUntil") private var dismissedUntil: Double = 0
@@ -53,7 +58,7 @@ struct HomeStoreHeroCard: View {
 
     var body: some View {
         Group {
-            if !isDismissed, let product = vm.product {
+            if !isSuppressed, !isDismissed, let product = vm.product {
                 Button {
                     router.open(.guideProduct(slug: product.slug), in: .home)
                 } label: {
@@ -106,10 +111,14 @@ struct HomeStoreHeroCard: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel(KXListingCopy.pickText(language, "关闭推荐", "おすすめを閉じる", "Dismiss suggestion"))
                 }
+                // 与 vm.load 的 withAnimation 配对:插入/让位都有过渡。
+                .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
             }
         }
-        .task {
-            guard !isDismissed else { return }
+        // 以 isSuppressed 为 key:被旅程卡压住期间不取数(拿到也不渲染,
+        // 还会虚报曝光漏斗);旅程卡消失(hint 变 nil)后再补载。
+        .task(id: isSuppressed) {
+            guard !isSuppressed, !isDismissed else { return }
             await vm.load()
         }
     }

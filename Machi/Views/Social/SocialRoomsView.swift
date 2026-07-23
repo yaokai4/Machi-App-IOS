@@ -77,6 +77,42 @@ enum KXRoomStyle {
     }
 }
 
+// MARK: - 房间未读水位(本地)
+
+/// 房间列表未读角标的本地已读水位:按「账号 + 房间」存最后已读的 message_count。
+/// 纯本地(服务端没有房间已读回执),未读数 = 服务端 message_count − 本地水位。
+/// 详情页进房/轮询/离场时推进水位;列表页对首次见到的已加入房间先播种基线,
+/// 避免重装 App 后历史消息全量算成未读。
+enum KXRoomReadMarks {
+    private static func key(_ userId: String, _ roomId: String) -> String {
+        "roomReadCount.\(userId).\(roomId)"
+    }
+
+    /// 单调推进(轮询快照可能过期,绝不把水位往回拉)。
+    static func markRead(userId: String, roomId: String, messageCount: Int) {
+        let k = key(userId, roomId)
+        if messageCount > UserDefaults.standard.integer(forKey: k) {
+            UserDefaults.standard.set(messageCount, forKey: k)
+        }
+    }
+
+    /// 首次见到该房间(无水位)时把当前计数记为基线 —— 只对已加入的房间调用。
+    static func seedIfNeeded(userId: String, roomId: String, messageCount: Int?) {
+        guard let messageCount else { return }
+        let k = key(userId, roomId)
+        if UserDefaults.standard.object(forKey: k) == nil {
+            UserDefaults.standard.set(messageCount, forKey: k)
+        }
+    }
+
+    static func unreadCount(userId: String, roomId: String, messageCount: Int?) -> Int {
+        guard let messageCount else { return 0 }
+        let k = key(userId, roomId)
+        guard UserDefaults.standard.object(forKey: k) != nil else { return 0 }
+        return max(0, messageCount - UserDefaults.standard.integer(forKey: k))
+    }
+}
+
 /// DTO 版头像(房间成员/活动参与者不是本地 UserEntity)。带首字母兜底。
 struct KXSocialAvatar: View {
     let user: KaiXUserDTO?
@@ -341,10 +377,23 @@ struct SocialRoomsView: View {
             .frame(maxWidth: .infinity, minHeight: 300)
         } else {
             ForEach(items) { room in
-                SocialRoomCard(room: room, language: language) {
+                SocialRoomCard(room: room, language: language, unreadCount: unreadCount(for: room)) {
                     router.open(.socialRoom(roomId: room.id))
                 }
             }
+        }
+    }
+
+    /// 只有加入的局才有未读语义(没加入的局消息本来就与我无关)。
+    private func unreadCount(for room: KaiXRoomDTO) -> Int {
+        guard room.joined else { return 0 }
+        return KXRoomReadMarks.unreadCount(userId: currentUser.id, roomId: room.id, messageCount: room.message_count)
+    }
+
+    /// 对首批见到的已加入房间播种已读基线,避免重装后历史消息全量算未读。
+    private func seedReadBaselines(_ rooms: [KaiXRoomDTO]) {
+        for room in rooms where room.joined {
+            KXRoomReadMarks.seedIfNeeded(userId: currentUser.id, roomId: room.id, messageCount: room.message_count)
         }
     }
 
@@ -382,6 +431,7 @@ struct SocialRoomsView: View {
                 mine: onlyMine
             )
             guard generation == loadGeneration else { return }
+            seedReadBaselines(page.items)
             items = page.items
             total = page.total
             nextOffset = page.nextOffset
@@ -412,6 +462,7 @@ struct SocialRoomsView: View {
         guard generation == loadGeneration else { return }
         total = page.total
         if !page.roomTypes.isEmpty { roomTypes = page.roomTypes }
+        seedReadBaselines(page.items)
         let refreshed = Dictionary(page.items.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let existing = Set(items.map(\.id))
         items = page.items.filter { !existing.contains($0.id) } + items.map { refreshed[$0.id] ?? $0 }
@@ -430,6 +481,7 @@ struct SocialRoomsView: View {
                 offset: offset
             )
             guard generation == loadGeneration else { return }
+            seedReadBaselines(page.items)
             let existing = Set(items.map(\.id))
             items += page.items.filter { !existing.contains($0.id) }
             nextOffset = page.nextOffset
@@ -449,6 +501,7 @@ struct SocialRoomsView: View {
 private struct SocialRoomCard: View {
     let room: KaiXRoomDTO
     let language: AppLanguage
+    var unreadCount: Int = 0
     let onOpen: () -> Void
 
     private var tint: Color { KXRoomStyle.tint(room.typeKey) }
@@ -491,6 +544,18 @@ private struct SocialRoomCard: View {
                                     .background(KXColor.accent.opacity(0.12), in: Capsule())
                             }
                             Spacer(minLength: 0)
+                            if unreadCount > 0 {
+                                // 未读角标:已加入的局有新消息时点亮(本地已读水位,
+                                // 见 KXRoomReadMarks;进房即清零)。
+                                Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
+                                    .font(.caption2.weight(.black))
+                                    .foregroundStyle(KXColor.onAccent)
+                                    .padding(.horizontal, 7)
+                                    .frame(minWidth: 19)
+                                    .frame(height: 19)
+                                    .background(KXColor.accent.gradient, in: Capsule())
+                                    .accessibilityLabel(KXListingCopy.pickText(language, "\(unreadCount) 条新消息", "新着メッセージ\(unreadCount)件", "\(unreadCount) new messages"))
+                            }
                             capacityBadge
                         }
                         Text(room.title)

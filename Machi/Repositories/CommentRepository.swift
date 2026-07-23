@@ -24,10 +24,22 @@ final class CommentRepository {
 
     func toggleLike(comment: CommentEntity) async throws {
         if KaiXBackend.token != nil || !KaiXRuntimeFlags.allowLocalStoreFallback {
-            let next = !comment.isLikedByCurrentUser
-            try await KaiXAPIClient.shared.setCommentLike(comment.id, next)
+            // Optimistic, same shape as PostStore.setLike: flip locally first so
+            // the heart turns red the instant it's tapped (weak-network taps used
+            // to sit dead for 1-2s), roll back if the request fails. CommentEntity
+            // is a SwiftData @Model (Observable), so the row re-renders on mutation.
+            let previousLiked = comment.isLikedByCurrentUser
+            let previousCount = comment.likeCount
+            let next = !previousLiked
             comment.isLikedByCurrentUser = next
-            comment.likeCount = max(0, comment.likeCount + (next ? 1 : -1))
+            comment.likeCount = max(0, previousCount + (next ? 1 : -1))
+            do {
+                try await KaiXAPIClient.shared.setCommentLike(comment.id, next)
+            } catch {
+                comment.isLikedByCurrentUser = previousLiked
+                comment.likeCount = previousCount
+                throw error
+            }
             return
         }
         comment.isLikedByCurrentUser.toggle()

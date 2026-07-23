@@ -26,7 +26,7 @@ final class HomeJourneyNextStepViewModel: ObservableObject {
         // Guests without a persona journey can never show a hint — skip the
         // network entirely instead of fetching a list we'd throw away.
         if !loggedIn, guideJourneyKey(forArrivalStage: persona) == nil {
-            hint = nil
+            setHint(nil)
             return
         }
         // Titles come from the localized journey list (public endpoint) so the
@@ -38,18 +38,26 @@ final class HomeJourneyNextStepViewModel: ObservableObject {
             guard let progress = try? await KaiXAPIClient.shared.guideProgress() else { return }
             guard let next = progress.summary.first(where: { $0.percent < 100 && $0.total > 0 }),
                   let journey = journeys.first(where: { $0.key == next.journeyKey }) else {
-                hint = nil
+                setHint(nil)
                 return
             }
-            hint = Hint(journeyKey: journey.key, title: journey.title, icon: journey.icon, done: next.done, total: next.total)
+            setHint(Hint(journeyKey: journey.key, title: journey.title, icon: journey.icon, done: next.done, total: next.total))
         } else {
             guard let key = guideJourneyKey(forArrivalStage: persona),
                   let journey = journeys.first(where: { $0.key == key }) else {
-                hint = nil
+                setHint(nil)
                 return
             }
-            hint = Hint(journeyKey: journey.key, title: journey.title, icon: journey.icon, done: nil, total: nil)
+            setHint(Hint(journeyKey: journey.key, title: journey.title, icon: journey.icon, done: nil, total: nil))
         }
+    }
+
+    /// nil→有值(插入)/有值→nil(移除)一律包 withAnimation:配合视图里的
+    /// .transition,数据晚到时 feed 是一次柔和的动画插入,而不是渲染好的
+    /// 整列内容被无动画地瞬间下顶 60~140pt。
+    private func setHint(_ newHint: Hint?) {
+        guard newHint != hint else { return }
+        withAnimation(.snappy(duration: 0.3)) { hint = newHint }
     }
 
     /// Same resolution as GuideViewModel.currentGuideLanguage (private there).
@@ -69,6 +77,9 @@ struct HomeJourneyNextStepCard: View {
     @AppStorage("onboardingPersona") private var onboardingPersona = ""
 
     let currentUser: UserEntity
+    /// 有无内容的变化回调,宿主(HomeTimelineView)用它做运营位互斥:
+    /// 旅程卡在场时商城 hero 卡让位,首屏同屏最多一张运营卡。
+    var onActiveChange: ((Bool) -> Void)? = nil
 
     var body: some View {
         Group {
@@ -109,7 +120,12 @@ struct HomeJourneyNextStepCard: View {
                     .kxGlassSurface(radius: KXRadius.lg)
                 }
                 .buttonStyle(.fullArea)
+                // 与 vm.setHint 的 withAnimation 配对:插入/移除都有过渡。
+                .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
             }
+        }
+        .onChange(of: vm.hint != nil, initial: true) { _, isActive in
+            onActiveChange?(isActive)
         }
         // 组合键带上应用语言:journey 标题按加载时语言从服务端取
         // (vm.load → guideJourneys(language:)),只以用户 id 为键的话,

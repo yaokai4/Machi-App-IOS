@@ -61,7 +61,9 @@ final class ComposePostViewModel: ObservableObject {
             || !mediaDrafts.isEmpty
             || !selectedTopics.isEmpty
             || hasPendingTopic
-        guard !hasPendingMediaUploads, !hasFailedMediaUploads else { return false }
+        // 相册导入中(isImportingFromPicker)也算媒体未就绪:此刻 draft 还没
+        // 入列,不拦的话点发布会把正在导入的视频落下。
+        guard !hasPendingMediaUploads, !hasFailedMediaUploads, !isImportingFromPicker else { return false }
         // Two ways to be "publishable":
         //   1) the typed form has its small set of required fields
         //      filled (e.g. secondhand: title + price), OR
@@ -213,11 +215,18 @@ final class ComposePostViewModel: ObservableObject {
         }
     }
 
+    /// 从相册 loadTransferable 拷贝所选文件期间为 true(iCloud 大视频可能要
+    /// 几十秒)。这一段发生在 addVideo/addMedia 之前,若不单独置位,用户点完
+    /// 「完成」到出现压缩进度之间是一段零反馈死窗,像点了没反应。视图在
+    /// onChange(pickerItems) 检出内容后立刻置位,导入循环结束后清除。
+    @Published var isImportingFromPicker = false
+
     /// 选大视频后 prepareVideo(内部可能有数十秒的 1080p 转码)期间 draft
     /// 尚未 append 进 mediaDrafts,.compressing 状态只挂在临时 preparingId
     /// 上。必须单独暴露这个阶段,否则转码全程界面毫无反馈、像卡死。
     var isPreparingMedia: Bool {
-        mediaUploadStates.contains { id, uploadState in
+        if isImportingFromPicker { return true }
+        return mediaUploadStates.contains { id, uploadState in
             uploadState == .compressing && !mediaDrafts.contains(where: { $0.id == id })
         }
     }
@@ -625,6 +634,94 @@ final class ComposePostViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Auto draft (crash safety net)
+
+    private static let autoDraftDefaultsKey = "machi.compose.autoDraft.v1"
+    private var autoDraftUserId: String?
+    private var autoDraftDebounceTask: Task<Void, Never>?
+
+    /// Arm the auto-draft for this composing session. Called by the view on
+    /// appear (it knows the current user id; the VM doesn't).
+    func startAutoDraft(for userId: String) {
+        autoDraftUserId = userId
+    }
+
+    /// 正文/类型/字段/话题任一变更后由视图调用:2 秒防抖后把文本态快照进
+    /// UserDefaults。App 被杀/崩溃后重开 composer 能提示恢复,发布成功、
+    /// 存草稿或主动丢弃(都会走 resetDraft)时清除。媒体不入快照——上传
+    /// 状态无法冷恢复,恢复提示里会明说。
+    func noteAutoDraftChange() {
+        guard autoDraftUserId != nil else { return }
+        autoDraftDebounceTask?.cancel()
+        autoDraftDebounceTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.persistAutoDraft()
+        }
+    }
+
+    private func persistAutoDraft() {
+        guard let userId = autoDraftUserId, !isPublishing else { return }
+        let hasBody = !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard hasBody || hasUserEnteredAttributes || !selectedTopics.isEmpty else {
+            // Emptied out by the user — a restored prompt for a blank draft
+            // would be noise, so drop any stale snapshot.
+            UserDefaults.standard.removeObject(forKey: Self.autoDraftDefaultsKey)
+            return
+        }
+        let draft = ComposeAutoDraft(
+            authorId: userId,
+            content: content,
+            contentTypeRaw: contentType.rawValue,
+            attributes: attributes,
+            topics: selectedTopics,
+            regionCode: selectedRegion?.regionCode,
+            languageRaw: selectedLanguage.rawValue,
+            savedAt: .now
+        )
+        if let data = try? JSONEncoder().encode(draft) {
+            UserDefaults.standard.set(data, forKey: Self.autoDraftDefaultsKey)
+        }
+    }
+
+    /// The stored snapshot, if it belongs to `userId`, isn't stale (7 days)
+    /// and the composer is still empty. Read on composer open to drive the
+    /// "restore your unsaved draft?" prompt.
+    func restorableAutoDraft(for userId: String) -> ComposeAutoDraft? {
+        guard let data = UserDefaults.standard.data(forKey: Self.autoDraftDefaultsKey),
+              let draft = try? JSONDecoder().decode(ComposeAutoDraft.self, from: data),
+              draft.authorId == userId,
+              Date.now.timeIntervalSince(draft.savedAt) < 7 * 24 * 3600,
+              !hasDraft
+        else { return nil }
+        let hasBody = !draft.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard hasBody || !draft.attributes.isEmpty || !draft.topics.isEmpty else { return nil }
+        return draft
+    }
+
+    func restoreAutoDraft(_ draft: ComposeAutoDraft) {
+        content = draft.content
+        if let type = ContentType(rawValue: draft.contentTypeRaw) {
+            contentType = type
+        }
+        attributes = draft.attributes
+        // Restored values are user-entered by definition — nothing here should
+        // count as an untouched seeded default (hasDraft must be true now).
+        seededDefaultAttributes = [:]
+        selectedTopics = draft.topics
+        if let code = draft.regionCode, let region = KaiXRegionDirectory.resolve(regionCode: code) {
+            selectedRegion = region
+        }
+        if let raw = draft.languageRaw, let lang = ContentLanguage(rawValue: raw) {
+            selectedLanguage = lang
+        }
+    }
+
+    func clearAutoDraft() {
+        autoDraftDebounceTask?.cancel()
+        UserDefaults.standard.removeObject(forKey: Self.autoDraftDefaultsKey)
+    }
+
     private func deterministicSuggestedTopics(from topics: [String]) -> [String] {
         let normalized = topics.normalizedDisplayHashtags
         return Array(normalized.prefix(8))
@@ -674,6 +771,9 @@ final class ComposePostViewModel: ObservableObject {
         mediaUploadStates = [:]
         mediaUploadProgress = [:]
         uploadedMediaByDraftID = [:]
+        // resetDraft 只在发布成功/存草稿成功/主动丢弃后调用——三种情况自动
+        // 草稿快照都不该再存在,一并清除。
+        clearAutoDraft()
         if !keepError {
             errorMessage = nil
         }
@@ -766,4 +866,20 @@ final class ComposePostViewModel: ObservableObject {
             mediaUploadStates[draft.id] = .failed
         }
     }
+}
+
+/// Snapshot of the composer's TEXT state, auto-saved to UserDefaults so a
+/// crash / swipe-kill doesn't eat a half-written post. Media is deliberately
+/// not captured — upload state can't be restored from cold — and the restore
+/// prompt says so out loud. Keyed to the author id so drafts never bleed
+/// across account switches.
+struct ComposeAutoDraft: Codable {
+    let authorId: String
+    let content: String
+    let contentTypeRaw: String
+    let attributes: [String: KaiXAttributeValue]
+    let topics: [String]
+    let regionCode: String?
+    let languageRaw: String?
+    let savedAt: Date
 }

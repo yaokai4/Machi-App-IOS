@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UserNotifications
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
@@ -17,6 +18,10 @@ struct SettingsView: View {
     @State private var showLogoutConfirm = false
     @State private var isShowingFavorites = false
     @State private var didEnter = false
+    // 通知行显示真实系统授权态(denied → 已关闭),不再恒显「已开启」。
+    @State private var notificationStatus: UNAuthorizationStatus?
+    // 隐私行显示服务端真实可见性(privacy_protect),不再恒显「公开」。
+    @State private var privacyProtected: Bool?
 
     let currentUser: UserEntity
     var onLogout: (() -> Void)?
@@ -27,38 +32,51 @@ struct SettingsView: View {
                 LazyVStack(alignment: .leading, spacing: 15) {
                     topBar
                         .kxSettingsEntrance(didEnter, index: 0)
-                    SettingsAccountCard(user: currentUser)
-                        .kxSettingsEntrance(didEnter, index: 1)
 
-                    // My content dashboard — the tappable home for posts /
-                    // favorites (listings + posts) / drafts / media. Replaces the
-                    // dead header numbers AND the old "内容管理" list section.
-                    contentDashboard
-                        .kxSettingsEntrance(didEnter, index: 2)
+                    if currentUser.isGuest {
+                        // 游客设置页:登录 CTA 取代账号功能区,隐藏账号与安全 / 会员 /
+                        // 钱包 / 邀请 / 订单 / 内容仪表盘(未登录点进全是 401),保留地区
+                        // 与语言 / 帮助 / 关于 —— 游客真正可用的部分。不显示「退出登录」。
+                        guestLoginCard
+                            .kxSettingsEntrance(didEnter, index: 1)
+                        guestPreferencesSection
+                            .kxSettingsEntrance(didEnter, index: 2)
+                        serviceSection
+                            .kxSettingsEntrance(didEnter, index: 3)
+                    } else {
+                        SettingsAccountCard(user: currentUser)
+                            .kxSettingsEntrance(didEnter, index: 1)
 
-                    accountSection
-                        .kxSettingsEntrance(didEnter, index: 3)
-                    serviceSection
-                        .kxSettingsEntrance(didEnter, index: 4)
+                        // My content dashboard — the tappable home for posts /
+                        // favorites (listings + posts) / drafts / media. Replaces the
+                        // dead header numbers AND the old "内容管理" list section.
+                        contentDashboard
+                            .kxSettingsEntrance(didEnter, index: 2)
 
-                    if currentUser.role == .admin {
-                        adminSection
-                            .kxSettingsEntrance(didEnter, index: 5)
+                        accountSection
+                            .kxSettingsEntrance(didEnter, index: 3)
+                        serviceSection
+                            .kxSettingsEntrance(didEnter, index: 4)
+
+                        if currentUser.role == .admin {
+                            adminSection
+                                .kxSettingsEntrance(didEnter, index: 5)
+                        }
+
+                        Button {
+                            showLogoutConfirm = true
+                        } label: {
+                            Label(L("logout", language), systemImage: "rectangle.portrait.and.arrow.right")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.primary)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 50)
+                                .kxGlassSurface(radius: KXRadius.lg)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.top, KXSpacing.xs)
+                        .kxSettingsEntrance(didEnter, index: 5)
                     }
-
-                    Button {
-                        showLogoutConfirm = true
-                    } label: {
-                        Label(L("logout", language), systemImage: "rectangle.portrait.and.arrow.right")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 50)
-                            .kxGlassSurface(radius: KXRadius.lg)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.top, KXSpacing.xs)
-                    .kxSettingsEntrance(didEnter, index: 5)
 
                     Text("Machi \(KaiXBackend.appVersion)")
                         .font(.subheadline.weight(.semibold))
@@ -91,6 +109,17 @@ struct SettingsView: View {
         .task {
             guard !currentUser.isGuest, KaiXBackend.token?.isEmpty == false else { return }
             await walletStore.refreshWallet()
+        }
+        .task {
+            // 系统通知授权态是本地读取(无网络);游客也读,通知行对游客不显示但无害。
+            notificationStatus = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+        }
+        .task {
+            // 隐私可见性以服务端为准(privacy_protect)。游客 / 未登录不拉。
+            guard !currentUser.isGuest, KaiXBackend.token?.isEmpty == false else { return }
+            if let remote = try? await KaiXAPIClient.shared.settings() {
+                privacyProtected = remote.privacy_protect
+            }
         }
         .onAppear {
             withAnimation(.snappy(duration: 0.38)) {
@@ -136,6 +165,18 @@ struct SettingsView: View {
 
     private var accountSection: some View {
         SettingsSectionCard(title: L("accountGroup", language)) {
+            // 编辑资料入口:此前只能从个人主页进,在设置里找头像 / 昵称修改的用户
+            // 会失败。EditProfileView 自带玻璃头(含返回),故不再叠系统导航栏。
+            SettingsRowLink(
+                icon: "person.text.rectangle",
+                tint: KXColor.accent,
+                title: t("编辑资料", "プロフィール編集", "Edit profile"),
+                subtitle: t("头像、昵称、简介与所在地", "アイコン・名前・自己紹介・地域", "Avatar, name, bio & location"),
+                revealsNavBar: false
+            ) {
+                EditProfileView(user: currentUser)
+            }
+            SettingsDivider()
             SettingsRowLink(icon: "rectangle.grid.2x2.fill", tint: KXColor.accent, title: L("workbenchTitle", language), subtitle: L("workbenchSettingsSubtitle", language)) {
                 MyWorkbenchView(currentUser: currentUser)
             }
@@ -183,7 +224,7 @@ struct SettingsView: View {
                 RegionLanguageSettingsView(currentUser: currentUser)
             }
             SettingsDivider()
-            SettingsRowLink(icon: "bell.badge", tint: .orange, title: L("notificationSettings", language), value: L("enabled", language), subtitle: L("notificationsHere", language)) {
+            SettingsRowLink(icon: "bell.badge", tint: .orange, title: L("notificationSettings", language), value: notificationRowValue, subtitle: L("notificationsHere", language)) {
                 NotificationPreferencesView(currentUser: currentUser)
             }
             SettingsDivider()
@@ -191,7 +232,7 @@ struct SettingsView: View {
                 SavedSearchesView()
             }
             SettingsDivider()
-            SettingsRowLink(icon: "hand.raised.fill", tint: .indigo, title: L("privacySettings", language), value: L("public", language), subtitle: L("privacySettingsSubtitle", language)) {
+            SettingsRowLink(icon: "hand.raised.fill", tint: .indigo, title: L("privacySettings", language), value: privacyRowValue, subtitle: L("privacySettingsSubtitle", language)) {
                 PrivacySettingsView(currentUser: currentUser)
             }
         }
@@ -306,11 +347,11 @@ struct SettingsView: View {
         // 帮助与反馈 only — merchant verification is a business function and lives
         // in the workbench (经营后台), not in settings (职责清晰).
         SettingsSectionCard(title: L("helpGroup", language)) {
-            SettingsRowLink(icon: "questionmark.circle", tint: .blue, title: L("helpCenter", language), subtitle: L("navigationReady", language)) {
+            SettingsRowLink(icon: "questionmark.circle", tint: .blue, title: L("helpCenter", language), subtitle: t("常见问题与使用指南", "よくある質問と使い方", "FAQ & how-to guides")) {
                 HelpCenterView()
             }
             SettingsDivider()
-            SettingsRowLink(icon: "bubble.left.and.text.bubble.right", tint: .orange, title: L("feedback", language), subtitle: L("navigationReady", language)) {
+            SettingsRowLink(icon: "bubble.left.and.text.bubble.right", tint: .orange, title: L("feedback", language), subtitle: t("告诉我们哪里可以做得更好", "改善点を教えてください", "Tell us what we can do better")) {
                 FeedbackView()
             }
             SettingsDivider()
@@ -359,6 +400,75 @@ struct SettingsView: View {
         // 会把上一账号的邮箱显示在未绑邮箱的账号 B 上,且明文 PII 落 UserDefaults
         // ——该键已废弃并在 ContactSettingsView 里清除。
         currentUser.email.isEmpty ? nil : currentUser.email
+    }
+
+    private func t(_ zh: String, _ ja: String, _ en: String) -> String {
+        KXListingCopy.pickText(language, zh, ja, en)
+    }
+
+    /// 通知行真值:未拉到(nil)不显示 value;denied → 已关闭;notDetermined →
+    /// 未开启;授权 / 临时 / 短时 → 已开启。
+    private var notificationRowValue: String? {
+        guard let status = notificationStatus else { return nil }
+        switch status {
+        case .authorized, .provisional, .ephemeral:
+            return L("enabled", language)
+        case .denied:
+            return t("已关闭", "オフ", "Off")
+        case .notDetermined:
+            return t("未开启", "未設定", "Not set")
+        @unknown default:
+            return nil
+        }
+    }
+
+    /// 隐私行真值:未拉到(nil)不显示 value;privacy_protect 打开 → 保护中,
+    /// 否则 → 公开。
+    private var privacyRowValue: String? {
+        guard let protected = privacyProtected else { return nil }
+        return protected ? t("保护中", "保護中", "Protected") : L("public", language)
+    }
+
+    /// 游客版账号卡:登录 / 注册 CTA(复用 guestProfile 文案体系)。点击走
+    /// GuestGate 弹登录 sheet。既是转化位,也让「未登录被要求退出登录」的荒诞消失。
+    private var guestLoginCard: some View {
+        VStack(spacing: KXSpacing.md) {
+            Image(systemName: "person.crop.circle.badge.plus")
+                .kxScaledFont(46, weight: .semibold)
+                .foregroundStyle(KXColor.accent)
+            Text(L("guestProfileTitle", language))
+                .font(.title3.weight(.bold))
+                .multilineTextAlignment(.center)
+            Text(L("guestProfileSubtitle", language))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                GuestSession.requireSignedIn(currentUser, reason: L("guestLoginRequired", language))
+            } label: {
+                Text(L("loginOrRegister", language))
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(KXColor.onAccent)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(KXColor.accent, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("settings.guestLogin")
+        }
+        .padding(KXSpacing.lg)
+        .frame(maxWidth: .infinity)
+        .kxGlassSurface(radius: KXRadius.lg)
+    }
+
+    /// 游客可用的偏好:地区与语言(本地设置,不需登录)。
+    private var guestPreferencesSection: some View {
+        SettingsSectionCard(title: t("偏好", "設定", "Preferences")) {
+            SettingsRowLink(icon: "globe.asia.australia", tint: .teal, title: L("regionAndLanguage", language), value: regionDisplayLabel, subtitle: L("regionAndLanguageSubtitle", language)) {
+                RegionLanguageSettingsView(currentUser: currentUser)
+            }
+        }
     }
 }
 

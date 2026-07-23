@@ -1,22 +1,30 @@
 import SwiftUI
 import SwiftData
 import UIKit
+#if canImport(Translation)
+import Translation
+#endif
 
 struct PostCardView: View, Equatable {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
     @EnvironmentObject private var postStore: PostStore
     @State private var isShowingRepostOptions = false
-    @State private var isShowingQuoteDialog = false
+    @State private var isShowingQuoteSheet = false
     @State private var isShowingEditPost = false
     @State private var isShowingDeleteConfirm = false
     @State private var isPostMutationInFlight = false
     @State private var isHiddenAfterDelete = false
     @State private var editPostText = ""
-    @State private var quoteText = ""
     @State private var cardMessage: String?
     @State private var cardError: String?
     @State private var isTextExpanded = false
+    // 「查看全文」按真实截断测量判定:隐藏探针分别量出 4 行钳制高度与
+    // 全文高度,两者有差才显示按钮 —— 取代旧的字符数启发式(97~104 字
+    // 单段帖「点了没变化」的误报、60~96 字被截却无按钮的漏报都消除)。
+    @State private var clampedBodyHeight: CGFloat?
+    @State private var fullBodyHeight: CGFloat?
+    @State private var isBodyTruncated = false
 
     let post: PostEntity
     let author: UserEntity?
@@ -27,10 +35,9 @@ struct PostCardView: View, Equatable {
     var originalMediaItems: [MediaEntity] = []
     var showsMenu = true
     /// When true (post detail), the body text is never truncated: the detail
-    /// page is the ONLY place the full text lives, and the character-count
-    /// heuristic (`shouldShowExpand`) can miss real CJK / large-Dynamic-Type
-    /// wrapping — a miss there would leave the clipped tail unreachable.
-    /// Feed cards keep `false` (4-line clamp, tap = open detail).
+    /// page is the ONLY place the full text lives, so it must not depend on
+    /// any truncation detection. Feed cards keep `false` (4-line clamp with
+    /// a measured "view full text" toggle, tap = open detail).
     var expandOnTap = false
     var onOpen: () -> Void = {}
     var onOpenOriginal: () -> Void = {}
@@ -154,10 +161,16 @@ struct PostCardView: View, Equatable {
                                     Text("·")
                                         .font(KXTypography.meta)
                                         .foregroundStyle(.tertiary)
-                                    Text(DateFormatterUtils.relativeText(from: contentPost.createdAt, language: language))
-                                        .font(KXTypography.meta)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
+                                    // TimelineView 让相对时间「走起来」:卡片停留时
+                                    // 「刚刚」每分钟自然长成「3分钟前」。periodic 只
+                                    // 换 context.date,不触发整卡重算(.equatable()
+                                    // 缓存不受影响)。
+                                    TimelineView(.periodic(from: .now, by: 60)) { timeline in
+                                        Text(DateFormatterUtils.relativeText(from: contentPost.createdAt, to: timeline.date, language: language))
+                                            .font(KXTypography.meta)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                    }
                                     if let region = postRegion(contentPost) {
                                         Text("·")
                                             .font(KXTypography.meta)
@@ -188,10 +201,8 @@ struct PostCardView: View, Equatable {
                         questionPanel(for: contentPost)
                     } else if !contentPost.previewText.isEmpty {
                         if expandOnTap {
-                            // 详情页是全文的唯一去处:shouldShowExpand 的字符数启发式与真实
-                            // 折行无关(CJK 每行仅 20 余字、动态大字号下更少),约 60–96 字的
-                            // 多段帖会被截在 4 行却不出现「查看全文」,后面的内容彻底不可达。
-                            // 所以详情页正文永不截断;折叠/展开只保留在 Feed 卡片上。
+                            // 详情页是全文的唯一去处,正文永不截断、不依赖任何截断检测;
+                            // 折叠/展开(隐藏探针实测截断)只保留在 Feed 卡片上。
                             Text(contentPost.previewText)
                                 .kxScaledFont(15, relativeTo: .body, weight: .regular)
                                 .foregroundStyle(.primary)
@@ -209,7 +220,10 @@ struct PostCardView: View, Equatable {
                                     .frame(maxWidth: .infinity, alignment: .leading)
                             }
                             .buttonStyle(.plain)
-                            if shouldShowExpand(for: contentPost.previewText) {
+                            // 隐藏探针在同一宽度下同时量出「4 行钳制」与「全文」
+                            // 高度;background 不参与布局,不撑高卡片。
+                            .background { bodyTruncationProbe(for: contentPost.previewText) }
+                            if isBodyTruncated || isTextExpanded {
                                 Button {
                                     withAnimation(.snappy(duration: 0.18)) {
                                         isTextExpanded.toggle()
@@ -224,6 +238,29 @@ struct PostCardView: View, Equatable {
                             }
                         }
                     }
+
+                    // 【王牌】日文帖一键翻中(反向 zh→ja、en 互译同理):检测到
+                    // 正文语言与界面语言不同时,正文下方出现「翻译」小按钮,点按
+                    // 用 Apple Translation framework 就地翻译。iOS 18 以下整体
+                    // 优雅隐藏(TranslationSession 是 iOS 18+ API)。
+                    #if canImport(Translation)
+                    if #available(iOS 18.0, *) {
+                        if contentPost.contentType != .question, !contentPost.previewText.isEmpty,
+                           let pair = PostTranslationService.shared.translationPair(
+                               postId: contentPost.id,
+                               text: contentPost.previewText,
+                               serverLanguageTag: contentPost.language,
+                               uiLanguage: language
+                           ) {
+                            PostTranslationSection(
+                                postId: contentPost.id,
+                                sourceText: contentPost.previewText,
+                                sourceTag: pair.source,
+                                targetTag: pair.target
+                            )
+                        }
+                    }
+                    #endif
 
                     if !visibleHashtags.isEmpty {
                         TagWrapView(tags: visibleHashtags, onTap: onTag)
@@ -262,24 +299,25 @@ struct PostCardView: View, Equatable {
             }
         }
         .confirmationDialog(L("repost", language), isPresented: $isShowingRepostOptions, titleVisibility: .visible) {
-            Button(L("undoRepost", language), role: .destructive, action: onRepost)
+            // 未转发:转发 / 引用 / 取消;已转发:撤销转发 / 引用 / 取消。
+            // 点按转发键一律先经此对话框,杜绝「误触即转」。
+            if menuTargetPost.isRepostedByCurrentUser {
+                Button(L("undoRepost", language), role: .destructive, action: onRepost)
+            } else {
+                Button(L("repost", language), action: onRepost)
+            }
             Button(L("quotePost", language)) {
-                quoteText = ""
-                isShowingQuoteDialog = true
+                isShowingQuoteSheet = true
             }
             Button(L("cancel", language), role: .cancel) {}
         }
-        .alert(L("quotePost", language), isPresented: $isShowingQuoteDialog) {
-            TextField(L("quotePlaceholder", language), text: $quoteText)
-            Button(L("publish", language)) {
-                let trimmed = quoteText.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty else { return }
-                onQuoteRepost(trimmed)
-                quoteText = ""
-            }
-            Button(L("cancel", language), role: .cancel) {
-                quoteText = ""
-            }
+        .sheet(isPresented: $isShowingQuoteSheet) {
+            QuoteComposerSheet(
+                post: menuTargetPost,
+                author: quoteTargetAuthor,
+                mediaItems: quoteTargetMedia,
+                onSubmit: onQuoteRepost
+            )
         }
         .confirmationDialog(L("deletePost", language), isPresented: $isShowingDeleteConfirm, titleVisibility: .visible) {
             Button(L("deletePost", language), role: .destructive) {
@@ -374,11 +412,47 @@ struct PostCardView: View, Equatable {
         )
     }
 
-    /// Feed 卡片「查看全文」入口的启发式。注意它与真实折行行数无关(只看字符
-    /// 数/段落数),所以只允许用在 Feed 上 —— Feed 漏判时点开详情仍能读到全文;
-    /// 详情页(expandOnTap)一律不截断,绝不能依赖这个启发式。
-    private func shouldShowExpand(for text: String) -> Bool {
-        text.count > 96 || text.components(separatedBy: .newlines).count > 4
+    /// Feed 卡片「查看全文」的真实截断探针:两份隐藏 Text 与可见正文完全同
+    /// 样式(字号/行距/fixedSize),一份钳制 4 行、一份不限行,在同一宽度下
+    /// 各自量出高度 —— 有差即真被截断。替代旧字符数启发式(与真实折行无关,
+    /// 误报/漏报皆有)。详情页(expandOnTap)一律不截断,不走此探针。
+    @ViewBuilder
+    private func bodyTruncationProbe(for text: String) -> some View {
+        ZStack(alignment: .topLeading) {
+            Text(text)
+                .kxScaledFont(15, relativeTo: .body, weight: .regular)
+                .lineSpacing(2)
+                .lineLimit(4)
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.height
+                } action: { height in
+                    clampedBodyHeight = height
+                    updateBodyTruncation()
+                }
+            Text(text)
+                .kxScaledFont(15, relativeTo: .body, weight: .regular)
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.height
+                } action: { height in
+                    fullBodyHeight = height
+                    updateBodyTruncation()
+                }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .hidden()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func updateBodyTruncation() {
+        guard let clamped = clampedBodyHeight, let full = fullBodyHeight else { return }
+        let truncated = full - clamped > 0.5
+        if truncated != isBodyTruncated {
+            isBodyTruncated = truncated
+        }
     }
 
     /// 提问帖的卡片主体:问题面板(问号徽章 + 问题原文 + 补充说明摘要 +
@@ -508,6 +582,19 @@ struct PostCardView: View, Equatable {
 
     private var canModifyMenuTarget: Bool {
         currentUser?.id == menuTargetPost.authorId
+    }
+
+    /// 引用弹窗预览用的作者/媒体,与 menuTargetPost 同一套解析:引用转发卡
+    /// 的目标是引用帖本身(author/mediaItems),纯转发卡的目标是被转发的
+    /// 原帖(originalAuthor/originalMediaItems)。
+    private var quoteTargetAuthor: UserEntity? {
+        if originalPost != nil && !post.previewText.isEmpty { return author }
+        return originalPost != nil ? originalAuthor : author
+    }
+
+    private var quoteTargetMedia: [MediaEntity] {
+        if originalPost != nil && !post.previewText.isEmpty { return mediaItems }
+        return originalPost != nil ? originalMediaItems : mediaItems
     }
 
     private var canSaveEdit: Bool {
@@ -681,17 +768,13 @@ struct PostCardView: View, Equatable {
     }
 
     private func handleRepostTap() {
+        // 无论是否已转发都先弹 confirmationDialog(转发 or 撤销转发 / 引用 /
+        // 取消)——引用入口不再藏在「先转发一次」之后,误触也不再立即成转。
         // 「是否已转发」的判定必须与交互条展示、onRepost 的作用目标(列表页的
         // targetPost / 详情页的 interactionTarget)取同一个帖子:引用转发卡的
-        // 交互条作用于引用帖本身,不是被引用的原帖。此前这里取 (originalPost
-        // ?? post),引用卡拿到的是【原帖】状态 —— 用户转发过原帖 A 再看引用帖
-        // Q 时,按钮未激活却弹「撤销转发」,选撤销反而对 Q 新建一条转发。
-        // menuTargetPost 与 body 的 contentPost 是同一解析,直接复用。
-        if menuTargetPost.isRepostedByCurrentUser {
-            isShowingRepostOptions = true
-        } else {
-            onRepost()
-        }
+        // 交互条作用于引用帖本身,不是被引用的原帖(menuTargetPost 与 body 的
+        // contentPost 是同一解析,对话框内的分支直接复用它)。
+        isShowingRepostOptions = true
     }
 
     /// Wrap a write action so a guest gets a login prompt instead. Reading /
@@ -866,7 +949,10 @@ private struct MetricButton: View {
             .animation(.snappy(duration: 0.18), value: isActive)
             .frame(maxWidth: .infinity)
             .frame(height: 30, alignment: .center)
-            .contentShape(Rectangle())
+            // 视觉高度保持 30pt(卡片布局不变),命中区只在纵向外扩到 44pt
+            // 推荐触达区。不能用 inset(by: -7) 全向外扩:相邻按钮横向紧贴,
+            // 横向外扩会在交界处互相抢命中。
+            .contentShape(VerticallyExpandedTapShape(expansion: 7))
         }
         .buttonStyle(KXPressableStyle(scale: 0.90, dim: 0.8))
         .sensoryFeedback(.selection, trigger: isActive)
@@ -877,6 +963,178 @@ private struct MetricButton: View {
         .accessibilityAddTraits(isActive ? .isSelected : [])
     }
 }
+
+/// 命中区形状:保持原始 frame 参与布局,仅纵向向外扩 `expansion` pt。
+private struct VerticallyExpandedTapShape: Shape {
+    var expansion: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        Path(rect.insetBy(dx: 0, dy: -expansion))
+    }
+}
+
+#if canImport(Translation)
+/// 卡片正文下的就地翻译区:「翻译」小按钮 + 淡入的译文块(标「AI 翻译」)。
+/// 再点收起;结果缓存在 PostTranslationService(内存 per postId×目标语言),
+/// 收起再展开、滚出滚回都不重跑模型。语言包未下载时由系统 sheet 引导下载
+/// (translationTask 自动弹出);语言对不支持时按钮整体隐藏。
+@available(iOS 18.0, *)
+private struct PostTranslationSection: View {
+    @Environment(\.appLanguage) private var language
+
+    let postId: String
+    let sourceText: String
+    /// 短标签("ja"/"zh"/"en"),Locale 映射见 PostTranslationService。
+    let sourceTag: String
+    let targetTag: String
+
+    @State private var translatedText: String?
+    @State private var isShowingTranslation = false
+    @State private var isTranslating = false
+    @State private var didFail = false
+    @State private var configuration: TranslationSession.Configuration?
+    @State private var isPairSupported = true
+
+    private var sourceLanguage: Locale.Language {
+        Locale.Language(identifier: PostTranslationService.localeIdentifier(forTag: sourceTag))
+    }
+
+    private var targetLanguage: Locale.Language {
+        Locale.Language(identifier: PostTranslationService.localeIdentifier(forTag: targetTag))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: KXSpacing.xs) {
+            if isPairSupported {
+                Button(action: handleTap) {
+                    HStack(spacing: 5) {
+                        if isTranslating {
+                            KXSpinner(size: 12, lineWidth: 1.6)
+                        } else {
+                            Image(systemName: "translate")
+                                .font(.caption2.weight(.bold))
+                        }
+                        Text(buttonTitle)
+                            .font(.caption.weight(.bold))
+                    }
+                    .foregroundStyle(KXColor.accent)
+                    .contentShape(VerticallyExpandedTapShape(expansion: 8))
+                }
+                .buttonStyle(.plain)
+                .disabled(isTranslating)
+                .accessibilityIdentifier("post_translate_button")
+
+                if didFail && !isShowingTranslation {
+                    Text(KXListingCopy.pickText(language, "翻译暂时不可用，点按重试", "翻訳を利用できません。タップして再試行", "Translation unavailable — tap to retry"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                if isShowingTranslation, let translatedText {
+                    VStack(alignment: .leading, spacing: KXSpacing.xxs) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "sparkles")
+                                .font(.caption2.weight(.semibold))
+                            Text(KXListingCopy.pickText(language, "AI 翻译", "AI翻訳", "AI translation"))
+                                .font(.caption2.weight(.bold))
+                        }
+                        .foregroundStyle(.secondary)
+                        Text(translatedText)
+                            .kxScaledFont(15, relativeTo: .body, weight: .regular)
+                            .foregroundStyle(.primary)
+                            .lineSpacing(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(KXSpacing.sm)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(KXColor.accent.opacity(0.06), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
+                            .stroke(KXColor.accent.opacity(0.12), lineWidth: 0.6)
+                    )
+                    .transition(.opacity)
+                }
+            }
+        }
+        .task(id: "\(sourceTag)->\(targetTag)") {
+            // 首次上屏或语言对变化(例如用户切换界面语言):丢弃旧配置,
+            // 用新目标语言回填缓存里的既有译文(无则收起旧展示),再查
+            // 该语言对的可用性。
+            configuration = nil
+            isTranslating = false
+            let cached = PostTranslationService.shared.cachedTranslation(postId: postId, targetTag: targetTag)
+            translatedText = cached
+            if cached == nil {
+                isShowingTranslation = false
+            }
+            await refreshPairSupport()
+        }
+        .translationTask(configuration) { session in
+            do {
+                let response = try await session.translate(sourceText)
+                PostTranslationService.shared.storeTranslation(response.targetText, postId: postId, targetTag: targetTag)
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    translatedText = response.targetText
+                    isShowingTranslation = true
+                }
+            } catch {
+                didFail = true
+            }
+            isTranslating = false
+        }
+    }
+
+    private var buttonTitle: String {
+        if isTranslating {
+            return KXListingCopy.pickText(language, "翻译中…", "翻訳中…", "Translating…")
+        }
+        if isShowingTranslation {
+            return KXListingCopy.pickText(language, "收起翻译", "翻訳を閉じる", "Hide translation")
+        }
+        return KXListingCopy.pickText(language, "翻译", "翻訳", "Translate")
+    }
+
+    private func handleTap() {
+        didFail = false
+        if isShowingTranslation {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                isShowingTranslation = false
+            }
+            return
+        }
+        if let cached = translatedText
+            ?? PostTranslationService.shared.cachedTranslation(postId: postId, targetTag: targetTag) {
+            translatedText = cached
+            withAnimation(.easeInOut(duration: 0.22)) {
+                isShowingTranslation = true
+            }
+            return
+        }
+        isTranslating = true
+        if configuration == nil {
+            configuration = TranslationSession.Configuration(source: sourceLanguage, target: targetLanguage)
+        } else {
+            // 失败后重试:invalidate 让 translationTask 以同一配置重跑。
+            configuration?.invalidate()
+        }
+    }
+
+    /// 语言对完全不支持(设备/系统不含该翻译方向)时隐藏整个入口;
+    /// 「支持但语言包未下载」保留按钮,点按时系统会引导下载。
+    private func refreshPairSupport() async {
+        let status = await LanguageAvailability().status(from: sourceLanguage, to: targetLanguage)
+        switch status {
+        case .unsupported:
+            isPairSupported = false
+        case .installed, .supported:
+            isPairSupported = true
+        @unknown default:
+            isPairSupported = true
+        }
+    }
+}
+#endif
 
 struct TagWrapView: View {
     let tags: [String]

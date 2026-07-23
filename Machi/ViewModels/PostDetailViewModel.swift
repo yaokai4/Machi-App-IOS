@@ -17,8 +17,13 @@ final class PostDetailViewModel: ObservableObject {
     @Published var commentText = ""
     @Published var failedCommentDraft: PendingCommentDraft?
     @Published var transientCommentError: String?
-    @Published var transientPostMessage: String?
     @Published var transientPostError: String?
+    /// Ids of comments the current user posted in THIS detail session (newest
+    /// first). The view pins them to the top of the list so a fresh 0-like
+    /// comment isn't immediately buried by the "hot" sort — the classic
+    /// "did my comment fail to post?" moment. Cleared whenever the thread is
+    /// re-fetched from the server, so a refresh restores natural ordering.
+    @Published private(set) var sessionCommentIds: [String] = []
 
     func load(context: ModelContext, postId: String, currentUser: UserEntity, postStore: PostStore, commentStore: CommentStore? = nil) async {
         let cachedPost = postStore.post(id: postId)
@@ -42,6 +47,7 @@ final class PostDetailViewModel: ObservableObject {
             author = nil
             originalAuthor = nil
             comments = []
+            sessionCommentIds = []
             commentAuthors = [:]
             media = []
             originalMedia = []
@@ -61,43 +67,59 @@ final class PostDetailViewModel: ObservableObject {
             state = .loaded
             let canonicalPostId = loadedPost.id
 
-            try? await postRepository.incrementView(post: loadedPost)
-
-            do {
-                author = try await UserRepository(context: context).fetchUser(id: loadedPost.authorId)
-            } catch {
-                author = nil
-            }
-
-            do {
-                media = try await postRepository.fetchMedia(postId: canonicalPostId)
-            } catch {
-                if !hasVisiblePost {
-                    media = []
-                }
-            }
-
-            originalPost = nil
-            originalAuthor = nil
-            originalMedia = []
-            if let originalPostId = loadedPost.repostOfPostId,
-               let loadedOriginalPost = try await postRepository.fetchPost(id: originalPostId, currentUserId: currentUser.id) {
-                originalPost = loadedOriginalPost
-                postStore.register(loadedOriginalPost)
-                originalAuthor = try? await UserRepository(context: context).fetchUser(id: loadedOriginalPost.authorId)
-                originalMedia = (try? await postRepository.fetchMedia(postId: loadedOriginalPost.id)) ?? []
-            }
+            // View counting is telemetry, not content — fire-and-forget so it
+            // never adds an RTT to the critical path of first render.
+            Task { try? await postRepository.incrementView(post: loadedPost) }
 
             if comments.isEmpty {
                 commentState = .loading
             }
-            do {
-                comments = try await CommentRepository(context: context).fetchComments(postId: canonicalPostId)
+
+            // 冷开详情曾是 6-7 次串行往返的瀑布(author → media → 原帖链 →
+            // comments 逐个 await),弱网 500ms RTT 下评论要 3-4 秒才出现。
+            // fetchPost 之后这四路互不依赖,并发发出,首屏压到 ~2×RTT。
+            let userRepository = UserRepository(context: context)
+            async let authorFetch = try? userRepository.fetchUser(id: loadedPost.authorId)
+            async let mediaFetch = try? postRepository.fetchMedia(postId: canonicalPostId)
+            async let originalFetch = loadOriginalBundle(
+                context: context,
+                repostOfPostId: loadedPost.repostOfPostId,
+                currentUser: currentUser
+            )
+            async let commentsFetch = loadCommentsResult(context: context, postId: canonicalPostId)
+
+            author = (await authorFetch) ?? nil
+            if let loadedMedia = await mediaFetch {
+                media = loadedMedia
+            } else if !hasVisiblePost {
+                media = []
+            }
+
+            if let bundle = await originalFetch {
+                originalPost = bundle.post
+                postStore.register(bundle.post)
+                originalAuthor = bundle.author
+                originalMedia = bundle.media
+            } else {
+                originalPost = nil
+                originalAuthor = nil
+                originalMedia = []
+            }
+
+            switch await commentsFetch {
+            case .success(let loadedComments):
+                sessionCommentIds = []
+                comments = loadedComments
                 commentState = CommentLoadState.resolved(commentCount: loadedPost.commentCount, loadedComments: comments)
                 commentStore?.setComments(comments, postId: canonicalPostId, expectedCount: loadedPost.commentCount)
-                let users = try await UserRepository(context: context).fetchUsers(ids: Set(comments.map(\.authorId)).union([loadedPost.authorId]))
-                commentAuthors = Dictionary(uniqueKeysWithValues: users.map { ($0.id, $0) })
-            } catch {
+                do {
+                    let users = try await userRepository.fetchUsers(ids: Set(comments.map(\.authorId)).union([loadedPost.authorId]))
+                    commentAuthors = Dictionary(uniqueKeysWithValues: users.map { ($0.id, $0) })
+                } catch {
+                    // Author lookups failing shouldn't hide the comments — rows
+                    // degrade to the "unknown user" placeholder name.
+                }
+            case .failure(let error):
                 commentState = .failed(error.kaixUserMessage)
                 commentStore?.setLoadingState(commentState, postId: canonicalPostId)
             }
@@ -116,6 +138,35 @@ final class PostDetailViewModel: ObservableObject {
         }
     }
 
+    /// Original-post bundle for a repost, loaded as one unit (post → author +
+    /// media concurrently). Degrades to nil instead of throwing: a deleted or
+    /// unreachable original should render the wrapper without the quote card,
+    /// not error out the whole detail page.
+    private func loadOriginalBundle(
+        context: ModelContext,
+        repostOfPostId: String?,
+        currentUser: UserEntity
+    ) async -> (post: PostEntity, author: UserEntity?, media: [MediaEntity])? {
+        guard let originalPostId = repostOfPostId else { return nil }
+        let postRepository = PostRepository(context: context)
+        guard let originalPost = try? await postRepository.fetchPost(id: originalPostId, currentUserId: currentUser.id) else {
+            return nil
+        }
+        async let authorFetch = try? UserRepository(context: context).fetchUser(id: originalPost.authorId)
+        async let mediaFetch = try? postRepository.fetchMedia(postId: originalPost.id)
+        return (originalPost, (await authorFetch) ?? nil, (await mediaFetch) ?? [])
+    }
+
+    /// Comments fetch wrapped in a Result so it can run under `async let`
+    /// while preserving the error message for `commentState = .failed(...)`.
+    private func loadCommentsResult(context: ModelContext, postId: String) async -> Result<[CommentEntity], Error> {
+        do {
+            return .success(try await CommentRepository(context: context).fetchComments(postId: postId))
+        } catch {
+            return .failure(error)
+        }
+    }
+
     func reloadComments(context: ModelContext, commentStore: CommentStore? = nil) async {
         guard let post else { return }
         if comments.isEmpty {
@@ -124,6 +175,7 @@ final class PostDetailViewModel: ObservableObject {
         }
         do {
             comments = try await CommentRepository(context: context).fetchComments(postId: post.id)
+            sessionCommentIds = []
             commentState = CommentLoadState.resolved(commentCount: post.commentCount, loadedComments: comments)
             commentStore?.setComments(comments, postId: post.id, expectedCount: post.commentCount)
         } catch {
@@ -147,6 +199,7 @@ final class PostDetailViewModel: ObservableObject {
             createdAt: .now
         )
         comments.insert(optimisticComment, at: 0)
+        sessionCommentIds.insert(optimisticComment.id, at: 0)
         commentStore?.insertOptimistic(optimisticComment)
         commentAuthors[currentUser.id] = currentUser
         commentText = ""
@@ -164,11 +217,15 @@ final class PostDetailViewModel: ObservableObject {
             if let index = comments.firstIndex(where: { $0.id == optimisticComment.id }) {
                 comments[index] = saved
             }
+            if let index = sessionCommentIds.firstIndex(of: optimisticComment.id) {
+                sessionCommentIds[index] = saved.id
+            }
             commentStore?.replaceComment(id: optimisticComment.id, with: saved)
             failedCommentDraft = nil
             commentState = CommentLoadState.resolved(commentCount: post.commentCount, loadedComments: comments)
         } catch {
             comments.removeAll { $0.id == optimisticComment.id }
+            sessionCommentIds.removeAll { $0 == optimisticComment.id }
             commentStore?.removeComment(optimisticComment)
             postStore.updateCommentCount(postId: post.id, delta: -1)
             commentText = trimmed
@@ -197,6 +254,7 @@ final class PostDetailViewModel: ObservableObject {
         let previousState = commentState
         transientCommentError = nil
         comments.removeAll { $0.id == comment.id || $0.parentCommentId == comment.id }
+        sessionCommentIds.removeAll { $0 == comment.id }
         // Authoritative count of what actually left the loaded thread (parent +
         // its loaded replies) so post.commentCount, the list, and CommentStore
         // all move by the same amount — a plain SwiftData descendant fetch is
@@ -295,7 +353,6 @@ final class PostDetailViewModel: ObservableObject {
         do {
             try await postStore.updatePost(context: context, postId: post.id, content: content)
             self.post = postStore.post(id: post.id) ?? post
-            transientPostMessage = "帖子已更新。"
             return true
         } catch {
             transientPostError = error.kaixUserMessage
@@ -316,9 +373,9 @@ final class PostDetailViewModel: ObservableObject {
             commentAuthors = [:]
             media = []
             originalMedia = []
+            sessionCommentIds = []
             state = .empty
             commentState = .idle
-            transientPostMessage = "帖子已删除。"
             return true
         } catch {
             transientPostError = error.kaixUserMessage

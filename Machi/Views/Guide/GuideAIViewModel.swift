@@ -9,7 +9,8 @@ enum GuideAIRole: String, Equatable {
 
 /// Local UI model for one chat bubble. Distinct from the wire DTO so we can
 /// represent transient client-only states (a pending "typing" assistant bubble,
-/// a failed user turn) without round-tripping the server.
+/// a failed user turn, a streaming partial answer) without round-tripping the
+/// server.
 struct GuideAIChatMessage: Identifiable, Equatable {
     let id: String
     let role: GuideAIRole
@@ -18,6 +19,11 @@ struct GuideAIChatMessage: Identifiable, Equatable {
     var isPending: Bool
     var failed: Bool
     var sources: [KaiXGuideAISourceDTO]
+    /// 用户点了「停止生成」或流中断:保留已收到的部分并标注「已停止」。
+    /// 该消息 id 仍是本地 UUID(没有服务端 id),不能对它提交评价。
+    var stopped: Bool = false
+    /// 「重新回答」后旧答案折叠保留(视图可点开查看)。
+    var collapsed: Bool = false
 }
 
 /// Drives `GuideAIChatView`. All limit/membership state is server-authoritative
@@ -30,10 +36,15 @@ final class GuideAIViewModel: ObservableObject {
     @Published var isLoading: Bool = false
     @Published var isSending: Bool = false
     @Published var errorMessage: String?
+    /// 会员引导横幅(锁定能力 / 服务端要求会员)。与 `errorMessage` 分离:
+    /// 会员引导不是错误,不能配 ⚠️ 图标和(此处必然无效的)「重试」按钮。
+    @Published var upsellMessage: String?
     @Published var quotaMessage: String?
     @Published var conversations: [KaiXGuideAIConversationDTO] = []
     @Published var suggestions: [KaiXGuideAISuggestionDTO] = []
     @Published var abilities: [KaiXGuideAIAbilityDTO] = []
+    /// done 事件带回的追问建议(≤3 条),点按即发送;新一轮发送时清空。
+    @Published var followupSuggestions: [String] = []
     /// Selected member-only ability (resume polish / mock interview), or nil for
     /// general chat. Server-authoritative — the gate is re-checked server-side.
     @Published var activeAbility: String?
@@ -44,11 +55,31 @@ final class GuideAIViewModel: ObservableObject {
     @Published var disclaimer: String?
     /// True once the daily quota is hit — the view shows the soft limit card.
     @Published private(set) var quotaReached: Bool = false
+    /// 正在打开一条历史会话(视图渲染加载指示;`isLoading` 仍归 bootstrap 用)。
+    @Published private(set) var isLoadingConversation: Bool = false
+    /// 正在流式渲染的 assistant 气泡 id(首个 delta 到达时设置)。视图用它做
+    /// 「锚定回答开头」的一次性滚动。
+    @Published private(set) var streamingMessageId: String?
+    /// 每收到一个流式 delta +1;视图据此做「仅当用户在底部时轻跟随」滚动。
+    @Published private(set) var deltaTick: Int = 0
+    /// 每完成一条回答 +1(流式与旧整段路径都算),视图用作答案到达的触感触发器。
+    @Published private(set) var completedAnswerCount: Int = 0
+    /// 旧整段回退路径完成的回答 id:答案是"砰"地整段到达的,视图滚动锚定到
+    /// 它的开头(流式路径在首个 delta 时已锚定,不再触发)。
+    @Published private(set) var legacyAnswerAnchorId: String?
 
     let language: AppLanguage
     private let country: String
     private var lastFailedText: String?
     private weak var lastUser: UserEntity?
+    /// 打开历史会话失败时记下会话 id,让错误横幅的「重试」真正重放
+    /// `loadConversation`(此前 `retryLastFailed` 在这种失败下是无操作的死按钮)。
+    private var pendingRetryConversationId: String?
+    /// 当前发送(流式或整段)的任务,「停止生成」取消它。
+    private var sendTask: Task<Void, Never>?
+    /// 仅当用户明确点了「停止生成」时,取消后才把问题放回输入框
+    ///(切换会话等隐式取消不应污染输入框)。
+    private var userRequestedStop = false
     /// True while the screen is used signed-out. Guests never see the
     /// member-oriented quota card / disabled composer — they get the login
     /// prompt instead — so the `quotaReached` computations skip them.
@@ -69,6 +100,9 @@ final class GuideAIViewModel: ObservableObject {
     }
 
     var hasMessages: Bool { !messages.isEmpty }
+
+    /// 错误横幅是否有可重试的动作(没有就渲染「关闭」而不是死按钮)。
+    var canRetry: Bool { lastFailedText != nil || pendingRetryConversationId != nil }
 
     private var serverLanguage: String {
         switch language {
@@ -115,11 +149,18 @@ final class GuideAIViewModel: ObservableObject {
     }
 
     func loadConversation(id: String) {
-        isLoading = true
+        guard !isLoadingConversation else { return }
+        // 打开别的会话 = 隐式放弃当前生成(不是用户点「停止」,不回填输入框)。
+        sendTask?.cancel()
+        isLoadingConversation = true
         errorMessage = nil
+        upsellMessage = nil
+        followupSuggestions = []
         Task {
+            defer { isLoadingConversation = false }  // never get stuck, even if cancelled
             do {
                 let resp = try await KaiXAPIClient.shared.guideAIMessages(conversationId: id)
+                pendingRetryConversationId = nil
                 conversationId = resp.conversation?.id ?? id
                 messages = (resp.items ?? []).map { dto in
                     GuideAIChatMessage(
@@ -133,21 +174,26 @@ final class GuideAIViewModel: ObservableObject {
                     )
                 }
             } catch {
+                // 记住失败的会话 id:错误横幅的「重试」重放本方法。
+                pendingRetryConversationId = id
                 errorMessage = genericErrorText
             }
-            isLoading = false
         }
     }
 
     /// Reset to a fresh conversation (keeps suggestions / membership state).
     func startNewConversation() {
+        sendTask?.cancel()
         conversationId = nil
         messages = []
         quotaMessage = nil
         quotaReached = !isGuestSession && (membershipActive == false) && (remainingFreeUses ?? 1) <= 0
         errorMessage = nil
+        upsellMessage = nil
+        followupSuggestions = []
         activeAbility = nil
         lastFailedText = nil
+        pendingRetryConversationId = nil
     }
 
     // MARK: - sending
@@ -174,7 +220,33 @@ final class GuideAIViewModel: ObservableObject {
         send(text: trimmed, currentUser: currentUser)
     }
 
-    func send(text: String, currentUser: UserEntity) {
+    /// 「重新回答」:折叠旧答案,用原问题 + 当前 ability 重发一轮
+    /// (不重复追加用户气泡)。
+    func regenerate(assistantMessageId: String, currentUser: UserEntity) {
+        guard !isSending, !quotaReached else { return }
+        guard let idx = messages.firstIndex(where: { $0.id == assistantMessageId }),
+              messages[idx].role == .assistant else { return }
+        guard let question = messages[..<idx].last(where: { $0.role == .user })?.content
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !question.isEmpty else { return }
+        // 游客门先于折叠检查:被登录墙拦下时不动任何消息状态。
+        if currentUser.isGuest, guestQuestionCount >= 1 {
+            GuestGate.shared.requireLogin(guestLoginPrompt)
+            return
+        }
+        messages[idx].collapsed = true
+        send(text: question, currentUser: currentUser, appendUserMessage: false)
+    }
+
+    /// 取消当前生成。已收到的部分保留并标注「已停止」;一字未收则撤掉
+    /// 气泡、把问题放回输入框。
+    func stopStreaming() {
+        guard isSending else { return }
+        userRequestedStop = true
+        sendTask?.cancel()
+    }
+
+    func send(text: String, currentUser: UserEntity, appendUserMessage: Bool = true) {
         guard !isSending else { return }
         isGuestSession = currentUser.isGuest
         // Guests get exactly one taster question on this device (the server
@@ -186,39 +258,115 @@ final class GuideAIViewModel: ObservableObject {
         }
         lastUser = currentUser
         errorMessage = nil
+        upsellMessage = nil
+        followupSuggestions = []
+        userRequestedStop = false
 
-        let userMessage = GuideAIChatMessage(
-            id: UUID().uuidString, role: .user, content: text, createdAt: Date(),
-            isPending: false, failed: false, sources: []
-        )
+        var userMessageId: String?
+        if appendUserMessage {
+            let userMessage = GuideAIChatMessage(
+                id: UUID().uuidString, role: .user, content: text, createdAt: Date(),
+                isPending: false, failed: false, sources: []
+            )
+            messages.append(userMessage)
+            userMessageId = userMessage.id
+        }
         let pendingId = UUID().uuidString
         let typing = GuideAIChatMessage(
             id: pendingId, role: .assistant, content: "", createdAt: Date(),
             isPending: true, failed: false, sources: []
         )
-        messages.append(userMessage)
         messages.append(typing)
         isSending = true
 
-        Task {
-            defer { isSending = false }  // always clears, even on cancellation
+        let guestId = currentUser.isGuest ? GuestSession.stableClientId : nil
+        sendTask = Task {
+            defer {
+                // 原有防御逻辑保留:任何路径(含取消)都复位发送态。
+                isSending = false
+                streamingMessageId = nil
+                sendTask = nil
+            }
             do {
-                let resp = try await KaiXAPIClient.shared.sendGuideAIMessage(
-                    conversationId: conversationId, message: text,
-                    country: country, language: serverLanguage, category: nil,
-                    ability: activeAbility,
-                    guestId: currentUser.isGuest ? GuestSession.stableClientId : nil
-                )
-                applyChatResponse(resp, pendingId: pendingId, userMessageId: userMessage.id, text: text)
+                try await performSend(text: text, guestId: guestId,
+                                      pendingId: pendingId, userMessageId: userMessageId)
+            } catch is CancellationError {
+                finalizeStopped(pendingId: pendingId, userMessageId: userMessageId, originalText: text)
+            } catch let urlError as URLError where urlError.code == .cancelled {
+                finalizeStopped(pendingId: pendingId, userMessageId: userMessageId, originalText: text)
             } catch let apiError as KaiXAPIError {
-                handleFailure(apiError, pendingId: pendingId, userMessageId: userMessage.id, text: text)
+                handleFailure(apiError, pendingId: pendingId, userMessageId: userMessageId, text: text)
             } catch {
-                handleFailure(nil, pendingId: pendingId, userMessageId: userMessage.id, text: text)
+                if Task.isCancelled {
+                    finalizeStopped(pendingId: pendingId, userMessageId: userMessageId, originalText: text)
+                } else {
+                    handleFailure(nil, pendingId: pendingId, userMessageId: userMessageId, text: text)
+                }
             }
         }
     }
 
+    /// 流式优先;404 回退整段 POST(旧服务端);200 非流式就地整段消费。
+    private func performSend(text: String, guestId: String?,
+                             pendingId: String, userMessageId: String?) async throws {
+        do {
+            let outcome = try await KaiXAPIClient.shared.streamGuideAIMessage(
+                conversationId: conversationId, message: text,
+                country: country, language: serverLanguage, category: nil,
+                ability: activeAbility, guestId: guestId
+            )
+            switch outcome {
+            case .legacy(let resp):
+                applyChatResponse(resp, pendingId: pendingId, userMessageId: userMessageId, text: text)
+            case .stream(let events):
+                var receivedDelta = false
+                for try await event in events {
+                    switch event {
+                    case .delta(let chunk):
+                        guard !chunk.isEmpty else { continue }
+                        appendDelta(chunk, pendingId: pendingId)
+                        receivedDelta = true
+                    case .done(let done):
+                        finalizeStream(done, pendingId: pendingId, userMessageId: userMessageId, text: text)
+                        return
+                    case .error(let code, let message):
+                        let resolved = message.isEmpty ? genericErrorText : message
+                        if receivedDelta {
+                            // 已有部分内容:保留 + 标注,只在横幅提示,不整体作废。
+                            markInterrupted(pendingId: pendingId)
+                            errorMessage = resolved
+                        } else {
+                            throw KaiXAPIError(error: .init(code: code, message: resolved))
+                        }
+                        return
+                    }
+                }
+                // 流断在 done 之前:有内容按停止收尾,没内容按失败处理。
+                if receivedDelta {
+                    markInterrupted(pendingId: pendingId)
+                    errorMessage = genericErrorText
+                } else {
+                    throw KaiXAPIError(error: .init(code: "ai_stream_interrupted", message: genericErrorText))
+                }
+            }
+        } catch is KaiXGuideAIStreamUnsupported {
+            // 旧服务端(404,消息未被处理):回退整段 POST,行为与升级前一致。
+            let resp = try await KaiXAPIClient.shared.sendGuideAIMessage(
+                conversationId: conversationId, message: text,
+                country: country, language: serverLanguage, category: nil,
+                ability: activeAbility, guestId: guestId
+            )
+            applyChatResponse(resp, pendingId: pendingId, userMessageId: userMessageId, text: text)
+        }
+    }
+
     func retryLastFailed() {
+        // 打开历史会话失败的重试:重放 loadConversation(此前是死按钮)。
+        if let cid = pendingRetryConversationId {
+            pendingRetryConversationId = nil
+            loadConversation(id: cid)
+            return
+        }
         guard let text = lastFailedText else { return }
         guard let user = lastUser else {
             errorMessage = genericErrorText
@@ -236,15 +384,93 @@ final class GuideAIViewModel: ObservableObject {
         errorMessage = nil
     }
 
-    func submitFeedback(messageId: String, rating: String) {
+    /// `reason` 仅点踩时携带(不准确 / 过时 / 无关 / 其他)。
+    func submitFeedback(messageId: String, rating: String, reason: String? = nil) {
         Task {
-            _ = try? await KaiXAPIClient.shared.sendGuideAIFeedback(messageId: messageId, rating: rating)
+            _ = try? await KaiXAPIClient.shared.sendGuideAIFeedback(messageId: messageId, rating: rating, reason: reason)
         }
+    }
+
+    // MARK: - streaming private
+
+    private func appendDelta(_ chunk: String, pendingId: String) {
+        guard let idx = messages.firstIndex(where: { $0.id == pendingId }) else { return }
+        if messages[idx].isPending { messages[idx].isPending = false }
+        messages[idx].content += chunk
+        if streamingMessageId != pendingId { streamingMessageId = pendingId }
+        deltaTick += 1
+    }
+
+    private func finalizeStream(_ done: KaiXGuideAIStreamDone, pendingId: String,
+                                userMessageId: String?, text: String) {
+        // 气泡已不在(切换了会话等):一切都是陈旧信息,整体丢弃。
+        guard let idx = messages.firstIndex(where: { $0.id == pendingId }) else { return }
+        let content = messages[idx].content
+        guard !content.isEmpty else {
+            // done 前没有任何 delta(异常响应):按失败处理,可重试。
+            handleFailure(nil, pendingId: pendingId, userMessageId: userMessageId, text: text)
+            return
+        }
+        if let cid = done.conversationId, !cid.isEmpty { conversationId = cid }
+        if let quota = done.quota {
+            membershipActive = quota.membershipActive ?? membershipActive
+            remainingFreeUses = (quota.membershipActive == true) ? nil : (quota.remainingFreeUses ?? remainingFreeUses)
+            upgradeSuggested = quota.upgradeSuggested ?? false
+        }
+        // 换上服务端消息 id(评价接口需要它);没有就保留本地 id。
+        let finalId = (done.messageId?.isEmpty == false ? done.messageId : nil) ?? pendingId
+        messages[idx] = GuideAIChatMessage(
+            id: finalId, role: .assistant, content: content, createdAt: Date(),
+            isPending: false, failed: false, sources: messages[idx].sources
+        )
+        followupSuggestions = Array(done.suggestions.prefix(3))
+        completedAnswerCount += 1
+        quotaMessage = nil
+        quotaReached = !isGuestSession && (membershipActive == false) && (remainingFreeUses ?? 1) <= 0
+        if lastUser?.isGuest == true {
+            // Taster question consumed — the next attempt hits the login gate.
+            guestQuestionCount += 1
+        } else {
+            // Keep the side list fresh so a new thread appears in history.
+            refreshConversations()
+        }
+    }
+
+    /// 流被服务端错误 / 断连打断,但已有部分内容:保留并标注「已停止」。
+    private func markInterrupted(pendingId: String) {
+        guard let idx = messages.firstIndex(where: { $0.id == pendingId }) else { return }
+        messages[idx].isPending = false
+        messages[idx].stopped = true
+        if lastUser?.isGuest == true { guestQuestionCount += 1 }
+    }
+
+    /// 用户取消(或隐式取消)后的收尾。
+    private func finalizeStopped(pendingId: String, userMessageId: String?, originalText: String) {
+        guard let idx = messages.firstIndex(where: { $0.id == pendingId }) else { return }
+        if messages[idx].content.isEmpty {
+            // 一字未收:撤掉气泡;明确点了「停止」的话把问题放回输入框。
+            messages.remove(at: idx)
+            if userRequestedStop {
+                if let userMessageId,
+                   let userIdx = messages.firstIndex(where: { $0.id == userMessageId }) {
+                    messages.remove(at: userIdx)
+                }
+                if inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    inputText = originalText
+                }
+            }
+        } else {
+            messages[idx].isPending = false
+            messages[idx].stopped = true
+            if lastUser?.isGuest == true { guestQuestionCount += 1 }
+        }
+        userRequestedStop = false
     }
 
     // MARK: - private
 
-    private func applyChatResponse(_ resp: KaiXGuideAIChatResponse, pendingId: String, userMessageId: String, text: String) {
+    private func applyChatResponse(_ resp: KaiXGuideAIChatResponse, pendingId: String,
+                                   userMessageId: String?, text: String) {
         conversationId = resp.conversationId ?? conversationId
         if let usage = resp.usage {
             membershipActive = usage.membershipActive ?? membershipActive
@@ -263,7 +489,10 @@ final class GuideAIViewModel: ObservableObject {
                 createdAt: Self.parseDate(message.createdAt), isPending: false, failed: false,
                 sources: message.sources ?? []
             )
+            // 整段到达的答案:视图滚动锚定到它的开头(而不是滚到底)。
+            legacyAnswerAnchorId = message.id
         }
+        completedAnswerCount += 1
         quotaMessage = nil
         quotaReached = !isGuestSession && (membershipActive == false) && (remainingFreeUses ?? 1) <= 0
         if lastUser?.isGuest == true {
@@ -275,9 +504,10 @@ final class GuideAIViewModel: ObservableObject {
         }
     }
 
-    private func handleFailure(_ apiError: KaiXAPIError?, pendingId: String, userMessageId: String, text: String?) {
+    private func handleFailure(_ apiError: KaiXAPIError?, pendingId: String,
+                               userMessageId: String?, text: String?) {
         messages.removeAll { $0.id == pendingId }
-        if let idx = messages.firstIndex(where: { $0.id == userMessageId }) {
+        if let userMessageId, let idx = messages.firstIndex(where: { $0.id == userMessageId }) {
             messages[idx].failed = true
         }
         if let text { lastFailedText = text }
@@ -299,9 +529,10 @@ final class GuideAIViewModel: ObservableObject {
             }
         case "AI_MEMBER_ABILITY_REQUIRED":
             // Members-only ability requested without membership: drop back to
-            // general chat and surface the upgrade prompt.
+            // general chat and surface the upsell banner (NOT the error banner —
+            // 会员引导不是网络错误,也没有可重试的动作).
             activeAbility = nil
-            errorMessage = apiError?.error.message ?? genericErrorText
+            upsellMessage = apiError?.error.message ?? memberAbilityUpsellText
             upgradeSuggested = true
         case "AI_UNAVAILABLE":
             errorMessage = apiError?.error.message ?? genericErrorText
@@ -314,7 +545,8 @@ final class GuideAIViewModel: ObservableObject {
     /// an upgrade prompt instead of activating it (the server re-checks anyway).
     func selectAbility(_ ability: KaiXGuideAIAbilityDTO) {
         if (ability.memberOnly ?? false) && !membershipActive {
-            errorMessage = guideText(
+            // 中性会员引导(皇冠 + 开通按钮),不再挪用 ⚠️ 错误横幅 + 死「重试」。
+            upsellMessage = guideText(
                 language,
                 "「\(ability.title)」是 Machi 会员专属能力，开通会员即可使用。",
                 "「\(ability.title)」は Machi メンバー限定機能です。メンバーになると利用できます。",
@@ -324,6 +556,7 @@ final class GuideAIViewModel: ObservableObject {
             return
         }
         errorMessage = nil
+        upsellMessage = nil
         activeAbility = (activeAbility == ability.key) ? nil : ability.key
     }
 
@@ -333,6 +566,16 @@ final class GuideAIViewModel: ObservableObject {
             "网络好像不太稳定，请稍后再试。",
             "通信が不安定なようです。少し待ってから再度お試しください。",
             "The connection seems unstable. Please try again shortly."
+        )
+    }
+
+    /// 服务端未附带文案时,会员能力横幅的默认引导语。
+    private var memberAbilityUpsellText: String {
+        guideText(
+            language,
+            "这是 Machi 会员专属能力，开通会员即可使用。",
+            "こちらは Machi メンバー限定機能です。メンバーになると利用できます。",
+            "This is a Machi members-only ability. Become a member to use it."
         )
     }
 

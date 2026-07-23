@@ -63,10 +63,20 @@ struct PostDetailView: View {
                 return $0.likeCount > $1.likeCount
             }
         }
-        // Pin an accepted best answer to the top, preserving order otherwise.
-        let accepted = base.filter { $0.isAccepted }
-        guard !accepted.isEmpty else { return base }
-        return accepted + base.filter { !$0.isAccepted }
+        // Pin order: ① comments the user just posted in this session (newest
+        // first) — the hot sort must not bury a fresh 0-like comment under
+        // liked ones ("I posted and it vanished" reads as a failure; a thread
+        // refresh clears these pins and restores natural order), ② the
+        // accepted best answer, ③ everything else in sort order.
+        let sessionIds = viewModel.sessionCommentIds
+        let sessionSet = Set(sessionIds)
+        let session = base
+            .filter { sessionSet.contains($0.id) }
+            .sorted { (sessionIds.firstIndex(of: $0.id) ?? .max) < (sessionIds.firstIndex(of: $1.id) ?? .max) }
+        let rest = base.filter { !sessionSet.contains($0.id) }
+        let accepted = rest.filter { $0.isAccepted }
+        guard !session.isEmpty || !accepted.isEmpty else { return base }
+        return session + accepted + rest.filter { !$0.isAccepted }
     }
 
     /// The post when it is a question — drives the Q&A status chip + accept affordances.
@@ -470,18 +480,6 @@ struct PostDetailView: View {
         .kxGlassSurface(radius: KXRadius.md)
     }
 
-    private func detailMetrics(_ post: PostEntity) -> some View {
-        HStack(spacing: 10) {
-            DetailMetric(title: L("comments", language), value: post.commentCount)
-            DetailMetric(title: L("repost", language), value: post.repostCount)
-            DetailMetric(title: L("like", language), value: post.likeCount)
-            DetailMetric(title: L("bookmark", language), value: post.bookmarkCount)
-            DetailMetric(title: L("heat", language), value: Int(post.heatScore), tint: KXColor.heat)
-        }
-        .padding(14)
-        .kxGlassSurface(radius: KXRadius.lg)
-    }
-
     private func commentThread(_ comment: CommentEntity, replies: [CommentEntity]) -> some View {
         let isExpanded = expandedReplyIds.contains(comment.id)
         let visibleReplies = isExpanded ? replies : Array(replies.prefix(2))
@@ -647,6 +645,11 @@ struct PostDetailView: View {
                     // to its root ancestor, since the comment UI only renders
                     // one level of replies (a grandchild would silently vanish).
                     let parentId = replyingTo.map { $0.parentCommentId ?? $0.id }
+                    // 回复发出后立刻展开父评论的回复区:否则新回复可能落进
+                    // prefix(2) 折叠区,发完看不到,像发失败了一样。
+                    if let parentId {
+                        expandedReplyIds.insert(parentId)
+                    }
                     Task {
                         await viewModel.sendComment(context: modelContext, currentUser: currentUser, postStore: postStore, commentStore: commentStore, parentCommentId: parentId)
                         replyingTo = nil
@@ -742,24 +745,6 @@ private enum CommentSortMode: String, CaseIterable, Identifiable {
         case .latest: L("latest", language)
         case .hot: L("top", language)
         }
-    }
-}
-
-private struct DetailMetric: View {
-    let title: String
-    let value: Int
-    var tint: Color = .primary
-
-    var body: some View {
-        VStack(spacing: 3) {
-            Text(NumberFormatterUtils.compact(value))
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(tint)
-            Text(title)
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
     }
 }
 

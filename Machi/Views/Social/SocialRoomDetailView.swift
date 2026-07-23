@@ -19,9 +19,23 @@ struct SocialRoomDetailView: View {
     @State private var isLoading = true
     @State private var isSending = false
     @State private var isJoining = false
+    @State private var isClosing = false
     @State private var errorMessage: String?
     @State private var actionMessage: String?
+    /// 操作结果弹窗的标题(具体动作名,如「发送失败」);nil 时回落到通用「提示」。
+    @State private var actionTitle: String?
     @State private var showLeaveConfirm = false
+    /// 房主「已成团,关闭报名」的确认弹窗。
+    @State private var showCloseConfirm = false
+    /// 待确认拉黑的消息作者(长按消息 → 拉黑用户)。
+    @State private var blockTarget: KaiXUserDTO?
+    /// 本地黑名单镜像(与 ChatView / ProfileView / 设置▸黑名单共用同一事实源):
+    /// 拉黑立即在本地过滤其房间消息,不等服务端下一次轮询。
+    @AppStorage private var blockedUserIdsRaw: String
+    /// 进房后本地已确认看过、但尚未反映进 room.message_count 快照的新消息数
+    /// (自己刚发的 + 轮询刚拉到的):离开房间时把已读水位补齐到快照 + 该差值,
+    /// 否则刚发完就退出会在列表上给自己挂一个假未读角标。
+    @State private var seenSinceRoomSnapshot = 0
     /// 局信息默认收起——聊天优先。点顶部信息条展开(描述/时间/位置/成员)。
     @State private var showInfo = false
     /// 轻量轮询:房间聊天没有专用推送通道,前台每 8s 刷一次新消息。
@@ -35,9 +49,27 @@ struct SocialRoomDetailView: View {
     /// mutation 前发出的过期 GET 快照把 viewer_joined 回滚(输入栏闪回加入按钮)。
     @State private var roomMutationGeneration = 0
 
+    init(roomId: String, currentUser: UserEntity) {
+        self.roomId = roomId
+        self.currentUser = currentUser
+        KXBlocklist.migrateLegacyIfNeeded(to: currentUser.id)
+        _blockedUserIdsRaw = AppStorage(wrappedValue: "", KXBlocklist.storageKey(for: currentUser.id))
+    }
+
     private var tint: Color { KXRoomStyle.tint(room?.typeKey ?? "chat") }
     private var joined: Bool { room?.joined ?? false }
     private var isHost: Bool { room?.isHostViewer ?? false }
+
+    private var blockedUserIds: Set<String> {
+        Set(blockedUserIdsRaw.split(separator: "|").map(String.init))
+    }
+
+    /// 拉黑用户的消息本地即时隐藏(系统消息不过滤)。服务端轮询仍会带回它们,
+    /// 每次渲染时按黑名单过滤即可,无需改动查重/分页逻辑。
+    private var visibleMessages: [KaiXRoomMessageDTO] {
+        guard !blockedUserIds.isEmpty else { return messages }
+        return messages.filter { $0.isSystem || !blockedUserIds.contains($0.user?.id ?? "") }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -56,7 +88,15 @@ struct SocialRoomDetailView: View {
         .toolbar(.hidden, for: .navigationBar)
         .kxHidesTabBar(reason: .custom("room-chat"))
         .task(id: roomId) { await load() }
-        .onDisappear { pollTask?.cancel() }
+        .onDisappear {
+            pollTask?.cancel()
+            // 离开即视为读完:快照计数 + 快照后本地已见的增量(自己刚发的/刚轮询到
+            // 的),否则刚发完消息就退出会给自己挂假未读角标。markRead 单调,不怕
+            // 过期快照把水位拉低。
+            if let count = room?.message_count {
+                KXRoomReadMarks.markRead(userId: currentUser.id, roomId: roomId, messageCount: count + seenSinceRoomSnapshot)
+            }
+        }
         .confirmationDialog(
             isHost
                 ? KXListingCopy.pickText(language, "解散这个局?", "ルームを解散しますか?", "Disband this room?")
@@ -74,9 +114,37 @@ struct SocialRoomDetailView: View {
             }
             Button(KXListingCopy.pickText(language, "取消", "キャンセル", "Cancel"), role: .cancel) {}
         }
-        .alert(KXListingCopy.pickText(language, "提示", "お知らせ", "Notice"), isPresented: Binding(
+        .confirmationDialog(
+            KXListingCopy.pickText(language, "已成团,关闭报名?", "メンバー決定として締め切りますか?", "Close signups?"),
+            isPresented: $showCloseConfirm,
+            titleVisibility: .visible
+        ) {
+            Button(KXListingCopy.pickText(language, "关闭报名", "締め切る", "Close signups")) {
+                Task { await closeRoom() }
+            }
+            Button(KXListingCopy.pickText(language, "取消", "キャンセル", "Cancel"), role: .cancel) {}
+        } message: {
+            Text(KXListingCopy.pickText(language, "关闭后新人无法再加入,已加入的成员不受影响。", "締め切ると新しい参加はできなくなります。参加中のメンバーはそのままです。", "New people can't join after this. Current members stay."))
+        }
+        .confirmationDialog(
+            KXListingCopy.pickText(language, "拉黑这个用户?", "このユーザーをブロックしますか?", "Block this user?"),
+            isPresented: Binding(
+                get: { blockTarget != nil },
+                set: { if !$0 { blockTarget = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: blockTarget
+        ) { target in
+            Button(L("blockUser", language), role: .destructive) {
+                Task { await block(target) }
+            }
+            Button(KXListingCopy.pickText(language, "取消", "キャンセル", "Cancel"), role: .cancel) {}
+        } message: { _ in
+            Text(KXListingCopy.pickText(language, "拉黑后将不再看到 TA 的消息,TA 也无法私信你。", "ブロックすると相手のメッセージは表示されず、DMも届きません。", "You won't see their messages and they can't DM you."))
+        }
+        .alert(actionTitle ?? KXListingCopy.pickText(language, "提示", "お知らせ", "Notice"), isPresented: Binding(
             get: { actionMessage != nil },
-            set: { if !$0 { actionMessage = nil } }
+            set: { if !$0 { actionMessage = nil; actionTitle = nil } }
         )) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -118,19 +186,36 @@ struct SocialRoomDetailView: View {
                 }
                 .accessibilityLabel(KXListingCopy.pickText(language, "分享", "共有", "Share"))
             }
-            if joined {
+            if let room {
                 Menu {
                     if isHost {
+                        if room.isOpen {
+                            Button {
+                                showCloseConfirm = true
+                            } label: {
+                                Label(KXListingCopy.pickText(language, "已成团,关闭报名", "メンバー決定(締め切る)", "Close signups"), systemImage: "checkmark.seal")
+                            }
+                            .disabled(isClosing)
+                        }
                         Button(role: .destructive) {
                             showLeaveConfirm = true
                         } label: {
                             Label(KXListingCopy.pickText(language, "解散房间", "ルームを解散", "Disband room"), systemImage: "trash")
                         }
-                    } else {
+                    } else if joined {
                         Button(role: .destructive) {
                             showLeaveConfirm = true
                         } label: {
                             Label(KXListingCopy.pickText(language, "退出这个局", "ルームを退出", "Leave room"), systemImage: "rectangle.portrait.and.arrow.right")
+                        }
+                    }
+                    // Apple Guideline 1.2:UGC 聊天房必须有可发现的举报入口,围观者
+                    // (未加入)也要能举报,所以菜单不再只在 joined 时出现。
+                    if !isHost, room.host_user_id?.isEmpty == false {
+                        Button(role: .destructive) {
+                            reportRoom(room)
+                        } label: {
+                            Label(KXListingCopy.pickText(language, "举报房间", "ルームを通報", "Report room"), systemImage: "flag")
                         }
                     }
                 } label: {
@@ -250,7 +335,7 @@ struct SocialRoomDetailView: View {
                         }
                         .buttonStyle(.plain)
                     }
-                    if messages.isEmpty {
+                    if visibleMessages.isEmpty {
                         if errorMessage != nil {
                             // room 加载成功、仅 messages 失败:不能伪装成「还没人说话」
                             // 的假空房,给内联重试(轮询也在跑,可自愈)。
@@ -290,7 +375,7 @@ struct SocialRoomDetailView: View {
                             .padding(.vertical, 60)
                         }
                     } else {
-                        ForEach(messages) { message in
+                        ForEach(visibleMessages) { message in
                             messageRow(message)
                                 .id(message.id)
                         }
@@ -350,7 +435,10 @@ struct SocialRoomDetailView: View {
                 }
                 Spacer()
                 if !room.isOpen {
-                    Text(KXListingCopy.pickText(language, "已结束", "終了", "Closed"))
+                    // 房主手动关闭报名(status=closed)语义是「人齐了」,不是「局结束了」。
+                    Text(room.status == "closed"
+                         ? KXListingCopy.pickText(language, "已成团", "メンバー決定", "Signups closed")
+                         : KXListingCopy.pickText(language, "已结束", "終了", "Ended"))
                         .font(.caption.weight(.black))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 9)
@@ -448,17 +536,29 @@ struct SocialRoomDetailView: View {
                             .font(.caption2.weight(.bold))
                             .foregroundStyle(.secondary)
                     }
-                    Text(message.content)
-                        .font(.subheadline)
-                        .foregroundStyle(isMine ? KXColor.onAccent : .primary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(
-                            isMine ? AnyShapeStyle(KXColor.accent.gradient) : AnyShapeStyle(KXColor.softBackground),
-                            in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
-                        )
-                        .frame(maxWidth: 280, alignment: isMine ? .trailing : .leading)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if isMine {
+                        bubbleText(message, isMine: true)
+                    } else {
+                        // Apple 1.2:骚扰发生在气泡上,举报/拉黑就要长按气泡可达,
+                        // 不能只藏在对方个人主页里。自己的气泡不挂菜单(空菜单也会
+                        // 触发长按抬起动画,徒增困惑)。
+                        bubbleText(message, isMine: false)
+                            .contextMenu {
+                                if let author = message.user {
+                                    Button(role: .destructive) {
+                                        reportMessage(message)
+                                    } label: {
+                                        Label(L("reportUser", language), systemImage: "flag")
+                                    }
+                                    Button(role: .destructive) {
+                                        guard GuestSession.requireSignedIn(currentUser, reason: KXListingCopy.pickText(language, "登录后可以拉黑用户。", "ログインするとブロックできます。", "Sign in to block users.")) else { return }
+                                        blockTarget = author
+                                    } label: {
+                                        Label(L("blockUser", language), systemImage: "hand.raised.slash")
+                                    }
+                                }
+                            }
+                    }
                     if let created = message.created_at, let date = KXDateParsing.parse(created) {
                         Text(DateFormatterUtils.relativeText(from: date, language: language))
                             .font(.caption2)
@@ -468,6 +568,21 @@ struct SocialRoomDetailView: View {
                 if !isMine { Spacer(minLength: 40) }
             }
         }
+    }
+
+    /// 消息气泡本体(自己 / 他人共用;菜单在调用点按归属挂载)。
+    private func bubbleText(_ message: KaiXRoomMessageDTO, isMine: Bool) -> some View {
+        Text(message.content)
+            .font(.subheadline)
+            .foregroundStyle(isMine ? KXColor.onAccent : .primary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                isMine ? AnyShapeStyle(KXColor.accent.gradient) : AnyShapeStyle(KXColor.softBackground),
+                in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
+            )
+            .frame(maxWidth: 280, alignment: isMine ? .trailing : .leading)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder
@@ -490,11 +605,14 @@ struct SocialRoomDetailView: View {
                         KXSpinner(size: 18, lineWidth: 2)
                             .frame(width: 44, height: 44)
                     } else {
+                        // 禁用态原是白箭头 + 35% 灰底,浅色模式下对比度不达标;
+                        // 改用 secondary 前景 + 低透明度同色底,两种外观下都可辨。
+                        let draftEmpty = draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                         Image(systemName: "arrow.up")
                             .font(.headline.weight(.bold))
-                            .foregroundStyle(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.white : KXColor.onAccent)
+                            .foregroundStyle(draftEmpty ? AnyShapeStyle(Color.secondary) : AnyShapeStyle(KXColor.onAccent))
                             .frame(width: 44, height: 44)
-                            .background(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? AnyShapeStyle(Color.secondary.opacity(0.35)) : AnyShapeStyle(KXColor.accent.gradient), in: Circle())
+                            .background(draftEmpty ? AnyShapeStyle(Color.secondary.opacity(0.16)) : AnyShapeStyle(KXColor.accent.gradient), in: Circle())
                     }
                 }
                 .buttonStyle(.plain)
@@ -551,6 +669,11 @@ struct SocialRoomDetailView: View {
             async let roomTask = KaiXAPIClient.shared.room(roomId)
             async let messagesTask = KaiXAPIClient.shared.roomMessages(roomId)
             room = try await roomTask
+            // 进房清零列表未读角标(本地水位推到当前快照)。
+            if let count = room?.message_count {
+                seenSinceRoomSnapshot = 0
+                KXRoomReadMarks.markRead(userId: currentUser.id, roomId: roomId, messageCount: count)
+            }
             do {
                 let page = try await messagesTask
                 messages = page.items
@@ -596,6 +719,8 @@ struct SocialRoomDetailView: View {
         let fresh = page.items.filter { !existing.contains($0.id) }
         if !fresh.isEmpty {
             messages += fresh
+            // 人在房里,轮询到的新消息即视为已见(计入快照后增量,离场时并入水位)。
+            seenSinceRoomSnapshot += fresh.count
         }
         // 轮询成功 = 消息通道恢复,清掉首载失败留下的内联错误条(room 此时必非 nil,
         // 不会影响整页错误态)。
@@ -607,6 +732,11 @@ struct SocialRoomDetailView: View {
             // 最长 8 秒)。列表页有 loadGeneration,此处同理。
             guard generation == roomMutationGeneration else { return }
             room = updated
+            // 新快照已包含刚才的增量:重置增量并把已读水位推进到快照值。
+            if let count = updated.message_count {
+                seenSinceRoomSnapshot = 0
+                KXRoomReadMarks.markRead(userId: currentUser.id, roomId: roomId, messageCount: count)
+            }
         }
     }
 
@@ -637,6 +767,7 @@ struct SocialRoomDetailView: View {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             await refreshMessagesQuietly()
         } catch {
+            actionTitle = KXListingCopy.pickText(language, "加入失败", "参加できませんでした", "Couldn't join")
             actionMessage = error.kaixUserMessage
         }
     }
@@ -658,6 +789,9 @@ struct SocialRoomDetailView: View {
                 await refreshMessagesQuietly()
             }
         } catch {
+            actionTitle = isHost
+                ? KXListingCopy.pickText(language, "解散失败", "解散できませんでした", "Couldn't disband")
+                : KXListingCopy.pickText(language, "退出失败", "退出できませんでした", "Couldn't leave")
             actionMessage = error.kaixUserMessage
         }
     }
@@ -674,9 +808,78 @@ struct SocialRoomDetailView: View {
             if !messages.contains(where: { $0.id == message.id }) {
                 messages.append(message)
             }
+            // 自己发的消息立刻计入已见增量:room 快照最长 8s 后才会包含它,发完就退
+            // 出不能在列表上给自己挂未读。
+            seenSinceRoomSnapshot += 1
             draft = ""
             forceScrollToBottomTick += 1 // 自己发的消息永远滚到底(即使正翻在历史里)
         } catch {
+            actionTitle = KXListingCopy.pickText(language, "发送失败", "送信できませんでした", "Couldn't send")
+            actionMessage = error.kaixUserMessage
+        }
+    }
+
+    /// 房主「已成团」:调服务端 PATCH status=closed,新人不能再加入,成员不受影响。
+    private func closeRoom() async {
+        guard !isClosing else { return }
+        isClosing = true
+        defer { isClosing = false }
+        do {
+            let updated = try await KaiXAPIClient.shared.closeRoom(roomId)
+            roomMutationGeneration += 1 // 作废在途轮询的过期 room 快照,防 status 回滚闪烁
+            room = updated
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        } catch {
+            actionTitle = KXListingCopy.pickText(language, "关闭报名失败", "締め切れませんでした", "Couldn't close signups")
+            actionMessage = error.kaixUserMessage
+        }
+    }
+
+    /// 举报房间。服务端没有房间级举报端点(/api/rooms/* 无 report 路由),复用
+    /// 用户举报通道、note 里带 room 上下文,后台报表可按 note 定位到房间。
+    private func reportRoom(_ room: KaiXRoomDTO) {
+        guard GuestSession.requireSignedIn(currentUser, reason: KXListingCopy.pickText(language, "登录后可以举报。", "ログインすると通報できます。", "Sign in to report.")) else { return }
+        guard let hostId = room.host_user_id, !hostId.isEmpty else { return }
+        Task {
+            do {
+                try await KaiXAPIClient.shared.reportUser(hostId, reason: "other", note: "room:\(room.id) title:\(room.title.prefix(80))")
+                actionTitle = KXListingCopy.pickText(language, "举报房间", "ルームを通報", "Report room")
+                actionMessage = L("reportRecorded", language)
+            } catch {
+                actionTitle = KXListingCopy.pickText(language, "举报失败", "通報できませんでした", "Couldn't report")
+                actionMessage = error.kaixUserMessage
+            }
+        }
+    }
+
+    /// 举报某条消息的作者。服务端没有消息级举报端点,复用用户举报通道并在 note
+    /// 里带 room/message id,足够后台定位这条消息。
+    private func reportMessage(_ message: KaiXRoomMessageDTO) {
+        guard GuestSession.requireSignedIn(currentUser, reason: KXListingCopy.pickText(language, "登录后可以举报。", "ログインすると通報できます。", "Sign in to report.")) else { return }
+        guard let authorId = message.user?.id, !authorId.isEmpty else { return }
+        Task {
+            do {
+                try await KaiXAPIClient.shared.reportUser(authorId, reason: "harassment", note: "room:\(roomId) message:\(message.id)")
+                actionTitle = L("reportUser", language)
+                actionMessage = L("reportRecorded", language)
+            } catch {
+                actionTitle = KXListingCopy.pickText(language, "举报失败", "通報できませんでした", "Couldn't report")
+                actionMessage = error.kaixUserMessage
+            }
+        }
+    }
+
+    /// 拉黑消息作者:服务端落黑名单 + 本地镜像立即过滤其消息(与 ChatView 同款)。
+    private func block(_ target: KaiXUserDTO) async {
+        do {
+            try await KaiXAPIClient.shared.setBlock(target.id, true)
+            var ids = blockedUserIds
+            ids.insert(target.id)
+            blockedUserIdsRaw = ids.sorted().joined(separator: "|")
+            actionTitle = L("blockUser", language)
+            actionMessage = L("userBlocked", language)
+        } catch {
+            actionTitle = KXListingCopy.pickText(language, "拉黑失败", "ブロックできませんでした", "Couldn't block")
             actionMessage = error.kaixUserMessage
         }
     }

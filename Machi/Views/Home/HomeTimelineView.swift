@@ -17,6 +17,27 @@ struct HomeTimelineView: View {
     /// Bumped on each follow tap to drive `.sensoryFeedback(.selection)`.
     @State private var followFeedbackTrigger = 0
 
+    // ── 列表级手感状态 ──────────────────────────────────────────────
+    /// FAB 随滚动方向收起(下滑)/浮现(上滑),阅读时让出右下角。
+    @State private var isFabVisible = true
+    /// 是否接近列表顶部,决定刷新增量的呈现形态(轻横幅 vs 回顶胶囊)。
+    @State private var isNearTop = true
+    /// 滚动偏移/方向追踪器。引用类型:高频回调里写它零 view invalidation。
+    @State private var scrollTracker = FeedScrollTracker()
+    /// 递增即触发 feed 回顶(再点首页 tab / 新内容胶囊共用一条通道)。
+    @State private var scrollToTopToken = 0
+    /// 运营位互斥:旅程卡在场时商城 hero 卡让位(同屏最多一张)。
+    @State private var isJourneyCardActive = false
+    /// 深处刷新出新内容时的「↑ 有新内容」胶囊(带新作者头像堆叠)。
+    @State private var newContentPill: HomeViewModel.FeedRefreshDelta?
+    /// 顶部刷新完成的「为你更新了 N 条」轻横幅(自动消失)。
+    @State private var refreshedBanner: HomeViewModel.FeedRefreshDelta?
+    @State private var bannerDismissTask: Task<Void, Never>?
+    /// 刷新真的带来新内容时的成功触感。
+    @State private var successFeedbackTrigger = 0
+
+    private static let feedTopAnchorID = "home.feed.top"
+
     let currentUser: UserEntity
     @Binding var selectedTab: AppTab
     @Binding var isShowingComposer: Bool
@@ -77,6 +98,11 @@ struct HomeTimelineView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .animation(.easeOut(duration: 0.24), value: viewModel.state)
+                // 刷新增量的悬浮提示,浮在 header 正下方。
+                .overlay(alignment: .top) {
+                    feedFloatingNotice
+                        .padding(.top, KXSpacing.sm)
+                }
             }
 
             KXFloatingComposeButton {
@@ -85,7 +111,15 @@ struct HomeTimelineView: View {
             .accessibilityLabel(L("compose", language))
             .padding(.trailing, KXSpacing.lg)
             .padding(.bottom, chrome.bottomContentPadding + KXSpacing.sm)
+            // 下滑收起、上滑浮现:阅读时让出右下角,想发布时一抬手就回来。
+            .opacity(isFabVisible ? 1 : 0)
+            .scaleEffect(isFabVisible ? 1 : 0.7, anchor: .bottomTrailing)
+            .offset(y: isFabVisible ? 0 : 10)
+            .allowsHitTesting(isFabVisible)
+            .accessibilityHidden(!isFabVisible)
+            .animation(.easeInOut(duration: 0.2), value: isFabVisible)
         }
+        .sensoryFeedback(.success, trigger: successFeedbackTrigger)
         .kxPageBackground()
         .toolbar(.hidden, for: .navigationBar)
         .onReceive(NotificationCenter.default.publisher(for: .kaiXPostRemoved)) { note in
@@ -93,13 +127,50 @@ struct HomeTimelineView: View {
             // 已忘掉、但 viewModel.posts 仍强引用的陈旧实体,点进去报 postDeleted)。
             if let ids = note.userInfo?["ids"] as? [String] { viewModel.removePosts(ids: ids) }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .kaiXTabReselectedAtRoot)) { note in
+            // 已在首页根页再点首页 tab:回顶 + 触发刷新(X/小红书标准手感)。
+            guard note.userInfo?["tab"] as? String == AppTab.home.rawValue else { return }
+            scrollToTopToken &+= 1
+            Task { await viewModel.refresh(context: modelContext, currentUser: currentUser, postStore: postStore) }
+        }
+        .onChange(of: viewModel.refreshDelta) { _, delta in
+            // 刷新真的拉到了新内容:成功触感 + 按所处位置二选一提示 ——
+            // 顶部给自动消失的「为你更新了 N 条」,深处给常驻的回顶胶囊。
+            guard let delta else { return }
+            successFeedbackTrigger &+= 1
+            if isNearTop {
+                withAnimation(.snappy(duration: 0.25)) {
+                    refreshedBanner = delta
+                    newContentPill = nil
+                }
+                bannerDismissTask?.cancel()
+                bannerDismissTask = Task {
+                    try? await Task.sleep(for: .seconds(2.4))
+                    guard !Task.isCancelled else { return }
+                    withAnimation(.easeOut(duration: 0.3)) { refreshedBanner = nil }
+                }
+            } else {
+                withAnimation(.snappy(duration: 0.25)) { newContentPill = delta }
+            }
+        }
+        .onChange(of: viewModel.state) { _, newState in
+            // 离开 loaded(骨架/空态/错误页)时 FAB 必须在场——那些页面没有
+            // 滚动手势能把它唤回来。
+            if newState != .loaded, !isFabVisible { isFabVisible = true }
+        }
         .task {
             await KXPerf.measure("feed.loadInitial") {
                 await viewModel.loadInitial(context: modelContext, currentUser: currentUser, postStore: postStore)
             }
         }
         .onChange(of: viewModel.mode) { _, _ in
-            Task { await viewModel.loadInitial(context: modelContext, currentUser: currentUser, postStore: postStore, clearExisting: true) }
+            // 快照机制下不再 clearExisting:HomeViewModel.mode.didSet 已同步
+            // 回填该 tab 的内存快照(零骨架)或清屏,这里只负责触发静默刷新。
+            // 悬浮提示属于旧 tab 的语境,随切换一起退场。
+            newContentPill = nil
+            refreshedBanner = nil
+            bannerDismissTask?.cancel()
+            Task { await viewModel.loadInitial(context: modelContext, currentUser: currentUser, postStore: postStore) }
         }
         .onChange(of: refreshToken) { _, _ in
             Task { await viewModel.loadInitial(context: modelContext, currentUser: currentUser, postStore: postStore) }
@@ -224,17 +295,24 @@ struct HomeTimelineView: View {
 
     private var feed: some View {
         let feedPosts = visibleFeedPosts
-        return ScrollView {
+        return ScrollViewReader { proxy in
+            ScrollView {
             LazyVStack(spacing: KXSpacing.sm) {
                 // "下一步该办什么" Guide-journey hook. Renders nothing when
                 // there is no journey hint, and loads independently — it can
                 // never delay the feed. Sits above the ForEach so the
-                // load-more trigger (anchored to feedPosts.last) is unaffected.
-                HomeJourneyNextStepCard(currentUser: currentUser)
+                // load-more sentinel (anchored to the trailing cards) is
+                // unaffected. 数据晚到时经 withAnimation + .transition 插入,
+                // feed 不再被无动画下顶。
+                HomeJourneyNextStepCard(currentUser: currentUser) { isActive in
+                    guard isJourneyCardActive != isActive else { return }
+                    withAnimation(.snappy(duration: 0.3)) { isJourneyCardActive = isActive }
+                }
 
-                // I2-1 hero SKU 曝光卡:同一套「自加载、失败静默」模式,与旅程卡
-                // 并存(旅程卡指路、这张卡开店门);可关闭,7 天内不再出现。
-                HomeStoreHeroCard()
+                // I2-1 hero SKU 曝光卡:同一套「自加载、失败静默」模式;
+                // 可关闭,7 天内不再出现。运营位互斥:旅程卡在场时让位
+                // (同屏最多一张,减轻首屏广告感)。
+                HomeStoreHeroCard(isSuppressed: isJourneyCardActive)
 
                 if feedPosts.isEmpty {
                     EmptyStateView(
@@ -273,7 +351,12 @@ struct HomeTimelineView: View {
                     )
                     .equatable()
                     .task(id: displayedPost.id) {
-                        guard displayedPost.id == feedPosts.last?.id else { return }
+                        // 预取哨兵提前 5 张卡:倒数第 5 张上屏即开始拉下一页
+                        // (pageSize=15 → 第 10 张触发),配合 loadMoreIfNeeded
+                        // 的 isLoadingMore/isLoadingInitial 守卫天然去重;触底
+                        // 撞见 spinner 的等待从「每 15 条一次」变成几乎不可见。
+                        guard feedPosts.suffix(KaiXConfig.feedLoadMoreLookahead)
+                            .contains(where: { $0.id == displayedPost.id }) else { return }
                         await viewModel.loadMoreIfNeeded(context: modelContext, currentUser: currentUser, post: nil, postStore: postStore)
                     }
                 }
@@ -282,14 +365,162 @@ struct HomeTimelineView: View {
                     KXInlineLoader()
                         .transition(.opacity)
                 }
+
+                // 到底收尾:明确告诉用户「没有了」而不是静默截止,并给
+                // 发现 / 同城两条出路,给无限流一个心理句点。
+                if !viewModel.canLoadMore, !viewModel.isLoadingMore, !feedPosts.isEmpty {
+                    feedEndFooter
+                }
             }
             .padding(.horizontal, KXSpacing.screen)
             .padding(.vertical, 7)
             .padding(.bottom, chrome.bottomContentPadding + 18)
             .kxReadableWidth()
+            .id(Self.feedTopAnchorID)
+            // 滚动方向/位置监听:iOS 17 可用的 onGeometryChange(替代 iOS 18
+            // 的 onScrollGeometryChange,与 ChatView 同模式),驱动 FAB 的
+            // 收起/浮现与「有新内容」胶囊的顶部自愈。
+            .onGeometryChange(for: CGFloat.self) { geometry in
+                geometry.frame(in: .scrollView).minY
+            } action: { minY in
+                handleFeedScroll(minY)
+            }
+            }
+            .refreshable {
+                await viewModel.refresh(context: modelContext, currentUser: currentUser, postStore: postStore)
+            }
+            .onChange(of: scrollToTopToken) { _, _ in
+                withAnimation(.easeOut(duration: 0.3)) {
+                    proxy.scrollTo(Self.feedTopAnchorID, anchor: .top)
+                }
+            }
+            .onChange(of: viewModel.mode) { _, _ in
+                // 四个 mode 共用同一个 ScrollView:快照回填的新列表不该停在
+                // 旧 tab 的滚动深度,内容替换同帧瞬时回顶(无动画)。
+                proxy.scrollTo(Self.feedTopAnchorID, anchor: .top)
+            }
         }
-        .refreshable {
-            await viewModel.refresh(context: modelContext, currentUser: currentUser, postStore: postStore)
+    }
+
+    /// 到底收尾:三语「已经看完啦」+ 去发现 / 同城两个出口。
+    private var feedEndFooter: some View {
+        VStack(spacing: KXSpacing.md) {
+            HStack(spacing: KXSpacing.sm) {
+                Rectangle().fill(.quaternary).frame(width: 28, height: 1)
+                Text(KXListingCopy.pickText(language, "已经看完啦", "全部見終わりました", "You're all caught up"))
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Rectangle().fill(.quaternary).frame(width: 28, height: 1)
+            }
+            HStack(spacing: KXSpacing.sm) {
+                Button {
+                    selectedTab = .search
+                } label: {
+                    Text(KXListingCopy.pickText(language, "去发现逛逛", "発見を見る", "Explore Discover"))
+                        .font(.footnote.weight(.semibold))
+                        .padding(.horizontal, KXSpacing.md)
+                        .frame(height: 34)
+                        .kxGlassCapsule()
+                }
+                .buttonStyle(.plain)
+                Button {
+                    if let region = regionStore.current {
+                        router.open(.city(regionCode: region.regionCode))
+                    } else {
+                        isShowingRegionPicker = true
+                    }
+                } label: {
+                    Text(KXListingCopy.pickText(language, "逛逛同城", "同じ街を見る", "Browse your city"))
+                        .font(.footnote.weight(.semibold))
+                        .padding(.horizontal, KXSpacing.md)
+                        .frame(height: 34)
+                        .kxGlassCapsule()
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, KXSpacing.lg)
+        .padding(.bottom, KXSpacing.md)
+        .accessibilityIdentifier("home.feed.endFooter")
+    }
+
+    /// 刷新增量的悬浮提示:顶部时是自动消失的「为你更新了 N 条」轻横幅;
+    /// 深处时是常驻的「↑ 有新内容」胶囊(前 3 位新作者头像堆叠,点按回顶)。
+    @ViewBuilder
+    private var feedFloatingNotice: some View {
+        if let pill = newContentPill {
+            Button {
+                scrollToTopToken &+= 1
+                withAnimation(.snappy(duration: 0.25)) { newContentPill = nil }
+            } label: {
+                HStack(spacing: KXSpacing.sm) {
+                    if !pill.authors.isEmpty {
+                        HStack(spacing: -8) {
+                            ForEach(pill.authors) { author in
+                                AvatarView(user: author, size: 22)
+                                    .overlay(Circle().stroke(KXColor.cardBackground, lineWidth: 1.5))
+                            }
+                        }
+                    }
+                    Image(systemName: "arrow.up")
+                        .font(.caption.weight(.bold))
+                    Text(KXListingCopy.pickText(language, "有新内容", "新着があります", "New posts"))
+                        .font(.footnote.weight(.semibold))
+                }
+                .foregroundStyle(KXColor.accent)
+                .padding(.horizontal, KXSpacing.md)
+                .frame(height: 36)
+                .kxGlassCapsule(isSelected: true)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(KXListingCopy.pickText(language, "有新内容，点按回到顶部", "新着があります。タップして先頭へ", "New posts — tap to scroll to top"))
+            .accessibilityIdentifier("home.feed.newContentPill")
+            .transition(.move(edge: .top).combined(with: .opacity))
+        } else if let banner = refreshedBanner {
+            Text(KXListingCopy.pickText(
+                language,
+                "为你更新了 \(banner.count) 条",
+                "\(banner.count)件の新着を更新しました",
+                banner.count == 1 ? "1 new post for you" : "\(banner.count) new posts for you"
+            ))
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, KXSpacing.md)
+            .frame(height: 32)
+            .kxGlassCapsule()
+            .accessibilityIdentifier("home.feed.refreshBanner")
+            .transition(.move(edge: .top).combined(with: .opacity))
+        }
+    }
+
+    /// FAB 收起/浮现 + 顶部感知。高频滚动回调只在【派生状态变化】时写
+    /// @State,原始偏移存引用类型 tracker,纯滚动零 view invalidation。
+    private func handleFeedScroll(_ minY: CGFloat) {
+        let delta = minY - scrollTracker.lastOffset
+        scrollTracker.lastOffset = minY
+        let nearTop = minY > -80
+        if nearTop != isNearTop { isNearTop = nearTop }
+        if nearTop {
+            scrollTracker.accumulated = 0
+            if !isFabVisible { isFabVisible = true }
+            // 用户自己滚回了顶部:新内容胶囊使命完成,顺手收掉。
+            if newContentPill != nil, minY > -40 {
+                withAnimation(.snappy(duration: 0.25)) { newContentPill = nil }
+            }
+            return
+        }
+        guard abs(delta) > 0.5 else { return }
+        // 同方向累计、反向即重置:±16pt 阈值防抖,避免慢滚时 FAB 抖动。
+        if (delta < 0) == (scrollTracker.accumulated < 0) {
+            scrollTracker.accumulated += delta
+        } else {
+            scrollTracker.accumulated = delta
+        }
+        if scrollTracker.accumulated < -16 {
+            if isFabVisible { isFabVisible = false }
+        } else if scrollTracker.accumulated > 16 {
+            if !isFabVisible { isFabVisible = true }
         }
     }
 
@@ -350,6 +581,15 @@ struct HomeTimelineView: View {
             await viewModel.refresh(context: modelContext, currentUser: currentUser, postStore: postStore)
         }
     }
+}
+
+/// 滚动偏移/方向追踪器。引用类型:onGeometryChange 每帧写它不触发任何
+/// view invalidation,只有派生的 isFabVisible / isNearTop 变化才重渲染。
+@MainActor
+private final class FeedScrollTracker {
+    var lastOffset: CGFloat = 0
+    /// 同方向累计位移(带符号),方向反转时重置;±16pt 阈值防抖。
+    var accumulated: CGFloat = 0
 }
 
 private struct HomeHeaderView: View {

@@ -55,6 +55,10 @@ struct MessagesView: View {
         .task(id: currentUser.id) {
             // Guests have no inbox to load or poll — the panel is a static CTA.
             guard !currentUser.isGuest else { return }
+            // 首开 cache-first:全局 12s 同步早已把会话灌进 MessageStore(且
+            // fetchThreads 同时暖了 cachedPeers)。先用暖缓存上屏,消灭首开骨架,
+            // refreshInbox() 再静默对齐服务端。
+            hydrateFromStore()
             await refreshInbox()
             await pollInboxLoop()
         }
@@ -118,6 +122,23 @@ struct MessagesView: View {
             "ログインすると大家さん・出品者・友だちにメッセージを送れます",
             "Log in to message landlords, sellers and friends"
         )
+    }
+
+    /// 消息 Tab 首开 cache-first,与 NotificationsViewModel.hydrate 对称。全局
+    /// 12s 同步早已把会话灌进 MessageStore,首开若 VM 尚无会话就先用暖缓存把
+    /// 列表(state=.loaded)推上屏,再由 refreshInbox() 后台刷新——消灭原先
+    /// 「骨架 → 网络」的首屏骨架闪。VM 不在本次改动的所有权文件内,hydrate 就近
+    /// 落在 View 层:只写 VM 的已发布状态(threads / peers / state),不改 VM 文件。
+    /// 缓存为空(真冷启动)时不动,正常走骨架。
+    private func hydrateFromStore() {
+        guard mode == .conversations,
+              viewModel.threads.isEmpty,
+              !messageStore.conversationsById.isEmpty else { return }
+        viewModel.threads = messageStore.conversationsById.values
+            .sorted { $0.lastMessageAt > $1.lastMessageAt }
+        let cachedPeers = MessageRepository(context: modelContext).cachedPeers()
+        if !cachedPeers.isEmpty { viewModel.peers = cachedPeers }
+        viewModel.state = .loaded
     }
 
     private func refreshInbox() async {
