@@ -177,7 +177,20 @@ final class JLPTAudioPlayerModel: ObservableObject {
         current = t.seconds
     }
 
-    func teardown() {
+    /// `isLeavingSession=false` 表示只是视图暂时消失（滚动、切页）。严格考场下
+    /// 若这次播放已计次，就保留播放器——否则用户回来时会被判成「已播放过」而
+    /// 彻底失去这道付费题的音频。真正离开会话时由调用方传 true 强制释放。
+    func teardown(isLeavingSession: Bool = true) {
+        guard JLPTListeningTeardownPolicy.shouldReleasePlayer(
+            isStrict: policy.mode == .strict,
+            didConsumePlayback: gate.didConsumePlaybackInCurrentLoad,
+            isLeavingSession: isLeavingSession
+        ) else {
+            // 保留播放器与凭证状态，只把声音停下，避免离屏后仍在播。
+            player?.pause()
+            playing = false
+            return
+        }
         if let o = timeObserver { player?.removeTimeObserver(o); timeObserver = nil }
         if let o = endObserver { NotificationCenter.default.removeObserver(o); endObserver = nil }
         statusObservation = nil
@@ -320,7 +333,8 @@ struct JLPTAudioPlayer: View {
         .task(id: taskID) {
             model.load(url, policy: policy, playbackIdentity: playbackIdentity)
         }
-        .onDisappear { model.teardown() }
+        // 离屏不等于离开考试：严格考场下已计次的播放要保住，见 teardown 注释。
+        .onDisappear { model.teardown(isLeavingSession: false) }
     }
 
     private var failureCopy: String {

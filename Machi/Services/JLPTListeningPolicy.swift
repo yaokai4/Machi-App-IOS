@@ -156,6 +156,24 @@ final class JLPTListeningPlaybackCredentialStore {
     }
 }
 
+/// 严格考场下「视图 onDisappear 时该不该销毁播放器」的判定。
+///
+/// 听力题在 ScrollView 里，SwiftUI 可能因滚动或切页触发 onDisappear。若此时
+/// 无条件 teardown，正在播放的音频会被打断，而播放凭证**已经计入**——回来时
+/// 直接 blocked，用户在一场付费考试里彻底失去这道题的音频。
+/// 因此严格模式下只要这次播放已计次，就保留播放器，等真正离开会话再释放。
+enum JLPTListeningTeardownPolicy {
+    static func shouldReleasePlayer(
+        isStrict: Bool,
+        didConsumePlayback: Bool,
+        isLeavingSession: Bool
+    ) -> Bool {
+        if isLeavingSession { return true }
+        if !isStrict { return true }
+        return !didConsumePlayback
+    }
+}
+
 enum JLPTListeningPlaybackDecision: Equatable {
     case startNew
     case resume

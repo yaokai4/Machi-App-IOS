@@ -153,6 +153,35 @@ struct JLPTExamProductGapTests {
         #expect(kept.count < counts.count, "必须真的回收掉一部分")
     }
 
+    // MARK: - ④ 严格考场：离屏不得毁掉已计次的听力
+
+    @Test func strictPlaybackSurvivesScrollingOffScreen() {
+        // 已计次 + 严格 + 只是离屏 → 保留播放器，否则用户彻底失去这道题的音频。
+        #expect(JLPTListeningTeardownPolicy.shouldReleasePlayer(
+            isStrict: true, didConsumePlayback: true, isLeavingSession: false
+        ) == false)
+    }
+
+    @Test func strictPlaybackIsReleasedWhenActuallyLeavingTheSession() {
+        #expect(JLPTListeningTeardownPolicy.shouldReleasePlayer(
+            isStrict: true, didConsumePlayback: true, isLeavingSession: true
+        ) == true)
+    }
+
+    @Test func unconsumedStrictPlaybackIsSafeToRelease() {
+        // 还没计次就离屏，释放掉不会损失任何权益，且能及时回收资源。
+        #expect(JLPTListeningTeardownPolicy.shouldReleasePlayer(
+            isStrict: true, didConsumePlayback: false, isLeavingSession: false
+        ) == true)
+    }
+
+    @Test func practicePlaybackAlwaysReleases() {
+        // 练习/定级/回看可无限重播，不需要为保权益而滞留播放器。
+        #expect(JLPTListeningTeardownPolicy.shouldReleasePlayer(
+            isStrict: false, didConsumePlayback: true, isLeavingSession: false
+        ) == true)
+    }
+
     @Test func listeningCredentialPruningIsANoOpBelowTheCap() {
         let counts = ["a:q0": 1, "a:q1": 1, "b:q0": 1]
         let kept = JLPTListeningPlaybackCredentialStore.pruned(
