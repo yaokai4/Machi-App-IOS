@@ -1,6 +1,17 @@
 import Foundation
 import os
 
+/// 轻量地图 pin(GET /api/listings?pins=1 契约的单行)。坐标必备,
+/// 其余字段宽容可缺。
+struct KaiXListingMapPinDTO: Decodable, Identifiable, Equatable {
+    let id: String
+    let title: String?
+    let price: Double?
+    let latitude: Double
+    let longitude: Double
+    let status: String?
+}
+
 extension Notification.Name {
     /// Fired when the backend rejects our session with HTTP 401.
     /// `AppState` should observe this and route to the login screen
@@ -1077,6 +1088,85 @@ final class KaiXAPIClient {
     private struct ListingsExtras: Decodable {
         let relaxation: [KaiXListingRelaxationDTO]?
         let facet_counts: [String: [String: Int]]?
+    }
+
+    // MARK: - listing map pins(「搜索此区域」)
+
+    struct ListingPinsPage {
+        let pins: [KaiXListingMapPinDTO]
+        /// 满足筛选 + bbox 的真实总数(可选下发)。
+        let total: Int?
+    }
+
+    /// 取景框(bbox)内的全量地图 pin:query 参数与 `listingsPage` 同一套,
+    /// 外加 `pins=1` 与 `min/max_lat`、`min/max_lng`。
+    ///
+    /// 宽容解码:单个 pin 形状不符(缺坐标等)只丢弃该条;顶层缺 `pins` 键
+    /// (旧服务端不认识 pins=1、按普通 items 形状返回)或直接 400 时抛错,
+    /// 由调用方优雅降级为「暂不可用」提示,绝不携带半套数据上图。
+    func listingPins(
+        type: String,
+        citySlug: String? = nil,
+        regionCode: String? = nil,
+        regionCodes: [String] = [],
+        provinceCodes: [String] = [],
+        countryCode: String? = nil,
+        query: String? = nil,
+        category: String? = nil,
+        categories: [String] = [],
+        minPrice: Double? = nil,
+        maxPrice: Double? = nil,
+        sort: String? = nil,
+        attributes: [String: String] = [:],
+        minLat: Double,
+        maxLat: Double,
+        minLng: Double,
+        maxLng: Double
+    ) async throws -> ListingPinsPage {
+        var q: [URLQueryItem] = [
+            URLQueryItem(name: "type", value: type),
+            URLQueryItem(name: "pins", value: "1"),
+            URLQueryItem(name: "min_lat", value: String(minLat)),
+            URLQueryItem(name: "max_lat", value: String(maxLat)),
+            URLQueryItem(name: "min_lng", value: String(minLng)),
+            URLQueryItem(name: "max_lng", value: String(maxLng)),
+        ]
+        if let citySlug, !citySlug.isEmpty { q.append(URLQueryItem(name: "city_slug", value: citySlug)) }
+        if let regionCode, !regionCode.isEmpty { q.append(URLQueryItem(name: "region_code", value: regionCode)) }
+        if !regionCodes.isEmpty { q.append(URLQueryItem(name: "region_codes", value: regionCodes.joined(separator: ","))) }
+        if !provinceCodes.isEmpty { q.append(URLQueryItem(name: "province_codes", value: provinceCodes.joined(separator: ","))) }
+        if let countryCode, !countryCode.isEmpty { q.append(URLQueryItem(name: "country_code", value: countryCode)) }
+        if let query, !query.isEmpty { q.append(URLQueryItem(name: "q", value: query)) }
+        if let category, !category.isEmpty { q.append(URLQueryItem(name: "category", value: category)) }
+        if !categories.isEmpty { q.append(URLQueryItem(name: "categories", value: categories.joined(separator: ","))) }
+        if let minPrice { q.append(URLQueryItem(name: "min_price", value: String(minPrice))) }
+        if let maxPrice { q.append(URLQueryItem(name: "max_price", value: String(maxPrice))) }
+        if let sort, !sort.isEmpty { q.append(URLQueryItem(name: "sort", value: sort)) }
+        for (key, value) in attributes.sorted(by: { $0.key < $1.key }) where !key.isEmpty && !value.isEmpty {
+            q.append(URLQueryItem(name: "attr_\(key)", value: value))
+        }
+        let data = try await request("GET", "/api/listings", queryItems: q,
+                                     timeoutInterval: 15,
+                                     maxReplayAttempts: 2)
+        let response: ListingPinsResponse = try decode(data)
+        guard let rows = response.pins else {
+            throw KaiXAPIError(error: .init(code: "pins_unavailable", message: "map pins not supported by this server"))
+        }
+        return ListingPinsPage(pins: rows.compactMap(\.value), total: response.total)
+    }
+
+    /// {"pins":[…],"total":N} 顶层形状。pins 键整体缺失 = 契约不可用(nil);
+    /// 单行解码失败落成 value == nil,由调用方 compactMap 丢弃。
+    private struct ListingPinsResponse: Decodable {
+        let pins: [TolerantPin]?
+        let total: Int?
+
+        struct TolerantPin: Decodable {
+            let value: KaiXListingMapPinDTO?
+            init(from decoder: Decoder) throws {
+                value = try? KaiXListingMapPinDTO(from: decoder)
+            }
+        }
     }
 
     /// 详情页相似推荐：服务端按同类目同城→同国→同城逐层补足,不含同卖家。

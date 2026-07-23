@@ -217,6 +217,15 @@ struct KXSecondhandListingCard: View {
         .frame(maxWidth: width ?? .infinity, alignment: .leading)
         .buttonStyle(.plain)
         .sensoryFeedback(.impact(weight: .light), trigger: openTaps)
+        // 无障碍:红心不再嵌在整卡 Button 的 label 里(VoiceOver 会把嵌套的
+        // 可交互元素并进卡片焦点、无法单独聚焦),改为卡片 Button 之外的
+        // overlay 定位。视觉零变化:44pt 命中框原先贴封面右上角 inset 1pt,
+        // 封面距卡缘 7pt,合计 8pt;muted(已售/已预约)时跟随整卡 0.8 降权。
+        .overlay(alignment: .topTrailing) {
+            heartButton
+                .padding(8)
+                .opacity(muted ? 0.8 : 1)
+        }
     }
 
     private var chipsRow: some View {
@@ -327,10 +336,6 @@ struct KXSecondhandListingCard: View {
                     .frame(height: 28)
                     .kxCoverBadge(in: Capsule())
             }
-        }
-        .overlay(alignment: .topTrailing) {
-            heartButton
-                .padding(1)   // 44pt frame absorbs the rest of the inset
         }
         .clipShape(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
         .overlay {

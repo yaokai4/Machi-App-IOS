@@ -23,6 +23,15 @@ final class ComposePostViewModel: ObservableObject {
     /// user is currently browsing (RegionStore), but can be overridden
     /// per-post — e.g. someone in Shanghai posting a Tokyo travel tip.
     @Published var selectedRegion: KaiXRegionDirectory.Region? = RegionStore.shared.current
+
+    /// 实际随发布/存草稿下发的地区(客户端双保险的第一层)。
+    /// init 默认值在 VM 创建那一刻取 RegionStore.current——若当时 store 还没
+    /// 水合(冷启动直进发帖/登录回放未完成),selectedRegion 会一直是 nil;
+    /// 这里在发出前再兜底读一次当前地区,与服务端的地区兜底互为双保险,
+    /// 不动 selectedRegion 本身(用户显式清除/选择的语义保持不变)。
+    private var outgoingRegion: KaiXRegionDirectory.Region? {
+        selectedRegion ?? RegionStore.shared.current
+    }
     /// Content type. Picked up front (see ContentTypePickerView) and
     /// may be changed mid-composition through the header chip; the
     /// generic body (text / media / tags) survives the swap.
@@ -518,7 +527,7 @@ final class ComposePostViewModel: ObservableObject {
                 content: content,
                 mediaDrafts: mediaDrafts,
                 hashtags: publishHashtags,
-                region: selectedRegion,
+                region: outgoingRegion,
                 contentType: contentType,
                 attributes: outgoingAttributes,
                 language: selectedLanguage.serverTag,
@@ -600,7 +609,7 @@ final class ComposePostViewModel: ObservableObject {
                 content: content,
                 mediaDrafts: mediaDrafts,
                 hashtags: publishHashtags,
-                region: selectedRegion,
+                region: outgoingRegion,
                 contentType: contentType,
                 attributes: outgoingAttributes,
                 language: selectedLanguage.serverTag,

@@ -507,9 +507,12 @@ struct CityListingChannelView: View {
                 .padding(.top, KXSpacing.md)
                 .padding(.bottom, 10)
             if mapMode {
-                ListingMapView(listings: visibleItems) { id in
-                    router.open(.cityListingDetail(listingId: id))
-                }
+                ListingMapView(
+                    listings: visibleItems,
+                    onOpen: { id in router.open(.cityListingDetail(listingId: id)) },
+                    searchArea: areaSearchClosure,
+                    searchAreaListingType: queryType
+                )
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: KXSpacing.lg) {
@@ -687,6 +690,42 @@ struct CityListingChannelView: View {
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(350))
             router.open(.cityListingDetail(listingId: id))
+        }
+    }
+
+    /// 地图「搜索此区域」重查:按当前取景框 bbox + 频道现有非地理筛选
+    /// (关键词/类目/价格/属性)走 pins=1 契约,整体替换 pin。
+    /// 只开放长租/民宿(与服务端 pins 契约同步上线的两个垂类);二手无地图
+    /// 入口(第一轮已隐藏),买房/其他频道待服务端确认覆盖后再放开。
+    /// 地理范围参数(city/region/province)刻意不传——bbox 本身就是比任何
+    /// 行政范围都精确的地理条件,叠加会把拖出原范围的取景框查成空结果。
+    private var areaSearchClosure: ((KXMapBoundingBox) async throws -> KaiXAPIClient.ListingPinsPage)? {
+        guard baseType == "rental", !forsaleActive else { return nil }
+        // 按值捕获当前筛选快照:闭包在地图手势后异步执行,不该回读 self 上
+        // 可能已变化的 state。
+        let type = queryType
+        let keyword = query
+        let category = serverCategory
+        let categories = serverCategories
+        let minPrice = Double(minimumPrice)
+        let maxPrice = Double(maximumPrice)
+        let sort = serverSort
+        let attrs = attrFilters
+        return { bbox in
+            try await KaiXAPIClient.shared.listingPins(
+                type: type,
+                query: keyword,
+                category: category,
+                categories: categories,
+                minPrice: minPrice,
+                maxPrice: maxPrice,
+                sort: sort,
+                attributes: attrs,
+                minLat: bbox.minLat,
+                maxLat: bbox.maxLat,
+                minLng: bbox.minLng,
+                maxLng: bbox.maxLng
+            )
         }
     }
 
