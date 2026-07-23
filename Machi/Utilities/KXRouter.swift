@@ -2,6 +2,16 @@ import Combine
 import SwiftData
 import SwiftUI
 
+/// 频道初始筛选（保存搜索回放等入口）:进入 CityListingChannelView 时预置的
+/// 搜索词 / 类目 / attr 条件 / 价格区间。字段全部可选,普通入口不携带。
+struct ListingChannelSeed: Hashable {
+    var query: String? = nil
+    var category: String? = nil
+    var attrs: [String: String] = [:]
+    var minPrice: String? = nil
+    var maxPrice: String? = nil
+}
+
 enum KXRoute: Hashable {
     case postDetail(postId: String)
     case postDetailComment(postId: String, commentId: String?)
@@ -10,6 +20,9 @@ enum KXRoute: Hashable {
     case city(regionCode: String)
     case cityChannel(regionCode: String, channel: CityChannel)
     case cityListings(regionCode: String, type: String)
+    /// 携带初始筛选的频道路由（保存搜索回放）。普通入口仍走 cityListings,
+    /// 避免为默认参数改动全部既有调用点。
+    case cityListingsFiltered(regionCode: String, type: String, seed: ListingChannelSeed)
     case userListings(userId: String, type: String, title: String)
     case cityListingDetail(listingId: String)
     case createCityListing(type: String, citySlug: String?)
@@ -207,7 +220,7 @@ extension KXRoute {
             return .none
         case .postDetailComment(_, let commentId):
             return commentId.map { .comment($0) } ?? .comments
-        case .profile, .topic, .city, .cityChannel, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .myInquiries, .myReservations, .businessDirectory, .businessProfile, .guideCategory, .guideJourney, .guidePlan, .guideStudyPlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideFinance, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications, .guideServices, .guideMemberResources, .guideMyLibrary, .personalWorkbench, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .guideAI, .conversation, .search, .savedSearches, .socialRooms, .socialRoom, .events, .eventDetail, .eventManage, .createEvent:
+        case .profile, .topic, .city, .cityChannel, .cityListings, .cityListingsFiltered, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .myInquiries, .myReservations, .businessDirectory, .businessProfile, .guideCategory, .guideJourney, .guidePlan, .guideStudyPlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideFinance, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications, .guideServices, .guideMemberResources, .guideMyLibrary, .personalWorkbench, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .guideAI, .conversation, .search, .savedSearches, .socialRooms, .socialRoom, .events, .eventDetail, .eventManage, .createEvent:
             return .none
         }
     }
@@ -218,7 +231,7 @@ extension KXRoute {
         // occludes the calendar / list footers (the bar covered the Calendar's
         // bottom rows). They keep their own nav bar + edge-swipe back, so users
         // are never stranded. The 我的工作台 hub itself keeps the tab bar.
-        case .postDetail, .postDetailComment, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .businessProfile, .guideArticle, .guideProduct, .guideJourney, .guideSchool, .guideCompany, .guideCompanyReviews, .conversation, .guidePlan, .guideStudyPlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideFinance, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications, .guideAI, .socialRoom, .eventDetail, .eventManage, .createEvent:
+        case .postDetail, .postDetailComment, .cityListings, .cityListingsFiltered, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .businessProfile, .guideArticle, .guideProduct, .guideJourney, .guideSchool, .guideCompany, .guideCompanyReviews, .conversation, .guidePlan, .guideStudyPlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideFinance, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications, .guideAI, .socialRoom, .eventDetail, .eventManage, .createEvent:
             true
         case .profile, .topic, .city, .cityChannel, .myInquiries, .myReservations, .businessDirectory, .guideCategory, .guideServices, .guideMemberResources, .guideMyLibrary, .personalWorkbench, .guideSchools, .guideCompanies, .guideInterviewReviews, .search, .savedSearches, .socialRooms, .events:
             false
@@ -233,7 +246,7 @@ extension KXRoute {
             L("unknownUser", language)
         case .topic:
             L("noTopicPosts", language)
-        case .city, .cityChannel, .cityListings, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .myInquiries, .myReservations, .businessDirectory, .businessProfile, .savedSearches:
+        case .city, .cityChannel, .cityListings, .cityListingsFiltered, .userListings, .cityListingDetail, .createCityListing, .editCityListing, .myInquiries, .myReservations, .businessDirectory, .businessProfile, .savedSearches:
             L("emptyFeed", language)
         case .guideCategory, .guideJourney, .guidePlan, .guideStudyPlan, .guideGoalPlan, .guideCalendar, .guideManage, .guideGoals, .guideFinance, .guideContracts, .guideDocuments, .guideProfile, .guideLifePlanner, .guideApplications, .guideServices, .guideMemberResources, .guideMyLibrary, .personalWorkbench, .guideArticle, .guideProduct, .guideSchools, .guideSchool, .guideCompanies, .guideCompany, .guideCompanyReviews, .guideInterviewReviews, .guideAI:
             L("guideOpenFailed", language)
@@ -281,6 +294,8 @@ private struct KXRouteDestinations: ViewModifier {
                     CityChannelView(regionCode: regionCode, currentUser: currentUser, initialChannel: channel)
                 case .cityListings(let regionCode, let type):
                     CityListingChannelView(regionCode: regionCode, listingType: type, currentUser: currentUser, zoomNamespace: listingZoom)
+                case .cityListingsFiltered(let regionCode, let type, let seed):
+                    CityListingChannelView(regionCode: regionCode, listingType: type, currentUser: currentUser, zoomNamespace: listingZoom, initialSeed: seed)
                 case .userListings(let userId, let type, let title):
                     UserListingsView(userId: userId, listingType: type, title: title, currentUser: currentUser)
                 case .cityListingDetail(let listingId):
@@ -445,6 +460,12 @@ private extension KXRoute {
             return KaiXRegionDirectory.resolve(regionCode: code) == nil || normalizedType.isEmpty
                 ? nil
                 : .cityListings(regionCode: code, type: normalizedType)
+        case .cityListingsFiltered(let regionCode, let type, let seed):
+            let code = regionCode.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let normalizedType = type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return KaiXRegionDirectory.resolve(regionCode: code) == nil || normalizedType.isEmpty
+                ? nil
+                : .cityListingsFiltered(regionCode: code, type: normalizedType, seed: seed)
         case .userListings(let userId, let type, let title):
             let id = userId.trimmingCharacters(in: .whitespacesAndNewlines)
             let normalizedType = type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()

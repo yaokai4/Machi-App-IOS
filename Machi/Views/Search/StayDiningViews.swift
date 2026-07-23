@@ -50,12 +50,12 @@ struct KXStayListingCard: View {
                 KXListingCopy.boolAttr(listing, "breakfast_included") ? KXListingCopy.pickText(language, "含早餐", "朝食付き", "Breakfast included") : nil,
             ].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " · ")
         case .home:
-            let area = KXListingCopy.attr(listing, "area_sqm").flatMap { $0.isEmpty ? nil : "\($0)㎡" }
+            let area = KXListingCopy.compactArea(KXListingCopy.attr(listing, "area_sqm"))
             let moveIn = KXListingCopy.attr(listing, "move_in_date").flatMap { $0.isEmpty ? nil : KXListingCopy.pickText(language, "\($0) 入住", "\($0) 入居可", "Move in \($0)") }
             return [KXListingCopy.attr(listing, "layout"), area, moveIn]
                 .compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " · ")
         case .forsale:
-            let area = KXListingCopy.attr(listing, "area_sqm").flatMap { $0.isEmpty ? nil : "\($0)㎡" }
+            let area = KXListingCopy.compactArea(KXListingCopy.attr(listing, "area_sqm"))
             let age = KXListingCopy.attr(listing, "building_age").flatMap { $0.isEmpty ? nil : "築\($0)" }
             return [KXListingCopy.attr(listing, "layout"), area, age, KXListingCopy.attr(listing, "structure")]
                 .compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " · ")

@@ -17,20 +17,25 @@ struct KXSkeletonBone: View {
 }
 
 struct KXSecondhandSkeletonCard: View {
-    let width: CGFloat
-    private var inner: CGFloat { max(0, width - 14) }
+    /// nil = 填满所在 grid cell(与真卡的 KXSquareCover(side: nil) 同一路径)。
+    var width: CGFloat? = nil
+    private var inner: CGFloat? { width.map { max(0, $0 - 14) } }
     var body: some View {
+        // 与真卡同构:封面 / 价格 / 两行标题 / chips 行 / meta 行,换入内容不跳版。
         VStack(alignment: .leading, spacing: 9) {
             RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                 .fill(KXColor.softBackground)
-                .frame(width: inner, height: inner)
-            KXSkeletonBone(width: 72, height: 15)
-            KXSkeletonBone(width: inner - 24, height: 11)
+                .modifier(KXSquareCover(side: inner))
+            KXSkeletonBone(width: 84, height: 20)
+            KXSkeletonBone(width: nil, height: 11)
+            KXSkeletonBone(width: 108, height: 11)
+            KXSkeletonBone(width: 64, height: 16, radius: 8)
             KXSkeletonBone(width: 96, height: 9)
         }
         .padding(7)
         .padding(.bottom, KXSpacing.xxs)
         .frame(width: width, alignment: .leading)
+        .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
         .kxLivingSurface(radius: KXRadius.lg)
         .kxShimmer()
     }
@@ -108,7 +113,15 @@ struct KXSquareCover: ViewModifier {
         if let side {
             content.frame(width: side, height: side)
         } else {
-            content.frame(maxWidth: .infinity).aspectRatio(1, contentMode: .fit)
+            // Color.clear 定出严格 1:1 的版面,内容走 overlay 再裁切——
+            // aspectRatio 只影响提案,竖图经 .fill 会汇报超高把卡撑成长方形,
+            // 用 overlay 承载才能保证任何原图比例下封面都是正方形。
+            Color.clear
+                .frame(maxWidth: .infinity)
+                .aspectRatio(1, contentMode: .fit)
+                .overlay(content)
+                .clipped()
+                .contentShape(Rectangle())
         }
     }
 }
@@ -139,6 +152,11 @@ struct KXSecondhandListingCard: View {
         innerWidth.map { max(70, $0 - 48) }
     }
 
+    /// 已预约/已售:整卡降权(封面去色 + 状态胶囊 + 卡面微透)。
+    private var muted: Bool {
+        KXListingCopy.isMutedListingStatus(listing.status)
+    }
+
     var body: some View {
         Button {
             openTaps += 1
@@ -147,42 +165,41 @@ struct KXSecondhandListingCard: View {
             VStack(alignment: .leading, spacing: 9) {
                 cover
                     .frame(width: innerWidth)
-                // Price reads through WEIGHT + position, not a loud red — the old
-                // headline/.black + heat made the price shout louder than the
-                // title. Title bumped a step so it isn't the smallest line.
-                Text(KXListingCopy.priceLabel(listing, language))
-                    .font(.subheadline.weight(.heavy))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-                    .frame(width: innerWidth, alignment: .leading)
+                // 价格是二手卡的第一信息层级:title3.heavy + 等宽数字,不缩字;
+                // 免费送用强调色「免费」胶囊,在满屏价格里一眼可辨。
+                Group {
+                    if KXListingCopy.isFreeListing(listing) {
+                        Text(KXListingCopy.pickText(language, "免费", "無料", "Free"))
+                            .font(.subheadline.weight(.heavy))
+                            .foregroundStyle(KXColor.onAccent)
+                            .lineLimit(1)
+                            .padding(.horizontal, 10)
+                            .frame(height: 24)
+                            .background(KXColor.livingAccent, in: Capsule())
+                    } else {
+                        Text(KXListingCopy.priceLabel(listing, language))
+                            .font(.title3.weight(.heavy))
+                            .monospacedDigit()
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                    }
+                }
+                .frame(height: 26, alignment: .leading)
+                .frame(width: innerWidth, alignment: .leading)
+                // 标题退为次级信息,固定两行占位 → 两列卡片天然等高。
                 Text(KXListingCopy.displayTitle(listing))
-                    .font(.subheadline.weight(.semibold))
+                    .font(.subheadline)
                     .foregroundStyle(.primary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(2, reservesSpace: true)
                     .multilineTextAlignment(.leading)
                     .frame(width: innerWidth, alignment: .leading)
-                let badges = KXListingCopy.secondhandCardBadges(for: listing, language)
-                if !badges.isEmpty {
-                    HStack(spacing: KXSpacing.xs) {
-                        ForEach(badges.prefix(2), id: \.self) { badge in
-                            Text(badge)
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(KXColor.rankTeal)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.78)
-                                .padding(.horizontal, 6)
-                                .frame(height: 20)
-                                .background(KXColor.rankTeal.opacity(0.09), in: Capsule())
-                        }
-                    }
+                // chips 行恒占位(空时透明填充),消除行高抖动的锯齿感。
+                chipsRow
                     .frame(width: innerWidth, alignment: .leading)
-                }
                 HStack(spacing: KXSpacing.xs) {
                     Image(systemName: "mappin.and.ellipse")
                         .font(.caption2.weight(.bold))
-                    Text(KXListingCopy.compactMeta(listing, language))
+                    Text(KXListingCopy.secondhandCompactMeta(listing, language))
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
                 }
@@ -195,10 +212,32 @@ struct KXSecondhandListingCard: View {
             .contentShape(RoundedRectangle(cornerRadius: KXRadius.lg, style: .continuous))
             .frame(maxWidth: width ?? .infinity, alignment: .leading)
             .kxLivingSurface(radius: KXRadius.lg)
+            .opacity(muted ? 0.8 : 1)
         }
         .frame(maxWidth: width ?? .infinity, alignment: .leading)
         .buttonStyle(.plain)
         .sensoryFeedback(.impact(weight: .light), trigger: openTaps)
+    }
+
+    private var chipsRow: some View {
+        let badges = KXListingCopy.secondhandCardBadges(for: listing, language)
+        return HStack(spacing: KXSpacing.xs) {
+            if badges.isEmpty {
+                Color.clear
+            } else {
+                ForEach(badges.prefix(2), id: \.self) { badge in
+                    Text(badge)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(KXColor.rankTeal)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                        .padding(.horizontal, 6)
+                        .frame(height: 20)
+                        .background(KXColor.rankTeal.opacity(0.09), in: Capsule())
+                }
+            }
+        }
+        .frame(height: 20)
     }
 
     /// 右上角爱心：乐观切换，失败回滚;同时写入本地收藏。与住宿/服务卡一致。
@@ -254,22 +293,40 @@ struct KXSecondhandListingCard: View {
             }
         }
         .modifier(KXSquareCover(side: innerWidth))
+        // 已预约/已售:封面去色压暗,配居中状态胶囊,浏览时一眼可辨。
+        .saturation(muted ? 0 : 1)
+        .opacity(muted ? 0.55 : 1)
         .overlay(alignment: .topLeading) {
-            HStack(spacing: KXSpacing.xs) {
-                Circle()
-                    .fill(KXListingCopy.statusColor(listing.status))
-                    .frame(width: 6, height: 6)
+            // published(默认态)不再常驻「出售中」badge——封面只在异常态
+            // (审核中/已下架等)才值得占位;已预约/已售改走居中胶囊。
+            if listing.status != "published", !muted {
+                HStack(spacing: KXSpacing.xs) {
+                    Circle()
+                        .fill(KXListingCopy.statusColor(listing.status))
+                        .frame(width: 6, height: 6)
+                    Text(KXListingCopy.formatListingStatus(listing.status, type: listing.type, language))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+                .padding(.horizontal, KXSpacing.sm)
+                .frame(height: 24)
+                .kxCoverBadge(in: Capsule())
+                .frame(maxWidth: statusBadgeMaxWidth, alignment: .leading)
+                .padding(7)
+            }
+        }
+        .overlay(alignment: .center) {
+            if muted {
                 Text(KXListingCopy.formatListingStatus(listing.status, type: listing.type, language))
-                    .font(.caption2.weight(.semibold))
+                    .font(.caption.weight(.heavy))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .padding(.horizontal, KXSpacing.md)
+                    .frame(height: 28)
+                    .kxCoverBadge(in: Capsule())
             }
-            .padding(.horizontal, KXSpacing.sm)
-            .frame(height: 24)
-            .kxCoverBadge(in: Capsule())
-            .frame(maxWidth: statusBadgeMaxWidth, alignment: .leading)
-            .padding(7)
         }
         .overlay(alignment: .topTrailing) {
             heartButton

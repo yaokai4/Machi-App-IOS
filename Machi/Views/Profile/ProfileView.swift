@@ -6,6 +6,7 @@ struct ProfileView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appLanguage) private var language
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var chrome: AppChromeState
     @EnvironmentObject private var postStore: PostStore
     @EnvironmentObject private var userStore: UserStore
@@ -368,14 +369,21 @@ struct ProfileView: View {
                 }
 
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: KXSpacing.md) {
+                LazyVStack(alignment: .leading, spacing: KXSpacing.md, pinnedViews: [.sectionHeaders]) {
                     profileHeader
                     if isCurrentUser {
                         personalWorkbenchEntry
                     }
-                    PersonalProfileTabPicker(tabs: availableTabs, selection: $profileTab)
-                        .padding(.horizontal, KXSpacing.xxs)
-                    stateContent
+                    // tab 栏做吸顶 Section header:长列表里回切 tab 不必再滚回顶部。
+                    // 玻璃底只在吸顶时有感知,防止下方卡片从 picker 后面透出。
+                    Section {
+                        stateContent
+                    } header: {
+                        PersonalProfileTabPicker(tabs: availableTabs, selection: $profileTab)
+                            .padding(.horizontal, KXSpacing.xxs)
+                            .padding(.vertical, KXSpacing.xs)
+                            .kxGlassBar()
+                    }
                 }
                 .padding(.horizontal, KXSpacing.screen)
                 .padding(.top, KXSpacing.sm)
@@ -697,7 +705,7 @@ struct ProfileView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 6) {
                         Text(profileUser.displayName)
-                            .font(.title3.weight(.semibold))
+                            .font(KXTypography.title2)
                             .lineLimit(1)
                             .minimumScaleFactor(0.82)
                         KXUserBadge(user: profileUser)
@@ -719,22 +727,69 @@ struct ProfileView: View {
                 .font(.callout)
                 .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: KXSpacing.md) {
-                if let regionLabel = profileRegionLabel {
-                    Label(regionLabel, systemImage: "mappin.and.ellipse")
-                } else if !profileUser.location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Label(profileUser.location, systemImage: "mappin.and.ellipse")
-                }
-                Label("\(profileUser.joinDate.formatted(date: .numeric, time: .omitted)) \(L("joined", language))", systemImage: "calendar")
-            }
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.secondary)
+            profileMetaRow
+
+            // 身份区(昵称/bio/metadata)与数据区(stats/徽章)之间用一条
+            // hairline 切开——比纯留白更能立住两个区块的层级。
+            Divider()
+                .overlay(KXColor.separator)
+                .padding(.top, KXSpacing.xs)
 
             profileStatsStrip
+
+            profileBadgeRow
+                .padding(.top, KXSpacing.xs)
+
             listingCountTags
         }
-        .padding(14)
+        .padding(KXSpacing.lg)
         .kxGlassSurface(radius: KXRadius.lg)
+    }
+
+    /// 地区 + 加入时间的低噪 metadata 行:小图标 tertiary、间隔点连接,与
+    /// 帖子卡 meta 行同一视觉语言。日期只到年月——精确到日只剩数字噪音。
+    private var profileMetaRow: some View {
+        HStack(spacing: KXSpacing.sm) {
+            if let locationText = profileLocationText {
+                HStack(spacing: 4) {
+                    Image(systemName: "mappin.and.ellipse")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                    Text(locationText)
+                }
+                Text("·")
+                    .foregroundStyle(.quaternary)
+            }
+            HStack(spacing: 4) {
+                Image(systemName: "calendar")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                Text(joinDateText)
+            }
+        }
+        .font(KXTypography.metaEmphasis)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+    }
+
+    private var profileLocationText: String? {
+        if let regionLabel = profileRegionLabel { return regionLabel }
+        let location = profileUser.location.trimmingCharacters(in: .whitespacesAndNewlines)
+        return location.isEmpty ? nil : location
+    }
+
+    /// 「2026年5月加入」/「2026年5月に参加」/「Joined May 2026」——语序按语言
+    /// 组装(en 习惯动词前置),年月格式用对应 locale 保证「年/月」字与月名正确。
+    private var joinDateText: String {
+        let joined = profileUser.joinDate
+        switch language {
+        case .ja:
+            return "\(joined.formatted(.dateTime.year().month().locale(Locale(identifier: "ja_JP"))))に参加"
+        case .en:
+            return "Joined \(joined.formatted(.dateTime.year().month(.wide).locale(Locale(identifier: "en_US"))))"
+        default:
+            return "\(joined.formatted(.dateTime.year().month().locale(Locale(identifier: "zh_CN"))))加入"
+        }
     }
 
     private var profileRegionLabel: String? {
@@ -749,52 +804,79 @@ struct ProfileView: View {
         return nil
     }
 
+    /// Tight, X-style metric strip — only the four/five numbers the user
+    /// actually checks. 等宽分列 + 细分隔线让它读成数据块而非一句话;
+    /// 超大动态字号下等宽列必然截断,退回 FlowLayout 自动换行。
+    @ViewBuilder
     private var profileStatsStrip: some View {
-        VStack(alignment: .leading, spacing: KXSpacing.sm) {
-            // Tight, X-style metric strip — only the four numbers the
-            // user actually checks on themselves and others. "总热度",
-            // "被收藏", "活跃城市" earlier filled the card with
-            // numbers nobody actively reads.
+        if dynamicTypeSize.isAccessibilitySize {
             FlowLayout(spacing: 14) {
+                profileStatCells
+            }
+        } else {
+            HStack(spacing: 0) {
                 followMetricButton(kind: .following)
+                statColumnDivider
                 followMetricButton(kind: .followers)
                 if isCurrentUser {
+                    statColumnDivider
                     followMetricButton(kind: .mutual)
                 }
+                statColumnDivider
                 ProfileMetricInline(value: NumberFormatterUtils.compact(viewModel.postCount), title: L("posts", language))
+                statColumnDivider
                 ProfileMetricInline(value: NumberFormatterUtils.compact(viewModel.likeCount), title: L("likes", language))
             }
-            // Identity + merchant + creator badges below the stats
-            // strip — these are categorical not numeric, so they
-            // belong on their own line.
-            FlowLayout(spacing: 6) {
-                ProfileRoleBadge(title: roleTitle, isOfficial: profileUser.isMachiOfficialAccount)
-                // Compact reputation chip sits right beside the role badge —
-                // tap to open the full level pathway + how-to-level-up sheet.
-                if let rep = reputation, let level = rep.level {
-                    ProfileReputationChip(level: level, name: reputationLevelName) {
-                        showReputationSheet = true
-                    }
-                }
-                if !profileUser.creatorBadge.isEmpty {
-                    ProfileRoleBadge(title: profileUser.creatorBadge)
-                }
-                if profileUser.merchantVerified {
-                    ProfileRoleBadge(title: L("merchantVerified", language))
-                }
-                if profileUser.isMerchant && !profileUser.merchantVerified {
-                    ProfileRoleBadge(title: L("merchantPending", language))
-                }
-                if !profileUser.contentLanguagePreference.isEmpty {
-                    ProfileRoleBadge(title: ContentLanguage(rawValue: profileUser.contentLanguagePreference)?.title(language) ?? profileUser.contentLanguagePreference)
-                }
-                // Admin-assigned custom tags (优质房东 / 资深卖家…).
-                ForEach(profileUser.customTags, id: \.self) { tag in
-                    ProfileCustomTagChip(title: tag)
+        }
+    }
+
+    /// FlowLayout 降级分支复用同一组 cell,保持列版与流版数据一致。
+    @ViewBuilder
+    private var profileStatCells: some View {
+        followMetricButton(kind: .following)
+        followMetricButton(kind: .followers)
+        if isCurrentUser {
+            followMetricButton(kind: .mutual)
+        }
+        ProfileMetricInline(value: NumberFormatterUtils.compact(viewModel.postCount), title: L("posts", language))
+        ProfileMetricInline(value: NumberFormatterUtils.compact(viewModel.likeCount), title: L("likes", language))
+    }
+
+    private var statColumnDivider: some View {
+        Rectangle()
+            .fill(KXColor.separator)
+            .frame(width: 0.5, height: 26)
+    }
+
+    /// Identity + merchant + creator badges — categorical not numeric,
+    /// so they sit on their own line below the stats block.
+    private var profileBadgeRow: some View {
+        FlowLayout(spacing: 6) {
+            ProfileRoleBadge(title: roleTitle, isOfficial: profileUser.isMachiOfficialAccount)
+            // Compact reputation chip sits right beside the role badge —
+            // tap to open the full level pathway + how-to-level-up sheet.
+            if let rep = reputation, let level = rep.level {
+                ProfileReputationChip(level: level, name: reputationLevelName) {
+                    showReputationSheet = true
                 }
             }
+            if !profileUser.creatorBadge.isEmpty {
+                ProfileRoleBadge(title: profileUser.creatorBadge)
+            }
+            if profileUser.merchantVerified {
+                ProfileRoleBadge(title: L("merchantVerified", language))
+            }
+            if profileUser.isMerchant && !profileUser.merchantVerified {
+                ProfileRoleBadge(title: L("merchantPending", language))
+            }
+            if !profileUser.contentLanguagePreference.isEmpty {
+                ProfileRoleBadge(title: ContentLanguage(rawValue: profileUser.contentLanguagePreference)?.title(language) ?? profileUser.contentLanguagePreference)
+            }
+            // Admin-assigned custom tags (优质房东 / 资深卖家…).
+            ForEach(profileUser.customTags, id: \.self) { tag in
+                ProfileCustomTagChip(title: tag)
+            }
         }
-        .padding(.top, KXSpacing.xxs)
     }
 
     /// Tappable per-type listing counts — open this user's published items of a
@@ -804,28 +886,34 @@ struct ProfileView: View {
     private var listingCountTags: some View {
         let tags = profileListingCountTags
         if !tags.isEmpty {
-            FlowLayout(spacing: 7) {
-                ForEach(tags, id: \.type) { tag in
-                    Button {
-                        router.open(.userListings(userId: profileUser.id, type: tag.type, title: "\(profileUser.displayName) · \(tag.label)"))
-                    } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: tag.icon).font(.caption2.weight(.bold))
-                            Text(tag.label).font(.caption.weight(.bold))
-                            Text("\(tag.count)")
-                                .font(.caption2.weight(.black))
-                                .foregroundStyle(KXColor.accent)
-                                .padding(.horizontal, 5)
-                                .frame(minWidth: 18, minHeight: 16)
-                                .background(KXColor.accentSoft, in: Capsule())
+            // 与徽章行之间加 hairline、胶囊统一 26 高度——商业计数与身份徽章
+            // 同节奏排布,避免三种胶囊高度在卡内打架。
+            VStack(alignment: .leading, spacing: KXSpacing.sm) {
+                Divider()
+                    .overlay(KXColor.separator)
+                FlowLayout(spacing: 7) {
+                    ForEach(tags, id: \.type) { tag in
+                        Button {
+                            router.open(.userListings(userId: profileUser.id, type: tag.type, title: "\(profileUser.displayName) · \(tag.label)"))
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: tag.icon).font(.caption2.weight(.bold))
+                                Text(tag.label).font(.caption.weight(.bold))
+                                Text("\(tag.count)")
+                                    .font(.caption2.weight(.black))
+                                    .foregroundStyle(KXColor.accent)
+                                    .padding(.horizontal, 5)
+                                    .frame(minWidth: 18, minHeight: 16)
+                                    .background(KXColor.accentSoft, in: Capsule())
+                            }
+                            .foregroundStyle(KXColor.livingInk)
+                            .padding(.horizontal, 10)
+                            .frame(height: 26)
+                            .background(KXColor.livingSurface, in: Capsule())
+                            .overlay(Capsule().strokeBorder(KXColor.livingInk.opacity(0.12), lineWidth: 0.8))
                         }
-                        .foregroundStyle(KXColor.livingInk)
-                        .padding(.horizontal, 10)
-                        .frame(height: 30)
-                        .background(KXColor.livingSurface, in: Capsule())
-                        .overlay(Capsule().strokeBorder(KXColor.livingInk.opacity(0.12), lineWidth: 0.8))
+                        .buttonStyle(KXPressableStyle(scale: 0.96))
                     }
-                    .buttonStyle(KXPressableStyle(scale: 0.96))
                 }
             }
             .padding(.top, KXSpacing.xs)
@@ -846,193 +934,6 @@ struct ProfileView: View {
             let total = entry.keys.reduce(0) { $0 + (counts[$1] ?? 0) }
             guard total > 0 else { return nil }
             return (entry.type, entry.label, entry.icon, total)
-        }
-    }
-
-    @ViewBuilder
-    private var contentSummaryStrip: some View {
-        let visible = profileContentSummaryItems
-        if !visible.isEmpty {
-            FlowLayout(spacing: 7) {
-                ForEach(visible, id: \.0) { item in
-                    let spec = item.0.spec
-                    Label("\(L(spec.titleKey, language)) \(item.1)", systemImage: spec.icon)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(spec.tint)
-                        .lineLimit(1)
-                        .padding(.horizontal, 9)
-                        .frame(height: 28)
-                        .kxGlassCapsule()
-                }
-            }
-            .padding(.top, KXSpacing.xs)
-        }
-    }
-
-    /// "成就" — small badge strip computed from existing
-    /// counters. Pure local derivation, no extra fetch.
-    @ViewBuilder
-    private var achievementsRow: some View {
-        let badges = computedAchievements
-        if !badges.isEmpty {
-            VStack(alignment: .leading, spacing: KXSpacing.sm) {
-                HStack {
-                    Image(systemName: "trophy.fill")
-                        .foregroundStyle(KXColor.heat)
-                        .font(.subheadline.weight(.bold))
-                    Text(L("profileAchievements", language))
-                        .font(.subheadline.weight(.bold))
-                    Spacer()
-                }
-                FlowLayout(spacing: KXSpacing.sm) {
-                    ForEach(badges, id: \.self) { badge in
-                        HStack(spacing: 5) {
-                            Image(systemName: badge.icon)
-                                .font(.caption.weight(.bold))
-                            Text(badge.title)
-                                .font(.caption.weight(.semibold))
-                        }
-                        .foregroundStyle(badge.color)
-                        .padding(.horizontal, 11)
-                        .frame(height: 28)
-                        .background(badge.color.opacity(0.12), in: Capsule())
-                    }
-                }
-            }
-            .padding(14)
-            .kxGlassSurface(radius: KXRadius.lg)
-        }
-    }
-
-    /// "活跃城市" — derive from `profileUser.recentRegionCodes`. Tap
-    /// any chip to set that region as the global browsing region.
-    @ViewBuilder
-    private var activeRegionsRow: some View {
-        let regions = profileUser.recentRegionCodes.prefix(6).compactMap { KaiXRegionDirectory.resolve(regionCode: $0) }
-        if !regions.isEmpty {
-            VStack(alignment: .leading, spacing: KXSpacing.sm) {
-                HStack {
-                    Image(systemName: "map")
-                        .foregroundStyle(KXColor.accent)
-                        .font(.subheadline.weight(.bold))
-                    Text(L("profileActiveCities", language))
-                        .font(.subheadline.weight(.bold))
-                    Spacer()
-                }
-                FlowLayout(spacing: KXSpacing.sm) {
-                    ForEach(regions, id: \.regionCode) { region in
-                        Button {
-                            RegionStore.shared.setCurrent(region)
-                        } label: {
-                            HStack(spacing: 5) {
-                                Text(region.countryEmoji)
-                                Text(region.cityName)
-                                    .font(.caption.weight(.semibold))
-                            }
-                            .padding(.horizontal, 11)
-                            .frame(height: 30)
-                            .kxGlassCapsule()
-                            .foregroundStyle(.primary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            .padding(14)
-            .kxGlassSurface(radius: KXRadius.lg)
-        }
-    }
-
-    /// Top hashtags this user posted in. Tap → topic list.
-    @ViewBuilder
-    private var topTopicsRow: some View {
-        let topTopics = computedTopTopics
-        if !topTopics.isEmpty {
-            VStack(alignment: .leading, spacing: KXSpacing.sm) {
-                HStack {
-                    Image(systemName: "number")
-                        .foregroundStyle(KXColor.accent)
-                        .font(.subheadline.weight(.bold))
-                    Text(L("profileFrequentTopics", language))
-                        .font(.subheadline.weight(.bold))
-                    Spacer()
-                }
-                FlowLayout(spacing: KXSpacing.sm) {
-                    ForEach(topTopics, id: \.self) { topic in
-                        Button {
-                            router.open(.topic(tag: topic))
-                        } label: {
-                            Text("#\(topic)")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(KXColor.accent)
-                                .padding(.horizontal, 11)
-                                .frame(height: 30)
-                                .background(KXColor.accent.opacity(0.10), in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            .padding(14)
-            .kxGlassSurface(radius: KXRadius.lg)
-        }
-    }
-
-    private struct AchievementBadge: Hashable {
-        let icon: String
-        let title: String
-        let color: Color
-    }
-
-    private var computedAchievements: [AchievementBadge] {
-        var badges: [AchievementBadge] = []
-        if viewModel.totalHeat >= 10_000 {
-            badges.append(.init(icon: "flame.fill", title: achievementTitle("万热达人", "1万ヒート達成", "10K heat"), color: KXColor.heat))
-        }
-        if viewModel.postCount >= 50 {
-            badges.append(.init(icon: "pencil.tip", title: achievementTitle("高产作者", "投稿上級者", "Power creator"), color: .indigo))
-        } else if viewModel.postCount >= 10 {
-            badges.append(.init(icon: "pencil", title: achievementTitle("活跃作者", "アクティブ投稿者", "Active creator"), color: .indigo))
-        }
-        if displayedFollowerCount >= 100 {
-            badges.append(.init(icon: "person.3.fill", title: achievementTitle("百人关注", "100人フォロワー", "100 followers"), color: .blue))
-        }
-        if viewModel.bookmarkCount >= 20 {
-            badges.append(.init(icon: "bookmark.fill", title: achievementTitle("收藏达人", "保存上手", "Saved often"), color: .teal))
-        }
-        if profileUser.merchantVerified {
-            badges.append(.init(icon: "checkmark.seal.fill", title: achievementTitle("认证商家", "認証済み店舗", "Verified merchant"), color: .green))
-        }
-        if profileUser.role == .creator {
-            badges.append(.init(icon: "sparkles", title: achievementTitle("本地创作者", "ローカルクリエイター", "Local creator"), color: KXColor.accent))
-        }
-        return badges
-    }
-
-    private func achievementTitle(_ zh: String, _ ja: String, _ en: String) -> String {
-        KXListingCopy.pickText(language, zh, ja, en)
-    }
-
-    private var computedTopTopics: [String] {
-        var counts: [String: Int] = [:]
-        for post in viewModel.authoredPosts {
-            for tag in post.hashtags {
-                counts[tag, default: 0] += 1
-            }
-        }
-        return counts.sorted { $0.value > $1.value }
-            .prefix(8)
-            .map { $0.key }
-    }
-
-    private var profileContentSummaryItems: [(ContentType, Int)] {
-        let preferred: [ContentType] = [
-            .guide, .secondhand, .housing, .roommate, .job_seek, .job_post,
-            .meetup, .dining, .event, .service, .merchant, .coupon
-        ]
-        return preferred.compactMap { type in
-            guard let count = viewModel.contentTypeCounts[type], count > 0 else { return nil }
-            return (type, count)
         }
     }
 
@@ -1361,23 +1262,32 @@ private enum FollowListKind: String, Identifiable {
     }
 }
 
+/// 纵向 metric cell:数字大字在上、标签小字在下——靠字号层级而非字重区分,
+/// 读起来是数据块而不是一句话。monospacedDigit 稳住数字宽度,numericText
+/// 让刷新时逐位滚动;ScaledMetric 保证 20pt 跟随动态字体放大。
 private struct ProfileMetricInline: View {
     let value: String
     let title: String
+    // 对齐 KXTypography.title2 的 19-20pt 尺度。
+    @ScaledMetric(relativeTo: .title3) private var valueSize: CGFloat = 20
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: KXSpacing.xs) {
+        VStack(spacing: KXSpacing.xxs) {
             Text(value)
-                .font(.callout.weight(.bold))
+                .font(.system(size: valueSize, weight: .bold).monospacedDigit())
                 .foregroundStyle(.primary)
                 .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .contentTransition(.numericText())
             Text(title)
-                .font(.callout.weight(.semibold))
+                .font(KXTypography.meta)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.82)
+                .minimumScaleFactor(0.8)
         }
         .padding(.vertical, KXSpacing.xs)
+        // 等宽列版里撑满本列;FlowLayout 降级版按内容自然宽度换行。
+        .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
     }
 }
@@ -1403,19 +1313,20 @@ private struct ProfileRoleBadge: View {
     }
 }
 
-/// Admin-assigned custom tag — a soft bordered chip (no seal icon) in the
-/// brand-warm tone so it reads distinctly from the verification badges.
+/// Admin-assigned custom tag — a soft bordered chip (no seal icon) in a
+/// neutral tone. 曾用 livingWarm 橙红,但那属于商业 listing 语境(见
+/// DesignSystem surface ownership 注释);中性灰让徽章行只剩 accent 一个色系。
 private struct ProfileCustomTagChip: View {
     let title: String
     var body: some View {
         Text(title)
             .font(.caption.weight(.bold))
-            .foregroundStyle(KXColor.livingWarm)
+            .foregroundStyle(Color.primary.opacity(0.7))
             .lineLimit(1)
             .padding(.horizontal, 9)
             .frame(height: 26)
-            .background(KXColor.livingWarm.opacity(0.10), in: Capsule())
-            .overlay(Capsule().strokeBorder(KXColor.livingWarm.opacity(0.32), lineWidth: 0.8))
+            .background(KXColor.softBackground, in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.8))
     }
 }
 
@@ -1921,18 +1832,26 @@ private struct FollowUserCard: View {
 private struct CoverGradientView: View {
     let user: UserEntity
 
+    /// 无封面时按 user.id 在品牌墨绿-暖纸系里确定性取一组渐变——千人千面但
+    /// 不偏出品牌。String.hashValue 每次启动换随机种子,同一用户会换色,
+    /// 故用 UTF-8 累乘做跨启动稳定的哈希。
+    private var fallbackGradientColors: [Color] {
+        let palettes: [[Color]] = [
+            [KXColor.livingAccent.opacity(0.85), KXColor.accent.opacity(0.45), KXColor.livingBackground],
+            [KXColor.official.opacity(0.68), KXColor.livingAccent.opacity(0.34), KXColor.livingSoft],
+            [KXColor.accent.opacity(0.58), KXColor.livingSoft, KXColor.livingBackground],
+        ]
+        let hash = user.id.utf8.reduce(UInt64(5381)) { ($0 &* 131) &+ UInt64($1) }
+        return palettes[Int(hash % UInt64(palettes.count))]
+    }
+
     var body: some View {
         ZStack {
             if let url = user.coverURL.kaixMediaURL {
                 CachedMediaImageView(url: url, targetPixelSize: 1200)
             } else {
                 LinearGradient(
-                    colors: [
-                        Color.pink.opacity(0.90),
-                        KXColor.accent.opacity(0.34),
-                        Color.cyan.opacity(0.24),
-                        Color(.systemGray4).opacity(0.42)
-                    ],
+                    colors: fallbackGradientColors,
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
@@ -1946,6 +1865,15 @@ private struct CoverGradientView: View {
                         startPoint: .top,
                         endPoint: .bottom
                     )
+                }
+                // 底部 10pt 渐隐到卡面,头像骑跨 cover 下缘处的过渡更柔。
+                .overlay(alignment: .bottom) {
+                    LinearGradient(
+                        colors: [Color.clear, KXColor.cardBackground.opacity(0.55)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 10)
                 }
             }
         }

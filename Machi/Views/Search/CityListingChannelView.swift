@@ -121,6 +121,28 @@ struct CityListingChannelView: View {
     /// zoom transition. nil outside the router path → plain push.
     var zoomNamespace: Namespace.ID? = nil
 
+    init(
+        regionCode: String,
+        listingType: String,
+        currentUser: UserEntity,
+        zoomNamespace: Namespace.ID? = nil,
+        initialSeed: ListingChannelSeed? = nil
+    ) {
+        self.regionCode = regionCode
+        self.listingType = listingType
+        self.currentUser = currentUser
+        self.zoomNamespace = zoomNamespace
+        // 保存搜索回放:条件作为 State 初值预置,首个 load 即带条件出发,
+        // 且不触发 onChange 的防抖重载(初值不算变更)。
+        if let seed = initialSeed {
+            _query = State(initialValue: seed.query ?? "")
+            _selectedCategory = State(initialValue: seed.category?.isEmpty == false ? seed.category! : "全部")
+            _attrFilters = State(initialValue: seed.attrs)
+            _minimumPrice = State(initialValue: seed.minPrice ?? "")
+            _maximumPrice = State(initialValue: seed.maxPrice ?? "")
+        }
+    }
+
     @State private var items: [KaiXCityListingDTO] = []
     /// Signature of the last successfully loaded (region, type, tab). `.task(id:)`
     /// re-fires on every pop-back from a detail even though the id is unchanged —
@@ -184,6 +206,16 @@ struct CityListingChannelView: View {
     @State private var priceDebounceTask: Task<Void, Never>?
     /// Debounce for the search field — see `scheduleQueryReload()`.
     @State private var queryDebounceTask: Task<Void, Never>?
+    /// 空结果时服务端下发的逐条放宽建议(可选契约;旧服务端/非空结果为空)。
+    @State private var relaxationHints: [KaiXListingRelaxationDTO] = []
+    /// facets=1 返回的每选项计数(attrKey → value → count);空 = 未下发,
+    /// 筛选面板不渲染计数。
+    @State private var facetCounts: [String: [String: Int]] = [:]
+    /// 订阅成功的确认 toast(自动消失),带「管理订阅」入口。
+    @State private var savedSearchToastVisible = false
+    @State private var savedSearchToastTask: Task<Void, Never>?
+    /// 筛选面板「都道府县」折叠态(位置区过长,默认收起)。
+    @State private var prefectureExpanded = false
 
     private var hasMoreListings: Bool {
         nextCursor != nil || nextHiringCursor != nil
@@ -194,33 +226,15 @@ struct CityListingChannelView: View {
         KXListingCopy.pickText(language, "登录后可以发布信息。", "ログインすると投稿できます。", "Sign in to publish a listing.")
     }
 
+    /// 两列网格交给 LazyVGrid 弹性列按容器宽自适应(iPad kxReadableWidth(820)
+    /// 下也不溢出),不再读物理屏宽手算卡宽。
     private var marketplaceGridSpacing: CGFloat { 12 }
 
-    private var marketplaceCardWidth: CGFloat {
-        let contentWidth = screenWidth - (KXSpacing.screen * 2)
-        return max(142, floor((contentWidth - marketplaceGridSpacing) / 2))
+    private var marketplaceGridColumns: [GridItem] {
+        // .top:行内两卡顶对齐,避免矮卡在行高内垂直居中造成参差。
+        [GridItem(.flexible(), spacing: marketplaceGridSpacing, alignment: .top),
+         GridItem(.flexible(), spacing: marketplaceGridSpacing, alignment: .top)]
     }
-
-    /// Cached once in `.onAppear` (see `currentScreenWidth`). Was a computed
-    /// property that walked `UIApplication.connectedScenes` on EVERY access —
-    /// i.e. once per card width during layout and scroll. Reading a stored
-    /// value is free; the screen width doesn't change mid-scroll anyway.
-    // Seed from the real screen width at init (not a hardcoded 393) so the
-    // two-column grid lays out correctly on the FIRST frame — no SE/iPad/Split
-    // View width jump after onAppear.
-    @State private var screenWidth: CGFloat = CityListingChannelView.resolveScreenWidth()
-
-    private static func resolveScreenWidth() -> CGFloat {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first { $0.activationState != .unattached }?
-            .screen.bounds.width ?? 393
-    }
-
-    /// 瀑布流两列分组。曾是计算属性,body 每次求值(收起头部/筛选/isReloading)
-    /// 都对整个 visibleItems 重切一遍 O(n)——分页到数百条后是可省的重复功。
-    /// 现随 visibleItems 一起在 recomputeVisibleItems() 里算好缓存。
-    @State private var secondhandRows: [[KaiXCityListingDTO]] = []
 
     private var region: KaiXRegionDirectory.Region? {
         KaiXRegionDirectory.resolve(regionCode: regionCode)
@@ -245,6 +259,10 @@ struct CityListingChannelView: View {
         let raw = listingType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         switch raw {
         case "stays", "hotels":
+            return "rental"
+        // 买房是住房频道的分区(见 activeRentalTab),深链/保存搜索回放
+        // (vertical=for_sale)也能落进正确的频道形态。
+        case "for_sale", "forsale":
             return "rental"
         case "work", "job", "jobs", "hiring":
             return "work"
@@ -275,7 +293,12 @@ struct CityListingChannelView: View {
     @State private var rentalTab: RentalTab?
 
     private var activeRentalTab: RentalTab {
-        rentalTab ?? (listingType == "hotels" || listingType == "stays" ? .stays : .homes)
+        if let rentalTab { return rentalTab }
+        switch listingType {
+        case "hotels", "stays": return .stays
+        case "for_sale", "forsale": return .forsale
+        default: return .homes
+        }
     }
 
     /// Materialised filtered+sorted list. Recomputed only when data or filters
@@ -285,9 +308,12 @@ struct CityListingChannelView: View {
     @State private var visibleItems: [KaiXCityListingDTO] = []
 
     /// Signature of every input that affects `visibleItems`; a change drives an
-    /// immediate local recompute via `.onChange` in `body`.
+    /// immediate local recompute via `.onChange` in `body`. attrFilters 与
+    /// scopeMode 也计入:它们虽由服务端过滤,但同样构成「一次新搜索」——
+    /// 变更后「已订阅」态必须复位,否则改了 attr 筛选按钮仍灰着无法再订阅。
     private var visibleFilterSignature: String {
-        "\(serviceSection)|\(selectedCategory)|\(query)|\(minimumPrice)|\(maximumPrice)|\(sortMode)|\(staysActive)|\(forsaleActive)|\(baseType)"
+        let attrs = attrFilters.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ",")
+        return "\(serviceSection)|\(selectedCategory)|\(query)|\(minimumPrice)|\(maximumPrice)|\(sortMode)|\(staysActive)|\(forsaleActive)|\(baseType)|\(scopeMode.rawValue)|\(attrs)"
     }
 
     private func recomputeVisibleItems() {
@@ -314,18 +340,32 @@ struct CityListingChannelView: View {
                 || item.title.localizedCaseInsensitiveContains(query)
                 || (item.description ?? "").localizedCaseInsensitiveContains(query)
                 || (item.location_text ?? "").localizedCaseInsensitiveContains(query)
-            let priceOK = (Double(minimumPrice).map { (item.price ?? 0) >= $0 } ?? true)
-                && (Double(maximumPrice).map { (item.price ?? .greatestFiniteMagnitude) <= $0 } ?? true)
+            // 与服务端 (price IS NULL OR ...) 对齐:面议(nil 价)不因价格区间被
+            // 隐藏,否则头部计数(服务端计入 nil 价)与实际可见数不一致,还会
+            // 连续翻出整页被客户端藏掉的行。
+            let priceOK = item.price == nil
+                || ((Double(minimumPrice).map { item.price! >= $0 } ?? true)
+                    && (Double(maximumPrice).map { item.price! <= $0 } ?? true))
             // 属性筛选由服务端完成（attrFilters → attr_<key>），客户端不再
             // 重复判断——gte 这类语义客户端复刻不了，重复判断只会误隐藏。
             return categoryOK && sectionOK && queryOK && priceOK
         }
-        visibleItems = filtered.sorted(by: sortMode.sortsBefore)
-        secondhandRows = baseType == "secondhand"
-            ? stride(from: 0, to: visibleItems.count, by: 2).map { start in
-                Array(visibleItems[start..<min(start + 2, visibleItems.count)])
-            }
-            : []
+        // 「最新」档保留服务端原序:第一页 is_promoted/推广权重在最前,客户端按
+        // published_at 重排会把付费推广位打散。工作频道两流在 load 合并时已
+        // 排序,维持原逻辑;显式的价格/评分排序才在客户端重排。
+        let ordered: [KaiXCityListingDTO]
+        if sortMode == .newest, !isWorkChannel {
+            ordered = filtered
+        } else {
+            ordered = filtered.sorted(by: sortMode.sortsBefore)
+        }
+        // 二手:已预约/已售沉底(卡面同步置灰),已出商品不再霸占前排。
+        if baseType == "secondhand" {
+            visibleItems = ordered.filter { !KXListingCopy.isMutedListingStatus($0.status) }
+                + ordered.filter { KXListingCopy.isMutedListingStatus($0.status) }
+        } else {
+            visibleItems = ordered
+        }
     }
 
     private var selectedArea: ListingScopeArea? {
@@ -524,9 +564,17 @@ struct CityListingChannelView: View {
             }
         }
         .overlay(alignment: .bottom) {
-            if !isLoading, errorMessage == nil, !visibleItems.isEmpty {
+            // 二手不填交易地点(location_text 恒为发布城市),地图 pin 是围绕市
+            // 中心的 55m 假环——隐藏入口止血,待有真实位置信号再恢复。
+            if !isLoading, errorMessage == nil, !visibleItems.isEmpty, baseType != "secondhand" {
                 mapToggle
                     .padding(.bottom, 24)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if savedSearchToastVisible {
+                savedSearchToast
+                    .padding(.bottom, 84)
             }
         }
         .kxPageBackground()
@@ -557,7 +605,6 @@ struct CityListingChannelView: View {
             recomputeVisibleItems()
             savedSearchDone = false
         }
-        .onAppear { screenWidth = Self.resolveScreenWidth() }
     }
 
     /// 服务端空结果回退提示：请求范围没有内容,已自动展示更大范围
@@ -687,7 +734,9 @@ struct CityListingChannelView: View {
             // 会把新分区隐形过滤成空列表。onChange 仅在值真变时触发。
             minimumPrice = ""
             maximumPrice = ""
-            if sortMode == .rating, tab == .homes { sortMode = .newest }
+            // 评分排序只有民宿分区可用:切到长租/买房都要复位,否则菜单里
+            // 看不到 .rating 却仍在按它生效、取消不掉。
+            if sortMode == .rating, tab != .stays { sortMode = .newest }
         } label: {
             Label(title, systemImage: icon)
                 .font(.subheadline.weight(.black))
@@ -711,11 +760,123 @@ struct CityListingChannelView: View {
             heroSearchBar
             categoryIconRail
             serviceSubCategoryRail
+            // 住房频道:活跃条件一行 chips,每条可单独 ✕ 清除——此前只能在
+            // 面板里逐个找,或一键全清。
+            if baseType == "rental", !activeConditionChips.isEmpty {
+                activeConditionRow
+            }
             if !headerCollapsed {
                 resultSummaryRow
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
+    }
+
+    /// 单个活跃筛选条件(label + 单独清除动作)。
+    private struct ActiveConditionChip: Identifiable {
+        let id: String
+        let label: String
+        let remove: () -> Void
+    }
+
+    private var activeConditionChips: [ActiveConditionChip] {
+        var chips: [ActiveConditionChip] = []
+        if scopeMode != .country {
+            chips.append(.init(id: "scope", label: activeScopeLabel) { selectScope(.country) })
+        }
+        let keyword = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !keyword.isEmpty {
+            // 清词后的服务端重载交给 onChange 的防抖,不在这里抢跑。
+            chips.append(.init(id: "query", label: "“\(keyword)”") { query = "" })
+        }
+        if !minimumPrice.isEmpty || !maximumPrice.isEmpty {
+            let label: String
+            if !minimumPrice.isEmpty && !maximumPrice.isEmpty {
+                label = "¥\(minimumPrice)–¥\(maximumPrice)"
+            } else if !minimumPrice.isEmpty {
+                label = "≥ ¥\(minimumPrice)"
+            } else {
+                label = "≤ ¥\(maximumPrice)"
+            }
+            chips.append(.init(id: "price", label: label) {
+                minimumPrice = ""
+                maximumPrice = ""
+            })
+        }
+        for (key, value) in attrFilters.sorted(by: { $0.key < $1.key }) where !value.isEmpty {
+            chips.append(.init(id: "attr:\(key)", label: attrChipLabel(key: key, value: value)) {
+                attrFilters.removeValue(forKey: key)
+                Task { await load(quiet: true) }
+            })
+        }
+        return chips
+    }
+
+    /// attr 条件 → 可读 label。布尔 toggle 用 key 的面板文案,枚举值(户型等)
+    /// 用值本身;gte_ 前缀是人数下限。
+    private func attrChipLabel(key: String, value: String) -> String {
+        if key.hasPrefix("gte_") {
+            return ListingFilterLocalizer.text("\(value) 人及以上", language)
+        }
+        if key == "layout" {
+            switch value {
+            case "1R,1K,1DK": return "1R/1K/1DK"
+            case "3LDK,4LDK,5LDK": return "3LDK+"
+            default: return ListingFilterLocalizer.text(value, language)
+            }
+        }
+        if value == "true" {
+            let zh: String
+            switch key {
+            case "furnished": zh = "家具家电"
+            case "pet_allowed": zh = "可宠物"
+            case "share_allowed": zh = "可合租"
+            case "short_term_allowed": zh = "短租"
+            case "breakfast_included": zh = "含早餐"
+            case "instant_confirmation": zh = "即时确认"
+            case "certified_provider": zh = "认证商家"
+            case "price_negotiable": zh = "价格可议"
+            case "pickup_available": zh = "可自取"
+            case "shipping_available": zh = "可邮寄"
+            case "no_experience_ok": zh = "无经验可"
+            case "student_ok": zh = "留学生可"
+            case "remote_ok": zh = "可远程"
+            default: zh = key
+            }
+            return ListingFilterLocalizer.text(zh, language)
+        }
+        return ListingFilterLocalizer.text(value, language)
+    }
+
+    private var activeConditionRow: some View {
+        KXFadingHScroll {
+            HStack(spacing: KXSpacing.xs) {
+                ForEach(activeConditionChips) { chip in
+                    HStack(spacing: 5) {
+                        Text(chip.label)
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(KXColor.livingInk)
+                            .lineLimit(1)
+                        Button {
+                            withAnimation(.snappy(duration: 0.18)) { chip.remove() }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(KXListingCopy.pickText(language, "移除 \(chip.label)", "\(chip.label) を外す", "Remove \(chip.label)"))
+                    }
+                    .padding(.leading, 11)
+                    .padding(.trailing, 7)
+                    .frame(height: 30)
+                    .background(KXColor.livingSoft.opacity(0.9), in: Capsule())
+                    .overlay(Capsule().stroke(KXColor.livingInk.opacity(0.08), lineWidth: 0.7))
+                }
+            }
+            .padding(.horizontal, KXSpacing.xxs)
+        }
+        .transition(.opacity.combined(with: .move(edge: .top)))
     }
 
     /// Web-parity second-level menu for 商家与服务: once a primary section
@@ -894,10 +1055,28 @@ struct CityListingChannelView: View {
                             categoryIconItem(
                                 title: KXListingCopy.categoryLabel(category, language),
                                 icon: KXListingCopy.categoryIcon(category),
+                                // 二手「全部」在 listing_mode facet 生效时不算选中,
+                                // 避免「全部」和「免费送」同时高亮。
                                 selected: selectedCategory == category
+                                    && (category != "全部" || !secondhandRailFacetActive)
                             ) {
                                 selectedCategory = category
+                                // 二手点「全部」= 回到真·全部,一并清掉 facet。
+                                if baseType == "secondhand", category == "全部" {
+                                    attrFilters.removeValue(forKey: "listing_mode")
+                                }
                                 Task { await load(quiet: true) }
+                            }
+                        }
+                        // 二手:免费送/求购是 listing_mode facet(attr 通道,
+                        // 与筛选面板「发布类型」同 key 互通),不再冒充 category。
+                        if baseType == "secondhand" {
+                            ForEach(KXListingCopy.facetChips(for: copyType)) { chip in
+                                categoryIconItem(
+                                    title: KXListingCopy.categoryLabel(chip.labelKey, language),
+                                    icon: KXListingCopy.categoryIcon(chip.labelKey),
+                                    selected: attrFilters[chip.key] == chip.value
+                                ) { toggleRailFacet(chip) }
                             }
                         }
                     }
@@ -912,6 +1091,11 @@ struct CityListingChannelView: View {
     /// facet 滑栏「全部」选中态：当前没有任何本滑栏管理的 facet 生效。
     private var railFacetsCleared: Bool {
         !KXListingCopy.facetChips(for: copyType).contains { attrFilters[$0.key] == $0.value }
+    }
+
+    /// 二手滑栏的 listing_mode facet(免费送/求购)是否生效。
+    private var secondhandRailFacetActive: Bool {
+        baseType == "secondhand" && attrFilters["listing_mode"] != nil
     }
 
     /// 点 facet chip：命中即取消(再点一次关掉)，否则写入该 attr。同 key 覆盖使
@@ -1030,7 +1214,10 @@ struct CityListingChannelView: View {
                 Button {
                     clearAllFilters()
                 } label: {
-                    Label(KXListingCopy.pickText(language, "清空筛选", "絞り込みをクリア", "Clear filters"), systemImage: "xmark.circle.fill")
+                    // 「全部」= 关键词+类目+范围+attr+价格,口径比面板角标
+                    // (只计面板自有条件)宽——文案点明,消除「角标 0 却有清空」
+                    // 的表面矛盾(B9)。
+                    Label(KXListingCopy.pickText(language, "全部清空", "すべてクリア", "Clear all"), systemImage: "xmark.circle.fill")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(KXColor.livingAccent)
                 }
@@ -1056,6 +1243,14 @@ struct CityListingChannelView: View {
                     // 会落库一条位置全空、匹配全世界的订阅。
                     let scope = region.map { savedSearchScope(for: $0) }
                     let keyword = query.trimmingCharacters(in: .whitespacesAndNewlines)
+                    // attr 条件与价格一起入订阅(filter_json):键名与 /api/listings
+                    // 查询参数一致(attr_<key>/min_price/max_price),匹配端 v2 直接解析。
+                    var filters: [String: String] = [:]
+                    for (key, value) in attrFilters where !value.isEmpty {
+                        filters["attr_\(key)"] = value
+                    }
+                    if !minimumPrice.isEmpty { filters["min_price"] = minimumPrice }
+                    if !maximumPrice.isEmpty { filters["max_price"] = maximumPrice }
                     _ = try await KaiXAPIClient.shared.createSavedSearch(
                         // 服务端 vertical 只认真实 listing type:买房/民宿分区走
                         // queryType(for_sale/local_service);工作频道订阅招聘流。
@@ -1064,9 +1259,11 @@ struct CityListingChannelView: View {
                         category: selectedCategory == "全部" ? nil : selectedCategory,
                         citySlug: scope?.citySlug,
                         regionCode: scope?.regionCode,
-                        countryCode: scope?.countryCode
+                        countryCode: scope?.countryCode,
+                        filters: filters.isEmpty ? nil : filters
                     )
                     savedSearchDone = true
+                    showSavedSearchToast()
                 } catch {
                     savedSearchDone = false
                 }
@@ -1095,6 +1292,62 @@ struct CityListingChannelView: View {
         maximumPrice = ""
         attrFilters = [:]
         Task { await load() }
+    }
+
+    /// sheet「清空」只清面板自有条件(价格 / attr / 面板内地域 / 服务细分类)。
+    /// 搜索词与滑栏类目不在面板角标里,不该被面板的清空连坐(B6)。
+    private func clearSheetFilters() {
+        minimumPrice = ""
+        maximumPrice = ""
+        attrFilters = [:]
+        if scopeMode == .area || scopeMode == .province || scopeMode == .selectedCity {
+            scopeMode = .country
+            selectedScopeArea = ""
+            selectedScopeRegionCode = ""
+            selectedProvinceCode = ""
+        }
+        if baseType == "local_service" { selectedCategory = "全部" }
+        Task { await load(quiet: true) }
+    }
+
+    /// 订阅成功确认:短暂 toast + 「管理」跳订阅列表。
+    private func showSavedSearchToast() {
+        withAnimation(KXMotion.reveal) { savedSearchToastVisible = true }
+        savedSearchToastTask?.cancel()
+        savedSearchToastTask = Task {
+            try? await Task.sleep(nanoseconds: 3_200_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(KXMotion.reveal) { savedSearchToastVisible = false }
+        }
+    }
+
+    private var savedSearchToast: some View {
+        HStack(spacing: KXSpacing.sm) {
+            Image(systemName: "bell.badge.fill")
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(KXColor.livingAccent)
+            Text(KXListingCopy.pickText(language, "已订阅,有新匹配会通知你", "保存しました。新着があれば通知します", "Saved — we'll notify you of new matches"))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+            Button {
+                savedSearchToastTask?.cancel()
+                savedSearchToastVisible = false
+                router.open(.savedSearches)
+            } label: {
+                Text(KXListingCopy.pickText(language, "管理", "管理", "Manage"))
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(KXColor.livingAccent)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 40)
+        .background(KXColor.cardBackground.opacity(0.97), in: Capsule())
+        .overlay(Capsule().stroke(KXColor.glassStroke.opacity(0.6), lineWidth: 0.7))
+        .shadow(color: KXColor.glassShadow.opacity(0.4), radius: 10, y: 4)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
     /// 筛选面板内的条件计数（类目在滑栏、城市/全国在菜单，不计入角标）。
@@ -1148,9 +1401,11 @@ struct CityListingChannelView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    if activeFilterCount > 0 {
+                    // 只在面板自己的条件(角标口径)非空时出现,且只清这些——
+                    // 不再把搜索词/滑栏类目一起清掉(B6)。
+                    if sheetFilterCount > 0 {
                         Button(KXListingCopy.pickText(language, "清空", "クリア", "Clear")) {
-                            clearAllFilters()
+                            clearSheetFilters()
                         }
                         .foregroundStyle(KXColor.livingAccent)
                     }
@@ -1178,8 +1433,19 @@ struct CityListingChannelView: View {
         Button {
             filtersOpen = false
         } label: {
-            Text(KXListingCopy.pickText(language, "查看 \(serverTotal ?? visibleItems.count) 个结果", "\(serverTotal ?? visibleItems.count) 件を見る", "Show \(serverTotal ?? visibleItems.count) results"))
-                .kxGlassButton(prominent: true)
+            // 静默重载在途时列表顶部的「更新中」胶囊在 sheet 下看不见——
+            // 底栏自己转 spinner,且不显示上一组条件的旧结果数。
+            HStack(spacing: 8) {
+                if isReloading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(KXColor.onAccent)
+                }
+                Text(isReloading
+                     ? KXListingCopy.pickText(language, "更新中…", "更新中…", "Updating…")
+                     : KXListingCopy.pickText(language, "查看 \(serverTotal ?? visibleItems.count) 个结果", "\(serverTotal ?? visibleItems.count) 件を見る", "Show \(serverTotal ?? visibleItems.count) results"))
+            }
+            .kxGlassButton(prominent: true)
         }
         .buttonStyle(KXPressableStyle(scale: 0.97))
         .padding(.horizontal, KXSpacing.screen)
@@ -1208,17 +1474,20 @@ struct CityListingChannelView: View {
                 filterChoiceSection(
                     title: "发布类型",
                     options: [("", "全部"), ("sale", "出售"), ("free", "免费送"), ("wanted", "求购")],
-                    selection: attrChoiceBinding("listing_mode")
+                    selection: attrChoiceBinding("listing_mode"),
+                    facetKey: "listing_mode"
                 )
                 filterChoiceSection(
                     title: "新旧程度",
                     options: [("", "不限"), ("brand_new", "全新"), ("like_new", "几乎全新"), ("good", "良好"), ("used", "有使用痕迹"), ("fair", "可用")],
-                    selection: attrChoiceBinding("condition")
+                    selection: attrChoiceBinding("condition"),
+                    facetKey: "condition"
                 )
                 filterChoiceSection(
                     title: "交易方式",
                     options: [("", "不限"), ("meetup", "面交"), ("pickup", "自取"), ("shipping", "邮寄"), ("negotiable", "可商量")],
-                    selection: attrChoiceBinding("delivery_method")
+                    selection: attrChoiceBinding("delivery_method"),
+                    facetKey: "delivery_method"
                 )
                 filterToggleSection(title: "交易偏好", toggles: [
                     ("price_negotiable", "价格可议"),
@@ -1239,8 +1508,12 @@ struct CityListingChannelView: View {
             } else if baseType == "rental" {
                 filterChoiceSection(
                     title: "户型",
-                    options: [("", "不限"), ("1R", "1R"), ("1K", "1K"), ("1DK", "1DK"), ("1LDK", "1LDK"), ("2K", "2K"), ("2LDK", "2LDK"), ("合租", "合租")],
-                    selection: attrChoiceBinding("layout")
+                    // 与库存词表对齐:partner 导入只产出 NLDK,旧的 1R/1K/2K 精确
+                    // 匹配在 partner 库存上几乎必 0。小户型合并、3LDK+ 走同 key
+                    // 多值 OR(服务端 attr 过滤天然支持逗号多值)。
+                    options: [("", "不限"), ("1R,1K,1DK", "1R/1K/1DK"), ("1LDK", "1LDK"), ("2LDK", "2LDK"), ("3LDK,4LDK,5LDK", "3LDK+"), ("一戸建て", "一戸建て"), ("合租", "合租")],
+                    selection: attrChoiceBinding("layout"),
+                    facetKey: "layout"
                 )
                 filterToggleSection(title: "条件", toggles: [
                     ("furnished", "家具家电"),
@@ -1251,18 +1524,21 @@ struct CityListingChannelView: View {
                 filterChoiceSection(
                     title: "雇佣形式",
                     options: [("", "不限"), ("part_time", "兼职"), ("full_time", "全职"), ("dispatch", "派遣"), ("internship", "实习")],
-                    selection: attrChoiceBinding("employment_type")
+                    selection: attrChoiceBinding("employment_type"),
+                    facetKey: "employment_type"
                 )
                 filterChoiceSection(
                     title: "日语要求",
                     options: [("", "不限"), ("not_required", "日语不限"), ("N5", "N5"), ("N4", "N4"), ("N3", "N3"), ("N2", "N2"), ("N1", "N1")],
-                    selection: attrChoiceBinding("japanese_level")
+                    selection: attrChoiceBinding("japanese_level"),
+                    facetKey: "japanese_level"
                 )
                 filterChoiceSection(
                     title: "签证支持",
                     // "available,true" 兼容老数据：早期版本把 visa_support 存成了布尔。
                     options: [("", "不限"), ("available,true", "有"), ("consult", "可咨询")],
-                    selection: attrChoiceBinding("visa_support")
+                    selection: attrChoiceBinding("visa_support"),
+                    facetKey: "visa_support"
                 )
                 filterToggleSection(title: "条件", toggles: [
                     ("no_experience_ok", "无经验可"),
@@ -1365,20 +1641,41 @@ struct CityListingChannelView: View {
 
     /// 47 都道府县选择:按都市圈分组(关东/关西/中部…),点一个县 = 看该县全部城市
     /// (服务端按 region_code 前缀匹配,覆盖客户端城市表之外的城市)。
+    /// 47 个 chip 让「位置」区过长,默认折叠;已选中都道府县时保持展开。
     private var prefecturePickerSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(KXListingCopy.pickText(language, "都道府县", "都道府県", "Prefecture"))
-                .font(.caption.weight(.black))
-                .foregroundStyle(.secondary)
-            ForEach(KaiXRegionDirectory.jpMetroCircles) { circle in
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(metroCircleTitle(circle.code))
-                        .font(.caption2.weight(.bold))
+            Button {
+                withAnimation(.snappy(duration: 0.2)) { prefectureExpanded.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(KXListingCopy.pickText(language, "都道府县", "都道府県", "Prefecture"))
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(.secondary)
+                    if scopeMode == .province {
+                        Text(selectedProvinceLabel)
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(KXColor.accent)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.down")
+                        .kxScaledFont(10, weight: .black)
                         .foregroundStyle(.tertiary)
-                    FlowLayout(spacing: KXSpacing.sm) {
-                        ForEach(circle.provinceCodes, id: \.self) { pc in
-                            if let prov = KaiXRegionDirectory.provinces(for: "jp").first(where: { $0.code == pc }) {
-                                provinceChip(prov)
+                        .rotationEffect(.degrees(prefectureExpanded || scopeMode == .province ? 180 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if prefectureExpanded || scopeMode == .province {
+                ForEach(KaiXRegionDirectory.jpMetroCircles) { circle in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(metroCircleTitle(circle.code))
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.tertiary)
+                        FlowLayout(spacing: KXSpacing.sm) {
+                            ForEach(circle.provinceCodes, id: \.self) { pc in
+                                if let prov = KaiXRegionDirectory.provinces(for: "jp").first(where: { $0.code == pc }) {
+                                    provinceChip(prov)
+                                }
                             }
                         }
                     }
@@ -1458,10 +1755,18 @@ struct CityListingChannelView: View {
         .overlay(RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous).stroke(KXColor.separator.opacity(0.7), lineWidth: 0.7))
     }
 
+    /// facet_counts 的选项计数。key 未下发/值为空(「不限」)时返回 nil → 不渲染;
+    /// 多值 OR("a,b")求和。gte_ 前缀键不传 facetKey(区间语义算不出单值计数)。
+    private func facetCount(for key: String?, value: String) -> Int? {
+        guard let key, !value.isEmpty, let table = facetCounts[key] else { return nil }
+        return value.split(separator: ",").reduce(0) { $0 + (table[String($1)] ?? 0) }
+    }
+
     private func filterChoiceSection(
         title: String,
         options: [(value: String, label: String)],
-        selection: Binding<String>
+        selection: Binding<String>,
+        facetKey: String? = nil
     ) -> some View {
         VStack(alignment: .leading, spacing: KXSpacing.sm) {
             Text(ListingFilterLocalizer.text(title, language))
@@ -1469,16 +1774,27 @@ struct CityListingChannelView: View {
                 .foregroundStyle(.secondary)
             FlowLayout(spacing: KXSpacing.sm) {
                 ForEach(options, id: \.value) { option in
+                    let selected = selection.wrappedValue == option.value
+                    let count = facetCount(for: facetKey, value: option.value)
                     Button {
                         selection.wrappedValue = option.value
                     } label: {
-                        Text(ListingFilterLocalizer.text(option.label, language))
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(selection.wrappedValue == option.value ? KXColor.onAccent : .primary)
-                            .padding(.horizontal, KXSpacing.md)
-                            .frame(height: 32)
-                            .background(selection.wrappedValue == option.value ? KXColor.accent : Color(.systemBackground), in: Capsule())
-                            .overlay(Capsule().stroke(selection.wrappedValue == option.value ? Color.clear : KXColor.separator.opacity(0.65), lineWidth: 0.7))
+                        HStack(spacing: 4) {
+                            Text(ListingFilterLocalizer.text(option.label, language))
+                                .font(.caption.weight(.bold))
+                            if let count {
+                                Text("\(count)")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(selected ? KXColor.onAccent.opacity(0.85) : Color.secondary)
+                            }
+                        }
+                        .foregroundStyle(selected ? KXColor.onAccent : .primary)
+                        .padding(.horizontal, KXSpacing.md)
+                        .frame(height: 32)
+                        .background(selected ? KXColor.accent : Color(.systemBackground), in: Capsule())
+                        .overlay(Capsule().stroke(selected ? Color.clear : KXColor.separator.opacity(0.65), lineWidth: 0.7))
+                        // 0 结果的选项降透明但仍可点(点了走 0 结果空态的放宽引导)。
+                        .opacity(count == 0 && !selected ? 0.55 : 1)
                     }
                     .buttonStyle(.plain)
                 }
@@ -1493,23 +1809,35 @@ struct CityListingChannelView: View {
                 .foregroundStyle(.secondary)
             FlowLayout(spacing: KXSpacing.sm) {
                 ForEach(toggles, id: \.key) { item in
-                    filterToggle(title: ListingFilterLocalizer.text(item.label, language), isOn: attrToggleBinding(item.key))
+                    filterToggle(
+                        title: ListingFilterLocalizer.text(item.label, language),
+                        isOn: attrToggleBinding(item.key),
+                        count: facetCount(for: item.key, value: "true")
+                    )
                 }
             }
         }
     }
 
-    private func filterToggle(title: String, isOn: Binding<Bool>) -> some View {
+    private func filterToggle(title: String, isOn: Binding<Bool>, count: Int? = nil) -> some View {
         Button {
             isOn.wrappedValue.toggle()
         } label: {
-            Label(title, systemImage: isOn.wrappedValue ? "checkmark.circle.fill" : "circle")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(isOn.wrappedValue ? KXColor.accent : .primary)
-                .padding(.horizontal, 11)
-                .frame(height: 32)
-                .background(Color(.systemBackground), in: Capsule())
-                .overlay(Capsule().stroke(isOn.wrappedValue ? KXColor.accent.opacity(0.45) : KXColor.separator.opacity(0.65), lineWidth: 0.7))
+            HStack(spacing: 4) {
+                Label(title, systemImage: isOn.wrappedValue ? "checkmark.circle.fill" : "circle")
+                    .font(.caption.weight(.bold))
+                if let count {
+                    Text("\(count)")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .foregroundStyle(isOn.wrappedValue ? KXColor.accent : .primary)
+            .padding(.horizontal, 11)
+            .frame(height: 32)
+            .background(Color(.systemBackground), in: Capsule())
+            .overlay(Capsule().stroke(isOn.wrappedValue ? KXColor.accent.opacity(0.45) : KXColor.separator.opacity(0.65), lineWidth: 0.7))
+            .opacity(count == 0 && !isOn.wrappedValue ? 0.55 : 1)
         }
         .buttonStyle(.plain)
     }
@@ -1531,6 +1859,11 @@ struct CityListingChannelView: View {
                         subtitle: KXListingCopy.pickText(language, "试试放宽筛选或扩大范围", "条件を緩めるか範囲を広げてみてください", "Try relaxing your filters or widening the area"),
                         systemImage: "line.3.horizontal.decrease.circle"
                     )
+                    // 服务端放宽建议(可选契约):逐条列出活跃条件与「移除后 +N 条」,
+                    // 单条 ✕ 即刻放宽——比一键全清精准。旧服务端无此字段则不出现。
+                    if !relaxationHints.isEmpty {
+                        relaxationList
+                    }
                     Button {
                         clearAllFilters()
                     } label: {
@@ -1588,25 +1921,17 @@ struct CityListingChannelView: View {
             }
         } else if baseType == "secondhand" {
             // Two-column photo grid: square covers, price first, quick scan.
-            LazyVStack(spacing: 14) {
-                // Stable id (first item's id) instead of row index, so paging
-                // loadMore / re-filter inserts rows incrementally instead of
-                // forcing SwiftUI to rebuild every row.
-                ForEach(secondhandRows, id: \.first?.id) { row in
-                    HStack(alignment: .top, spacing: marketplaceGridSpacing) {
-                        ForEach(row) { item in
-                            KXSecondhandListingCard(listing: item, width: marketplaceCardWidth) {
-                                router.open(.cityListingDetail(listingId: item.id))
-                            }
-                            .kxListingZoomSource("listing-\(item.id)", zoomNamespace)
-                            .transition(.opacity.combined(with: .move(edge: .bottom)))
-                        }
-                        if row.count == 1 {
-                            Spacer(minLength: 0)
-                                .frame(width: marketplaceCardWidth)
-                        }
+            // LazyVGrid 弹性列按容器宽自适应(卡内 KXSquareCover(side: nil)
+            // 自适应路径,UserListingsView 同款),卡片等高不再锯齿,iPad
+            // kxReadableWidth 下也不溢出。稳定 id 由 ForEach(visibleItems)
+            // 保证,loadMore 仍是增量插入。
+            LazyVGrid(columns: marketplaceGridColumns, spacing: 14) {
+                ForEach(visibleItems) { item in
+                    KXSecondhandListingCard(listing: item) {
+                        router.open(.cityListingDetail(listingId: item.id))
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .kxListingZoomSource("listing-\(item.id)", zoomNamespace)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
             }
             .frame(maxWidth: .infinity)
@@ -1642,6 +1967,83 @@ struct CityListingChannelView: View {
         }
     }
 
+    /// 0 结果空态的放宽建议列表:每个活跃条件一行,「移除后 +N 条」+ 单条 ✕。
+    private var relaxationList: some View {
+        VStack(spacing: KXSpacing.sm) {
+            ForEach(relaxationHints) { hint in
+                HStack(spacing: KXSpacing.sm) {
+                    Text(relaxationTitle(hint))
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Text(KXListingCopy.pickText(language, "移除后 +\(hint.count_if_removed) 条", "外すと +\(hint.count_if_removed)件", "+\(hint.count_if_removed) if removed"))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(KXColor.livingAccent)
+                    Spacer(minLength: 4)
+                    Button {
+                        withAnimation(.snappy(duration: 0.2)) { removeRelaxationTarget(hint) }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 32, height: 32)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(KXListingCopy.pickText(language, "移除 \(relaxationTitle(hint))", "\(relaxationTitle(hint)) を外す", "Remove \(relaxationTitle(hint))"))
+                }
+                .padding(.horizontal, KXSpacing.md)
+                .frame(height: 46)
+                .background(KXColor.softBackground.opacity(0.8), in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+            }
+        }
+        .frame(maxWidth: 420)
+        .padding(.horizontal, KXSpacing.lg)
+    }
+
+    /// 放宽建议行标题:优先服务端 label,否则按 kind 回退到本地条件描述。
+    private func relaxationTitle(_ hint: KaiXListingRelaxationDTO) -> String {
+        if let label = hint.label, !label.isEmpty { return ListingFilterLocalizer.text(label, language) }
+        switch hint.kind {
+        case "price":
+            return KXListingCopy.pickText(language, "价格区间", "価格帯", "Price range")
+        case "scope":
+            return activeScopeLabel
+        case "query":
+            return "“\(query.trimmingCharacters(in: .whitespacesAndNewlines))”"
+        case "category":
+            return ListingFilterLocalizer.text(selectedCategory, language)
+        default:
+            let key = hint.key.hasPrefix("attr_") ? String(hint.key.dropFirst(5)) : hint.key
+            if let value = attrFilters[key] { return attrChipLabel(key: key, value: value) }
+            return key
+        }
+    }
+
+    /// 移除单个放宽建议对应的条件并重查。
+    private func removeRelaxationTarget(_ hint: KaiXListingRelaxationDTO) {
+        switch hint.kind {
+        case "price":
+            // 服务端重载交给价格 onChange 的防抖,不抢跑。
+            minimumPrice = ""
+            maximumPrice = ""
+            return
+        case "scope":
+            selectScope(.country)   // 自带 load()
+            return
+        case "query":
+            query = ""              // onChange 防抖自会重载
+            return
+        case "category":
+            selectedCategory = "全部"
+        default:
+            let key = hint.key.hasPrefix("attr_") ? String(hint.key.dropFirst(5)) : hint.key
+            attrFilters.removeValue(forKey: key)
+        }
+        Task { await load(quiet: true) }
+    }
+
     /// 按频道形态给出对应骨架占位。Extracted to `ChannelLoadingSkeleton` (a
     /// separate value-typed View) to keep this already-large struct's body
     /// lighter — the first step of breaking the channel screen into pieces.
@@ -1649,7 +2051,6 @@ struct CityListingChannelView: View {
         ChannelLoadingSkeleton(
             isWorkChannel: isWorkChannel,
             baseType: baseType,
-            cardWidth: marketplaceCardWidth,
             gridSpacing: marketplaceGridSpacing
         )
     }
@@ -1659,6 +2060,11 @@ struct CityListingChannelView: View {
     /// send one request, not five. Cancelling the previous task keeps exactly
     /// one pending reload; `loadGeneration` already defuses any stragglers.
     private func schedulePriceReload() {
+        // 同 scheduleQueryReload:值一变先作废旧游标(哨兵消失)。防抖窗口内
+        // 客户端过滤把列表缩短会触发哨兵 loadMore,用「旧筛选流的游标 + 新价格
+        // 参数」拉页,价格排序的偏移游标下会跳/重行(B4)。
+        nextCursor = nil
+        nextHiringCursor = nil
         priceDebounceTask?.cancel()
         priceDebounceTask = Task {
             try? await Task.sleep(nanoseconds: 400_000_000)
@@ -1746,6 +2152,9 @@ struct CityListingChannelView: View {
                 } else {
                     serverTotal = nil
                 }
+                // 双流合并没有一致的放宽/facet 口径,工作频道不展示这两块。
+                relaxationHints = []
+                facetCounts = [:]
             } else {
                 let page = try await KaiXAPIClient.shared.listingsPage(
                     type: queryType,
@@ -1760,7 +2169,9 @@ struct CityListingChannelView: View {
                     minPrice: Double(minimumPrice),
                     maxPrice: Double(maximumPrice),
                     sort: serverSort,
-                    attributes: attrFilters
+                    attributes: attrFilters,
+                    // 面板选项计数(facet_counts)只在首屏请求;旧服务端忽略该参数。
+                    facets: true
                 )
                 guard generation == loadGeneration else { return }   // superseded by a newer load
                 items = page.items
@@ -1768,6 +2179,8 @@ struct CityListingChannelView: View {
                 nextHiringCursor = nil
                 serverTotal = page.total
                 fallbackNoticeLabel = (page.fallback != nil && page.fallbackLabel?.isEmpty == false) ? page.fallbackLabel : nil
+                relaxationHints = page.relaxation
+                facetCounts = page.facetCounts ?? [:]
             }
             isLoading = false
             recomputeVisibleItems()
@@ -1778,6 +2191,12 @@ struct CityListingChannelView: View {
             // screen. Whatever list was on screen stays; the .task guard reloads
             // on the next appearance only if the list is actually empty.
             if error is CancellationError || (error as? URLError)?.code == .cancelled {
+                isLoading = false
+                return
+            }
+            // 静默重载(筛选微调)失败不清屏:旧列表还好好摆在屏上,换成整页
+            // 错误态反而把内容全丢了(B8)。首屏无内容时才走错误页。
+            if quiet, !items.isEmpty {
                 isLoading = false
                 return
             }
@@ -1985,7 +2404,7 @@ struct UserListingsView: View {
         ScrollView {
             Group {
                 if baseType == "secondhand" {
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: KXSpacing.md), GridItem(.flexible(), spacing: KXSpacing.md)], spacing: 14) {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: KXSpacing.md, alignment: .top), GridItem(.flexible(), spacing: KXSpacing.md, alignment: .top)], spacing: 14) {
                         ForEach(items) { item in
                             KXSecondhandListingCard(listing: item) { router.open(.cityListingDetail(listingId: item.id)) }
                         }
@@ -2057,7 +2476,6 @@ struct UserListingsView: View {
 private struct ChannelLoadingSkeleton: View {
     let isWorkChannel: Bool
     let baseType: String
-    let cardWidth: CGFloat
     let gridSpacing: CGFloat
 
     var body: some View {
@@ -2068,14 +2486,12 @@ private struct ChannelLoadingSkeleton: View {
                 ForEach(0..<3, id: \.self) { _ in KXJobSkeletonRow() }
             }
         } else if baseType == "secondhand" {
-            LazyVStack(spacing: 14) {
-                ForEach(0..<2, id: \.self) { _ in
-                    HStack(alignment: .top, spacing: gridSpacing) {
-                        KXSecondhandSkeletonCard(width: cardWidth)
-                        KXSecondhandSkeletonCard(width: cardWidth)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
+            // 与真列表同款 LazyVGrid;6 张(3 行)才填满一屏,4 张时下半屏空白。
+            LazyVGrid(
+                columns: [GridItem(.flexible(), spacing: gridSpacing), GridItem(.flexible(), spacing: gridSpacing)],
+                spacing: 14
+            ) {
+                ForEach(0..<6, id: \.self) { _ in KXSecondhandSkeletonCard() }
             }
         } else if baseType == "rental" {
             LazyVStack(spacing: 18) {

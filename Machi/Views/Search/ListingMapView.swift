@@ -59,7 +59,8 @@ struct ListingMapPin: Identifiable {
 }
 
 /// Airbnb-style map of the current results. Pins are price badges; tapping one
-/// raises a compact card that opens the detail. Coverage depends on how cleanly
+/// raises a compact card that opens the detail. 服务端下发坐标的条目直接上图
+/// (无 40 条上限);无坐标的回退设备端 geocode,coverage depends on how cleanly
 /// each listing's location geocodes — unmappable ones are simply omitted.
 struct ListingMapView: View {
     @Environment(\.appLanguage) private var language
@@ -201,14 +202,25 @@ struct ListingMapView: View {
         isResolving = true
         var resolved: [ListingMapPin] = []
         var coordUse: [String: Int] = [:]   // 相同坐标出现次数 → 环形散开
-        // Cap the work so a huge result set doesn't hammer the geocoder.
-        for listing in listings.prefix(40) {
+        // 服务端坐标(partner 房源自带精确经纬度)不占预算、全量上图;只有
+        // 无坐标的条目才回退 CLGeocoder,预算 40 次防止大结果集打爆限流。
+        var geocodeBudget = 40
+        for listing in listings {
             // .task(id:) 换筛选会启动新循环——旧循环必须立刻让位,否则两个
             // 循环并发打 CLGeocoder,还会用旧列表的结果覆盖新 pins。
             if Task.isCancelled { return }
-            guard let q = query(for: listing) else { continue }
-            guard let coord = await ListingGeocodeCache.shared.resolve(q) else { continue }
-            if Task.isCancelled { return }
+            let coord: CLLocationCoordinate2D?
+            if let lat = listing.latitude, let lng = listing.longitude,
+               abs(lat) <= 90, abs(lng) <= 180, !(lat == 0 && lng == 0) {
+                coord = CLLocationCoordinate2D(latitude: lat, longitude: lng)
+            } else if geocodeBudget > 0, let q = query(for: listing) {
+                geocodeBudget -= 1
+                coord = await ListingGeocodeCache.shared.resolve(q)
+                if Task.isCancelled { return }
+            } else {
+                coord = nil
+            }
+            guard let coord else { continue }
             let key = String(format: "%.5f,%.5f", coord.latitude, coord.longitude)
             let dup = coordUse[key, default: 0]
             coordUse[key] = dup + 1

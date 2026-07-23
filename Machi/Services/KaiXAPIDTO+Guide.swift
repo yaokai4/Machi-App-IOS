@@ -2283,6 +2283,10 @@ struct KaiXJLPTListeningPolicy: Codable, Equatable, Hashable {
 
 /// Read-only price/access contract that must be confirmed before every start.
 /// `paperAttempt` is nil when the backend sends its documented empty object.
+///
+/// 计费关键字段(canStart/requiredCoins/balance 等)保持硬 decode——宁可考不了
+/// 也不能用错误价格发起扣费确认;纯展示字段(退款文案/确认文案/serverTime 等)
+/// 缺失时取默认值,「缺一个文案字段就整个考不了」降级为「文案退化但能考」。
 struct KaiXJLPTExamPreflight: Decodable, Equatable {
     let status: String
     let examId: String
@@ -2323,15 +2327,15 @@ struct KaiXJLPTExamPreflight: Decodable, Equatable {
         status = try c.decode(String.self, forKey: .status)
         examId = try c.decode(String.self, forKey: .examId)
         paperExamId = try c.decode(String.self, forKey: .paperExamId)
-        accessDecision = try c.decode(String.self, forKey: .accessDecision)
+        accessDecision = try c.decodeIfPresent(String.self, forKey: .accessDecision) ?? ""
         canStart = try c.decode(Bool.self, forKey: .canStart)
         baseCoinCost = try c.decode(Int.self, forKey: .baseCoinCost)
         memberCoinCost = try c.decode(Int.self, forKey: .memberCoinCost)
         requiredCoins = try c.decode(Int.self, forKey: .requiredCoins)
-        pricingTier = try c.decode(String.self, forKey: .pricingTier)
+        pricingTier = try c.decodeIfPresent(String.self, forKey: .pricingTier) ?? ""
         balance = try c.decode(Int.self, forKey: .balance)
         shortfall = try c.decode(Int.self, forKey: .shortfall)
-        unlockSource = try c.decode(String.self, forKey: .unlockSource)
+        unlockSource = try c.decodeIfPresent(String.self, forKey: .unlockSource) ?? ""
         oneTimePaperPayment = try c.decode(Bool.self, forKey: .oneTimePaperPayment)
         currentSectionExamId = try c.decode(String.self, forKey: .currentSectionExamId)
         resumeSessionId = try c.decode(String.self, forKey: .resumeSessionId)
@@ -2349,14 +2353,14 @@ struct KaiXJLPTExamPreflight: Decodable, Equatable {
         } else {
             paperAttempt = try c.decode(KaiXJLPTPaperAttempt.self, forKey: .paperAttempt)
         }
-        priceSnapshotSource = try c.decode(String.self, forKey: .priceSnapshotSource)
-        refundPolicyCode = try c.decode(String.self, forKey: .refundPolicyCode)
-        refundPolicyCopy = try c.decode(String.self, forKey: .refundPolicyCopy)
-        confirmationCopyKey = try c.decode(String.self, forKey: .confirmationCopyKey)
-        confirmationCopy = try c.decode(String.self, forKey: .confirmationCopy)
+        priceSnapshotSource = try c.decodeIfPresent(String.self, forKey: .priceSnapshotSource) ?? ""
+        refundPolicyCode = try c.decodeIfPresent(String.self, forKey: .refundPolicyCode) ?? ""
+        refundPolicyCopy = try c.decodeIfPresent(String.self, forKey: .refundPolicyCopy) ?? ""
+        confirmationCopyKey = try c.decodeIfPresent(String.self, forKey: .confirmationCopyKey) ?? ""
+        confirmationCopy = try c.decodeIfPresent(String.self, forKey: .confirmationCopy) ?? ""
         listeningPolicy = try c.decodeIfPresent(KaiXJLPTListeningPolicy.self, forKey: .listeningPolicy)
-        serverTime = try c.decode(String.self, forKey: .serverTime)
-        disclaimer = try c.decode(String.self, forKey: .disclaimer)
+        serverTime = try c.decodeIfPresent(String.self, forKey: .serverTime) ?? ""
+        disclaimer = try c.decodeIfPresent(String.self, forKey: .disclaimer) ?? ""
     }
 }
 

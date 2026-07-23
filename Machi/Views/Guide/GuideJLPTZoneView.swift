@@ -215,6 +215,9 @@ struct GuideJLPTZoneView: View {
                 .buttonStyle(KXPressableStyle(scale: 0.97))
                 .disabled(!(core?.hasVocab ?? true))
 
+                // 模考入口不随 hasExams 一刀切禁用:没内容也允许进列表,由列表
+                // 空态解释原因并给「去练习自测/刷新」出路;enabled 只降级样式,
+                // 「即将开放」保留为确实无内容时的副标题提示。
                 NavigationLink { GuideJLPTExamView() } label: {
                     entryCard(icon: "checklist",
                               title: guideText(language, "全真模考", "本番形式模試", "Full mock exams"),
@@ -223,7 +226,6 @@ struct GuideJLPTZoneView: View {
                               enabled: core?.hasExams ?? true)
                 }
                 .buttonStyle(KXPressableStyle(scale: 0.97))
-                .disabled(!(core?.hasExams ?? true))
             }
 
             HStack(spacing: KXSpacing.sm) {

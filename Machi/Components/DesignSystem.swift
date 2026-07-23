@@ -872,6 +872,26 @@ extension View {
             }
     }
 
+    /// Guide 首页顶部「hero 级」面板共用 surface(搜索条 / AI hero / JLPT 卡):
+    /// livingSoft 底 + sheet 圆角 + livingInk 细描边 + 软阴影,收敛此前三处
+    /// 手写的同一 recipe,避免参数各自漂移。
+    func kxHeroPanel(radius: CGFloat = KXRadius.sheet) -> some View {
+        self
+            .background(KXColor.livingSoft, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .stroke(KXColor.livingInk.opacity(0.06), lineWidth: 0.8)
+            }
+            // 与 kxGlassSurface 相同的 120 Hz 优化:阴影由背后同形的不透明
+            // 圆角矩形投射(livingSoft 不透明,轮廓逐像素一致),避免整卡
+            // 每帧离屏合成取 alpha 蒙版。
+            .background {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(KXColor.livingSoft)
+                    .shadow(color: Color.black.opacity(0.05), radius: 14, y: 7)
+            }
+    }
+
     func kxGlassCapsule(isSelected: Bool = false) -> some View {
         self
             .background {

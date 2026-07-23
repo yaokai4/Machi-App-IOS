@@ -812,7 +812,10 @@ enum KXListingCopy {
         case "work", "job", "hiring": ["全部", "兼职", "全职", "时给", "月给", "N3 可", "签证支持", "无经验可"]
         case "local_service": ["全部"] + serviceCreateCategories
         case "discount": ["全部", "餐饮", "学校", "服务", "购物", "限时"]
-        default: ["全部", "家具", "家电", "手机数码", "电脑办公", "电子产品", "教材", "书籍教材", "衣物", "生活用品", "母婴儿童", "运动户外", "票券卡券", "搬家出清", "免费送", "求购"]
+        // 「免费送/求购」不是真实 category(发布端写 listing_mode attr),已移到
+        // facetChips(for: "secondhand") 走 attr 通道;「教材/书籍教材」近重复,
+        // 合并保留语义更宽的「书籍教材」。
+        default: ["全部", "家具", "家电", "手机数码", "电脑办公", "电子产品", "书籍教材", "衣物", "生活用品", "母婴儿童", "运动户外", "票券卡券", "搬家出清"]
         }
     }
 
@@ -859,6 +862,14 @@ enum KXListingCopy {
                 // 与筛选面板「签证支持」选项同值："available,true" 兼容早期布尔存法。
                 .init(key: "visa_support", value: "available,true", labelKey: "签证支持"),
                 .init(key: "no_experience_ok", value: "true", labelKey: "无经验可"),
+            ]
+        case "secondhand":
+            // 免费送/求购:发布端落库为 listing_mode attr,旧实现把它们当 category
+            // 精确下发,只命中 category 恰为「免费送」的极少数老条目,attr 为 free
+            // 的商品全部漏掉。改走 attr 通道后与筛选面板「发布类型」同 key 互通。
+            return [
+                .init(key: "listing_mode", value: "free", labelKey: "免费送"),
+                .init(key: "listing_mode", value: "wanted", labelKey: "求购"),
             ]
         default:
             return []
@@ -1349,6 +1360,20 @@ enum KXListingCopy {
         }
     }
 
+    /// 卡片用紧凑面积:数据里可能自带单位(「30.1 m²」),剥掉再统一补 ㎡,
+    /// 避免渲染出「30.1 m²㎡」双单位。
+    static func compactArea(_ value: String?) -> String? {
+        guard var text = cleanText(value) else { return nil }
+        for unit in ["m²", "㎡", "平方米", "平米", "m2"] {
+            if text.lowercased().hasSuffix(unit.lowercased()) {
+                text = String(text.dropLast(unit.count)).trimmingCharacters(in: .whitespaces)
+                break
+            }
+        }
+        guard !text.isEmpty else { return nil }
+        return "\(text)㎡"
+    }
+
     static func formatArea(_ value: String?) -> String {
         guard let value = cleanText(value) else { return "" }
         if let number = Double(value), number.isFinite, number > 0 {
@@ -1473,12 +1498,43 @@ enum KXListingCopy {
     static func secondhandCardBadges(for listing: KaiXCityListingDTO, _ language: AppLanguage = .zh) -> [String] {
         guard listing.type == "secondhand" else { return [] }
         var result: [String] = []
-        if let mode = attr(listing, "listing_mode") { result.append(mode) }
+        // 「出售」是默认态不占 chip;只有免费送/求购是真正的差异信息。
+        let mode = rawAttribute(listing, "listing_mode")
+        if !mode.isEmpty {
+            switch listingModeKey(mode) {
+            case "free": result.append(pickText(language, "免费送", "無料譲渡", "Free giveaway"))
+            case "wanted": result.append(pickText(language, "求购", "買います", "Wanted"))
+            default: break
+            }
+        }
+        // 新旧程度最有信息量,排最前(旧序排最后,永远被 prefix(2) 挤掉)。
+        if let condition = attr(listing, "condition") { result.append(condition) }
         if boolAttr(listing, "price_negotiable") { result.append(pickText(language, "可议价", "価格相談可", "Negotiable")) }
         if boolAttr(listing, "pickup_available") { result.append(pickText(language, "可自取", "手渡し可", "Pickup OK")) }
         if boolAttr(listing, "shipping_available") { result.append(pickText(language, "可邮寄", "配送可", "Shipping OK")) }
-        if let condition = attr(listing, "condition") { result.append(condition) }
         return result
+    }
+
+    /// 二手卡底部 meta:「地点 · 相对时间」。condition / status 已由 chips 与
+    /// 封面 badge 承担,不再重复(compactMeta 仍服务其他频道的兜底行)。
+    static func secondhandCompactMeta(_ listing: KaiXCityListingDTO, _ language: AppLanguage = .zh) -> String {
+        let published = listing.published_at ?? listing.publishedAt ?? listing.created_at ?? listing.createdAt
+        let relative = KXDateParsing.parse(published).map { DateFormatterUtils.relativeText(from: $0, language: language) }
+        return [cleanText(listing.location_text), relative]
+            .compactMap { $0?.isEmpty == false ? $0 : nil }
+            .joined(separator: " · ")
+    }
+
+    /// 免费送判定(价格胶囊/徽章用),与 formatPrice 的免费分支同一套口径。
+    static func isFreeListing(_ listing: KaiXCityListingDTO) -> Bool {
+        if normalized(listing.price_type ?? listing.priceType ?? "") == "free" { return true }
+        let mode = rawAttribute(listing, "listing_mode")
+        return !mode.isEmpty && listingModeKey(mode) == "free"
+    }
+
+    /// 已预约/已售出等「不可再买」状态:列表沉底 + 卡面置灰。
+    static func isMutedListingStatus(_ status: String) -> Bool {
+        ["reserved", "sold", "rented"].contains(normalized(status))
     }
 
     static func attributes(for listing: KaiXCityListingDTO, _ language: AppLanguage = .zh) -> [(String, String)] {

@@ -1,6 +1,45 @@
 import Combine
+import os
 import SwiftUI
 import UIKit
+
+/// 开考链路错误兜底文案,单卷(GuideJLPTExamView)与整卷(GuideJLPTPaperFlowView)共用。
+/// 原则:任何分支都不把服务端英文原文直接弹给用户。
+private enum JLPTStartErrorCopy {
+    private static let logger = Logger(subsystem: "com.yaokai.kaizi", category: "jlpt-exam")
+
+    /// preflight/start 404:考卷已下架或生产内容未上线。
+    static func examUnavailable(_ language: AppLanguage) -> String {
+        guideText(language,
+                  "该模考已下架或暂不可用，请刷新列表。",
+                  "この模試は公開終了か一時的に利用できません。一覧を更新してください。",
+                  "This exam is unavailable or was taken down. Refresh the list.")
+    }
+
+    /// 未映射错误码:通用文案 + 括注原始 code 便于用户反馈时排查,不透传英文原文。
+    static func unmapped(code: String, language: AppLanguage) -> String {
+        let base = guideText(language,
+                             "无法开始考试，请稍后再试。",
+                             "試験を開始できません。しばらくしてからお試しください。",
+                             "Couldn't start the exam. Try again later.")
+        return code.isEmpty ? base : base + "（\(code)）"
+    }
+
+    /// 泛型 catch:200-但-decode 失败 = 双端契约漂移的唯一信号,与网络故障分开
+    /// 提示并打点;其余(网络中断等)沿用调用方给的默认文案。
+    static func fallback(for error: Error, language: AppLanguage, default defaultMessage: String) -> String {
+        guard error is DecodingError else { return defaultMessage }
+        logger.error("JLPT start-chain contract drift: \(String(describing: error), privacy: .public)")
+        return guideText(language,
+                         "服务暂不可用或 App 需要更新，请稍后再试。",
+                         "サービスが一時的に利用できないか、アプリの更新が必要です。しばらくしてからお試しください。",
+                         "The service is temporarily unavailable, or the app may need an update. Try again later.")
+    }
+
+    static func isUnavailable(code: String) -> Bool {
+        code == "not_found" || code == "http_404"
+    }
+}
 
 private func jlptResumeAnswerMap(_ answers: [KaiXJLPTExamResumeAnswer]) -> [String: Int] {
     answers.reduce(into: [:]) { result, answer in
@@ -38,6 +77,9 @@ struct GuideJLPTExamView: View {
     @State private var coinInsufficientError: KaiXAPIError?
     @State private var showWalletSheet = false
     @State private var pendingStartIntent: JLPTExamStartIntent?
+    /// 余额提前可见:付费卷该在列表页就知道够不够,而不是点进确认页才发现差币。
+    /// 游客与拉取失败保持 nil,余额条静默隐藏,不影响列表主内容。
+    @State private var walletBalance: Int?
 
     // active session pushed via navigation
     @State private var activeStart: KaiXJLPTExamStartResponse?
@@ -106,7 +148,8 @@ struct GuideJLPTExamView: View {
         } message: {
             Text(JLPTExamCopy.insufficientCoins(error: coinInsufficientError, language: language))
         }
-        .sheet(isPresented: $showWalletSheet) {
+        // 充值页关闭后刷新余额条,避免充完值列表仍显示旧余额/旧「余额不足」标记。
+        .sheet(isPresented: $showWalletSheet, onDismiss: { Task { await loadWalletBalance() } }) {
             NavigationStack { WalletView() }
         }
         .sheet(item: $pendingStartIntent) { intent in
@@ -139,11 +182,40 @@ struct GuideJLPTExamView: View {
                 .frame(minHeight: 320)
         } else {
             if exams.isEmpty {
-                JLPTStateView(systemImage: "doc.text.magnifyingglass",
-                              title: guideText(language, "暂无可用模考", "利用可能な模試がありません", "No exams available"),
-                              message: guideText(language, "题库补充后即可开考。", "問題が追加されると受験できます。", "Exams open once the bank is filled."))
-                    .frame(minHeight: 260)
+                // 空态不做死胡同:解释之外必须给出路——先去练习自测热身,或刷新
+                // 等内容上架(模考入口在专区页不再因 hasExams=false 被禁用,
+                // 用户会真的走到这里)。
+                VStack(spacing: KXSpacing.md) {
+                    JLPTStateView(systemImage: "doc.text.magnifyingglass",
+                                  title: guideText(language, "暂无可用模考", "利用可能な模試がありません", "No exams available"),
+                                  message: guideText(language, "题库补充后即可开考，可以先去练习自测热身。", "問題が追加されると受験できます。まずは問題演習でウォームアップしましょう。", "Exams open once the bank is filled. Warm up with practice drills in the meantime."))
+                    HStack(spacing: KXSpacing.sm) {
+                        NavigationLink { GuideJLPTPracticeView() } label: {
+                            Text(guideText(language, "去练习自测", "問題演習へ", "Try practice"))
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(KXColor.onTint(KXColor.livingAccent))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(KXColor.livingAccent, in: Capsule())
+                        }
+                        .buttonStyle(KXPressableStyle(scale: 0.97))
+                        Button { Task { await load() } } label: {
+                            Text(guideText(language, "刷新", "更新", "Refresh"))
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(KXColor.livingAccent)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(KXColor.livingSurface, in: Capsule())
+                                .overlay(Capsule().stroke(JLPTStyle.accentRim, lineWidth: 0.9))
+                        }
+                        .buttonStyle(KXPressableStyle(scale: 0.97))
+                    }
+                }
+                .frame(minHeight: 260)
             } else {
+                if let walletBalance, exams.contains(where: { ($0.coinCost ?? 0) > 0 }) {
+                    balanceHeader(walletBalance)
+                }
                 ForEach(exams) { exam in examRow(exam) }
             }
             if !history.isEmpty {
@@ -227,21 +299,50 @@ struct GuideJLPTExamView: View {
         .background(KXColor.livingSoft, in: Capsule())
     }
 
+    /// 余额条:列表含付费卷且已登录时显示,把差额认知从确认页前移到列表页。
+    /// 配色沿用 coinChip 的琥珀 coin 语义;右侧直达充值。
+    private func balanceHeader(_ balance: Int) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "circle.hexagongrid.fill").kxScaledFont(11, weight: .bold)
+                .foregroundStyle(.orange)
+            Text(guideText(language, "当前余额 \(balance) 币", "残高 \(balance) コイン", "Balance: \(balance) coins"))
+                .font(.caption.weight(.bold))
+                .foregroundStyle(KXColor.livingInk)
+            Spacer(minLength: 0)
+            Button { showWalletSheet = true } label: {
+                Text(guideText(language, "去充值", "チャージ", "Top up"))
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(KXColor.livingAccent)
+            }
+            .buttonStyle(KXPressableStyle(scale: 0.96))
+        }
+        .padding(.horizontal, 12).padding(.vertical, 9)
+        .background(Color.orange.opacity(0.1), in: Capsule())
+    }
+
     /// Machi 币价 chip:开考消耗,琥珀色区别于中性 meta chip;附会员价。
+    /// 差额前移:连会员价都不够时整颗 chip 转警示色。只做「肯定不够」的保守
+    /// 提醒——会员/解锁后的实际扣费仍由 preflight 决定,避免误标已解锁场景。
     private func coinChip(cost: Int, member: Int?) -> some View {
-        HStack(spacing: 3) {
+        let minCost = member.map { min($0, cost) } ?? cost
+        let insufficient = walletBalance.map { $0 < minCost } ?? false
+        return HStack(spacing: 3) {
             Image(systemName: "circle.hexagongrid.fill").kxScaledFont(9, weight: .bold)
             Text("\(cost)").font(.caption2.weight(.bold))
             if let member, member < cost {
                 Text(guideText(language, "· 会员 \(member)", "· 会員 \(member)", "· Member \(member)"))
                     .font(.caption2.weight(.semibold))
             }
+            if insufficient {
+                Text(guideText(language, "· 余额不足", "· 残高不足", "· Low balance"))
+                    .font(.caption2.weight(.semibold))
+            }
         }
         .lineLimit(1)
         .fixedSize(horizontal: true, vertical: false)
-        .foregroundStyle(.orange)
+        .foregroundStyle(insufficient ? KXColor.livingWarm : .orange)
         .padding(.horizontal, 7).padding(.vertical, 3)
-        .background(Color.orange.opacity(0.14), in: Capsule())
+        .background((insufficient ? KXColor.livingWarm : Color.orange).opacity(0.14), in: Capsule())
     }
 
     private func historyRow(_ item: KaiXJLPTExamHistoryItem) -> some View {
@@ -300,6 +401,16 @@ struct GuideJLPTExamView: View {
             loadFailed = true
         }
         isLoading = false
+        await loadWalletBalance()
+    }
+
+    /// 钱包余额预取。游客跳过:/api/wallet/me 是登录态端点,不请求即不白费。
+    private func loadWalletBalance() async {
+        guard KaiXBackend.token?.isEmpty == false else {
+            walletBalance = nil
+            return
+        }
+        walletBalance = (try? await KaiXAPIClient.shared.walletMe())?.wallet.balancePoints
     }
 
     private func prepareStart(_ exam: KaiXJLPTExam) async {
@@ -326,11 +437,20 @@ struct GuideJLPTExamView: View {
                 coinInsufficient = true
             } else if code == "no_questions" {
                 startErrorMessage = guideText(language, "该模考暂无可用题目。", "この模試には利用可能な問題がありません。", "This exam has no questions yet.")
+            } else if JLPTStartErrorCopy.isUnavailable(code: code) {
+                // 考卷在 preflight 时已下架/未上架(运营下线或生产内容缺位):
+                // 给可解释文案并顺手刷新列表,让下架卷从列表消失。
+                startErrorMessage = JLPTStartErrorCopy.examUnavailable(language)
+                await load()
             } else {
-                startErrorMessage = err.error.message
+                startErrorMessage = JLPTStartErrorCopy.unmapped(code: err.error.code, language: language)
             }
         } catch {
-            startErrorMessage = guideText(language, "无法开始考试，请稍后再试。", "試験を開始できません。", "Couldn't start the exam.")
+            startErrorMessage = JLPTStartErrorCopy.fallback(
+                for: error,
+                language: language,
+                default: guideText(language, "无法开始考试，请稍后再试。", "試験を開始できません。", "Couldn't start the exam.")
+            )
         }
     }
 
@@ -345,6 +465,8 @@ struct GuideJLPTExamView: View {
                 idempotencyKey: intent.idempotencyKey
             )
             pendingStartIntent = nil
+            // 开考已扣费:用 start 回执里的权威余额同步余额条,免得回列表还是旧数。
+            if let newBalance = response.coinBalance { walletBalance = newBalance }
             activeStart = response
             activeStartReceipt = JLPTExamStartReceipt(intent: intent)
             pushSession = true
@@ -368,10 +490,22 @@ struct GuideJLPTExamView: View {
                 pendingStartIntent = nil
                 upgradeMessage = error.error.message
             default:
-                startErrorMessage = error.error.message
+                if JLPTStartErrorCopy.isUnavailable(code: error.error.code.lowercased()) {
+                    // preflight 到 start 之间考卷被下架:关掉确认页(留着只剩死路)
+                    // 并刷新列表。
+                    pendingStartIntent = nil
+                    startErrorMessage = JLPTStartErrorCopy.examUnavailable(language)
+                    await load()
+                } else {
+                    startErrorMessage = JLPTStartErrorCopy.unmapped(code: error.error.code, language: language)
+                }
             }
         } catch {
-            startErrorMessage = guideText(language, "无法开始考试，请稍后再试。", "試験を開始できません。", "Couldn't start the exam.")
+            startErrorMessage = JLPTStartErrorCopy.fallback(
+                for: error,
+                language: language,
+                default: guideText(language, "无法开始考试，请稍后再试。", "試験を開始できません。", "Couldn't start the exam.")
+            )
         }
     }
 }
@@ -1299,7 +1433,11 @@ struct GuideJLPTPaperFlowView: View {
         } catch let error as KaiXAPIError {
             handleStartError(error)
         } catch {
-            startError = guideText(language, "无法读取当前科目与价格，请稍后再试。", "現在の科目と価格を取得できません。", "Couldn't load the current section and price.")
+            startError = JLPTStartErrorCopy.fallback(
+                for: error,
+                language: language,
+                default: guideText(language, "无法读取当前科目与价格，请稍后再试。", "現在の科目と価格を取得できません。", "Couldn't load the current section and price.")
+            )
         }
     }
 
@@ -1386,7 +1524,11 @@ struct GuideJLPTPaperFlowView: View {
                 handleStartError(error)
             }
         } catch {
-            startError = guideText(language, "无法开始科目，请稍后再试。", "科目を開始できません。", "Couldn't start the section.")
+            startError = JLPTStartErrorCopy.fallback(
+                for: error,
+                language: language,
+                default: guideText(language, "无法开始科目，请稍后再试。", "科目を開始できません。", "Couldn't start the section.")
+            )
         }
     }
 
@@ -1420,7 +1562,13 @@ struct GuideJLPTPaperFlowView: View {
             pendingStartIntent = nil
             router.open(.guideMemberResources, in: .guide)
         default:
-            startError = error.error.message
+            if JLPTStartErrorCopy.isUnavailable(code: code) {
+                // 整卷/科目已下架:确认页留着只剩死路,关掉并提示回列表刷新。
+                pendingStartIntent = nil
+                startError = JLPTStartErrorCopy.examUnavailable(language)
+            } else {
+                startError = JLPTStartErrorCopy.unmapped(code: error.error.code, language: language)
+            }
         }
     }
 

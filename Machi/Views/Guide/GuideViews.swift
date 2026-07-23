@@ -31,6 +31,9 @@ struct GuideHomeView: View {
     @ObservedObject private var regionStore = RegionStore.shared
     @StateObject private var viewModel = GuideViewModel()
     @State private var searchTask: Task<Void, Never>?
+    // 下拉刷新计数:递增后经 refreshKey 触发 JLPT 卡重拉倒计时/streak
+    //(卡内数据不走 GuideViewModel,单靠 viewModel.load 刷不到)。
+    @State private var refreshTick = 0
 
     let currentUser: UserEntity
 
@@ -55,6 +58,7 @@ struct GuideHomeView: View {
         }
         .refreshable {
             await viewModel.load(country: country, force: true)
+            refreshTick &+= 1
         }
         // Library search is debounced so it runs as the user types without a
         // request per keystroke. Clearing the field cancels any pending query.
@@ -87,20 +91,16 @@ struct GuideHomeView: View {
             GuideComingSoonView(empty: viewModel.home?.emptyState)
         } else if let home = viewModel.home {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 18) {
+                LazyVStack(alignment: .leading, spacing: KXSpacing.lg + KXSpacing.xxs) {
                     if let message = viewModel.errorMessage, !message.isEmpty {
                         GuideInlineStatus(message: message)
                     }
 
-                    // 首页顺序(2026-07 去重复入口):AI hero 置顶 → 库搜索次位
-                    // 常驻 → JLPT 一等卡(唯一定级 CTA)→ 会员/商城双入口 →
-                    // 六大指南宫格 → 学校/公司数据库分区。搜索时上下区块让位,
-                    // 但搜索条保持同一结构位(否则 TextField 身份变化会在首个
-                    // 字符后掉键盘),结果紧随其后。
-                    if !isSearchActive {
-                        GuideAIHero()
-                    }
-
+                    // 首页顺序(2026-07 搜索前置):库搜索恒为第一子项(TextField
+                    // 必须保持无条件的稳定结构位,否则身份变化会在首个字符后掉
+                    // 键盘,置顶后天然满足)→ 非搜索态其下依次 AI hero → JLPT
+                    // 一等卡(唯一定级 CTA)→ 会员/商城双入口 → 六大指南宫格 →
+                    // 学校/公司数据库分区;搜索态整段让位,结果紧随搜索条。
                     GuideLibrarySearchBar(
                         searchText: $viewModel.searchText,
                         placeholder: home.hero.searchPlaceholder,
@@ -118,8 +118,10 @@ struct GuideHomeView: View {
                             journeys: viewModel.journeyResults
                         )
                     } else {
+                        GuideAIHero()
+
                         // JLPT 一等卡:首页唯一的「30 秒定级」入口(倒计时 + streak)。
-                        GuideJLPTHomeCard()
+                        GuideJLPTHomeCard(refreshKey: refreshTick)
 
                         // 会员/商城双入口:精选商品卡不再上首页,商品进商城内浏览。
                         GuideDualEntrySection()
@@ -133,8 +135,10 @@ struct GuideHomeView: View {
                         GuideLibraryDirectorySection()
                     }
                 }
+                // 搜索态/浏览态区块切换用统一动效,避免整屏硬跳。
+                .animation(KXMotion.select, value: isSearchActive)
                 .padding(.horizontal, KXSpacing.screen)
-                .padding(.top, 10)
+                .padding(.top, KXSpacing.sm + KXSpacing.xxs)
                 .guideBottomInset()
                 .kxReadableWidth()
             }
@@ -1882,9 +1886,7 @@ private struct GuideLibrarySearchBar: View {
             }
         }
         .padding(15)
-        .background(KXColor.livingSoft, in: RoundedRectangle(cornerRadius: KXRadius.sheet, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: KXRadius.sheet, style: .continuous).stroke(KXColor.livingInk.opacity(0.06), lineWidth: 0.8))
-        .shadow(color: Color.black.opacity(0.05), radius: 14, y: 7)
+        .kxHeroPanel()
     }
 }
 
@@ -2107,7 +2109,6 @@ private struct GuideLibraryDirectoryRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.fullArea)
-        .contentShape(Rectangle())
         .accessibilityIdentifier(identifier)
     }
 }
@@ -2189,16 +2190,16 @@ private struct GuideAIHero: View {
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     ),
-                    in: RoundedRectangle(cornerRadius: 17, style: .continuous)
+                    in: RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 17, style: .continuous)
+                    RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous)
                         .stroke(KXColor.livingAccent.opacity(0.22), lineWidth: 0.9)
                 )
                 .shadow(color: KXColor.livingAccent.opacity(0.09), radius: 9, y: 4)
             }
             .buttonStyle(.fullArea)
-            .contentShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: KXRadius.tile, style: .continuous))
             .accessibilityIdentifier("guide.ai.entry")
             .accessibilityLabel(guideText(language, "进入 Machi AI", "Machi AI を開く", "Open Machi AI"))
 
@@ -2222,60 +2223,68 @@ private struct GuideAIHero: View {
         }
         .padding(KXSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(KXColor.livingSoft, in: RoundedRectangle(cornerRadius: KXRadius.sheet, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: KXRadius.sheet, style: .continuous)
-                .stroke(KXColor.livingInk.opacity(0.06), lineWidth: 0.8)
-        )
-        .shadow(color: Color.black.opacity(0.05), radius: 14, y: 7)
+        .kxHeroPanel()
     }
 }
 
-/// JLPT 一等卡(I1-1)— 首页付费漏斗的第一入口:距下一场考试倒计时 +
-/// 打卡 streak + 「30 秒定级」主 CTA。倒计时走公开 exam-dates 端点,
-/// streak 仅登录态拉取;任一失败静默降级为纯入口卡,绝不阻塞首页。
+/// JLPT 一等卡(I1-1)— 首页付费漏斗的第一入口。强分离双入口:上半区
+/// (eyebrow + 标题 + 倒计时 + streak)整卡可点进专区,「30 秒定级」CTA
+/// 独立在卡外成第二个 surface —— 一眼两个控件,卡内无点击死区。
+/// 倒计时走公开 exam-dates 端点,streak 仅登录态拉取;任一失败静默降级
+/// 为纯入口卡,绝不阻塞首页。
 private struct GuideJLPTHomeCard: View {
     @Environment(\.appLanguage) private var language
     @EnvironmentObject private var router: AppRouter
+    /// host 下拉刷新时递增,触发倒计时/streak 重拉。
+    var refreshKey: Int = 0
     @State private var countdown: KaiXJLPTCountdown?
     @State private var streak: KaiXJLPTStreak?
-    @State private var didLoad = false
+    // 记录已加载的 refreshKey:LazyVStack 里滚回视口会重触 .task,
+    // 同 key 去重避免反复请求;key 变化(下拉刷新)则重拉。
+    @State private var loadedKey: Int?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: KXSpacing.md) {
-            HStack(alignment: .center) {
-                JLPTEyebrow(text: "Machi Guide · JLPT")
-                Spacer(minLength: 0)
-                if let streak, (streak.currentStreak ?? 0) > 0 {
-                    JLPTStreakBadge(streak: streak, compact: true)
-                }
-            }
-
+        VStack(alignment: .leading, spacing: KXSpacing.sm) {
             Button {
                 router.open(.guideCategory(categoryKey: "jlpt"))
             } label: {
-                HStack(spacing: KXSpacing.md) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(guideText(language, "JLPT 备考专区", "JLPT 対策センター", "JLPT prep center"))
-                            .kxScaledFont(22, relativeTo: .title3, weight: .bold, design: .rounded)
-                            .foregroundStyle(KXColor.livingInk)
-                        Text(guideText(language, "定级 · 全真模考 · 练习 · 错题本", "レベル判定・本番形式模試・演習・間違いノート", "Placement, full mock exams, practice, review"))
-                            .font(.footnote)
+                VStack(alignment: .leading, spacing: KXSpacing.md) {
+                    HStack(alignment: .center) {
+                        JLPTEyebrow(text: "Machi Guide · JLPT")
+                        Spacer(minLength: 0)
+                        if let streak, (streak.currentStreak ?? 0) > 0 {
+                            JLPTStreakBadge(streak: streak, compact: true)
+                        }
+                    }
+
+                    HStack(spacing: KXSpacing.md) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(guideText(language, "JLPT 备考专区", "JLPT 対策センター", "JLPT prep center"))
+                                .kxScaledFont(22, relativeTo: .title3, weight: .bold, design: .rounded)
+                                .foregroundStyle(KXColor.livingInk)
+                            Text(guideText(language, "定级 · 全真模考 · 练习 · 错题本", "レベル判定・本番形式模試・演習・間違いノート", "Placement, full mock exams, practice, review"))
+                                .font(.footnote)
+                                .foregroundStyle(KXColor.livingMuted)
+                        }
+                        Spacer(minLength: 8)
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
                             .foregroundStyle(KXColor.livingMuted)
                     }
-                    Spacer(minLength: 8)
-                    Image(systemName: "chevron.right")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(KXColor.livingMuted)
+
+                    if let countdown {
+                        JLPTCountdownBar(countdown: countdown)
+                    }
                 }
+                .padding(KXSpacing.lg)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .kxHeroPanel()
                 .contentShape(Rectangle())
             }
             .buttonStyle(.fullArea)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(guideText(language, "进入 JLPT 备考专区", "JLPT 対策センターへ", "Open the JLPT prep center"))
             .accessibilityIdentifier("guide.jlpt.card")
-
-            if let countdown {
-                JLPTCountdownBar(countdown: countdown)
-            }
 
             NavigationLink {
                 GuideJLPTPlacementView()
@@ -2298,20 +2307,12 @@ private struct GuideJLPTHomeCard: View {
             .buttonStyle(KXPressableStyle(scale: 0.97))
             .accessibilityIdentifier("guide.jlpt.placement")
         }
-        .padding(KXSpacing.lg)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(KXColor.livingSoft, in: RoundedRectangle(cornerRadius: KXRadius.sheet, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: KXRadius.sheet, style: .continuous)
-                .stroke(KXColor.livingInk.opacity(0.06), lineWidth: 0.8)
-        )
-        .shadow(color: Color.black.opacity(0.05), radius: 14, y: 7)
-        .task { await load() }
+        .task(id: refreshKey) { await load() }
     }
 
     private func load() async {
-        guard !didLoad else { return }
-        didLoad = true
+        guard loadedKey != refreshKey else { return }
+        loadedKey = refreshKey
         if let resp = try? await KaiXAPIClient.shared.jlptExamDates() {
             countdown = resp.countdown
         }
@@ -2401,6 +2402,9 @@ private struct GuideDualEntrySection: View {
     @EnvironmentObject private var router: AppRouter
 
     var body: some View {
+        // 与「六大指南」「数据库」分区同节奏:分区前置 Divider。
+        Divider()
+            .padding(.top, KXSpacing.xs)
         VStack(alignment: .leading, spacing: 10) {
             GuideSectionHeader(title: guideText(language, "会员与商城", "会員・ストア", "Membership and Store"), subtitle: guideText(language, "会员专属资料、原创资料包、模板与人工服务统一入口", "会員資料、オリジナル資料パック、テンプレート、人的サービスの入口", "One place for member resources, original packs, templates, and services"))
             HStack(spacing: 10) {
@@ -2412,7 +2416,7 @@ private struct GuideDualEntrySection: View {
                     // 「清单模板」打头 —— 静态资料已被 Machi AI 覆盖,拿它当卖点
                     // 既不实在也卖不动(服务端 default_membership_benefits 同样把
                     // ai_member_quota 排在第一位)。
-                    subtitle: guideText(language, "AI 额度与每月赠币\n会员权益与专属内容", "AI 枠と毎月のコイン\n会員特典コンテンツ", "AI quota and monthly coins\nMember perks and content")
+                    subtitle: guideText(language, "AI 额度与每月赠币，会员权益与专属内容", "AI 枠と毎月のコイン、会員特典コンテンツ", "AI quota and monthly coins, member perks and content")
                 ) {
                     router.open(.guideMemberResources)
                 }
@@ -2420,7 +2424,7 @@ private struct GuideDualEntrySection: View {
                     icon: "bag.fill",
                     tint: .orange,
                     title: guideText(language, "商城", "ストア", "Store"),
-                    subtitle: guideText(language, "履历修改等人工服务\n资料模板按需购买", "履歴書添削など1対1サービス\n資料・テンプレートも購入可", "1-on-1 services like resume review\nResources and templates on demand")
+                    subtitle: guideText(language, "履历修改等人工服务，资料模板按需购买", "履歴書添削など1対1サービス、資料・テンプレートも購入可", "1-on-1 services like resume review, resources and templates on demand")
                 ) {
                     router.open(.guideServices)
                 }
@@ -2444,7 +2448,8 @@ private struct GuideDualEntrySection: View {
                 Text(subtitle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    // 自然折行(大字号 Dynamic Type 下硬换行会截第二行)。
+                    .lineLimit(3)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -2454,7 +2459,6 @@ private struct GuideDualEntrySection: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.fullArea)
-        .contentShape(Rectangle())
     }
 }
 

@@ -1000,6 +1000,12 @@ final class KaiXAPIClient {
         /// country), so channels can show "该地区暂无,已为你展示{label}的内容".
         var fallback: String? = nil
         var fallbackLabel: String? = nil
+        /// 可选契约:0 结果时服务端下发的逐条放宽建议(顶层 relaxation)。
+        /// 旧服务端/非空结果为空数组,UI 不出现。
+        var relaxation: [KaiXListingRelaxationDTO] = []
+        /// 可选契约:facets=1 时顶层 facet_counts {attrKey: {value: count}}。
+        /// nil = 服务端未下发,筛选面板不渲染计数。
+        var facetCounts: [String: [String: Int]]? = nil
     }
 
     func listingsPage(
@@ -1019,7 +1025,8 @@ final class KaiXAPIClient {
         sellerId: String? = nil,
         excludeListingId: String? = nil,
         cursor: String? = nil,
-        limit: Int? = nil
+        limit: Int? = nil,
+        facets: Bool = false
     ) async throws -> ListingsPage {
         var q: [URLQueryItem] = [
             URLQueryItem(name: "type", value: type),
@@ -1046,18 +1053,30 @@ final class KaiXAPIClient {
         if let excludeListingId, !excludeListingId.isEmpty { q.append(URLQueryItem(name: "exclude", value: excludeListingId)) }
         if let cursor, !cursor.isEmpty { q.append(URLQueryItem(name: "cursor", value: cursor)) }
         if let limit { q.append(URLQueryItem(name: "limit", value: String(limit))) }
+        if facets { q.append(URLQueryItem(name: "facets", value: "1")) }
         // 首屏 GET,同 feed():缩短弱网下的最坏等待(15s×2 次)。
         let data = try await request("GET", "/api/listings", queryItems: q,
                                      timeoutInterval: 15,
                                      maxReplayAttempts: 2)
         let response: KaiXListingsResponse = try decode(data)
+        // relaxation / facet_counts 是新契约的可选顶层字段,独立解码:字段缺失
+        // 或形状不符时整体降级(nil),绝不影响主响应。
+        let extras: ListingsExtras? = try? decode(data)
         return ListingsPage(
             items: response.items,
             nextCursor: response.next_cursor,
             total: response.total,
             fallback: response.data?.filters?.fallback,
-            fallbackLabel: response.data?.filters?.fallback_label
+            fallbackLabel: response.data?.filters?.fallback_label,
+            relaxation: extras?.relaxation ?? [],
+            facetCounts: extras?.facet_counts
         )
+    }
+
+    /// /api/listings 顶层可选扩展(见 ListingsPage.relaxation / facetCounts)。
+    private struct ListingsExtras: Decodable {
+        let relaxation: [KaiXListingRelaxationDTO]?
+        let facet_counts: [String: [String: Int]]?
     }
 
     /// 详情页相似推荐：服务端按同类目同城→同国→同城逐层补足,不含同卖家。
@@ -1092,9 +1111,10 @@ final class KaiXAPIClient {
 
     // MARK: - Saved-search alerts (N4)
 
-    /// The current user's saved searches.
-    func savedSearches() async throws -> [KaiXSavedSearchDTO] {
-        struct Response: Decodable { let items: [KaiXSavedSearchDTO] }
+    /// The current user's saved searches — the replay-capable row shape (with
+    /// regionCode + filter_json), so tapping a row can restore the search.
+    func savedSearches() async throws -> [KaiXSavedSearchItemDTO] {
+        struct Response: Decodable { let items: [KaiXSavedSearchItemDTO] }
         let data = try await request("GET", "/api/saved_searches")
         let response: Response = try decode(data)
         return response.items
@@ -1102,6 +1122,8 @@ final class KaiXAPIClient {
 
     /// Subscribe to a search; a matching new listing drops an in-app
     /// notification (and a push once configured). Empty vertical = any type.
+    /// `filters` 落库 filter_json:attr 条件用 attr_<key> 键、价格用
+    /// min_price/max_price(与 /api/listings 查询参数同一命名,匹配端 v2 解析)。
     func createSavedSearch(
         vertical: String? = nil,
         keyword: String? = nil,
@@ -1110,7 +1132,8 @@ final class KaiXAPIClient {
         regionCode: String? = nil,
         countryCode: String? = nil,
         label: String? = nil,
-        cadence: String = "instant"
+        cadence: String = "instant",
+        filters: [String: String]? = nil
     ) async throws -> KaiXSavedSearchDTO {
         struct Body: Encodable {
             let vertical: String?
@@ -1121,12 +1144,13 @@ final class KaiXAPIClient {
             let country_code: String?
             let label: String?
             let cadence: String
+            let filters: [String: String]?
         }
         struct Response: Decodable { let item: KaiXSavedSearchDTO }
         let body = Body(
             vertical: vertical, keyword: keyword, category: category,
             city_slug: citySlug, region_code: regionCode, country_code: countryCode,
-            label: label, cadence: cadence
+            label: label, cadence: cadence, filters: filters
         )
         let data = try await request("POST", "/api/saved_searches", body: body)
         let response: Response = try decode(data)
@@ -2463,6 +2487,32 @@ final class KaiXAPIClient {
 }
 
 // MARK: - tiny encoder helpers
+
+/// /api/listings 空结果时的放宽建议(可选契约,仅 0 结果下发):移除该活跃
+/// 条件可多出 count_if_removed 条。kind ∈ attr|price|scope|category|query。
+struct KaiXListingRelaxationDTO: Decodable, Equatable, Identifiable {
+    let kind: String
+    let key: String
+    let label: String?
+    let count_if_removed: Int
+    var id: String { "\(kind)|\(key)" }
+}
+
+/// GET /api/saved_searches 的行 DTO——比通用 KaiXSavedSearchDTO 多带回放
+/// (点行还原搜索)所需的 regionCode 与 filters。filters 值宽容解码
+/// (KaiXAttributeValue):旧数据/Web 端可能存了数字或布尔。
+struct KaiXSavedSearchItemDTO: Decodable, Identifiable, Equatable {
+    let id: String
+    let vertical: String?
+    let keyword: String?
+    let category: String?
+    let label: String?
+    let cadence: String?
+    let citySlug: String?
+    let regionCode: String?
+    let matchCount: Int?
+    let filters: [String: KaiXAttributeValue]?
+}
 
 struct KaiXBusinessApplicationPayload: Encodable {
     let business_name: String

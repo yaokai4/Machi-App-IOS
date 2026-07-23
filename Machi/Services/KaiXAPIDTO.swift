@@ -363,6 +363,10 @@ struct KaiXCityListingDTO: Codable, Identifiable, Equatable {
     let ratingAvg: Double?
     let rating_count: Int?
     let ratingCount: Int?
+    // 服务端下发的房源坐标（partner 房源自带精确坐标）。可选:旧服务端/无坐标
+    // 条目缺失时地图回退到 CLGeocoder。
+    let latitude: Double?
+    let longitude: Double?
     // 星域 partner 入驻：Machi 推荐金徽章 / 闪耀标签 / 推广权重 / 预约联系人。
     // 服务端在 serialized listing 上用 snake_case 发这些字段（同时有 camel
     // 重复键，这里只解 snake，避免重复声明同名属性）。全部可选 → 不破坏旧解码。
