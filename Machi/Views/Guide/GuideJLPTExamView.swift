@@ -174,7 +174,10 @@ struct GuideJLPTExamView: View {
                             Image(systemName: "crown.fill").font(.caption2).foregroundStyle(KXColor.livingWarm)
                         }
                     }
-                    HStack(spacing: 6) {
+                    // FlowLayout：chip 多、屏幕窄时整颗 chip 换行。之前用 HStack
+                    // 硬挤一行，SwiftUI 会把 chip 内部的文字压成竖排字塔
+                    // （「400·会员200」变成两列竖字），观感崩坏。
+                    FlowLayout(spacing: 5) {
                         if (exam.isPaper ?? false), let sc = exam.sectionCount, sc > 0 {
                             examMetaChip(icon: "square.stack.3d.up.fill", text: guideText(language, "分科 \(sc) 科", "分野別 \(sc) 科", "\(sc) sections"))
                         }
@@ -217,6 +220,7 @@ struct GuideJLPTExamView: View {
         HStack(spacing: 3) {
             Image(systemName: icon).kxScaledFont(9, weight: .bold)
             Text(text).font(.caption2.weight(.semibold))
+                .lineLimit(1).fixedSize(horizontal: true, vertical: false)
         }
         .foregroundStyle(KXColor.livingMuted)
         .padding(.horizontal, 7).padding(.vertical, 3)
@@ -233,6 +237,8 @@ struct GuideJLPTExamView: View {
                     .font(.caption2.weight(.semibold))
             }
         }
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
         .foregroundStyle(.orange)
         .padding(.horizontal, 7).padding(.vertical, 3)
         .background(Color.orange.opacity(0.14), in: Capsule())
@@ -307,7 +313,13 @@ struct GuideJLPTExamView: View {
             // 只有会员/配额类错误才弹「会员专享」+「查看会员」;题目缺失/网络等
             // 通用失败走中性弹窗,否则把无关错误伪装成会员墙、误导用户去买会员。
             let code = err.error.code.lowercased()
-            if code == "member_required" || code.contains("quota") {
+            if code == "auth_required" || code == "unauthorized" {
+                // 游客点开考：走标准登录墙（带「去登录」入口），不弹只有一个
+                // 「好」按钮的死路 alert——被告知要登录却没有登录入口。
+                GuestGate.shared.requireLogin(
+                    guideText(language, "登录后即可参加全真模考。", "ログインすると模試を受験できます。", "Log in to take the full mock exam.")
+                )
+            } else if code == "member_required" || code.contains("quota") {
                 upgradeMessage = err.error.message
             } else if code == "exam_insufficient_coins" || code == "insufficient_coins" {
                 coinInsufficientError = err
@@ -1379,6 +1391,15 @@ struct GuideJLPTPaperFlowView: View {
     }
 
     private func handleStartError(_ error: KaiXAPIError) {
+        let code = error.error.code.lowercased()
+        if code == "auth_required" || code == "unauthorized" {
+            // 与单卷一致：游客走标准登录墙，不留「只有好按钮」的死路。
+            pendingStartIntent = nil
+            GuestGate.shared.requireLogin(
+                guideText(language, "登录后即可参加全真模考。", "ログインすると模試を受験できます。", "Log in to take the full mock exam.")
+            )
+            return
+        }
         switch JLPTExamRecoveryPolicy.action(for: error) {
         case let .showPaperResult(recoveredAttemptId):
             // 整卷已交完：服务端已把 attempt 放在 detail 里，直接进成绩页。
