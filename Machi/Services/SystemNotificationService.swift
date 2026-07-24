@@ -245,25 +245,32 @@ final class SystemNotificationService: NSObject {
 }
 
 extension SystemNotificationService: UNUserNotificationCenterDelegate {
-    nonisolated func userNotificationCenter(
+    // MainActor-isolated (NOT `nonisolated`): the OS bridges this async method
+    // to the ObjC `withCompletionHandler:` selector and invokes that completion
+    // wherever the async body finishes. A `nonisolated` body runs — and thus
+    // completes — on a background thread, and UIKit's post-completion snapshot /
+    // state-restoration work then asserts main-thread and aborts (SIGABRT). Main
+    // actor keeps the whole method + its completion on the main thread.
+    @MainActor func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        let conversationId = Self.conversationId(from: notification.request.content.userInfo)
-        let suppressed = await MainActor.run { self.suppressBanners }
-        if let conversationId {
-            await MainActor.run {
-                Self.postConversationRefresh(conversationId)
-            }
+        if let conversationId = Self.conversationId(from: notification.request.content.userInfo) {
+            Self.postConversationRefresh(conversationId)
         }
         // willPresent only fires while the app is FOREGROUND. The user doesn't
         // want intrusive banners/sounds while actively using the app — keep the
         // entry in Notification Center + badge, but no banner or sound. On the
         // chat / messages / notifications screens, suppress entirely.
-        return suppressed ? [] : [.list, .badge]
+        return suppressBanners ? [] : [.list, .badge]
     }
 
-    nonisolated func userNotificationCenter(
+    // MainActor-isolated (NOT `nonisolated`) — see the note on willPresent above.
+    // This is the tap handler: a `nonisolated` body completed on a background
+    // thread, and iOS then ran `_updateSnapshotAndStateRestoration…` off-main
+    // inside the completion, tripping a UIKit main-thread assertion → SIGABRT
+    // (the "tapping a DM push crashes" report). Staying on the main actor fixes it.
+    @MainActor func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
@@ -286,18 +293,13 @@ extension SystemNotificationService: UNUserNotificationCenterDelegate {
         }
         if let conversationId = Self.conversationId(from: userInfo) {
             payload["conversationId"] = conversationId
-            await MainActor.run {
-                Self.postConversationRefresh(conversationId)
-            }
+            Self.postConversationRefresh(conversationId)
         }
-        let finalPayload = payload
-        await MainActor.run {
-            self.pendingTapPayload = finalPayload
-            NotificationCenter.default.post(
-                name: .kaiXSystemNotificationTapped,
-                object: nil,
-                userInfo: finalPayload.isEmpty ? nil : finalPayload
-            )
-        }
+        pendingTapPayload = payload
+        NotificationCenter.default.post(
+            name: .kaiXSystemNotificationTapped,
+            object: nil,
+            userInfo: payload.isEmpty ? nil : payload
+        )
     }
 }
