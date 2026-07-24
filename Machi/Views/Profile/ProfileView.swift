@@ -382,7 +382,15 @@ struct ProfileView: View {
                         PersonalProfileTabPicker(tabs: availableTabs, selection: $profileTab)
                             .padding(.horizontal, KXSpacing.xxs)
                             .padding(.vertical, KXSpacing.xs)
-                            .kxGlassBar()
+                            .background {
+                                // 与页面同色 + 左右负边距出血到屏幕边:不吸顶时与
+                                // 背景融为一体,吸顶时照样挡住下方滚动内容。此前用
+                                // kxGlassBar 的毛玻璃矩形两侧内缩,边缘发虚像一层
+                                // 「隔膜」——pageBackground 正是页面渐变的中点色,
+                                // 铺满后看不出任何矩形边界。
+                                KXColor.pageBackground
+                                    .padding(.horizontal, -KXSpacing.screen)
+                            }
                     }
                 }
                 .padding(.horizontal, KXSpacing.screen)
@@ -729,13 +737,10 @@ struct ProfileView: View {
 
             profileMetaRow
 
-            // 身份区(昵称/bio/metadata)与数据区(stats/徽章)之间用一条
-            // hairline 切开——比纯留白更能立住两个区块的层级。
-            Divider()
-                .overlay(KXColor.separator)
-                .padding(.top, KXSpacing.xs)
-
+            // 身份区与数据区之间只靠留白分层——hairline 在这种密度下是多余
+            // 的线条噪音,留白足以立住层级,也更干净。
             profileStatsStrip
+                .padding(.top, KXSpacing.xs)
 
             profileBadgeRow
                 .padding(.top, KXSpacing.xs)
@@ -814,17 +819,14 @@ struct ProfileView: View {
                 profileStatCells
             }
         } else {
+            // 列间不再放竖线:等宽留白本身就分得清列,少一层线条更精致。
             HStack(spacing: 0) {
                 followMetricButton(kind: .following)
-                statColumnDivider
                 followMetricButton(kind: .followers)
                 if isCurrentUser {
-                    statColumnDivider
                     followMetricButton(kind: .mutual)
                 }
-                statColumnDivider
                 ProfileMetricInline(value: NumberFormatterUtils.compact(viewModel.postCount), title: L("posts", language))
-                statColumnDivider
                 ProfileMetricInline(value: NumberFormatterUtils.compact(viewModel.likeCount), title: L("likes", language))
             }
         }
@@ -840,12 +842,6 @@ struct ProfileView: View {
         }
         ProfileMetricInline(value: NumberFormatterUtils.compact(viewModel.postCount), title: L("posts", language))
         ProfileMetricInline(value: NumberFormatterUtils.compact(viewModel.likeCount), title: L("likes", language))
-    }
-
-    private var statColumnDivider: some View {
-        Rectangle()
-            .fill(KXColor.separator)
-            .frame(width: 0.5, height: 26)
     }
 
     /// Identity + merchant + creator badges — categorical not numeric,
@@ -1269,10 +1265,12 @@ private struct ProfileMetricInline: View {
     let value: String
     let title: String
     // 对齐 KXTypography.title2 的 19-20pt 尺度。
-    @ScaledMetric(relativeTo: .title3) private var valueSize: CGFloat = 20
+    @ScaledMetric(relativeTo: .title3) private var valueSize: CGFloat = 19
 
     var body: some View {
-        VStack(spacing: KXSpacing.xxs) {
+        // 数字与标签贴得更紧(2pt)读成一个整体;标签加一点字距,小字才有
+        // 精致感——这两处是「数据块」与「一排文字」的分界。
+        VStack(spacing: 2) {
             Text(value)
                 .font(.system(size: valueSize, weight: .bold).monospacedDigit())
                 .foregroundStyle(.primary)
@@ -1281,6 +1279,7 @@ private struct ProfileMetricInline: View {
                 .contentTransition(.numericText())
             Text(title)
                 .font(KXTypography.meta)
+                .tracking(0.25)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
