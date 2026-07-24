@@ -1900,6 +1900,20 @@ struct PrivacySettingsView: View {
     // 切号后、服务端回填前把账号 A 的隐私开关显示给账号 B(离线时持续错)。
     @AppStorage private var privacyProtect: Bool
     @AppStorage private var privacyAllowDM: String
+    // Consent is deliberately never cached in AppStorage. False is the safe
+    // initial state and only a validated /api/settings response may change it.
+    @State private var appleConsentSnapshot: AppleConsumptionConsentSnapshot = .unavailable
+    @State private var appleConsentIsLoading = false
+    @State private var appleConsentIsSaving = false
+    @State private var appleConsentError: String?
+    @State private var appleConsentPrompt: AppleConsentPrompt?
+
+    private enum AppleConsentPrompt: String, Identifiable {
+        case grant
+        case withdraw
+
+        var id: String { rawValue }
+    }
 
     init(currentUser: UserEntity) {
         self.currentUser = currentUser
@@ -1938,6 +1952,10 @@ struct PrivacySettingsView: View {
 
             Divider()
 
+            appleConsumptionConsentSection
+
+            Divider()
+
             NavigationLink {
                 BlocklistSettingsView(currentUser: currentUser)
             } label: {
@@ -1954,12 +1972,230 @@ struct PrivacySettingsView: View {
             .buttonStyle(.plain)
         }
         .task {
-            guard KaiXBackend.token != nil else { return }
-            guard let remote = try? await KaiXAPIClient.shared.settings() else { return }
+            await loadRemoteSettings()
+        }
+        .alert(item: $appleConsentPrompt) { prompt in
+            let copy = AppleConsumptionConsentCopy(language: language)
+            switch prompt {
+            case .grant:
+                return Alert(
+                    title: Text(copy.grantConfirmationTitle),
+                    message: Text(copy.grantConfirmationMessage),
+                    primaryButton: .default(Text(copy.grantButton)) {
+                        Task { await saveAppleConsumptionConsent(granting: true) }
+                    },
+                    secondaryButton: .cancel(Text(copy.cancel))
+                )
+            case .withdraw:
+                return Alert(
+                    title: Text(copy.withdrawConfirmationTitle),
+                    message: Text(copy.withdrawConfirmationMessage),
+                    primaryButton: .destructive(Text(copy.withdrawButton)) {
+                        Task { await saveAppleConsumptionConsent(granting: false) }
+                    },
+                    secondaryButton: .cancel(Text(copy.cancel))
+                )
+            }
+        }
+    }
+
+    private var appleConsumptionConsentSection: some View {
+        let copy = AppleConsumptionConsentCopy(language: language)
+        return VStack(alignment: .leading, spacing: KXSpacing.md) {
+            Label(copy.sectionTitle, systemImage: "apple.logo")
+                .font(.headline.weight(.bold))
+
+            appleConsentDisclosureRow(
+                title: settingsText(language, "用途", "目的", "Purpose"),
+                text: copy.purpose,
+                systemImage: "checkmark.shield"
+            )
+            appleConsentDisclosureRow(
+                title: settingsText(language, "会发送的数据", "送信するデータ", "Data shared"),
+                text: copy.dataShared,
+                systemImage: "doc.text.magnifyingglass"
+            )
+            appleConsentDisclosureRow(
+                title: settingsText(language, "你的选择", "選択と撤回", "Your choice"),
+                text: copy.optionalAndWithdrawal,
+                systemImage: "hand.raised"
+            )
+
+            Toggle(isOn: appleConsentBinding) {
+                VStack(alignment: .leading, spacing: KXSpacing.xxs) {
+                    Text(copy.toggleTitle)
+                        .font(.subheadline.weight(.semibold))
+                    Text(appleConsentStatus(copy))
+                        .font(.caption)
+                        .foregroundStyle(appleConsentSnapshot.isGranted ? Color.green : Color.secondary)
+                }
+            }
+            .disabled(
+                appleConsentIsLoading
+                || appleConsentIsSaving
+                || !appleConsentSnapshot.isSupported
+            )
+            .accessibilityLabel(copy.toggleTitle)
+            .accessibilityValue(appleConsentStatus(copy))
+            .accessibilityHint(copy.voiceOverToggleHint)
+
+            if appleConsentIsLoading || appleConsentIsSaving {
+                HStack(spacing: KXSpacing.sm) {
+                    ProgressView()
+                    Text(appleConsentIsSaving ? copy.saving : copy.loading)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .combine)
+            }
+
+            if let policyVersion = appleConsentSnapshot.policyVersion {
+                Text("\(copy.policyVersionLabel): \(policyVersion)")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("\(copy.policyVersionLabel), \(policyVersion)")
+            }
+
+            if let appleConsentError {
+                VStack(alignment: .leading, spacing: KXSpacing.sm) {
+                    Label(appleConsentError, systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.red)
+                        .accessibilityLabel(appleConsentError)
+                    Button(copy.retry) {
+                        Task { await loadRemoteSettings() }
+                    }
+                    .font(.footnote.weight(.bold))
+                    .disabled(appleConsentIsLoading || appleConsentIsSaving)
+                    .accessibilityHint(copy.loadError)
+                }
+            } else if !appleConsentIsLoading, !appleConsentSnapshot.isSupported {
+                Text(copy.unavailable)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(KXSpacing.md)
+        .background(KXColor.cardBackground, in: RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: KXRadius.md, style: .continuous)
+                .stroke(KXColor.separator, lineWidth: 0.6)
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private func appleConsentDisclosureRow(
+        title: String,
+        text: String,
+        systemImage: String
+    ) -> some View {
+        HStack(alignment: .top, spacing: KXSpacing.sm) {
+            Image(systemName: systemImage)
+                .foregroundStyle(KXColor.accent)
+                .frame(width: 22)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: KXSpacing.xxs) {
+                Text(title)
+                    .font(.footnote.weight(.bold))
+                Text(text)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var appleConsentBinding: Binding<Bool> {
+        Binding {
+            appleConsentSnapshot.isGranted
+        } set: { requested in
+            guard requested != appleConsentSnapshot.isGranted,
+                  appleConsentSnapshot.isSupported,
+                  !appleConsentIsLoading,
+                  !appleConsentIsSaving else { return }
+            appleConsentPrompt = requested ? .grant : .withdraw
+        }
+    }
+
+    private func appleConsentStatus(_ copy: AppleConsumptionConsentCopy) -> String {
+        if appleConsentIsSaving { return copy.saving }
+        if appleConsentIsLoading { return copy.loading }
+        if !appleConsentSnapshot.isSupported { return copy.unavailable }
+        return appleConsentSnapshot.isGranted ? copy.enabled : copy.disabled
+    }
+
+    private func loadRemoteSettings() async {
+        let copy = AppleConsumptionConsentCopy(language: language)
+        guard KaiXBackend.token != nil else {
+            appleConsentSnapshot = .unavailable
+            appleConsentError = copy.loadError
+            return
+        }
+        guard !appleConsentIsLoading, !appleConsentIsSaving else { return }
+        let previous = appleConsentSnapshot
+        appleConsentIsLoading = true
+        appleConsentError = nil
+        defer { appleConsentIsLoading = false }
+
+        do {
+            let remote = try await KaiXAPIClient.shared.settings()
             privacyProtect = remote.privacy_protect
             if ["everyone", "following", "nobody"].contains(remote.privacy_allow_dm) {
                 privacyAllowDM = remote.privacy_allow_dm
             }
+            guard let snapshot = AppleConsumptionConsentContract.snapshot(from: remote) else {
+                appleConsentSnapshot = previous.isSupported ? previous : .unavailable
+                appleConsentError = copy.loadError
+                return
+            }
+            appleConsentSnapshot = snapshot
+            if !snapshot.isSupported {
+                appleConsentError = copy.unavailable
+            }
+        } catch {
+            // Keep only a state validated during this view's lifetime. There
+            // is still no device cache: an initial failure remains unavailable,
+            // while a refresh failure keeps the last server-confirmed value.
+            appleConsentSnapshot = previous.isSupported ? previous : .unavailable
+            appleConsentError = copy.loadError
+        }
+    }
+
+    private func saveAppleConsumptionConsent(granting: Bool) async {
+        let copy = AppleConsumptionConsentCopy(language: language)
+        guard !appleConsentIsSaving, !appleConsentIsLoading else { return }
+        let previous = appleConsentSnapshot
+        appleConsentIsSaving = true
+        appleConsentError = nil
+        defer { appleConsentIsSaving = false }
+
+        do {
+            let payload = try AppleConsumptionConsentContract.updatePayload(
+                granting: granting,
+                current: previous,
+                language: language
+            )
+            let remote = try await KaiXAPIClient.shared.updateAppleConsumptionConsent(payload)
+            let confirmed = try AppleConsumptionConsentContract.confirmedSnapshot(
+                from: remote,
+                granting: granting,
+                requestedPolicyVersion: payload.apple_consumption_consent_policy_version
+            )
+            // Commit UI state only after the response proves persistence.
+            appleConsentSnapshot = confirmed
+        } catch let contractError as AppleConsumptionConsentContractError {
+            appleConsentSnapshot = previous
+            appleConsentError = contractError == .policyVersionChanged
+                ? copy.policyChanged
+                : copy.saveError
+        } catch let apiError as KaiXAPIError
+            where apiError.error.code == "apple_consumption_policy_version_mismatch" {
+            appleConsentSnapshot = previous
+            appleConsentError = copy.policyChanged
+        } catch {
+            appleConsentSnapshot = previous
+            appleConsentError = copy.saveError
         }
     }
 

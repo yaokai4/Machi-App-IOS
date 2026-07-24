@@ -922,6 +922,11 @@ struct KaiXSettingsDTO: Codable, Equatable {
     let privacy_allow_dm: String
     let recommend_following: Bool
     let recommend_topics: Bool
+    // Optional for rolling compatibility with servers deployed before the
+    // standalone App Store consumption-information consent contract.
+    let apple_consumption_consent: Bool?
+    let apple_consumption_consent_policy_version: String?
+    let apple_consumption_consented_at: String?
     let updated_at: String
 }
 
@@ -1011,4 +1016,3 @@ struct KaiXReferralBindResponse: Codable {
     let bound: Bool
     let reason: String?
 }
-
