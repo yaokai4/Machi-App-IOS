@@ -80,48 +80,71 @@ struct ConversationView: View {
         // then seeds cached messages + refreshes from the server.
         if thread == nil, let cached = messageStore.conversationsById[conversationId] {
             let repository = MessageRepository(context: modelContext)
-            thread = cached
-            if let peerId = repository.peerUserId(in: cached, currentUserId: currentUser.id) {
-                peer = repository.cachedPeers()[peerId]
-            }
-            state = .loaded
+            await open(cached, repository: repository)
             return
         }
         state = .loading
-        do {
-            if KaiXBackend.token != nil {
-                let repository = MessageRepository(context: modelContext)
-                guard let loadedThread = try await repository.fetchThreads(currentUserId: currentUser.id).first(where: { $0.id == conversationId }) else {
+        let repository = MessageRepository(context: modelContext)
+
+        // Online: try the server list first. But a transient backend failure
+        // (500/503/statement-timeout — exactly what the DM error flood produced)
+        // must NOT dead-end a *notification tap* at a full error screen. Fall
+        // back to the locally-persisted thread and let ChatView refresh its
+        // messages in the background; only surface an error when we have
+        // nothing at all to show.
+        if KaiXBackend.token != nil {
+            do {
+                let threads = try await repository.fetchThreads(currentUserId: currentUser.id)
+                if let loadedThread = threads.first(where: { $0.id == conversationId }) {
+                    await open(loadedThread, repository: repository)
+                } else if let localThread = localThread() {
+                    // Server answered but this thread isn't in the list yet
+                    // (e.g. a freshly-created DM the list hasn't caught up on).
+                    await open(localThread, repository: repository)
+                } else {
                     state = .empty
-                    return
                 }
-                thread = loadedThread
-                if let peerId = repository.peerUserId(in: loadedThread, currentUserId: currentUser.id) {
-                    if let cachedPeer = repository.cachedPeers()[peerId] {
-                        peer = cachedPeer
-                    } else {
-                        peer = try? await UserRepository(context: modelContext).fetchUser(id: peerId)
-                    }
+            } catch {
+                // Server errored/timed out: open from the local copy if we have
+                // one; the retry button stays available if we don't.
+                if let localThread = localThread() {
+                    await open(localThread, repository: repository)
+                } else {
+                    state = .error(error.kaixUserMessage)
                 }
-                state = .loaded
-                return
             }
-            var descriptor = FetchDescriptor<MessageThreadEntity>(
-                predicate: #Predicate { $0.id == conversationId }
-            )
-            descriptor.fetchLimit = 1
-            guard let loadedThread = try modelContext.fetch(descriptor).first else {
-                state = .empty
-                return
-            }
-            thread = loadedThread
-            if let peerId = MessageRepository(context: modelContext).peerUserId(in: loadedThread, currentUserId: currentUser.id) {
-                peer = try await UserRepository(context: modelContext).fetchUser(id: peerId)
-            }
-            state = .loaded
-        } catch {
-            state = .error(error.kaixUserMessage)
+            return
         }
+
+        // Offline: local SwiftData only.
+        if let localThread = localThread() {
+            await open(localThread, repository: repository)
+        } else {
+            state = .empty
+        }
+    }
+
+    /// The locally-persisted copy of this conversation, if SwiftData has one.
+    private func localThread() -> MessageThreadEntity? {
+        var descriptor = FetchDescriptor<MessageThreadEntity>(
+            predicate: #Predicate { $0.id == conversationId }
+        )
+        descriptor.fetchLimit = 1
+        return try? modelContext.fetch(descriptor).first
+    }
+
+    /// Adopt a resolved thread + best-effort peer and reveal the chat. Peer
+    /// lookup is non-fatal — the chat opens even if the profile fetch fails.
+    private func open(_ loadedThread: MessageThreadEntity, repository: MessageRepository) async {
+        thread = loadedThread
+        if let peerId = repository.peerUserId(in: loadedThread, currentUserId: currentUser.id) {
+            if let cachedPeer = repository.cachedPeers()[peerId] {
+                peer = cachedPeer
+            } else {
+                peer = try? await UserRepository(context: modelContext).fetchUser(id: peerId)
+            }
+        }
+        state = .loaded
     }
 }
 
